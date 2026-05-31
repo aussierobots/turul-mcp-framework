@@ -119,6 +119,9 @@ pub const CASES: &[Case] = &[
     Case { dir: "ListResourcesResult",                 kind: Kind::NotModeled, parse_and_reserialize: not_modeled },
     Case { dir: "ListResourcesResultResponse",         kind: Kind::NotModeled, parse_and_reserialize: not_modeled },
     Case { dir: "ListRootsRequest",                    kind: Kind::NotModeled, parse_and_reserialize: not_modeled },
+    // SEP-2577-deprecated; binding retained during the migration window so
+    // upstream fixtures continue to round-trip.
+    #[allow(deprecated)]
     Case { dir: "ListRootsResult",                     kind: Kind::Result,     parse_and_reserialize: roundtrip::<crate::roots::ListRootsResult> },
     // ListToolsRequest upstream fixture is the FULL JSON-RPC envelope
     // (`{jsonrpc, id, method, params}`). Our `tools::ListToolsRequest`
@@ -147,6 +150,8 @@ pub const CASES: &[Case] = &[
     Case { dir: "ResourceListChangedNotification",     kind: Kind::NotModeled, parse_and_reserialize: not_modeled },
     Case { dir: "ResourceUpdatedNotification",         kind: Kind::NotModeled, parse_and_reserialize: not_modeled },
     Case { dir: "ResourceUpdatedNotificationParams",   kind: Kind::NotModeled, parse_and_reserialize: not_modeled },
+    // SEP-2577-deprecated; binding retained during the migration window.
+    #[allow(deprecated)]
     Case { dir: "Root",                                kind: Kind::Struct,     parse_and_reserialize: roundtrip::<crate::roots::Root> },
     Case { dir: "SamplingMessage",                     kind: Kind::NotModeled, parse_and_reserialize: not_modeled },
     Case { dir: "ServerCapabilities",                  kind: Kind::NotModeled, parse_and_reserialize: not_modeled },

@@ -1,6 +1,23 @@
 //! MCP Sampling Protocol Types
 //!
-//! This module defines types for sampling requests in MCP.
+//! # Deprecation status (DRAFT-2026-v1)
+//!
+//! Per SEP-2577, the entire Sampling client capability (`sampling/createMessage`
+//! RPC, `SamplingMessage` shape, `SamplingCapabilities`) is **deprecated** in
+//! this revision. New implementations SHOULD NOT adopt it. Earliest removal:
+//! first revision released on or after **2027-07-28**.
+//!
+//! Replacement: integrate directly with LLM provider APIs.
+//!
+//! Soft-deprecated since 2025-11-25 and now reclassified per SEP-2596:
+//! `CreateMessageRequestParams.include_context` values `"thisServer"` and
+//! `"allServers"`. Omit the field or use `"none"`.
+//!
+//! Types NOT deprecated:
+//! - [`Role`] — used outside sampling (e.g. by `Annotations.audience` in `meta`).
+//! - [`ModelPreferences`], [`ToolChoice`], [`ToolChoiceMode`], [`ModelHint`] —
+//!   referenced by the in-spec `sampling/createMessage` shape and the SEP-2322
+//!   MRTR `InputRequest::CreateMessage` variant during the migration window.
 
 use crate::content::ContentBlock;
 use serde::{Deserialize, Serialize};
@@ -145,6 +162,14 @@ impl ToolChoice {
 /// variants that the general [`ContentBlock`] allows. Discriminated on the
 /// `type` field exactly like [`ContentBlock`] for wire-format symmetry across
 /// the 5 shared shapes.
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum SamplingMessageContentBlock {
@@ -198,6 +223,7 @@ pub enum SamplingMessageContentBlock {
     },
 }
 
+#[allow(deprecated)]
 impl SamplingMessageContentBlock {
     /// Construct a text block.
     pub fn text(text: impl Into<String>) -> Self {
@@ -213,6 +239,15 @@ impl SamplingMessageContentBlock {
 ///
 /// `content: SamplingMessageContentBlock | SamplingMessageContentBlock[]`.
 /// Untagged — the wire decides which shape is sent.
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
+#[allow(deprecated)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SamplingMessageContent {
@@ -223,6 +258,15 @@ pub enum SamplingMessageContent {
 }
 
 /// Sampling message.
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
+#[allow(deprecated)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SamplingMessage {
@@ -232,7 +276,20 @@ pub struct SamplingMessage {
     pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
-/// Parameters for sampling/createMessage request (per MCP spec)
+/// Parameters for sampling/createMessage request (per MCP spec).
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+///
+/// `include_context` value note: `"thisServer"` and `"allServers"` are
+/// soft-deprecated per SEP-2596 and conditional on
+/// `ClientCapabilities.sampling.context`. Omit the field or use `"none"`.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
+#[allow(deprecated)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMessageRequestParams {
@@ -269,7 +326,16 @@ pub struct CreateMessageRequestParams {
     // non-spec carryover, removed for Protocol Crate Purity.
 }
 
-/// Complete sampling/createMessage request (matches TypeScript CreateMessageRequest interface)
+/// Complete sampling/createMessage request (matches TypeScript CreateMessageRequest interface).
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
+#[allow(deprecated)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMessageRequest {
@@ -281,6 +347,15 @@ pub struct CreateMessageRequest {
 
 /// Result for `sampling/createMessage` — `extends SamplingMessage`
 /// (role, content, _meta) plus `model` and optional `stopReason`.
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
+#[allow(deprecated)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMessageResult {
@@ -293,6 +368,7 @@ pub struct CreateMessageResult {
     pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
+#[allow(deprecated)]
 impl CreateMessageRequestParams {
     pub fn new(messages: Vec<SamplingMessage>, max_tokens: u32) -> Self {
         Self {
@@ -340,6 +416,7 @@ impl CreateMessageRequestParams {
     }
 }
 
+#[allow(deprecated)]
 impl CreateMessageRequest {
     pub fn new(messages: Vec<SamplingMessage>, max_tokens: u32) -> Self {
         Self {
@@ -386,6 +463,7 @@ impl CreateMessageRequest {
 
 }
 
+#[allow(deprecated)]
 impl CreateMessageResult {
     pub fn new(role: Role, content: SamplingMessageContent, model: impl Into<String>) -> Self {
         Self {
@@ -413,14 +491,23 @@ impl CreateMessageResult {
     }
 }
 
-// Trait implementations for sampling
+// Trait implementations for sampling.
+//
+// **Deprecated** per SEP-2577 — trait impls retained during the 12-month
+// migration window so existing call sites that depend on the trait surface
+// (e.g. `InputRequest::CreateMessage` in the MRTR flow) continue to compile.
+// Concrete `#[deprecated]` attributes live on the struct definitions above;
+// the `#[allow(deprecated)]` blocks below suppress the cascading warning
+// inside the protocol crate itself.
 
 use crate::traits::*;
 use std::collections::HashMap;
 
 // Trait implementations for CreateMessageRequestParams
+#[allow(deprecated)]
 impl Params for CreateMessageRequestParams {}
 
+#[allow(deprecated)]
 impl HasCreateMessageRequestParams for CreateMessageRequestParams {
     fn messages(&self) -> &Vec<SamplingMessage> {
         &self.messages
@@ -460,12 +547,14 @@ impl HasCreateMessageRequestParams for CreateMessageRequestParams {
 // `_meta` field on the wire.
 
 // Trait implementations for CreateMessageRequest
+#[allow(deprecated)]
 impl HasMethod for CreateMessageRequest {
     fn method(&self) -> &str {
         &self.method
     }
 }
 
+#[allow(deprecated)]
 impl HasParams for CreateMessageRequest {
     fn params(&self) -> Option<&dyn Params> {
         Some(&self.params)
@@ -473,6 +562,7 @@ impl HasParams for CreateMessageRequest {
 }
 
 // Trait implementations for CreateMessageResult
+#[allow(deprecated)]
 impl HasData for CreateMessageResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
@@ -492,6 +582,7 @@ impl HasData for CreateMessageResult {
     }
 }
 
+#[allow(deprecated)]
 impl HasMeta for CreateMessageResult {
     fn meta(&self) -> Option<&crate::meta::MetaObject> {
         self.meta.as_ref()
@@ -503,6 +594,7 @@ impl HasMeta for CreateMessageResult {
 // discriminator and the `RpcResult: HasMeta + HasResultType` bound doesn't fit.
 // See `crate::traits::RpcResult` for the contract.
 
+#[allow(deprecated)]
 impl crate::traits::CreateMessageResult for CreateMessageResult {
     fn role(&self) -> &Role {
         &self.role
@@ -564,6 +656,7 @@ impl Default for ModelPreferences {
     }
 }
 
+#[allow(deprecated)]
 impl SamplingMessage {
     pub fn new(role: Role, content: SamplingMessageContent) -> Self {
         Self {
@@ -593,6 +686,7 @@ impl SamplingMessage {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

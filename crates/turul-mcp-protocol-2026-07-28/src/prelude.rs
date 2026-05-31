@@ -27,17 +27,25 @@ pub use crate::tools::{
     CallToolRequestParams, CallToolRequest, CallToolResult, Tool, ToolResult, ToolSchema,
 };
 
-// Notification types (using specific structs that exist)
+// Notification types (using specific structs that exist).
 pub use crate::notifications::{
-    LoggingMessageNotification, LoggingMessageNotificationParams, Notification, NotificationParams,
-    ProgressNotification, ProgressNotificationParams, ResourceUpdatedNotification,
-    ResourceUpdatedNotificationParams,
+    Notification, NotificationParams, ProgressNotification, ProgressNotificationParams,
+    ResourceUpdatedNotification, ResourceUpdatedNotificationParams,
 };
+// SEP-2577-deprecated re-exports kept available during the migration window.
+#[allow(deprecated)]
+pub use crate::notifications::{LoggingMessageNotification, LoggingMessageNotificationParams};
 
-// Root types (spec-pure structs only)
-pub use crate::roots::{ListRootsParams, Root};
+// Root types (spec-pure structs only). `ListRootsRequest.params?` is the
+// standard `RequestParams` (already exported above), no roots-specific params
+// struct. **Deprecated** per SEP-2577 in DRAFT-2026-v1 — re-exported for the
+// migration window; new code should use tool parameters / resource URIs / server
+// configuration instead.
+#[allow(deprecated)]
+pub use crate::roots::Root;
 
-// Sampling types (spec-pure structs only)
+// Sampling types — **deprecated** per SEP-2577; re-exported during migration window.
+#[allow(deprecated)]
 pub use crate::sampling::{CreateMessageResult, SamplingMessage};
 
 // Completion types (spec-pure structs only)

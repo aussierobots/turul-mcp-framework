@@ -1,12 +1,32 @@
 //! MCP Roots Protocol Types
 //!
-//! This module defines types for root directory listing in MCP.
+//! # Deprecation status (DRAFT-2026-v1)
+//!
+//! Per SEP-2577, the entire Roots client capability (`roots/list` RPC, `Root`
+//! type, `RootsCapabilities`) is **deprecated** in this revision. New
+//! implementations SHOULD NOT adopt it. Earliest removal: first revision
+//! released on or after **2027-07-28**.
+//!
+//! Replacement: pass directories or files via tool parameters, resource URIs,
+//! or server configuration.
+//!
+//! Note: the `notifications/roots/list_changed` notification was REMOVED
+//! entirely in DRAFT-2026-v1 (not just deprecated). Only the request/response
+//! surface remains during the 12-month migration window.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Root directory entry (per MCP spec)
+/// Root directory entry.
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: pass directories or files via tool parameters, resource URIs, or server configuration. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Root {
@@ -20,6 +40,7 @@ pub struct Root {
     pub meta: Option<HashMap<String, Value>>,
 }
 
+#[allow(deprecated)]
 impl Root {
     pub fn new(uri: impl Into<String>) -> Self {
         Self {
@@ -48,58 +69,57 @@ impl Root {
     }
 }
 
-/// Parameters for roots/list request (per MCP spec - no params required but can have _meta)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ListRootsParams {
-    /// Meta information (optional _meta field inside params)
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<HashMap<String, Value>>,
-}
-
-/// Complete roots/list request (matches TypeScript ListRootsRequest interface)
+/// Complete roots/list request.
+///
+/// Schema: `ListRootsRequest { method: "roots/list"; params?: RequestParams; }`.
+/// `params` is the standard [`crate::json_rpc::RequestParams`] when present,
+/// or omitted entirely — the schema's `params?` is honored by serializing as
+/// `None`.
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: pass directories or files via tool parameters, resource URIs, or server configuration. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListRootsRequest {
     /// Method name (always "roots/list")
     pub method: String,
-    /// Optional parameters (can be None since no actual params needed, but _meta can be present)
+    /// Optional standard request params.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub params: Option<ListRootsParams>,
+    pub params: Option<crate::json_rpc::RequestParams>,
 }
 
 /// Response for `roots/list` — `{ roots: Root[] }`.
+///
+/// **Deprecated** per SEP-2577 — see module-level docs.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: pass directories or files via tool parameters, resource URIs, or server configuration. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(deprecated)]
 pub struct ListRootsResult {
     /// Available roots.
     pub roots: Vec<Root>,
 }
 
-impl Default for ListRootsParams {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl ListRootsParams {
-    pub fn new() -> Self {
-        Self { meta: None }
-    }
-
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
-        self
-    }
-}
-
+#[allow(deprecated)]
 impl Default for ListRootsRequest {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[allow(deprecated)]
 impl ListRootsRequest {
+    /// Construct without params (paramsless `roots/list`).
     pub fn new() -> Self {
         Self {
             method: "roots/list".to_string(),
@@ -107,18 +127,22 @@ impl ListRootsRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
-    pub fn with_params(mut self, params: ListRootsParams) -> Self {
-        self.params = Some(params);
-        self
+    /// Construct with explicit per-request meta.
+    pub fn with_meta(meta: crate::meta::RequestMetaObject) -> Self {
+        Self {
+            method: "roots/list".to_string(),
+            params: Some(crate::json_rpc::RequestParams::new(meta)),
+        }
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.params = Some(ListRootsParams::new().with_meta(meta));
+    /// Attach a fully-constructed params struct.
+    pub fn with_params(mut self, params: crate::json_rpc::RequestParams) -> Self {
+        self.params = Some(params);
         self
     }
 }
 
+#[allow(deprecated)]
 impl ListRootsResult {
     pub fn new(roots: Vec<Root>) -> Self {
         Self { roots }
@@ -128,20 +152,14 @@ impl ListRootsResult {
 // Trait implementations for protocol compliance
 use crate::traits::*;
 
-impl Params for ListRootsParams {}
-
-impl HasMetaParam for ListRootsParams {
-    fn meta(&self) -> Option<&HashMap<String, Value>> {
-        self.meta.as_ref()
-    }
-}
-
+#[allow(deprecated)]
 impl HasMethod for ListRootsRequest {
     fn method(&self) -> &str {
         &self.method
     }
 }
 
+#[allow(deprecated)]
 impl HasParams for ListRootsRequest {
     fn params(&self) -> Option<&dyn Params> {
         self.params.as_ref().map(|p| p as &dyn Params)
@@ -158,6 +176,7 @@ impl HasParams for ListRootsRequest {
 
 /// Trait for root metadata (URI, name, path info)
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::{ListRootsRequest, ListRootsResult, Root};
     use serde_json::json;
@@ -219,16 +238,26 @@ mod tests {
 
     #[test]
     fn test_list_roots_request_matches_typescript_spec() {
-        // Test ListRootsRequest matches: { method: string, params?: { _meta?: {...} } }
-        let mut meta = HashMap::new();
-        meta.insert("requestId".to_string(), json!("req-123"));
+        // Schema-anchor: `ListRootsRequest { method: "roots/list"; params?: RequestParams }`.
+        // When `params` is present it carries the standard `RequestParams._meta:
+        // RequestMetaObject` (required, typed).
+        let meta = crate::meta::RequestMetaObject::new(
+            "DRAFT-2026-v1",
+            crate::initialize::Implementation::new("c", "1"),
+            crate::initialize::ClientCapabilities::default(),
+        )
+        .with_extra("requestId", json!("req-123"));
 
-        let request = ListRootsRequest::new().with_meta(meta);
+        let request = ListRootsRequest::with_meta(meta);
 
         let json_value = serde_json::to_value(&request).unwrap();
 
         assert_eq!(json_value["method"], "roots/list");
         assert!(json_value["params"].is_object());
+        assert_eq!(
+            json_value["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"],
+            "DRAFT-2026-v1"
+        );
         assert_eq!(json_value["params"]["_meta"]["requestId"], "req-123");
     }
 

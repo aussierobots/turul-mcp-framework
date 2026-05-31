@@ -3,6 +3,13 @@
 //! Tests verify Rust types serialize to JSON shapes matching `schema/draft-schema.ts`
 //! at the vendored ETag. When the schema is re-vendored, these tests are the
 //! contract that must keep passing.
+//!
+//! Many tests intentionally exercise SEP-2577-deprecated types (Roots, Sampling,
+//! Logging) to lock down their wire-shape contract during the 12-month migration
+//! window. Crate-level `#![allow(deprecated)]` suppresses the deprecation noise;
+//! the `#[deprecated]` attributes themselves remain on the type definitions so
+//! external consumers see the warnings.
+#![allow(deprecated)]
 
 /// Shared test fixture — minimal `RequestMetaObject` satisfying the
 /// DRAFT-2026-v1 stateless-core required `_meta` contract. Tests that don't
@@ -1813,9 +1820,21 @@ mod method_strings {
 
     #[test]
     fn subscriptions_listen_binding() {
-        use turul_mcp_protocol_2026_07_28::subscriptions::{SubscriptionFilter, SubscriptionsListenRequest};
-        let v = serde_json::to_value(SubscriptionsListenRequest::new(SubscriptionFilter::new()))
-            .unwrap();
+        use turul_mcp_protocol_2026_07_28::initialize::{ClientCapabilities, Implementation};
+        use turul_mcp_protocol_2026_07_28::meta::RequestMetaObject;
+        use turul_mcp_protocol_2026_07_28::subscriptions::{
+            SubscriptionFilter, SubscriptionsListenRequest,
+        };
+        let meta = RequestMetaObject::new(
+            "DRAFT-2026-v1",
+            Implementation::new("c", "1"),
+            ClientCapabilities::default(),
+        );
+        let v = serde_json::to_value(SubscriptionsListenRequest::new(
+            SubscriptionFilter::new(),
+            meta,
+        ))
+        .unwrap();
         assert_eq!(method_of(&v), "subscriptions/listen");
     }
 
@@ -2183,7 +2202,7 @@ mod request_meta {
         let s = serde_json::to_string(&m).unwrap();
         let parsed: RequestMetaObject = serde_json::from_str(&s).unwrap();
         assert_eq!(parsed.protocol_version, "DRAFT-2026-v1");
-        assert_eq!(parsed.progress_token.unwrap().as_str(), "tok-X");
+        assert_eq!(parsed.progress_token.unwrap().as_str(), Some("tok-X"));
         assert!(matches!(parsed.log_level, Some(LoggingLevel::Info)));
     }
 }

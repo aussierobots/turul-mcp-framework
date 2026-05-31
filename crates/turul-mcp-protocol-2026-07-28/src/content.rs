@@ -51,7 +51,17 @@ pub enum ResourceContents {
     Blob(BlobResourceContents),
 }
 
-/// Resource reference for resource links (matches TypeScript Resource interface)
+/// Resource reference for resource links.
+///
+/// Mirrors the schema's `Resource` interface so `ContentBlock::ResourceLink`
+/// (which the schema declares as `ResourceLink extends Resource`) round-trips
+/// all spec-permitted fields including `size` and `icons`.
+///
+/// Carries the same fields as [`crate::resources::Resource`]; the parallel
+/// type is preserved for now because `ContentBlock::ResourceLink` flattens
+/// this body and we don't want to cascade the type swap through
+/// `prompts.rs`/`lib.rs` re-exports in this slice. Collapsing onto a single
+/// `Resource` struct is the cleaner end-state.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceReference {
@@ -68,6 +78,13 @@ pub struct ResourceReference {
     /// The MIME type of this resource, if known
     #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
+    /// Size of the raw resource content, in bytes. Hosts use this for file-size
+    /// display and context-window estimation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size: Option<u64>,
+    /// Display icons (from `Resource extends Icons`). Most consumers won't need this.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icons: Option<Vec<crate::icons::Icon>>,
     /// Client annotations for this resource
     #[serde(skip_serializing_if = "Option::is_none")]
     pub annotations: Option<Annotations>,
@@ -341,6 +358,8 @@ impl ResourceReference {
             title: None,
             description: None,
             mime_type: None,
+            size: None,
+            icons: None,
             annotations: None,
             meta: None,
         }
@@ -361,6 +380,18 @@ impl ResourceReference {
     /// Add MIME type
     pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
         self.mime_type = Some(mime_type.into());
+        self
+    }
+
+    /// Set the raw content size in bytes.
+    pub fn with_size(mut self, size: u64) -> Self {
+        self.size = Some(size);
+        self
+    }
+
+    /// Attach display icons.
+    pub fn with_icons(mut self, icons: Vec<crate::icons::Icon>) -> Self {
+        self.icons = Some(icons);
         self
     }
 
@@ -554,6 +585,35 @@ mod tests {
 
         assert_eq!(json["type"], "tool_result");
         assert_eq!(json["isError"], true);
+    }
+
+    #[test]
+    fn test_resource_link_round_trips_size_and_icons() {
+        // Schema-anchor: `ResourceLink extends Resource`; `Resource` carries
+        // `size?: number` and `icons?` via `extends Icons`. Both must survive
+        // a wire round-trip when embedded inside `ContentBlock::ResourceLink`.
+        use crate::icons::Icon;
+
+        let icon = Icon::new("https://example.com/icon.svg");
+        let resource_ref = ResourceReference::new("file:///big.bin", "big-binary")
+            .with_size(1_048_576)
+            .with_icons(vec![icon.clone()]);
+        let block = ContentBlock::resource_link(resource_ref);
+
+        // Outbound serialization carries both fields.
+        let json = serde_json::to_value(&block).unwrap();
+        assert_eq!(json["type"], "resource_link");
+        assert_eq!(json["size"], 1_048_576);
+        assert_eq!(json["icons"][0]["src"], "https://example.com/icon.svg");
+
+        // Round-trip preserves them.
+        let parsed: ContentBlock = serde_json::from_value(json).unwrap();
+        if let ContentBlock::ResourceLink { resource, .. } = parsed {
+            assert_eq!(resource.size, Some(1_048_576));
+            assert_eq!(resource.icons.as_ref().map(|v| v.len()), Some(1));
+        } else {
+            panic!("Expected ResourceLink variant");
+        }
     }
 
     #[test]

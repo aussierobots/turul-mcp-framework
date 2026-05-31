@@ -61,30 +61,103 @@ impl Default for Annotations {
     }
 }
 
-/// Progress token for tracking long-running operations
+/// Progress token for tracking long-running operations.
+///
+/// Schema: `export type ProgressToken = string | number;` — used in both
+/// `RequestMetaObject.progressToken?` and `ProgressNotificationParams.progressToken`.
+/// JSON `number` is any IEEE-754 double, so the numeric variant is modeled as
+/// [`serde_json::Number`] to losslessly preserve the wire representation
+/// (integer vs. float, large integers beyond `i64::MAX`, etc.). An `i64`
+/// variant would reject spec-valid tokens like `1.5`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(transparent)]
-pub struct ProgressToken(pub String);
+#[serde(untagged)]
+pub enum ProgressToken {
+    String(String),
+    Number(serde_json::Number),
+}
 
 impl ProgressToken {
+    /// Construct a string-form token. For numeric tokens use the `From<i64>` /
+    /// `From<u64>` / `From<f64>` impls, or `ProgressToken::Number(num)` directly.
     pub fn new(token: impl Into<String>) -> Self {
-        Self(token.into())
+        Self::String(token.into())
     }
 
-    pub fn as_str(&self) -> &str {
-        &self.0
+    /// Return the string body if this is a string-form token; `None` for numeric.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(s) => Some(s.as_str()),
+            Self::Number(_) => None,
+        }
+    }
+
+    /// Return the numeric body if this is an integer-form token; `None` for
+    /// string or for a JSON float that has no exact `i64` representation.
+    pub fn as_i64(&self) -> Option<i64> {
+        match self {
+            Self::Number(n) => n.as_i64(),
+            Self::String(_) => None,
+        }
+    }
+
+    /// Return the numeric body as `f64` if this is a number-form token. Lossy
+    /// for integers beyond `2^53`; `None` for string-form tokens.
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Self::Number(n) => n.as_f64(),
+            Self::String(_) => None,
+        }
+    }
+
+    /// Return the raw `serde_json::Number` for a number-form token. Use this
+    /// when you need to preserve the exact wire representation (int vs float)
+    /// without lossy conversion.
+    pub fn as_number(&self) -> Option<&serde_json::Number> {
+        match self {
+            Self::Number(n) => Some(n),
+            Self::String(_) => None,
+        }
     }
 }
 
 impl From<String> for ProgressToken {
     fn from(s: String) -> Self {
-        Self(s)
+        Self::String(s)
     }
 }
 
 impl From<&str> for ProgressToken {
     fn from(s: &str) -> Self {
-        Self(s.to_string())
+        Self::String(s.to_string())
+    }
+}
+
+impl From<i64> for ProgressToken {
+    fn from(n: i64) -> Self {
+        Self::Number(serde_json::Number::from(n))
+    }
+}
+
+impl From<u64> for ProgressToken {
+    fn from(n: u64) -> Self {
+        Self::Number(serde_json::Number::from(n))
+    }
+}
+
+impl From<i32> for ProgressToken {
+    fn from(n: i32) -> Self {
+        Self::Number(serde_json::Number::from(n))
+    }
+}
+
+/// Construct from an `f64`. Panics if the value is NaN or ±infinity — JSON
+/// has no representation for those. Use [`serde_json::Number::from_f64`]
+/// directly + `ProgressToken::Number(...)` if you need explicit error handling.
+impl From<f64> for ProgressToken {
+    fn from(n: f64) -> Self {
+        let num = serde_json::Number::from_f64(n)
+            .expect("ProgressToken numeric value must be a finite JSON number (not NaN or ±Inf)");
+        Self::Number(num)
     }
 }
 
@@ -280,12 +353,102 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_progress_token() {
+    fn test_progress_token_string() {
         let token = ProgressToken::new("task-123");
-        assert_eq!(token.as_str(), "task-123");
+        assert_eq!(token.as_str(), Some("task-123"));
+        assert_eq!(token.as_i64(), None);
+        assert_eq!(token.as_f64(), None);
+        assert!(token.as_number().is_none());
 
         let from_string: ProgressToken = "task-456".into();
-        assert_eq!(from_string.as_str(), "task-456");
+        assert_eq!(from_string.as_str(), Some("task-456"));
+    }
+
+    #[test]
+    fn test_progress_token_integer_round_trips() {
+        let token: ProgressToken = 42i64.into();
+        assert_eq!(token.as_i64(), Some(42));
+        assert_eq!(token.as_f64(), Some(42.0));
+        assert_eq!(token.as_str(), None);
+
+        // Round-trip a numeric token through serde.
+        let json = serde_json::to_value(&token).unwrap();
+        assert_eq!(json, serde_json::json!(42));
+        let back: ProgressToken = serde_json::from_value(json).unwrap();
+        assert_eq!(back, ProgressToken::Number(serde_json::Number::from(42)));
+    }
+
+    #[test]
+    fn test_progress_token_float_round_trips() {
+        // Schema says `ProgressToken = string | number`; `number` is IEEE-754.
+        // 1.5 is a spec-valid token. Pre-fix `Number(i64)` rejected this shape.
+        let json = serde_json::json!(1.5);
+        let token: ProgressToken = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(token.as_f64(), Some(1.5));
+        assert_eq!(token.as_i64(), None); // not an integer
+        let back = serde_json::to_value(&token).unwrap();
+        assert_eq!(back, json);
+
+        // Constructing from an f64 literal works via the From<f64> impl.
+        let from_float: ProgressToken = 2.71828_f64.into();
+        assert_eq!(from_float.as_f64(), Some(2.71828));
+    }
+
+    #[test]
+    fn test_progress_token_negative_and_large_round_trip() {
+        let neg: ProgressToken = (-7_i64).into();
+        let big: ProgressToken = (u64::MAX).into(); // i64 would have rejected this too
+        assert_eq!(neg.as_i64(), Some(-7));
+        assert_eq!(big.as_i64(), None); // doesn't fit in i64
+        assert_eq!(big.as_number().unwrap().as_u64(), Some(u64::MAX));
+        // Round-trip through JSON.
+        let big_json = serde_json::to_value(&big).unwrap();
+        let big_back: ProgressToken = serde_json::from_value(big_json).unwrap();
+        assert_eq!(big_back, big);
+    }
+
+    #[test]
+    fn test_progress_token_deserializes_from_both_shapes() {
+        let s: ProgressToken = serde_json::from_value(serde_json::json!("op-7")).unwrap();
+        assert_eq!(s, ProgressToken::String("op-7".to_string()));
+        let n: ProgressToken = serde_json::from_value(serde_json::json!(7)).unwrap();
+        assert_eq!(n, ProgressToken::Number(serde_json::Number::from(7)));
+        let f: ProgressToken = serde_json::from_value(serde_json::json!(3.14)).unwrap();
+        assert_eq!(f.as_f64(), Some(3.14));
+    }
+
+    #[test]
+    #[should_panic(expected = "finite JSON number")]
+    fn test_progress_token_from_nan_panics() {
+        // JSON has no representation for NaN; `From<f64>` rejects it loudly.
+        let _: ProgressToken = f64::NAN.into();
+    }
+
+    #[test]
+    fn test_progress_token_accepts_scientific_notation() {
+        // JSON `number` includes scientific notation per RFC 8259 §6.
+        // Verify each form deserializes into a numeric token (structural
+        // coverage; serde_json::Number handles the parsing).
+        let cases = [
+            (serde_json::json!(1e10), Some(1e10)),
+            (serde_json::json!(1.5e-3), Some(1.5e-3)),
+            (serde_json::json!(1.5e3), Some(1500.0)),
+        ];
+        for (wire, want) in cases {
+            let t: ProgressToken = serde_json::from_value(wire.clone()).unwrap();
+            assert_eq!(t.as_f64(), want, "wire shape {wire} did not parse to {:?}", want);
+            // Round-trip preserves the numeric body.
+            let back = serde_json::to_value(&t).unwrap();
+            let again: ProgressToken = serde_json::from_value(back).unwrap();
+            assert_eq!(again, t);
+        }
+    }
+
+    #[test]
+    fn test_progress_token_rejects_wire_inf_overflow() {
+        // `1e400` overflows IEEE-754 double; serde_json::Number refuses it on the wire.
+        let res: Result<ProgressToken, _> = serde_json::from_str("1e400");
+        assert!(res.is_err(), "spec-invalid (overflowing) number must not deserialize");
     }
 
     #[test]

@@ -22,7 +22,9 @@ use serde::{Deserialize, Serialize};
 use crate::elicitation::ElicitRequest;
 use crate::meta::MetaObject;
 use crate::result_type::ResultType;
+#[allow(deprecated)]
 use crate::roots::{ListRootsRequest, ListRootsResult};
+#[allow(deprecated)]
 use crate::sampling::{CreateMessageRequest, CreateMessageResult};
 
 /// Server → client request emitted as part of an [`InputRequiredResult`].
@@ -34,17 +36,26 @@ use crate::sampling::{CreateMessageRequest, CreateMessageResult};
 /// `roots/list`, `elicitation/create`) and rejects any other value, so the
 /// schema's union discriminator is enforced explicitly rather than relying
 /// on first-variant-wins fallback.
+///
+/// **Note**: `CreateMessageRequest` (Sampling) and `ListRootsRequest` (Roots)
+/// are themselves deprecated per SEP-2577 in DRAFT-2026-v1. They remain valid
+/// variants of `InputRequest` during the 12-month migration window so servers
+/// can continue to ask clients for sampling/roots input via the MRTR pattern
+/// (SEP-2322). After the deprecated features are removed, the corresponding
+/// variants will be removed from this enum.
+#[allow(deprecated)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum InputRequest {
-    /// `sampling/createMessage` request.
+    /// `sampling/createMessage` request. **Deprecated** per SEP-2577.
     CreateMessage(CreateMessageRequest),
-    /// `roots/list` request.
+    /// `roots/list` request. **Deprecated** per SEP-2577.
     ListRoots(ListRootsRequest),
     /// `elicitation/create` request.
     Elicit(ElicitRequest),
 }
 
+#[allow(deprecated)]
 impl<'de> Deserialize<'de> for InputRequest {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -82,12 +93,17 @@ impl<'de> Deserialize<'de> for InputRequest {
 /// identifier from the corresponding [`InputRequests`] entry.
 ///
 /// `type InputResponse = CreateMessageResult | ListRootsResult | ElicitResult`.
+///
+/// **Note**: `CreateMessageResult` and `ListRootsResult` variants reference
+/// types deprecated per SEP-2577. They remain valid during the deprecation
+/// window so clients can respond to legacy server-initiated requests.
+#[allow(deprecated)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum InputResponse {
-    /// Response to a `sampling/createMessage` request.
+    /// Response to a `sampling/createMessage` request. **Deprecated** per SEP-2577.
     CreateMessage(CreateMessageResult),
-    /// Response to a `roots/list` request.
+    /// Response to a `roots/list` request. **Deprecated** per SEP-2577.
     ListRoots(ListRootsResult),
     /// Response to an `elicitation/create` request.
     Elicit(crate::elicitation::ElicitResult),
@@ -180,6 +196,31 @@ impl InputRequiredResult {
     }
 }
 
+// Trait impls: `InputRequiredResult` satisfies `HasResultType + HasMeta +
+// HasInputRequiredResult` so consumers can dispatch on `resultType` and pull
+// the structured fields generically.
+impl crate::traits::HasResultType for InputRequiredResult {
+    fn result_type(&self) -> ResultType {
+        self.result_type
+    }
+}
+impl crate::traits::HasMeta for InputRequiredResult {
+    fn meta(&self) -> Option<&MetaObject> {
+        self.meta.as_ref()
+    }
+}
+impl crate::traits::HasInputRequiredResult for InputRequiredResult {
+    fn input_requests(&self) -> Option<&InputRequests> {
+        self.input_requests.as_ref()
+    }
+    fn request_state(&self) -> Option<&str> {
+        self.request_state.as_deref()
+    }
+    fn meta(&self) -> Option<&MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
 impl<'de> Deserialize<'de> for InputRequiredResult {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -263,6 +304,7 @@ impl InputResponseRequestParams {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -286,6 +328,21 @@ mod tests {
         assert_eq!(r.result_type, ResultType::InputRequired);
         assert_eq!(r.request_state.as_deref(), Some("opaque-blob"));
         assert!(r.input_requests.is_none());
+    }
+
+    #[test]
+    fn input_required_result_field_getters_via_trait() {
+        // Drive through the `HasInputRequiredResult` trait (A8). Returns the
+        // same field bodies as direct struct access.
+        use crate::traits::HasInputRequiredResult;
+        let r = InputRequiredResult::with_state("opaque-blob");
+        assert_eq!(
+            crate::traits::HasResultType::result_type(&r),
+            ResultType::InputRequired
+        );
+        assert_eq!(HasInputRequiredResult::request_state(&r), Some("opaque-blob"));
+        assert!(HasInputRequiredResult::input_requests(&r).is_none());
+        assert!(HasInputRequiredResult::meta(&r).is_none());
     }
 
     #[test]

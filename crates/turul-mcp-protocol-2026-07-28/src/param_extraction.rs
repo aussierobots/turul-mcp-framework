@@ -44,7 +44,11 @@ impl_serde_extractor!(crate::completion::CompleteRequestParams);
 // `logging::SetLevelParams` removed (logging/setLevel not in DRAFT-2026-v1 schema).
 // `resources::SubscribeParams`/`UnsubscribeParams` removed (replaced by subscriptions/listen filter).
 impl_serde_extractor!(crate::elicitation::ElicitRequestFormParams);
-impl_serde_extractor!(crate::sampling::CreateMessageRequestParams);
+// SEP-2577-deprecated; extractor retained during the migration window.
+mod sampling_extractor_impls {
+    #![allow(deprecated)]
+    impl_serde_extractor!(crate::sampling::CreateMessageRequestParams);
+}
 impl_serde_extractor!(crate::ping::EmptyParams);
 
 /// Generic parameter extractor function that works with any type implementing SerdeParamExtractor

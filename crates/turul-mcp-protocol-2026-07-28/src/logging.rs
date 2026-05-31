@@ -1,13 +1,35 @@
 //! MCP Logging Protocol Types
 //!
-//! This module defines types for logging in MCP.
+//! # Deprecation status (DRAFT-2026-v1)
+//!
+//! Per SEP-2577, the Logging RPC surface (`notifications/message`) is
+//! **deprecated** in this revision. New implementations SHOULD NOT adopt it.
+//! Earliest removal: first revision released on or after **2027-07-28**.
+//!
+//! - Stdio transports: log to `stderr` instead.
+//! - Other transports: use [OpenTelemetry](https://opentelemetry.io/) for
+//!   observability — trace-context keys ride in `_meta` per SEP-414 (see
+//!   `META_KEY_TRACEPARENT` etc. in [`crate::meta`]).
+//!
+//! The per-request log level mechanism ([`crate::meta::RequestMetaObject::log_level`])
+//! is the replacement opt-in. `logging/setLevel` was REMOVED entirely in
+//! DRAFT-2026-v1 — clients now declare desired level per-request.
+//!
+//! The wire-payload types ([`crate::notifications::LoggingMessageNotification`]
+//! and [`crate::notifications::LoggingMessageNotificationParams`]) live in
+//! [`crate::notifications`] alongside the other notification payloads. This
+//! module carries only the wire-value enum [`LoggingLevel`] (still used by
+//! the non-deprecated [`crate::meta::RequestMetaObject::log_level`] field).
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::HashMap;
 
 /// Logging levels (per MCP spec)
-/// Maps to syslog message severities as specified in RFC-5424
+/// Maps to syslog message severities as specified in RFC-5424.
+///
+/// NOT deprecated: this enum is the wire-value type for both the deprecated
+/// `notifications/message` surface AND the non-deprecated per-request
+/// `_meta.io.modelcontextprotocol/logLevel` opt-in. Deprecating it would
+/// cascade a warning into the replacement mechanism.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LoggingLevel {
@@ -23,76 +45,6 @@ pub enum LoggingLevel {
 
 /// Type alias for compatibility (per MCP spec)
 pub type LogLevel = LoggingLevel;
-
-/// Parameters for notifications/message logging (per MCP spec)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoggingMessageParams {
-    /// Log level
-    pub level: LoggingLevel,
-    /// Optional logger name
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub logger: Option<String>,
-    /// Log data (any serializable type)
-    pub data: Value,
-    /// Meta information (optional _meta field inside params)
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<HashMap<String, Value>>,
-}
-
-/// Complete logging message notification (per MCP spec)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LoggingMessageNotification {
-    /// Method name (always "notifications/message")
-    pub method: String,
-    /// Notification parameters
-    pub params: LoggingMessageParams,
-}
-
-impl LoggingMessageParams {
-    pub fn new(level: LoggingLevel, data: Value) -> Self {
-        Self {
-            level,
-            logger: None,
-            data,
-            meta: None,
-        }
-    }
-
-    pub fn with_logger(mut self, logger: impl Into<String>) -> Self {
-        self.logger = Some(logger.into());
-        self
-    }
-
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
-        self
-    }
-}
-
-impl LoggingMessageNotification {
-    pub fn new(level: LoggingLevel, data: Value) -> Self {
-        Self {
-            method: "notifications/message".to_string(),
-            params: LoggingMessageParams::new(level, data),
-        }
-    }
-
-    pub fn with_logger(mut self, logger: impl Into<String>) -> Self {
-        self.params = self.params.with_logger(logger);
-        self
-    }
-
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.params = self.params.with_meta(meta);
-        self
-    }
-}
-
-// Clients opt in to log notifications per-request via
-// `_meta.io.modelcontextprotocol/logLevel` (see [`crate::meta::RequestMetaObject::log_level`]).
-// There is no `logging/setLevel` RPC in DRAFT-2026-v1.
 
 /// Convenience constructors for LoggingLevel
 impl LoggingLevel {
@@ -116,53 +68,9 @@ impl LoggingLevel {
     }
 }
 
-// Trait implementations for protocol compliance
-use crate::traits::*;
-
-// Params trait implementations
-impl Params for LoggingMessageParams {}
-
-// LoggingMessageParams specific traits
-impl HasLevelParam for LoggingMessageParams {
-    fn level(&self) -> &LoggingLevel {
-        &self.level
-    }
-}
-
-impl HasLoggerParam for LoggingMessageParams {
-    fn logger(&self) -> Option<&String> {
-        self.logger.as_ref()
-    }
-}
-
-impl HasMetaParam for LoggingMessageParams {
-    fn meta(&self) -> Option<&HashMap<String, Value>> {
-        self.meta.as_ref()
-    }
-}
-
-// LoggingMessageNotification traits
-impl HasMethod for LoggingMessageNotification {
-    fn method(&self) -> &str {
-        &self.method
-    }
-}
-
-impl HasParams for LoggingMessageNotification {
-    fn params(&self) -> Option<&dyn Params> {
-        Some(&self.params)
-    }
-}
-
-// ===========================================
-// === Fine-Grained Logging Traits ===
-// ===========================================
-
-/// Trait for logging metadata (method, logger name)
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn test_logging_level_priority() {
@@ -171,17 +79,5 @@ mod tests {
 
         assert!(LoggingLevel::Error.should_log(LoggingLevel::Warning));
         assert!(!LoggingLevel::Info.should_log(LoggingLevel::Error));
-    }
-
-    #[test]
-    fn test_logging_message_notification() {
-        let data = json!({"message": "Test log message", "context": "test"});
-        let notification = LoggingMessageNotification::new(LoggingLevel::Info, data.clone())
-            .with_logger("test-logger");
-
-        assert_eq!(notification.method, "notifications/message");
-        assert_eq!(notification.params.level, LoggingLevel::Info);
-        assert_eq!(notification.params.logger, Some("test-logger".to_string()));
-        assert_eq!(notification.params.data, data);
     }
 }

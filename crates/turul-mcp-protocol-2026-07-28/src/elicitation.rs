@@ -286,6 +286,10 @@ pub enum StringFormat {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitationSchema {
+    /// JSON Schema dialect URI. DRAFT-2026-v1 adopts JSON Schema 2020-12;
+    /// clients use this to declare which dialect validated the schema.
+    #[serde(rename = "$schema", skip_serializing_if = "Option::is_none")]
+    pub schema_dialect: Option<String>,
     #[serde(rename = "type")]
     pub schema_type: String, // Always "object"
     pub properties: HashMap<String, PrimitiveSchemaDefinition>,
@@ -460,6 +464,7 @@ impl Default for ElicitationSchema {
 impl ElicitationSchema {
     pub fn new() -> Self {
         Self {
+            schema_dialect: None,
             schema_type: "object".to_string(),
             properties: HashMap::new(),
             required: None,
@@ -477,6 +482,12 @@ impl ElicitationSchema {
 
     pub fn with_required(mut self, required: Vec<String>) -> Self {
         self.required = Some(required);
+        self
+    }
+
+    /// Set the JSON Schema dialect URI (e.g. `"https://json-schema.org/draft/2020-12/schema"`).
+    pub fn with_schema_dialect(mut self, dialect: impl Into<String>) -> Self {
+        self.schema_dialect = Some(dialect.into());
         self
     }
 }
@@ -771,6 +782,7 @@ impl ElicitationBuilder {
 
 /// Trait for elicitation metadata (message, title)
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -808,6 +820,31 @@ mod tests {
         assert_eq!(schema.schema_type, "object");
         assert_eq!(schema.properties.len(), 2);
         assert_eq!(schema.required, Some(vec!["name".to_string()]));
+        assert!(schema.schema_dialect.is_none());
+    }
+
+    #[test]
+    fn test_elicitation_schema_dialect_round_trips() {
+        let schema = ElicitationSchema::new()
+            .with_schema_dialect("https://json-schema.org/draft/2020-12/schema");
+        let json = serde_json::to_value(&schema).unwrap();
+        assert_eq!(
+            json["$schema"],
+            "https://json-schema.org/draft/2020-12/schema"
+        );
+        // Round-trip.
+        let back: ElicitationSchema = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            back.schema_dialect.as_deref(),
+            Some("https://json-schema.org/draft/2020-12/schema")
+        );
+    }
+
+    #[test]
+    fn test_elicitation_schema_omits_dialect_when_none() {
+        let schema = ElicitationSchema::new();
+        let json = serde_json::to_value(&schema).unwrap();
+        assert!(!json.as_object().unwrap().contains_key("$schema"));
     }
 
     #[test]

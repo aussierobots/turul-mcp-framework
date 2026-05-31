@@ -12,10 +12,9 @@
 //! All notification types are **opt-in**: the server MUST NOT send any type
 //! the client didn't request.
 
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Wire method string for the subscription RPC.
 pub const SUBSCRIPTIONS_LISTEN_METHOD: &str = "subscriptions/listen";
@@ -75,25 +74,37 @@ impl SubscriptionFilter {
     }
 }
 
-/// Params for `subscriptions/listen`.
+/// Params for `subscriptions/listen` — `SubscriptionsListenRequestParams
+/// extends RequestParams`, so `_meta` is the typed [`crate::meta::RequestMetaObject`]
+/// carrying the per-request capability negotiation (protocol version, client
+/// info, client capabilities). Required by schema.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionsListenRequestParams {
     /// Notifications the client opts in to on this stream.
     pub notifications: SubscriptionFilter,
 
-    /// Standard request `_meta`. `RequestParams._meta` is required spec-strict
-    /// but kept optional here transitionally.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<HashMap<String, Value>>,
+    /// Schema-typed `_meta` per `RequestMetaObject`. Required.
+    #[serde(rename = "_meta")]
+    pub meta: crate::meta::RequestMetaObject,
 }
 
 impl SubscriptionsListenRequestParams {
-    pub fn new(notifications: SubscriptionFilter) -> Self {
+    /// Construct with the required filter and per-request meta.
+    pub fn new(
+        notifications: SubscriptionFilter,
+        meta: crate::meta::RequestMetaObject,
+    ) -> Self {
         Self {
             notifications,
-            meta: None,
+            meta,
         }
+    }
+
+    /// Replace the per-request meta.
+    pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
+        self.meta = meta;
+        self
     }
 }
 
@@ -109,10 +120,11 @@ pub struct SubscriptionsListenRequest {
 }
 
 impl SubscriptionsListenRequest {
-    pub fn new(filter: SubscriptionFilter) -> Self {
+    /// Construct with a filter and the required per-request meta.
+    pub fn new(filter: SubscriptionFilter, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: SUBSCRIPTIONS_LISTEN_METHOD.to_string(),
-            params: SubscriptionsListenRequestParams::new(filter),
+            params: SubscriptionsListenRequestParams::new(filter, meta),
         }
     }
 
@@ -164,10 +176,39 @@ impl SubscriptionsAcknowledgedNotification {
     }
 }
 
+// Trait impls: `SubscriptionsListenRequest` satisfies
+// `RpcRequest + SubscriptionsListenRequestTrait`.
+impl crate::traits::Params for SubscriptionsListenRequestParams {}
+impl crate::traits::HasSubscriptionsListenParams for SubscriptionsListenRequestParams {
+    fn notifications(&self) -> &SubscriptionFilter {
+        &self.notifications
+    }
+}
+impl crate::traits::HasMethod for SubscriptionsListenRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+impl crate::traits::HasParams for SubscriptionsListenRequest {
+    fn params(&self) -> Option<&dyn crate::traits::Params> {
+        Some(&self.params as &dyn crate::traits::Params)
+    }
+}
+impl crate::traits::RpcRequest for SubscriptionsListenRequest {}
+impl crate::traits::SubscriptionsListenRequestTrait for SubscriptionsListenRequest {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn test_request_meta() -> crate::meta::RequestMetaObject {
+        crate::meta::RequestMetaObject::new(
+            "DRAFT-2026-v1",
+            crate::initialize::Implementation::new("test-client", "1.0.0"),
+            crate::initialize::ClientCapabilities::default(),
+        )
+    }
 
     #[test]
     fn listen_method_constant_matches_schema() {
@@ -186,10 +227,15 @@ mod tests {
     fn listen_request_serializes_method() {
         let req = SubscriptionsListenRequest::new(
             SubscriptionFilter::new().with_tools_list_changed(true),
+            test_request_meta(),
         );
         let v = serde_json::to_value(&req).unwrap();
         assert_eq!(v["method"], "subscriptions/listen");
         assert_eq!(v["params"]["notifications"]["toolsListChanged"], true);
+        assert_eq!(
+            v["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"],
+            "DRAFT-2026-v1"
+        );
     }
 
     #[test]
@@ -264,21 +310,37 @@ mod tests {
     }
 
     #[test]
-    fn listen_params_meta_omitted_when_none() {
-        let p = SubscriptionsListenRequestParams::new(SubscriptionFilter::new());
+    fn listen_params_meta_required_on_wire() {
+        // _meta is a required typed field on the wire — no longer omittable.
+        let p = SubscriptionsListenRequestParams::new(
+            SubscriptionFilter::new(),
+            test_request_meta(),
+        );
         let v = serde_json::to_value(&p).unwrap();
-        assert!(!v.as_object().unwrap().contains_key("_meta"));
+        assert!(v.as_object().unwrap().contains_key("_meta"));
+        assert_eq!(
+            v["_meta"]["io.modelcontextprotocol/protocolVersion"],
+            "DRAFT-2026-v1"
+        );
     }
 
     #[test]
     fn listen_request_round_trips_from_wire_example() {
-        // Mimics schema example "listen-for-list-changes".
+        // Schema-conformant example with the required `_meta`.
         let wire = json!({
             "method": "subscriptions/listen",
             "params": {
                 "notifications": {
                     "toolsListChanged": true,
                     "resourcesListChanged": true
+                },
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+                    "io.modelcontextprotocol/clientInfo": {
+                        "name": "test-client",
+                        "version": "1.0.0"
+                    },
+                    "io.modelcontextprotocol/clientCapabilities": {}
                 }
             }
         });
@@ -287,5 +349,36 @@ mod tests {
         assert_eq!(r.params.notifications.tools_list_changed, Some(true));
         assert_eq!(r.params.notifications.resources_list_changed, Some(true));
         assert!(r.params.notifications.prompts_list_changed.is_none());
+        assert_eq!(r.params.meta.protocol_version, "DRAFT-2026-v1");
+    }
+
+    #[test]
+    fn listen_request_satisfies_new_rpc_trait() {
+        // Generic function over the trait abstraction (A8).
+        fn method_via_trait<R: crate::traits::SubscriptionsListenRequestTrait>(r: &R) -> &str {
+            r.method_string()
+        }
+        let req = SubscriptionsListenRequest::new(
+            SubscriptionFilter::new().with_tools_list_changed(true),
+            test_request_meta(),
+        );
+        assert_eq!(method_via_trait(&req), "subscriptions/listen");
+
+        // Field-getter via HasSubscriptionsListenParams on the params struct.
+        let n: &SubscriptionFilter =
+            crate::traits::HasSubscriptionsListenParams::notifications(&req.params);
+        assert_eq!(n.tools_list_changed, Some(true));
+    }
+
+    #[test]
+    fn listen_request_rejects_missing_meta() {
+        // Pre-fix shape (no `_meta`) must now fail to deserialize.
+        let wire = json!({
+            "method": "subscriptions/listen",
+            "params": {
+                "notifications": { "toolsListChanged": true }
+            }
+        });
+        assert!(serde_json::from_value::<SubscriptionsListenRequest>(wire).is_err());
     }
 }

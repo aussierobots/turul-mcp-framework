@@ -66,11 +66,21 @@ impl Implementation {
     }
 }
 
-/// Capabilities related to root listing support
+/// Capabilities related to root listing support.
+///
+/// **Deprecated** per SEP-2577 alongside the Roots feature.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: pass directories or files via tool parameters, resource URIs, or server configuration. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct RootsCapabilities {
-    /// Whether the client supports notifications for root list changes
+    /// Whether the client supports notifications for root list changes.
+    /// Note: `notifications/roots/list_changed` was REMOVED in DRAFT-2026-v1;
+    /// declaring `listChanged: true` has no effect.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub list_changed: Option<bool>,
 }
@@ -83,6 +93,14 @@ pub struct RootsCapabilities {
 ///
 /// Presence of the parent `sampling` field indicates baseline sampling support;
 /// presence of a sub-field declares the specific sub-capability. Empty `{}` is valid.
+///
+/// **Deprecated** per SEP-2577 alongside the Sampling feature.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SamplingCapabilities {
@@ -141,11 +159,13 @@ pub struct ElicitationCapabilities {
 /// `extensions["io.modelcontextprotocol/tasks"]`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
+#[allow(deprecated)]
 pub struct ClientCapabilities {
-    /// Root directory capabilities.
+    /// Root directory capabilities. **Deprecated** per SEP-2577.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub roots: Option<RootsCapabilities>,
     /// Sampling capabilities (client can handle sampling requests from server).
+    /// **Deprecated** per SEP-2577.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sampling: Option<SamplingCapabilities>,
     /// Elicitation capabilities (client can handle elicitation requests from server).

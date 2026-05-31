@@ -15,9 +15,15 @@ use crate::{
     meta::{Cursor, ProgressToken},
     prompts::{Prompt, PromptMessage},
     resources::Resource,
-    roots::Root,
-    sampling::{ModelPreferences, Role, SamplingMessage, SamplingMessageContent},
+    sampling::{ModelPreferences, Role},
     tools::{Tool, ToolResult},
+};
+// Imports below reference DRAFT-2026 SEP-2577-deprecated types used inside
+// trait abstractions retained for the 12-month migration window.
+#[allow(deprecated)]
+use crate::{
+    roots::Root,
+    sampling::{SamplingMessage, SamplingMessageContent},
 };
 
 // JSON-RPC version constant
@@ -126,14 +132,6 @@ pub trait JsonRpcErrorResponseTrait:
 // === Param Specialisations ===
 // ==========================
 
-pub trait HasRequestIdParam: Params {
-    fn request_id(&self) -> &Value;
-}
-
-pub trait HasReasonParam: Params {
-    fn reason(&self) -> Option<&str>;
-}
-
 pub trait HasDataParam: Params {
     fn data(&self) -> &HashMap<String, Value>;
 }
@@ -150,25 +148,103 @@ pub trait HasProgressTokenParam: Params {
 // === Typed Traits from MCP Spec ===
 // ==========================
 
-pub trait HasCancelledParams: HasRequestIdParam + HasReasonParam {}
-pub trait CancelledNotification: RpcNotification + HasCancelledParams {}
+// `*Notification` traits below are bound on `RpcNotification` (which requires
+// only `HasMethod + HasParams`), NOT on `JsonRpcNotificationTrait` (which would
+// also require `HasJsonRpcVersion`). The concrete notification structs in
+// `notifications.rs` intentionally carry only `method` + `params` — the
+// `jsonrpc: "2.0"` envelope is added by wrapping in `JsonRpcNotification` at
+// transport time. The `RpcNotification`-bound abstraction is satisfiable by
+// the structs as-shipped.
+
+// Notification traits below use a `*Trait` suffix to avoid name collision
+// with the same-named structs in `notifications.rs` (e.g. trait
+// `CancelledNotificationTrait` vs struct `CancelledNotification`). The
+// schema-level interface names are reflected in the struct, not the trait.
+//
+// Has*Params traits are bound on `Params` and impl'd on the *Params struct
+// (which carries the actual field bodies). The wire-level *Trait abstractions
+// are bound on `RpcNotification` (HasMethod + HasParams) and impl'd on the
+// outer notification struct.
+
+// ---------------------- notifications/cancelled ------------------------
+
+pub trait HasCancelledParams: Params {
+    /// Schema: `requestId?` — optional per the spec text (cancellations MAY
+    /// arrive after the originating request has finished).
+    fn request_id(&self) -> Option<&turul_rpc::RequestId>;
+    fn reason(&self) -> Option<&str>;
+}
+
+pub trait CancelledNotificationTrait: RpcNotification {
+    fn method_string(&self) -> &str {
+        "notifications/cancelled"
+    }
+}
 
 // ---------------------- notifications/progress ------------------------
 
-/// Trait for params of `notifications/progress`
 pub trait HasProgressParams: Params {
     fn progress_token(&self) -> &ProgressToken;
-    // `progress` is `f64` per spec — fractional progress in `[0.0, 1.0]`.
+    /// `progress` is `f64` per spec — fractional progress in `[0.0, 1.0]`.
     fn progress(&self) -> f64;
-    fn total(&self) -> Option<u64>;
-    fn message(&self) -> Option<&String>;
+    fn total(&self) -> Option<f64>;
+    fn message(&self) -> Option<&str>;
 }
 
-/// The notification itself
-pub trait ProgressNotification: JsonRpcNotificationTrait + HasProgressParams {
-    /// Always exactly `"notifications/progress"`
-    fn method(&self) -> &str {
+pub trait ProgressNotificationTrait: RpcNotification {
+    fn method_string(&self) -> &str {
         "notifications/progress"
+    }
+}
+
+// ---------------------- notifications/resources/list_changed ------------------------
+
+pub trait ResourcesListChangedNotificationTrait: RpcNotification {
+    fn method_string(&self) -> &str {
+        "notifications/resources/list_changed"
+    }
+}
+
+// ---------------------- notifications/resources/updated ------------------------
+
+pub trait HasResourceUpdatedParams: Params {
+    fn uri(&self) -> &str;
+}
+
+pub trait ResourceUpdatedNotificationTrait: RpcNotification {
+    fn method_string(&self) -> &str {
+        "notifications/resources/updated"
+    }
+}
+
+// ---------------------- notifications/prompts/list_changed ------------------------
+
+pub trait PromptListChangedNotificationTrait: RpcNotification {
+    fn method_string(&self) -> &str {
+        "notifications/prompts/list_changed"
+    }
+}
+
+// ---------------------- notifications/tools/list_changed ------------------------
+
+pub trait ToolListChangedNotificationTrait: RpcNotification {
+    fn method_string(&self) -> &str {
+        "notifications/tools/list_changed"
+    }
+}
+
+// ---------------------- notifications/message ------------------------
+
+/// **Deprecated** per SEP-2577 — see [`crate::notifications::LoggingMessageNotification`].
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: stderr (stdio) or OpenTelemetry, plus per-request log-level opt-in. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
+pub trait LoggingMessageNotificationTrait: RpcNotification {
+    fn method_string(&self) -> &str {
+        "notifications/message"
     }
 }
 
@@ -189,12 +265,6 @@ pub trait ListResourcesResult: RpcResult {
     fn next_cursor(&self) -> Option<&Cursor>;
 }
 
-pub trait ResourcesListChangedNotification: JsonRpcNotificationTrait {
-    fn method(&self) -> &str {
-        "notifications/resources/list_changed"
-    }
-}
-
 pub trait HasReadResourceRequestParams: Params {
     fn uri(&self) -> &String;
 }
@@ -207,16 +277,6 @@ pub trait ReadResourceRequest: JsonRpcRequestTrait + HasReadResourceRequestParam
 
 pub trait ReadResourceResult: RpcResult {
     fn contents(&self) -> &Vec<crate::resources::ResourceContent>;
-}
-
-pub trait HasResourceUpdatedParams: Params {
-    fn uri(&self) -> &String;
-}
-
-pub trait ResourceUpdatedNotification: JsonRpcNotificationTrait + HasResourceUpdatedParams {
-    fn method(&self) -> &str {
-        "notifications/resources/updated"
-    }
 }
 
 // ---------------------- prompts/list & get ------------------------
@@ -250,12 +310,6 @@ pub trait GetPromptRequest: JsonRpcRequestTrait + HasGetPromptRequestParams {
 pub trait GetPromptResult: RpcResult {
     fn description(&self) -> Option<&String>;
     fn messages(&self) -> &Vec<PromptMessage>;
-}
-
-pub trait PromptListChangedNotification: JsonRpcNotificationTrait {
-    fn method(&self) -> &str {
-        "notifications/prompts/list_changed"
-    }
 }
 
 // ---------------------- tools/list & call ------------------------
@@ -295,14 +349,13 @@ pub trait CallToolResult: RpcResult {
     fn structured_content(&self) -> Option<&Value>;
 }
 
-pub trait ToolListChangedNotification: JsonRpcNotificationTrait {
-    fn method(&self) -> &str {
-        "notifications/tools/list_changed"
-    }
-}
-
 // ---------------------- sampling/createMessage ------------------------
+//
+// **Deprecated** per SEP-2577 — trait surface retained during the 12-month
+// migration window. References deprecated types in its signature; suppression
+// is scoped to this section.
 
+#[allow(deprecated)]
 pub trait HasCreateMessageRequestParams: Params {
     fn messages(&self) -> &Vec<SamplingMessage>;
     fn model_preferences(&self) -> Option<&ModelPreferences>;
@@ -314,6 +367,7 @@ pub trait HasCreateMessageRequestParams: Params {
     fn metadata(&self) -> Option<&Value>;
 }
 
+#[allow(deprecated)]
 pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestParams {
     fn method(&self) -> &str {
         "sampling/createMessage"
@@ -323,6 +377,7 @@ pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestPar
 /// `CreateMessageResult` — per schema `extends SamplingMessage`, NOT `Result`.
 /// Bound to [`HasMeta`] only (not [`RpcResult`]) because it has no
 /// `resultType` discriminator.
+#[allow(deprecated)]
 pub trait CreateMessageResult: HasMeta {
     fn role(&self) -> &Role;
     fn content(&self) -> &SamplingMessageContent;
@@ -389,7 +444,9 @@ pub trait ListRootsRequest: JsonRpcRequestTrait + HasListRootsParams {
 
 // `ListRootsResult` is `{roots: Root[]}` per the DRAFT-2026-v1 schema — bare,
 // no `_meta`, no `resultType`. The `RpcResult: HasMeta + HasResultType` bound doesn't
-// fit, so the trait is plain.
+// fit, so the trait is plain. **Deprecated** per SEP-2577 alongside the Roots
+// surface; retained during the migration window.
+#[allow(deprecated)]
 pub trait ListRootsResult {
     fn roots(&self) -> &Vec<Root>;
 }
@@ -397,17 +454,12 @@ pub trait ListRootsResult {
 
 // ---------------------- logging ------------------------
 
-pub trait HasSetLevelParams: Params {
-    fn level(&self) -> &LogLevel;
-}
+// `logging/setLevel` RPC was removed in DRAFT-2026-v1 — per-request log level
+// opt-in now rides on `RequestMetaObject.log_level`. The earlier
+// `HasSetLevelParams` / `SetLevelRequest` trait pair is gone.
 
-pub trait SetLevelRequest: JsonRpcRequestTrait + HasSetLevelParams {
-    fn method(&self) -> &str {
-        "logging/setLevel"
-    }
-}
-
-// Field-getter traits you already have; if not, add:
+// Field-getter traits implemented by `LoggingMessageParams` (the params for
+// `notifications/message`).
 pub trait HasLevelParam: Params {
     fn level(&self) -> &LogLevel;
 }
@@ -415,10 +467,56 @@ pub trait HasLoggerParam: Params {
     fn logger(&self) -> Option<&String>;
 }
 
-pub trait LoggingMessageNotificationTrait: JsonRpcNotificationTrait + HasParams {
-    fn method(&self) -> &str {
-        "notifications/message"
+// ---------------------- server/discover (DRAFT-2026) ------------------------
+
+// `*RequestTrait` traits below are bound on `RpcRequest` (which requires only
+// `HasMethod + HasParams`), NOT on `JsonRpcRequestTrait` (which would also
+// require `HasJsonRpcVersion + HasRequestId`). The concrete request structs in
+// each module intentionally carry only `method` + `params` — the
+// `jsonrpc: "2.0"` envelope and `id` are added by wrapping in
+// `turul_rpc::JsonRpcRequest` at transport time.
+
+/// `server/discover` request — replaces the 2025-11-25 `initialize` handshake.
+/// Params is the bare [`crate::json_rpc::RequestParams`]; capability negotiation
+/// rides on `_meta: RequestMetaObject`. The trait gives consumers a uniform
+/// way to detect a discover request by method.
+pub trait DiscoverRequestTrait: RpcRequest {
+    fn method_string(&self) -> &str {
+        "server/discover"
     }
+}
+
+// ---------------------- subscriptions/listen (DRAFT-2026) ------------------------
+
+/// Field-getter for `SubscriptionsListenRequestParams.notifications`
+/// (the `SubscriptionFilter` declaring which notification types the client
+/// opts in to on this stream).
+pub trait HasSubscriptionsListenParams: Params {
+    fn notifications(&self) -> &crate::subscriptions::SubscriptionFilter;
+}
+
+pub trait SubscriptionsListenRequestTrait: RpcRequest {
+    fn method_string(&self) -> &str {
+        "subscriptions/listen"
+    }
+}
+
+// ---------------------- InputRequiredResult (SEP-2322) ------------------------
+
+/// Field-getters for `InputRequiredResult` — the multi-round-trip
+/// server-initiated request shape that replaces the 2025-11-25
+/// server→client SSE stream.
+///
+/// Bound on [`HasResultType`] only (not on full [`RpcResult`]) because
+/// `_meta` access is exposed through [`Self::meta`] below directly.
+pub trait HasInputRequiredResult: HasResultType {
+    /// Server-initiated requests the client must fulfill before retrying.
+    fn input_requests(&self) -> Option<&crate::input_required::InputRequests>;
+    /// Opaque state blob the client echoes back on the retry's
+    /// `InputResponseRequestParams.request_state`.
+    fn request_state(&self) -> Option<&str>;
+    /// Optional `_meta` per the `Result` schema.
+    fn meta(&self) -> Option<&crate::meta::MetaObject>;
 }
 
 // ---------------------- elicitation ------------------------

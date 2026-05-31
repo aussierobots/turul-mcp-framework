@@ -135,6 +135,33 @@ impl DiscoverResultResponse {
     }
 }
 
+// Trait impls: `DiscoverRequest` satisfies `JsonRpcRequestTrait + DiscoverRequestTrait`.
+impl crate::traits::HasMethod for DiscoverRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+impl crate::traits::HasParams for DiscoverRequest {
+    fn params(&self) -> Option<&dyn crate::traits::Params> {
+        Some(&self.params as &dyn crate::traits::Params)
+    }
+}
+impl crate::traits::RpcRequest for DiscoverRequest {}
+impl crate::traits::DiscoverRequestTrait for DiscoverRequest {}
+
+// `DiscoverResult` satisfies `RpcResult` and `HasMeta`.
+impl crate::traits::HasMeta for DiscoverResult {
+    fn meta(&self) -> Option<&MetaObject> {
+        self.meta.as_ref()
+    }
+}
+impl crate::traits::HasResultType for DiscoverResult {
+    fn result_type(&self) -> ResultType {
+        self.result_type
+    }
+}
+impl crate::traits::RpcResult for DiscoverResult {}
+
 // The client capabilities are *advertised* by the client per-request via
 // `RequestMetaObject.client_capabilities`, not in the discover request itself.
 // We re-export the type here for ergonomic discovery from `discover::`.
@@ -186,6 +213,17 @@ mod tests {
         let r = DiscoverRequest::new(fixture_meta());
         let v = serde_json::to_value(&r).unwrap();
         assert!(v["params"].is_object(), "params must be present per DiscoverRequest schema");
+    }
+
+    #[test]
+    fn discover_request_satisfies_rpc_trait() {
+        // Generic function over the A8 trait abstraction.
+        fn method_via_trait<R: crate::traits::DiscoverRequestTrait>(r: &R) -> &str {
+            r.method_string()
+        }
+        let r = DiscoverRequest::new(fixture_meta());
+        assert_eq!(method_via_trait(&r), "server/discover");
+        assert_eq!(crate::traits::HasMethod::method(&r), "server/discover");
     }
 
     // --- DiscoverResult ---

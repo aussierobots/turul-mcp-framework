@@ -169,12 +169,14 @@ pub use subscriptions::{
     SUBSCRIPTIONS_LISTEN_METHOD,
 };
 pub use notifications::{
-    CancelledNotification, ElicitationCompleteNotification, LoggingMessageNotification,
-    LoggingMessageNotificationParams, Notification, NotificationParams, ProgressNotification,
-    ProgressNotificationParams, ProgressTokenValue, PromptListChangedNotification,
-    ResourceListChangedNotification, ResourceUpdatedNotification,
+    CancelledNotification, ElicitationCompleteNotification, Notification, NotificationParams,
+    ProgressNotification, ProgressNotificationParams, ProgressTokenValue,
+    PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
     ResourceUpdatedNotificationParams, ToolListChangedNotification,
 };
+// SEP-2577-deprecated re-exports kept available during the migration window.
+#[allow(deprecated)]
+pub use notifications::{LoggingMessageNotification, LoggingMessageNotificationParams};
 pub use ping::{EmptyParams, EmptyResult};
 pub use schema::JsonSchema;
 pub use traits::{

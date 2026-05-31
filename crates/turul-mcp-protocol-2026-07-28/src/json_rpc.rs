@@ -199,7 +199,7 @@ mod tests {
                 .as_ref()
                 .unwrap()
                 .as_str(),
-            "test-token"
+            Some("test-token")
         );
         assert_eq!(parsed.meta.protocol_version, "DRAFT-2026-v1");
     }

@@ -216,39 +216,17 @@ pub struct ProgressNotification {
     pub params: ProgressNotificationParams,
 }
 
-/// Progress token value — a string or a number. Used by the caller to opt in
-/// to out-of-band `notifications/progress` for a request; echoed in every
-/// progress notification for that operation.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(untagged)]
-pub enum ProgressTokenValue {
-    String(String),
-    Number(i64),
-}
-
-impl From<String> for ProgressTokenValue {
-    fn from(s: String) -> Self {
-        Self::String(s)
-    }
-}
-
-impl From<&str> for ProgressTokenValue {
-    fn from(s: &str) -> Self {
-        Self::String(s.to_string())
-    }
-}
-
-impl From<i64> for ProgressTokenValue {
-    fn from(n: i64) -> Self {
-        Self::Number(n)
-    }
-}
+/// Progress token value. Deprecated alias for [`crate::meta::ProgressToken`] —
+/// the schema has one `ProgressToken = string | number` type used at both
+/// request-meta and progress-notification carriers; both sites now reference
+/// the unified type. Kept as a re-export for any caller pinning the old name.
+pub use crate::meta::ProgressToken as ProgressTokenValue;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProgressNotificationParams {
-    /// Token to correlate with the original request (string or number)
-    pub progress_token: ProgressTokenValue,
+    /// Token to correlate with the original request (string or number).
+    pub progress_token: crate::meta::ProgressToken,
     /// Amount of work completed so far (fractional progress)
     pub progress: f64,
     /// Optional total work count
@@ -263,7 +241,7 @@ pub struct ProgressNotificationParams {
 }
 
 impl ProgressNotification {
-    pub fn new(progress_token: impl Into<ProgressTokenValue>, progress: f64) -> Self {
+    pub fn new(progress_token: impl Into<crate::meta::ProgressToken>, progress: f64) -> Self {
         Self {
             method: "notifications/progress".to_string(),
             params: ProgressNotificationParams {
@@ -342,8 +320,11 @@ pub struct CancelledNotification {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CancelledNotificationParams {
-    /// The ID of the request to cancel
-    pub request_id: RequestId,
+    /// The ID of the request to cancel. Optional per schema (`requestId?`) —
+    /// a cancellation MAY arrive after the originating request has already
+    /// finished, in which case the id is unknown to the sender.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<RequestId>,
     /// An optional reason for cancelling
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -353,7 +334,17 @@ pub struct CancelledNotificationParams {
 }
 
 impl CancelledNotification {
+    /// Cancel a specific in-flight request.
     pub fn new(request_id: RequestId) -> Self {
+        Self::new_optional(Some(request_id))
+    }
+
+    /// Cancellation without a specific request id (spec-valid late-arrival case).
+    pub fn without_id() -> Self {
+        Self::new_optional(None)
+    }
+
+    fn new_optional(request_id: Option<RequestId>) -> Self {
         Self {
             method: "notifications/cancelled".to_string(),
             params: CancelledNotificationParams {
@@ -375,7 +366,21 @@ impl CancelledNotification {
     }
 }
 
-/// Method: "notifications/message"
+/// Method: "notifications/message".
+///
+/// **Deprecated** per SEP-2577 — the Logging RPC surface is being removed.
+/// Migrate to stderr (stdio) or OpenTelemetry. The `LoggingLevel` enum stays
+/// non-deprecated because it is also the value type for the replacement
+/// per-request `_meta.io.modelcontextprotocol/logLevel` opt-in
+/// ([`crate::meta::RequestMetaObject::log_level`]).
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: log to stderr for stdio transports or use OpenTelemetry. \
+            Per-request log level opt-in lives on RequestMetaObject.log_level. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
+#[allow(deprecated)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoggingMessageNotification {
@@ -385,6 +390,13 @@ pub struct LoggingMessageNotification {
     pub params: LoggingMessageNotificationParams,
 }
 
+/// **Deprecated** per SEP-2577 — see [`LoggingMessageNotification`].
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: log to stderr for stdio transports or use OpenTelemetry. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoggingMessageNotificationParams {
@@ -400,6 +412,7 @@ pub struct LoggingMessageNotificationParams {
     pub meta: Option<HashMap<String, Value>>,
 }
 
+#[allow(deprecated)]
 impl LoggingMessageNotification {
     pub fn new(level: LoggingLevel, data: Value) -> Self {
         Self {
@@ -476,12 +489,175 @@ impl HasMetaParam for NotificationParams {
     }
 }
 
+// ResourceListChangedNotification — empty params, just method
+impl HasMethod for ResourceListChangedNotification {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+impl HasParams for ResourceListChangedNotification {
+    fn params(&self) -> Option<&dyn Params> {
+        self.params.as_ref().map(|p| p as &dyn Params)
+    }
+}
+impl RpcNotification for ResourceListChangedNotification {}
+impl ResourcesListChangedNotificationTrait for ResourceListChangedNotification {}
+
+// ToolListChangedNotification — empty params, just method
+impl HasMethod for ToolListChangedNotification {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+impl HasParams for ToolListChangedNotification {
+    fn params(&self) -> Option<&dyn Params> {
+        self.params.as_ref().map(|p| p as &dyn Params)
+    }
+}
+impl RpcNotification for ToolListChangedNotification {}
+impl ToolListChangedNotificationTrait for ToolListChangedNotification {}
+
+// PromptListChangedNotification — empty params, just method
+impl HasMethod for PromptListChangedNotification {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+impl HasParams for PromptListChangedNotification {
+    fn params(&self) -> Option<&dyn Params> {
+        self.params.as_ref().map(|p| p as &dyn Params)
+    }
+}
+impl RpcNotification for PromptListChangedNotification {}
+impl PromptListChangedNotificationTrait for PromptListChangedNotification {}
+
+// ProgressNotificationParams — field-getter coverage on the params struct.
+impl Params for ProgressNotificationParams {}
+impl HasProgressParams for ProgressNotificationParams {
+    fn progress_token(&self) -> &crate::meta::ProgressToken {
+        &self.progress_token
+    }
+    fn progress(&self) -> f64 {
+        self.progress
+    }
+    fn total(&self) -> Option<f64> {
+        self.total
+    }
+    fn message(&self) -> Option<&str> {
+        self.message.as_deref()
+    }
+}
+impl HasMethod for ProgressNotification {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+impl HasParams for ProgressNotification {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params as &dyn Params)
+    }
+}
+impl RpcNotification for ProgressNotification {}
+impl ProgressNotificationTrait for ProgressNotification {}
+
+// ResourceUpdatedNotificationParams + ResourceUpdatedNotification
+impl Params for ResourceUpdatedNotificationParams {}
+impl HasResourceUpdatedParams for ResourceUpdatedNotificationParams {
+    fn uri(&self) -> &str {
+        &self.uri
+    }
+}
+impl HasMethod for ResourceUpdatedNotification {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+impl HasParams for ResourceUpdatedNotification {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params as &dyn Params)
+    }
+}
+impl RpcNotification for ResourceUpdatedNotification {}
+impl ResourceUpdatedNotificationTrait for ResourceUpdatedNotification {}
+
+// CancelledNotificationParams + CancelledNotification
+impl Params for CancelledNotificationParams {}
+impl HasCancelledParams for CancelledNotificationParams {
+    fn request_id(&self) -> Option<&turul_rpc::RequestId> {
+        self.request_id.as_ref()
+    }
+    fn reason(&self) -> Option<&str> {
+        self.reason.as_deref()
+    }
+}
+impl HasMethod for CancelledNotification {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+impl HasParams for CancelledNotification {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params as &dyn Params)
+    }
+}
+impl RpcNotification for CancelledNotification {}
+impl CancelledNotificationTrait for CancelledNotification {}
+
+// LoggingMessageNotification — `notifications/message` wire payload.
+//
+// **Deprecated** per SEP-2577 in DRAFT-2026-v1; concrete `#[deprecated]`
+// attributes live on the struct definitions below. The trait impls here are
+// gated with `#[allow(deprecated)]` so the unimplementable-from-outside trait
+// surface still compiles internally without forcing every reader to chase a
+// warning through framework-internal code.
+#[allow(deprecated)]
+impl HasMethod for LoggingMessageNotification {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+#[allow(deprecated)]
+impl HasParams for LoggingMessageNotification {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params as &dyn Params)
+    }
+}
+#[allow(deprecated)]
+impl RpcNotification for LoggingMessageNotification {}
+#[allow(deprecated)]
+impl LoggingMessageNotificationTrait for LoggingMessageNotification {}
+
+#[allow(deprecated)]
+impl Params for LoggingMessageNotificationParams {}
+
+#[allow(deprecated)]
+impl HasLevelParam for LoggingMessageNotificationParams {
+    fn level(&self) -> &crate::logging::LoggingLevel {
+        &self.level
+    }
+}
+
+#[allow(deprecated)]
+impl HasLoggerParam for LoggingMessageNotificationParams {
+    fn logger(&self) -> Option<&String> {
+        self.logger.as_ref()
+    }
+}
+
+#[allow(deprecated)]
+impl HasMetaParam for LoggingMessageNotificationParams {
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
 // ===========================================
 // === Fine-Grained Notification Traits ===
 // ===========================================
 
 /// Trait for notification metadata (method, type info)
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -514,7 +690,7 @@ mod tests {
         assert_eq!(notification.method, "notifications/progress");
         assert_eq!(
             notification.params.progress_token,
-            ProgressTokenValue::String("token123".to_string())
+            crate::meta::ProgressToken::String("token123".to_string())
         );
         assert_eq!(notification.params.progress, 50.0);
         assert_eq!(notification.params.total, Some(100.0));
@@ -526,10 +702,28 @@ mod tests {
 
     #[test]
     fn test_progress_token_number() {
-        let notification = ProgressNotification::new(ProgressTokenValue::Number(42), 0.5);
+        let notification = ProgressNotification::new(crate::meta::ProgressToken::Number(serde_json::Number::from(42i64)), 0.5);
         let json = serde_json::to_value(&notification).unwrap();
         assert_eq!(json["params"]["progressToken"], 42);
         assert_eq!(json["params"]["progress"], 0.5);
+    }
+
+    #[test]
+    fn test_request_meta_accepts_numeric_progress_token() {
+        // Schema-anchor: `RequestMetaObject.progressToken?: ProgressToken` where
+        // `ProgressToken = string | number`. A numeric token must round-trip
+        // through the unified type at both carriers.
+        use crate::meta::RequestMetaObject;
+        let meta = RequestMetaObject::new(
+            "DRAFT-2026-v1",
+            crate::initialize::Implementation::new("c", "1"),
+            crate::initialize::ClientCapabilities::default(),
+        )
+        .with_progress_token(7i64);
+        let json = serde_json::to_value(&meta).unwrap();
+        assert_eq!(json["progressToken"], 7);
+        let back: RequestMetaObject = serde_json::from_value(json).unwrap();
+        assert_eq!(back.progress_token, Some(crate::meta::ProgressToken::Number(serde_json::Number::from(7i64))));
     }
 
     #[test]
@@ -546,11 +740,35 @@ mod tests {
             CancelledNotification::new(RequestId::Number(123)).with_reason("User cancelled");
 
         assert_eq!(notification.method, "notifications/cancelled");
-        assert_eq!(notification.params.request_id, RequestId::Number(123));
+        assert_eq!(notification.params.request_id, Some(RequestId::Number(123)));
         assert_eq!(
             notification.params.reason,
             Some("User cancelled".to_string())
         );
+    }
+
+    #[test]
+    fn test_cancelled_notification_without_id() {
+        let notification =
+            CancelledNotification::without_id().with_reason("Request finished before cancel");
+
+        let json = serde_json::to_value(&notification).unwrap();
+        assert_eq!(json["method"], "notifications/cancelled");
+        // requestId must be omitted entirely when None per schema.
+        assert!(!json["params"].as_object().unwrap().contains_key("requestId"));
+        assert_eq!(json["params"]["reason"], "Request finished before cancel");
+    }
+
+    #[test]
+    fn test_cancelled_notification_deserializes_without_request_id() {
+        // Spec-valid late-arrival shape — `notifications/cancelled` MAY arrive
+        // after the request finished, with no `requestId`.
+        let wire = serde_json::json!({
+            "reason": "late arrival"
+        });
+        let params: CancelledNotificationParams = serde_json::from_value(wire).unwrap();
+        assert!(params.request_id.is_none());
+        assert_eq!(params.reason.as_deref(), Some("late arrival"));
     }
 
     #[test]
@@ -575,5 +793,60 @@ mod tests {
         let json = serde_json::to_value(&notification).unwrap();
         assert_eq!(json["method"], "notifications/elicitation/complete");
         assert_eq!(json["params"]["elicitationId"], "elicit-xyz-789");
+    }
+
+    // ---- Notification trait coverage (A7 rebind) ----
+
+    #[test]
+    fn tool_list_changed_satisfies_rpc_notification_and_trait() {
+        // Generic function over the trait abstraction.
+        fn check_method<N: ToolListChangedNotificationTrait>(n: &N) -> &str {
+            n.method_string()
+        }
+        let n = ToolListChangedNotification::new();
+        assert_eq!(HasMethod::method(&n), "notifications/tools/list_changed");
+        assert_eq!(check_method(&n), "notifications/tools/list_changed");
+    }
+
+    #[test]
+    fn cancelled_params_field_getters_via_trait() {
+        use turul_rpc::RequestId;
+        let params = CancelledNotificationParams {
+            request_id: Some(RequestId::Number(42)),
+            reason: Some("user clicked stop".to_string()),
+            meta: None,
+        };
+        // Drive the field-getters through the `HasCancelledParams` trait.
+        let request_id: Option<&RequestId> = HasCancelledParams::request_id(&params);
+        let reason: Option<&str> = HasCancelledParams::reason(&params);
+        assert_eq!(request_id, Some(&RequestId::Number(42)));
+        assert_eq!(reason, Some("user clicked stop"));
+    }
+
+    #[test]
+    fn progress_params_field_getters_via_trait() {
+        let params = ProgressNotificationParams {
+            progress_token: crate::meta::ProgressToken::Number(serde_json::Number::from(7i64)),
+            progress: 0.42,
+            total: Some(1.0),
+            message: Some("loading...".to_string()),
+            meta: None,
+        };
+        assert_eq!(
+            HasProgressParams::progress_token(&params),
+            &crate::meta::ProgressToken::Number(serde_json::Number::from(7i64))
+        );
+        assert_eq!(HasProgressParams::progress(&params), 0.42);
+        assert_eq!(HasProgressParams::total(&params), Some(1.0));
+        assert_eq!(HasProgressParams::message(&params), Some("loading..."));
+    }
+
+    #[test]
+    fn resource_updated_uri_via_trait() {
+        let p = ResourceUpdatedNotificationParams {
+            uri: "file:///cfg.toml".to_string(),
+            meta: None,
+        };
+        assert_eq!(HasResourceUpdatedParams::uri(&p), "file:///cfg.toml");
     }
 }
