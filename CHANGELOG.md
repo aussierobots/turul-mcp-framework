@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
+
+> **Release status.** This entry tracks the in-progress 0.4.0 cut on the
+> `2026-07-28-MCP-Specification` branch (and its current sub-branch
+> `feat/turul-mcp-protocol-2026-07-28`). The workspace `[workspace.package].version`
+> was already bumped to `0.4.0` in commit `064733e` (with the turul-rpc isolation
+> fix in `c0737fb`). **The branch has not been merged to `main` and 0.4.0 has not
+> been published.** Per the branch lock, that requires explicit maintainer
+> authorization. The footer compare-link will be added at the release tag.
+> `main` continues to ship at the 0.3.x line (currently `0.3.47`).
+
+### Added
+
+- **New crate `turul-mcp-protocol-2026-07-28` at 0.4.0** — first standalone binding for the MCP DRAFT-2026-v1 release candidate (see [https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)). Stateless protocol core (`initialize` / `notifications/initialized` removed, `Mcp-Session-Id` header removed, per-request capability negotiation in `_meta`), new `server/discover` method, multi-round-trip `InputRequiredResult` (SEP-2322), `CacheableResult` mixin (`ttlMs`, `cacheScope`), W3C Trace Context in `_meta`, JSON Schema 2020-12 on tool input schemas, MCP Apps templates, RFC 9207 auth hardening, error code `-32002 → -32602`. Schema pinned to upstream commit `c3e3f09eb5d271407afac0f0bb6ee2dae5813d1d`. Compliance harness with bidirectional wire-format gate against the upstream's 86 canonical example fixtures (8 modeled cases / 20 fixtures bound at this cut; remainder marked `Kind::NotModeled` for wave-by-wave migration). 342 tests pass (159 lib + 179 integration + 3 fixture + 1 doctest), 0 warnings. See `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md`.
+- **ADR-027** — *Targeting MCP DRAFT-2026-v1*. Records the wire-string choice (`"DRAFT-2026-v1"` until the upstream RC ships its `2026-07-28` literal), the schema-pin regeneration trigger, the per-crate versioning policy, and the consequences for downstream consumers. Revision log captures the 2026-05-24 initial cut, the 2026-05-31 per-crate-versioning adoption, Slice A' schema-fidelity corrections, Slice A'' SEP-2577 deprecation annotations, and the Slice C status update (§Consequences replaced; Phase 9.4 moves *into* 0.4.0).
+- **ADR-029** — *Spec-version coexistence via mutually-exclusive cargo features (default DRAFT-2026-v1)*. The load-bearing 0.4.0 architecture decision. Default = 2026; opt-in `legacy-2025-11-25` feature on `turul-mcp-protocol`; `compile_error!` mutex; Phase 9.4 committed to flip-all-at-once.
+- **ADR-030** — *turul-mcp-client spec coexistence — bilingual default*. Client diverges from server's single-spec strategy because a client has no process-wide state-machine lock — it talks to whatever's on the wire. Per-connection version detection via try-`server/discover`-then-fallback-to-`initialize`; opt-in `client-2025-only`/`client-2026-only` narrowing features for binary size.
+- **8 existing-ADR amendments** documenting the default-2026 cascade through ADR-027 (consequences replaced + status update + revision log), ADR-006 (stateless variant; GET SSE is 2025-only), ADR-009 (`McpProtocolVersion` becomes feature-exclusive), ADR-023 (per-request fingerprint persistence), ADR-001-lambda (stateless 2026 Lambda variant — ~50 vs ~200 LOC), and revision-log entries on ADR-025, ADR-026, ADR-028.
+- **`docs/plans/2026-07-28-architecture-review.md`** — doc-form persistence of the 5-pattern architecture-review workflow that recommended Pattern A (cargo-feature gating). Persists what was previously in `/tmp` so the analysis is permanently in the repo.
+- **`docs/plans/2026-07-28-feature-gating-rollout.md`** — phase-by-phase implementation plan for wiring `#[cfg(feature = "protocol-...")]` through 6 framework crates + 55 examples + 8 test crates. The actual rollout is a separate slice; this plan is the verification artifact.
+- **`docs/plans/2026-07-28-codex-review-summary.md`** — self-contained codex-review-ready summary covering the decision, files-touched inventory, technical risks, and codex focus areas.
+- **SEP-2577 deprecation annotations** on Roots / Sampling / Logging types and traits (`#[deprecated(since = "0.4.0", note = "...")]` with migration-path guidance and 2027-07-28+ earliest-removal date). Annotation-only this revision; types remain fully functional during the 12-month migration window. `LoggingLevel` (the value type for the non-deprecated `RequestMetaObject.log_level` replacement) is intentionally NOT deprecated.
+- **ADR-028** — *Extensions strategy* (SEP-2133 / SEP-2663). Documents how the framework will host out-of-tree extensions including `turul-mcp-ext-tasks-2026-07-28` and `turul-mcp-ext-apps-2026-07-28`.
+
+### Changed
+
+- **Per-crate independent versioning policy adopted.** Every non-frozen crate's `Cargo.toml` migrated from `version.workspace = true` to a literal `version = "0.4.0"`. After this cut, individual crates may patch and publish independently — bump only the crate that changed, not the whole workspace. `[workspace.package].version` remains for tooling compatibility but is no longer authoritative. `[workspace.dependencies]` pins each internal crate path to its current literal version.
+- **Frozen historical protocol crates** `turul-mcp-protocol-2025-06-18` and `turul-mcp-protocol-2025-11-25` received a one-time literal `version = "0.3.47"` pin in their respective `Cargo.toml` files. Without this they would inherit the new `[workspace.package].version = "0.4.0"` and silently bump the published version of crates that are explicitly frozen against historical spec snapshots. No source files were touched in either frozen crate. See ADR-027 §"Revision log" entry **2026-05-31** for the one-time-exception record.
+- **`turul-mcp-json-rpc-server` is now a compatibility shim** re-exporting `turul-rpc 0.1`. New code should depend on `turul-rpc` directly (the 2026-07-28 protocol crate already does, isolated to `0.2.2` via a per-crate dep override). The shim continues to satisfy the rest of the framework on 0.1 through the 0.3.x line; framework-wide cutover is deferred to a later slice. See ADR-025.
+
+### Notes for downstream consumers
+
+- `turul-mcp-protocol` (the active-spec re-export alias) currently points at `turul-mcp-protocol-2025-11-25` in the doc-slice that introduced ADR-029 / ADR-030. Per ADR-029 the alias becomes a **feature-gated re-export** (default = `protocol-2026-07-28`, opt-in `legacy-2025-11-25`) and Phase 9.4 (the actual flip + every consumer crate migrating to forwarding-feature topology) is **in-scope for 0.4.0 publication**, not deferred. Consumer migration is REQUIRED across `turul-mcp-server`, `turul-mcp-client`, `turul-http-mcp-server`, `turul-mcp-aws-lambda`, `turul-mcp-builders`, derive macros, and ~55 examples — scoped in `docs/plans/2026-07-28-feature-gating-rollout.md`. 0.4.0 is **not shippable to crates.io** until that work lands and CI exercises both feature matrices.
+- Branch lock: the `2026-07-28-MCP-Specification` branch remains unmerged from `main`. Pulling `main` against 0.4.0 gives a working tree that still ships MCP 2025-11-25 on the wire.
+
 ## [0.3.47] - 2026-05-23
 
 ### Fixed

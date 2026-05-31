@@ -11,7 +11,40 @@
 - `turul-mcp-server`: High-level server builder and areas (tools/resources/prompts/etc.).
 - `turul-mcp-client`: HTTP client library.
 - `turul-mcp-protocol`: Current-spec alias that re-exports the active protocol crate for downstreams.
-- `turul-mcp-protocol-2025-11-25`: MCP spec types and contracts for the 2025-11-25 schema.
+- `turul-mcp-protocol-2026-07-28`: MCP spec types for the 2026-07-28 schema (independently versioned at 0.4.x; current active spec line).
+- `turul-mcp-protocol-2025-11-25`: **FROZEN** at 0.3.x — historical snapshot, do not modify.
+- `turul-mcp-protocol-2025-06-18`: **FROZEN** at 0.3.x — historical snapshot, do not modify.
+
+## Frozen Protocol Crates
+
+`turul-mcp-protocol-2025-06-18` and `turul-mcp-protocol-2025-11-25` are **frozen at `0.3.47`**. Do not edit them — no code changes, no version bumps, no doc updates, no dependency changes. They are immutable historical spec snapshots. All new MCP spec work belongs in `turul-mcp-protocol-2026-07-28`. The only permitted touch is workspace `Cargo.toml` metadata if a workspace-wide rename forces it.
+
+## Crate Versioning Policy
+
+**Per-crate independent versioning.** Each crate's `Cargo.toml` carries its own literal `version = "X.Y.Z"`. No crate uses `version.workspace = true`.
+
+- The **0.4.0 release** is the first under this policy. Every non-frozen crate ships at `0.4.0` together as a coordinated initial cut.
+- After 0.4.0, crates may be patched and published independently — bump only the crate(s) that changed, not the whole workspace.
+- Frozen crates (`2025-06-18`, `2025-11-25`) stay at `0.3.47` regardless of what the rest of the workspace does.
+- `[workspace.package].version` exists for tooling compatibility but is not authoritative — per-crate literal versions are the source of truth.
+- When bumping a crate, update both the crate's `Cargo.toml` AND the matching `[workspace.dependencies]` pin in the root `Cargo.toml`.
+
+External dependencies (`serde`, `tokio`, etc.) continue to use `workspace = true` references — only internal crate versions are independent.
+
+## Branch-Conditional Spec Guidance
+
+This file documents the framework under two simultaneous spec targets:
+
+- **`main` (and any branch derived from `main`)** — MCP 2025-11-25 (stateful core: `initialize`/`notifications/initialized` handshake, `Mcp-Session-Id` header, capability negotiation at handshake time).
+- **`2026-07-28-MCP-Specification` (and side-branches of it, including `feat/turul-mcp-protocol-2026-07-28`)** — MCP DRAFT-2026-v1 release candidate (stateless core: handshake and session header removed, capabilities travel in `_meta` on every request, new `server/discover` method). See §"Branch Lock" below for the full diff.
+
+Rules in §"MCP Specification Compliance", §"Notifications Compliance", §"Testing Guidelines", §"Agent-Specific Instructions", §"Critic Review Mode", and §"Reviewer Focus Areas" are written against the `main` 2025-11-25 baseline and are explicitly tagged `(2025-11-25 baseline)` where the draft branch supersedes them. On the draft branch, defer to:
+
+- `docs/adr/027-targeting-mcp-draft-2026-v1.md` — spec target + cutover plan
+- `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md` — current compliance state
+- §"Branch Lock" below — headline diffs vs 2025-11-25
+
+If a `(2025-11-25 baseline)` rule conflicts with a draft-branch spec requirement, the draft-branch artifact wins on the draft branch; do not back-port the draft-branch shape to `main` without explicit instruction.
 - `turul-mcp-session-storage`: Pluggable session backends (in-memory, SQLite, Postgres, DynamoDB).
 - `turul-mcp-json-rpc-server`: JSON-RPC 2.0 foundation.
 - `turul-http-mcp-server`: HTTP/SSE transport.
@@ -33,7 +66,7 @@
 
 ## Building MCP Clients
 - Use `turul_mcp_client::McpClientBuilder` with an appropriate transport (`HttpTransport`, `SseTransport`, etc.); the builder owns connection retries and timeouts.
-- Invoke `client.connect().await?` to perform the JSON-RPC handshake; the client automatically sends `initialize` and the required `notifications/initialized` follow-up.
+- Invoke `client.connect().await?` to perform the JSON-RPC handshake; the client automatically sends `initialize` and the required `notifications/initialized` follow-up. (2025-11-25 baseline; the DRAFT-2026 branch is stateless and removes both `initialize` and `notifications/initialized`.)
 - Interact through the high-level APIs (`list_tools`, `call_tool`, `list_resources`, `read_resource`, `list_prompts`, `get_prompt`, etc.) which all return `McpClientResult<T>` with rich `McpClientError` variants.
 - For streaming notifications, subscribe through the transport-specific stream helpers and always handle progress tokens echoed by tools.
 - When embedding in other applications, propagate errors using the typed enums rather than string matching and surface meaningful diagnostics (e.g., include `McpClientError::Lifecycle` messaging when initialization fails).
@@ -51,13 +84,16 @@
   - `cargo test --test mcp_vec_result_schema_test`
   - `cargo test -p turul-mcp-derive schemars_integration_test`
 
-## MCP Specification Compliance
+## MCP Specification Compliance (2025-11-25 baseline)
+
+_Rules below apply to `main` / the 2025-11-25 spec target. On the DRAFT-2026 branch, see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md` and §"Branch Lock" — stateless core, `_meta`-routed capability negotiation, error code `-32002 → -32602`._
+
 - Target spec: https://modelcontextprotocol.io/specification/2025-11-25
 - Requirements: correct JSON-RPC usage, `_meta` fields, version negotiation, pagination/cursors, progress, and session isolation/TTL.
 - Validate: run `cargo test --test mcp_compliance_tests`; for end‑to‑end session compliance, see README “MCP Session Management Compliance Testing”.
 
-### TypeScript Schema Alignment
-- Shapes must match the latest TS schema in `turul-mcp-protocol-2025-11-25` (camelCase, optional `_meta` on params/results where spec allows).
+### TypeScript Schema Alignment (2025-11-25 baseline)
+- Shapes must match the latest TS schema in `turul-mcp-protocol-2025-11-25` (camelCase, optional `_meta` on params/results where spec allows). _On the DRAFT-2026 branch, the equivalent reference is `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`._
 - Prompts: `GetPromptParams.arguments` is `map<string,string>` at the boundary. Handlers may convert internally to `Value` for rendering.
 - Tools: `ToolSchema` type is `object`; `properties`/`required` present when needed; `annotations` are optional hints.
 - Resources: `Resource`, `ResourceTemplate`, and results (`List*Result`, `ReadResourceResult`) follow TS names, including `nextCursor` and `_meta`.
@@ -105,8 +141,11 @@
 - Pagination: respects `cursor` and returns `nextCursor` when more items exist.
 - Tests: add/keep coverage for all of the above.
 
-## Notifications Compliance
-- `notifications/initialized`: in strict lifecycle mode, reject operations until client sends `notifications/initialized`; add E2E to verify gating and acceptance after.
+## Notifications Compliance (2025-11-25 baseline)
+
+_On the DRAFT-2026 branch the `notifications/initialized` rule does not apply — the handshake is gone. Per-request capability negotiation rides in `_meta`._
+
+- `notifications/initialized`: in strict lifecycle mode, reject operations until client sends `notifications/initialized`; add E2E to verify gating and acceptance after. (2025-11-25 baseline only.)
 - `notifications/progress`: progress updates must include `progressToken`. Add at least one strict E2E that asserts ≥1 progress event and token match with tool response.
 - `list_changed` notifications (e.g., `notifications/tools/list_changed`) for tools/prompts/resources must only be advertised/emitted when dynamic change sources exist; keep capability key `listChanged=false` for static servers.
 
@@ -146,7 +185,7 @@
 - Use `tests/shared` server manager; do not hardcode `current_dir` paths. Discover workspace root dynamically.
 - Add E2E for `resources/templates/list` (pagination, stable ordering, `_meta` round‑trip).
 - Add a strict SSE progress test validating at least one progress event and `progressToken` match.
-- Add strict lifecycle E2E gating with `notifications/initialized`.
+- Add strict lifecycle E2E gating with `notifications/initialized`. (2025-11-25 baseline only — DRAFT-2026 has no lifecycle to gate.)
 - Assert initialize capability snapshot in each E2E suite.
 
 ## Commit & Pull Request Guidelines
@@ -158,9 +197,33 @@
 - Never commit secrets. AWS examples require valid credentials; prefer env vars/roles.
 - Keep debug logs off by default; gate experimental features behind flags.
 
+## Branch Lock: `2026-07-28-MCP-Specification`
+
+**This branch tracks adoption of the MCP 2026-07-28 release candidate** (see https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/). Headline changes the framework must absorb:
+
+- **Stateless protocol core**: `initialize`/`notifications/initialized` handshake removed; `Mcp-Session-Id` header removed; protocol version, client info, and capabilities travel in `_meta` on every request; new `server/discover` method.
+- **Server-to-client requests**: SSE no longer held open for elicitation — server returns `InputRequiredResult` with `inputRequests` + `requestState`; client re-issues original call with `inputResponses`.
+- **New required headers**: `MCP-Protocol-Version: 2026-07-28`, `Mcp-Method`, `Mcp-Name`; servers reject header/body disagreement.
+- **Caching headers**: `ttlMs`, `cacheScope` on list/read results.
+- **Distributed tracing**: W3C `traceparent`/`tracestate`/`baggage` in `_meta`.
+- **Extensions first-class** (SEP-2133): reverse-DNS IDs, `extensions` capability map, separate `ext-*` repos.
+- **Tasks → official extension** (SEP-2663): new stateless lifecycle (`tasks/get`/`update`/`cancel`, no `tasks/list`); 2025-11-25 experimental Tasks API is **incompatible** and requires migration.
+- **MCP Apps extension** (SEP-1865): sandboxed-iframe HTML UI templates.
+- **JSON Schema 2020-12** (SEP-2106): `oneOf`/`anyOf`/`allOf`/`$ref`/`$defs` on `inputSchema`; `outputSchema` unrestricted; `structuredContent` may be any JSON value.
+- **Auth hardening**: RFC 9207 `iss` validation (SEP-2468), OIDC `application_type` on DCR (SEP-837), issuer binding (SEP-2352), refresh token requests (SEP-2207), scope accumulation (SEP-2350), `.well-known` discovery suffix (SEP-2351).
+- **Deprecations** (12-month window, annotation-only this version): Roots, Sampling, Logging.
+- **Breaking error code**: missing resource `-32002` → JSON-RPC standard `-32602`.
+
+**Branch governance — MANDATORY:**
+- **DO NOT merge `2026-07-28-MCP-Specification` into `main` without the maintainer's express authority.** This applies to merge commits, fast-forward merges, rebase-onto-main, squash-merges, and merge PRs alike.
+- **DO NOT mark this branch "done," delete it, force-push it, or open a release/merge PR** without explicit maintainer authorization in the current session.
+- "All SEPs implemented," "all tests pass," and "conformance suite green" are necessary but **not sufficient** — disposition is the maintainer's call.
+- `main` remains on MCP 2025-11-25 throughout this work. Do not back-port 2026-07-28-only changes to `main` without explicit instruction.
+- Side-branches off `2026-07-28-MCP-Specification` may merge back into it freely; only the branch → `main` direction is locked.
+
 ## Agent-Specific Instructions
 - Scope: this file applies to the entire repository.
-- Role: act as a strict critic for MCP 2025-11-25 compliance within the Turul MCP Framework; flag deviations and propose compliant fixes.
+- Role: act as a strict critic for the **active branch's spec target** — MCP 2025-11-25 on `main`, MCP DRAFT-2026-v1 on the `2026-07-28-MCP-Specification` branch (see §"Branch-Conditional Spec Guidance") — within the Turul MCP Framework; flag deviations and propose compliant fixes.
 - Do not relax security, logging, or API contracts to “make tests pass”; fix root causes while preserving spec compliance.
 - Boundaries: do not modify core framework areas unless explicitly requested. The ~9 areas are Tools, Resources, Prompts, Sampling, Completion, Logging, Roots, Elicitation, and Notifications.
  - Extensions: if introducing truly non-standard fields, document them clearly, keep optional, and ensure baseline compliance without them.
@@ -221,7 +284,7 @@
 - Treat docs/examples/agent-instruction changes as potentially compliance-impacting:
   - Flag docs that advertise unsupported capabilities or incorrect defaults.
   - Flag examples that imply `listChanged`/subscription/progress/lifecycle support without matching implementation/tests.
-  - Flag spec-version drift (must remain aligned to MCP `2025-11-25` unless intentionally upgraded everywhere).
+  - Flag spec-version drift relative to the active branch's spec target (MCP 2025-11-25 on `main`; MCP DRAFT-2026-v1 on the `2026-07-28-MCP-Specification` branch). On `main`, do not back-port draft-branch shapes; on the draft branch, do not preserve removed 2025-11-25 contracts (`initialize`/`notifications/initialized`/`Mcp-Session-Id`).
 - When reviewing client/server API guidance, verify it preserves typed error propagation and truthful capability advertisement.
 
 ### Workspace State Triage (Required Before Review Conclusions)
@@ -235,7 +298,7 @@
 ### Reviewer Focus Areas (Do Not Skip)
 - Architecture boundaries: examples and docs should not encourage bypassing crate layering (`protocol` vs `server` vs transport crates).
 - Capability truthfulness: docs/tests must not imply dynamic capabilities when the framework is static by default.
-- Lifecycle strictness: guidance must preserve `notifications/initialized` gating and correct error mapping semantics.
+- Lifecycle strictness: on the 2025-11-25 baseline, guidance must preserve `notifications/initialized` gating and correct error mapping semantics. On the DRAFT-2026 branch this rule is inapplicable (stateless core).
 - Pagination/meta/schema accuracy: docs/examples must use `cursor`, `nextCursor`, and optional `_meta` consistently with the protocol crate.
 - Notifications naming: spec method names use snake_case path segments; capability keys remain camelCase.
 - Tool error semantics: do not normalize transport/framework errors into fake successful tool payloads.

@@ -14,14 +14,27 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 > - **docs/adr/** — architectural decisions
 > - If conflict: AGENTS.md wins.
 
+## Branch Lock: `2026-07-28-MCP-Specification`
+
+**This branch tracks adoption of the MCP 2026-07-28 release candidate** (stateless core, `initialize`/`Mcp-Session-Id` removed, Tasks moved to extension, error code `-32002` → `-32602`, JSON Schema 2020-12, MCP Apps, caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging). See https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/.
+
+- **DO NOT merge `2026-07-28-MCP-Specification` into `main` without the maintainer's express authority.**
+- **DO NOT fast-forward, rebase-onto-main, squash-to-main, or open a merge PR for this branch** unless the maintainer (Nick) has explicitly authorized that specific action in the current session.
+- **DO NOT delete the branch, force-push it, or treat it as "complete"** without express authority. "Tests pass" / "all SEPs implemented" is not sufficient — final disposition is the maintainer's call.
+- All work for the 2026-07-28 spec lands on this branch. `main` continues to hold 2025-11-25 (current) until the maintainer chooses to cut over.
+
 ## Critical Rules
 
 ### Protocol Crate Purity
-**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-11-25` unless it directly relates to MCP spec compliance.** No framework features, middleware hooks, or convenience additions.
+**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2026-07-28` unless it directly relates to MCP spec compliance.** No framework features, middleware hooks, or convenience additions.
 
 **Forbidden**: Trait hierarchies, builder patterns, framework helpers, tutorial docs
 **Allowed**: MCP spec types, serde derives, basic builder methods on concrete types, spec error types
 **Framework traits belong in `turul-mcp-builders`** (`turul-mcp-builders/src/traits/`)
+
+### Frozen Protocol Crates (DO NOT MODIFY)
+
+**`turul-mcp-protocol-2025-06-18` and `turul-mcp-protocol-2025-11-25` are FROZEN at 0.3.x.** They are historical spec snapshots and must never be edited again — no patches, no version bumps, no doc updates, no dependency changes. New MCP spec work lives in `turul-mcp-protocol-2026-07-28` (0.4.x line). The only permitted touch is workspace `Cargo.toml` metadata if a workspace-wide rename forces it.
 
 ### Simple Solutions First
 **ALWAYS** prefer simple, minimal fixes over complex or over-engineered solutions:
@@ -92,8 +105,17 @@ struct Calculator;  // Framework → tools/call
 #[mcp_tool(method = "tools/call")]  // NO METHOD STRINGS!
 ```
 
+### Crate Versioning Policy
+
+**Each crate carries its own literal `version = "X.Y.Z"` in `Cargo.toml`.** No crate uses `version.workspace = true`. The 0.4.0 release is the first under this policy — all non-frozen crates ship at 0.4.0 together, but going forward they can be patched and published independently (only bumping the crate that changed, not the whole workspace).
+
+- Frozen crates (`turul-mcp-protocol-2025-06-18`, `turul-mcp-protocol-2025-11-25`) stay at `0.3.47`. They are historical spec snapshots and don't move.
+- All other crates start the 0.4.x line at `0.4.0`.
+- `[workspace.package].version` exists but is **not authoritative** — it's a default for tooling. Per-crate `version = "..."` is the source of truth.
+- `[workspace.dependencies]` pins the version for each internal crate path. When bumping a crate, bump it in the crate's `Cargo.toml` AND in the workspace dependency pin.
+
 ### Workspace Dependencies
-All crate dependencies MUST use `workspace = true` references. Declare versions in root `Cargo.toml` `[workspace.dependencies]`, reference with `.workspace = true` in crate `Cargo.toml`. Add crate-specific features inline: `hyper = { workspace = true, features = ["http1"] }`.
+External crate dependencies (`serde`, `tokio`, `hyper`, etc.) MUST use `workspace = true` references. Declare versions in root `Cargo.toml` `[workspace.dependencies]`, reference with `.workspace = true` in crate `Cargo.toml`. Add crate-specific features inline: `hyper = { workspace = true, features = ["http1"] }`.
 
 ### Feature Flags — Storage Backends
 Default features: `["http", "sse"]` — in-memory only, no backend deps compiled. Storage backends are opt-in:
@@ -376,6 +398,65 @@ cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
 ```
 
 **Why**: Incremental compilation caches string literals/errors across crates.
+
+### Comments
+
+**Comments describe what the code IS and what's non-obvious about it.** Not session history, not internal phase tags, not line numbers that will rot.
+
+**Forbidden:**
+- **Internal development phases** — `Phase 3.4`, `Slice 1`, `Batch N`, `Group A`, `Migration step 2`. These mean nothing once the session ends.
+- **Upstream schema line numbers** — `Schema line 2627`, `lines 943–949`. Line numbers shift every time we re-pin the schema (`refresh --write`); the comment quietly becomes wrong without anyone noticing.
+- **Tombstones / dev log narratives** — `was removed in v0.3.42`, `formerly known as X`, `pending Phase 5`. Git history is the log; code comments are not.
+- **Comparative claims you haven't verified** — `unlike every other Result type`, `the only place we do X`. Either grep and enumerate (`X, Y, Z all share this shape`) or don't claim it.
+- **Self-references to `CLAUDE.md` / `AGENTS.md` in code comments** — `see CLAUDE.md §Comments`, `per CLAUDE.md §Notification Wire Format`. The repo playbook governs *how* code is written, not what individual files cite. Code comments should describe the code; they don't need a citation to the rule that says *"comments should describe the code."* Project docs (CHANGELOG.md, ADRs, COMPLIANCE.md, plan docs) may cite CLAUDE.md / AGENTS.md by name when explaining process decisions — `.rs` source files must not.
+- **Speculation about author intent** — `intentional or oversight`, `presumably because the spec authors meant`. We don't know intent.
+
+**Allowed — and preferred when the WHY is non-obvious:**
+- Hidden invariants that can't be expressed in the type — `caller must hold the mutex when invoking this`
+- Constraints not visible from one site — `keep in sync with the kebab-case in foo.rs::REGISTRY`
+- Workarounds for specific bugs with context — `reqwest #1234: trailing newline corrupts the cookie jar`
+- Verifiable schema anchors by NAME, not line — `Wire shape of \`elicitation/create\`'s URL-mode params — see \`ElicitRequestURLParams\` in the DRAFT-2026-v1 schema.` Names survive re-pins; line numbers don't.
+- **Mirror the schema's `@see` anchors** when the upstream type carries one. The MCP schema uses TypeDoc `@see` block tags pointing to the spec docs (e.g. `@see [General fields: _meta](/specification/draft/basic/index#meta)`). When our Rust binding documents that type, carry the same anchor through as a doc link — anchors are URL fragments tied to section IDs, not line numbers, so they survive re-pins. Example: `/// See [General fields: _meta](https://modelcontextprotocol.io/specification/draft/basic/index#meta).` Anchors that are missing from the upstream schema (an `@see` we couldn't find) ARE useful information — flag them, don't make them up.
+
+**Default: write no comment.** If removing the comment wouldn't confuse a future reader, don't write it. Well-named identifiers describe WHAT; comments earn their place by explaining WHY.
+
+### Slice Completion Gate
+
+**Before declaring a slice "complete" or writing a summary claim ("X is now clean", "no violations remain", "all instances fixed"), run a pre-declared verification grep across the FULL scope of the rule — not just the instances the prior reviewer named.**
+
+The recurring failure mode this gate exists to stop: reviewer surfaces N instances → operator fixes N → operator claims "rule satisfied across crate" → next reviewer finds M more instances the first didn't search for → repeat. Each "fix" was correct; each "claim" was premature.
+
+**Mandatory before claiming a comment-rule slice done** (applied to the whole crate, not just `src/`):
+
+```bash
+# All counts MUST be 0. If non-zero, surface each hit with explicit
+# disposition (keep as historical/migration note, or rewrite) BEFORE
+# claiming the slice is done.
+grep -rEc 'Schema line|schema line|Schema lines|schema lines|lines [0-9]'  <crate>/
+grep -rEc 'Phase [0-9]\.\?|Slice [0-9]|Group [A-G] —|Group [A-G]:'         <crate>/
+grep -rEc 'CLAUDE\.md|AGENTS\.md'                                          <crate>/src/ <crate>/tests/
+grep -rEc 'removed:|was removed|no longer:|formerly known|deleted with'    <crate>/
+grep -rEn '\b2025-11-25\b'                                                 <crate>/  # then disposition each hit
+grep -rEc 'initialization handshake|notifications/initialized'             <crate>/src/
+```
+
+For ambiguous hits — historical migration notes that explain a current shape vs. stale current-spec claims — list each one in the slice summary with a per-instance disposition. Never silently let them pass.
+
+The verification runs **before** the "done" claim, not after a reviewer finds the gap. The gate is the same regardless of which reviewer or agent wrote the fixes.
+
+### Reviewing Agents (spawned subagents)
+
+**Any agent spawned to review code, audit compliance, or critique a design MUST first read the rules they'll be judging against. Their report is worth nothing if they don't know what "compliant" means in this repo.**
+
+When spawning a reviewer agent (Explore, Plan, code-reviewer, devils-advocate, etc.), the prompt MUST tell them — explicitly, by absolute path — to read:
+
+1. `/Users/nick/turul-mcp-framework/AGENTS.md` — repo policy (source of truth, wins on conflict)
+2. `/Users/nick/turul-mcp-framework/CLAUDE.md` — operator playbook (this file)
+3. Any ADR in `docs/adr/` that governs the area under review
+
+Agents have filesystem access via the `Read` tool. They will NOT magically know about the Comments rule, the Branch Lock, the Protocol Crate Purity rule, the schema-line-numbers-rot caveat, or the `@see` anchor convention unless the prompt instructs them to read CLAUDE.md/AGENTS.md and apply those rules. Don't assume — instruct.
+
+The reviewer's report should cite the rule it's invoking (e.g. "violates CLAUDE.md §Comments: schema line reference in production code") so the operator can verify the rule actually says what the agent claims.
 
 ### Scope Discipline
 
