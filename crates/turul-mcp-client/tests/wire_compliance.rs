@@ -192,8 +192,8 @@ async fn test_mcp_protocol_version_header_on_requests() {
 // rotate the bearer *before* DELETE without rebuilding the transport (which
 // would drop the connection pool).
 //
-// These are wire-layer tests per CLAUDE.md rule 3: they assert what reqwest
-// actually puts on the wire, not framework-internal state.
+// These are wire-layer tests: they assert what reqwest actually puts on the
+// wire (transport-protocol-boundary bytes), not framework-internal state.
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
