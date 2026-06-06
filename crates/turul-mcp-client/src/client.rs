@@ -243,6 +243,14 @@ impl McpClient {
 
     async fn lock_version(&self, v: crate::version::McpVersion) -> McpClientResult<()> {
         *self.protocol_version.write().await = Some(v);
+        // 2026-07-28 is stateless — there is no initialize handshake to mark the
+        // session ready, so do it here. (A 2025-11-25 connection is already Active
+        // via initialize_session() before this is reached.)
+        if v == crate::version::McpVersion::V2026_07_28 {
+            self.session
+                .set_state(crate::session::SessionState::Active)
+                .await;
+        }
         info!(version = %v, "Negotiated MCP wire version");
         Ok(())
     }
@@ -746,7 +754,16 @@ impl McpClient {
 
     /// Fetch tools from the server (no cache interaction).
     async fn fetch_tools(&self) -> McpClientResult<Vec<Tool>> {
-        debug!("Fetching tools from server");
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self.fetch_tools_2026().await;
+        }
+        self.fetch_tools_2025().await
+    }
+
+    /// `tools/list` for a 2025-11-25 connection (the historical alias path).
+    async fn fetch_tools_2025(&self) -> McpClientResult<Vec<Tool>> {
+        debug!("Fetching tools from server (2025-11-25)");
 
         let request = self.build_request("tools/list", json!({}));
 
@@ -756,6 +773,29 @@ impl McpClient {
 
         debug!(count = tools_response.tools.len(), "Retrieved tools");
         Ok(tools_response.tools)
+    }
+
+    /// `tools/list` for a 2026-07-28 connection: request carries `_meta`, and the
+    /// 2026-shaped result (`resultType`/`ttlMs`/`cacheScope` + tools) is parsed
+    /// via the [`protocol::v2026`](crate::protocol::v2026) module.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-only"))]
+    async fn fetch_tools_2026(&self) -> McpClientResult<Vec<Tool>> {
+        debug!("Fetching tools from server (2026-07-28)");
+
+        let meta = crate::protocol::v2026::request_meta(
+            &self.config.client_info.name,
+            &self.config.client_info.version,
+        );
+        let request =
+            self.build_request("tools/list", crate::protocol::v2026::list_tools_params(&meta));
+
+        let response = self.send_request_internal(request).await?;
+        let tools = crate::protocol::v2026::parse_list_tools(
+            &response.get("result").cloned().unwrap_or(Value::Null),
+        )?;
+
+        debug!(count = tools.len(), "Retrieved tools");
+        Ok(tools)
     }
 
     /// List available tools with pagination support

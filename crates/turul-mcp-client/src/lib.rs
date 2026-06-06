@@ -225,6 +225,7 @@ pub mod client;
 pub mod config;
 pub mod error;
 pub mod prelude;
+pub(crate) mod protocol;
 pub mod session;
 pub mod streaming;
 pub mod transport;

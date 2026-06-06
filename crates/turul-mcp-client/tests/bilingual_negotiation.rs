@@ -1,4 +1,4 @@
-//! Acceptance tests for ADR-030 per-connection version negotiation.
+//! Acceptance tests for per-connection wire-version negotiation.
 //!
 //! One bilingual `McpClient` (the default build) connects to three different
 //! wiremock servers and locks the correct wire spec for each: 2026-07-28 when
@@ -143,4 +143,73 @@ async fn bilingual_client_aborts_on_4xx_without_downgrade() {
         None,
         "no wire version may be locked when negotiation aborts"
     );
+}
+
+#[tokio::test]
+async fn bilingual_client_round_trips_tools_list_against_2026_server() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    // server/discover => 2026 server; the connection locks to 2026-07-28.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"],
+                        "capabilities": {},
+                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    // tools/list: the matcher REQUIRES the 2026 per-request `_meta` to be present,
+    // so this only responds if the client sent a 2026-shaped request. The body is a
+    // 2026 `ListToolsResult` (resultType + CacheableResult mixin + tools).
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({
+            "method": "tools/list",
+            "params": { "_meta": { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } }
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_1",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "tools": [{
+                            "name": "echo",
+                            "description": "Echo a message",
+                            "inputSchema": { "type": "object", "properties": { "msg": { "type": "string" } } }
+                        }]
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("connect against a 2026 server must succeed");
+    assert_eq!(client.negotiated_version().await, Some(McpVersion::V2026_07_28));
+
+    // The round-trip: a 2026-shaped tools/list request that parses the 2026 result.
+    let tools = client
+        .list_tools()
+        .await
+        .expect("tools/list must round-trip against a 2026 server");
+    assert_eq!(tools.len(), 1, "expected the one tool the 2026 server returned");
+    assert_eq!(tools[0].name, "echo");
 }
