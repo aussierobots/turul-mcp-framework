@@ -601,7 +601,7 @@ impl HasMeta for ReadResourceResult {
 
 impl crate::traits::HasResultType for ReadResourceResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 
@@ -669,7 +669,7 @@ impl HasMeta for ListResourceTemplatesResult {
 
 impl crate::traits::HasResultType for ListResourceTemplatesResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 
@@ -711,7 +711,7 @@ impl HasMeta for ListResourcesResult {
 
 impl crate::traits::HasResultType for ListResourcesResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 

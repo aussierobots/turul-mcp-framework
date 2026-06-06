@@ -31,7 +31,11 @@ pub enum McpVersion {
     #[serde(rename = "2025-11-25")]
     V2025_11_25,
     /// Protocol with stateless core, extensions framework, JSON Schema 2020-12 (introduced 2026-07-28)
-    #[serde(rename = "DRAFT-2026-v1")]
+    ///
+    /// The pre-finalization draft emitted `"DRAFT-2026-v1"`; the finalized schema
+    /// emits `"2026-07-28"`. We serialize the finalized literal and accept the
+    /// draft literal on deserialize for back-compat.
+    #[serde(rename = "2026-07-28", alias = "DRAFT-2026-v1")]
     V2026_07_28,
 }
 
@@ -43,7 +47,7 @@ impl McpVersion {
             McpVersion::V2025_03_26 => "2025-03-26",
             McpVersion::V2025_06_18 => "2025-06-18",
             McpVersion::V2025_11_25 => "2025-11-25",
-            McpVersion::V2026_07_28 => "DRAFT-2026-v1",
+            McpVersion::V2026_07_28 => "2026-07-28",
         }
     }
 
@@ -171,7 +175,7 @@ impl std::str::FromStr for McpVersion {
             "2025-03-26" => Ok(McpVersion::V2025_03_26),
             "2025-06-18" => Ok(McpVersion::V2025_06_18),
             "2025-11-25" => Ok(McpVersion::V2025_11_25),
-            "DRAFT-2026-v1" => Ok(McpVersion::V2026_07_28),
+            "2026-07-28" | "DRAFT-2026-v1" => Ok(McpVersion::V2026_07_28),
             _ => Err(crate::McpError::VersionMismatch {
                 expected: Self::CURRENT.as_str().to_string(),
                 actual: s.to_string(),
@@ -209,6 +213,11 @@ mod tests {
             McpVersion::V2025_11_25
         );
         assert_eq!(
+            "2026-07-28".parse::<McpVersion>().unwrap(),
+            McpVersion::V2026_07_28
+        );
+        // Draft literal still parses for back-compat (deserialize-only alias).
+        assert_eq!(
             "DRAFT-2026-v1".parse::<McpVersion>().unwrap(),
             McpVersion::V2026_07_28
         );
@@ -221,7 +230,7 @@ mod tests {
         assert_eq!(McpVersion::V2025_03_26.as_str(), "2025-03-26");
         assert_eq!(McpVersion::V2025_06_18.as_str(), "2025-06-18");
         assert_eq!(McpVersion::V2025_11_25.as_str(), "2025-11-25");
-        assert_eq!(McpVersion::V2026_07_28.as_str(), "DRAFT-2026-v1");
+        assert_eq!(McpVersion::V2026_07_28.as_str(), "2026-07-28");
     }
 
     #[test]

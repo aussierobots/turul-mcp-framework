@@ -1,25 +1,28 @@
-# DRAFT-2026-v1 Compliance Report
+# MCP 2026-07-28 Compliance Report
 
-`turul-mcp-protocol-2026-07-28` against the vendored MCP draft schema.
+`turul-mcp-protocol-2026-07-28` against the vendored MCP schema (`schema/draft/`
+upstream path; finalized wire string `"2026-07-28"`).
 
 ## Pin
 
 - **Schema source**: `modelcontextprotocol/modelcontextprotocol` @ `schema/draft/schema.ts`
 - **Vendored copy**: `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`
 - **Fixture pin (commit SHA)**: `c3e3f09eb5d271407afac0f0bb6ee2dae5813d1d` — see `schema/EXAMPLES_PIN.md`
-- **Captured**: 2026-05-24
-- **Schema surface**: 123 `export interface` + 27 `export type` + 9 `export const` = 159 declarations
-- **Upstream MCP version string**: `"DRAFT-2026-v1"` (will flip when the final 2026-07-28 spec ships — see `docs/adr/027`)
+- **Captured**: 2026-06-07 (re-vendored; finalized wire string. Prior cut: 2026-05-24)
+- **Schema content sha256**: `20df36f9c597bb4c1ecda5f3d836e7d92ffc7252334e364424046bfd016ee810`
+- **Schema surface**: 123 `export interface` + 27 `export type` + 9 `export const` = 159 declarations (unchanged across the re-vendor)
+- **Upstream MCP version string**: `"2026-07-28"` (finalized; was `"DRAFT-2026-v1"` — accepted on deserialize for back-compat. See `docs/adr/027`)
 
 ## Test gate
 
 | Surface | Count | Status |
 |---|---|---|
-| Lib unit tests | 159 | ✅ pass |
+| Lib unit tests | 160 | ✅ pass |
 | `tests/compliance.rs` integration | 179 | ✅ pass |
 | `tests/upstream_fixtures.rs` harness | 3 | ✅ pass |
 | Doctests | 1 (+ 2 ignored) | ✅ pass |
-| **Total** | **342** | ✅ all green, 0 warnings |
+| **Total (`--features compliance`)** | **343** | ✅ all green, `clippy -D warnings` clean |
+| Total (default features) | 333 | ✅ — `compliance` feature adds the 7 lib + 3 fixture wire-gate tests |
 | `mcp-compliance-2026-07-28` binary | 20/20 fixtures | ✅ all pass |
 | Modeled fixtures | 8 of 86 (9.3%) | ⚠ partial — see §Coverage below |
 

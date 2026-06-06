@@ -58,15 +58,21 @@ impl DiscoverRequest {
 
 /// Server → client `server/discover` result.
 ///
-/// Extends `Result`, hence carries the required `resultType` discriminator
-/// (always [`ResultType::Complete`] for normal discovery responses —
-/// InputRequired discovery is not a defined flow).
+/// Extends `CacheableResult`, hence carries the required `resultType`
+/// discriminator (always [`ResultType::Complete`] for normal discovery
+/// responses — InputRequired discovery is not a defined flow) plus the
+/// `ttlMs`/`cacheScope` cache-control mixin (SEP-2549).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiscoverResult {
     /// Discriminator — `"complete"`.
     #[serde(default)]
     pub result_type: ResultType,
+
+    /// `CacheableResult.ttlMs` — required by schema (DiscoverResult extends CacheableResult).
+    pub ttl_ms: u64,
+    /// `CacheableResult.cacheScope` — required by schema.
+    pub cache_scope: crate::caching::CacheScope,
 
     /// Protocol versions this server supports.
     /// The client should choose one of these in subsequent requests'
@@ -89,7 +95,9 @@ pub struct DiscoverResult {
 }
 
 impl DiscoverResult {
-    /// Construct with the three required fields. `instructions` and `_meta` start `None`.
+    /// Construct with the three required fields. Cache hint defaults to
+    /// immediately-stale public (`ttlMs=0`, `cacheScope=public`);
+    /// `instructions` and `_meta` start `None`.
     pub fn new(
         supported_versions: Vec<String>,
         capabilities: ServerCapabilities,
@@ -97,12 +105,21 @@ impl DiscoverResult {
     ) -> Self {
         Self {
             result_type: ResultType::Complete,
+            ttl_ms: 0,
+            cache_scope: crate::caching::CacheScope::Public,
             supported_versions,
             capabilities,
             server_info,
             instructions: None,
             meta: None,
         }
+    }
+
+    /// Set the cache-control hint (`ttlMs` + `cacheScope`).
+    pub fn with_cache(mut self, ttl_ms: u64, cache_scope: crate::caching::CacheScope) -> Self {
+        self.ttl_ms = ttl_ms;
+        self.cache_scope = cache_scope;
+        self
     }
 
     /// Attach natural-language guidance.
@@ -157,7 +174,7 @@ impl crate::traits::HasMeta for DiscoverResult {
 }
 impl crate::traits::HasResultType for DiscoverResult {
     fn result_type(&self) -> ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 impl crate::traits::RpcResult for DiscoverResult {}
@@ -283,11 +300,16 @@ mod tests {
             fixture_impl(),
         )
         .with_instructions("hi");
-        let s = serde_json::to_string(&r).unwrap();
-        let parsed: DiscoverResult = serde_json::from_str(&s).unwrap();
+        let v = serde_json::to_value(&r).unwrap();
+        // CacheableResult mixin (DiscoverResult extends CacheableResult) — both
+        // fields are required on the wire, camelCase.
+        assert_eq!(v["ttlMs"], 0);
+        assert_eq!(v["cacheScope"], "public");
+        let parsed: DiscoverResult = serde_json::from_value(v).unwrap();
         assert_eq!(parsed.result_type, ResultType::Complete);
         assert_eq!(parsed.supported_versions, vec!["DRAFT-2026-v1".to_string()]);
         assert_eq!(parsed.instructions.as_deref(), Some("hi"));
+        assert_eq!(parsed.cache_scope, crate::caching::CacheScope::Public);
     }
 
     #[test]
@@ -295,7 +317,9 @@ mod tests {
         // Per the `Result` schema, clients receiving a result without
         // `resultType` must treat it as "complete". Our serde default does this.
         let v = json!({
-            "supportedVersions": ["DRAFT-2026-v1"],
+            "ttlMs": 0,
+            "cacheScope": "public",
+            "supportedVersions": ["2026-07-28"],
             "capabilities": {},
             "serverInfo": {"name": "s", "version": "0.4.0"}
         });

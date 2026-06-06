@@ -681,7 +681,7 @@ impl HasMeta for CallToolResult {
 
 impl HasResultType for CallToolResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 
@@ -749,7 +749,7 @@ impl HasMeta for ListToolsResult {
 
 impl HasResultType for ListToolsResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 

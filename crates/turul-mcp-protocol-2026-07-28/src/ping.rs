@@ -64,7 +64,7 @@ impl HasMeta for EmptyResult {
 
 impl HasResultType for EmptyResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 

@@ -19,9 +19,11 @@ use serde::{Deserialize, Serialize};
 
 /// Discriminator for [`Result`](crate::traits::RpcResult)-shaped responses.
 ///
-/// `ResultType = "complete" | "input_required"`.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
+/// `ResultType = "complete" | "input_required" | string`. The trailing open
+/// `| string` arm (added in the finalized schema) means an unknown
+/// discriminator MUST be tolerated rather than rejected — carried verbatim in
+/// [`ResultType::Other`] so it round-trips.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResultType {
     /// The request completed successfully and the result carries final content.
     Complete,
@@ -29,6 +31,8 @@ pub enum ResultType {
     /// [`InputRequiredResult`](crate::input_required::InputRequiredResult)
     /// with `inputRequests` and/or `requestState`.
     InputRequired,
+    /// An unknown discriminator string, preserved per the open `| string` arm.
+    Other(String),
 }
 
 impl Default for ResultType {
@@ -40,10 +44,11 @@ impl Default for ResultType {
 
 impl ResultType {
     /// Wire string for this discriminator.
-    pub const fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             ResultType::Complete => "complete",
             ResultType::InputRequired => "input_required",
+            ResultType::Other(s) => s,
         }
     }
 }
@@ -51,6 +56,23 @@ impl ResultType {
 impl std::fmt::Display for ResultType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl Serialize for ResultType {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for ResultType {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(match s.as_str() {
+            "complete" => ResultType::Complete,
+            "input_required" => ResultType::InputRequired,
+            _ => ResultType::Other(s),
+        })
     }
 }
 
@@ -84,14 +106,25 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unknown_discriminator() {
-        let r: Result<ResultType, _> = serde_json::from_str("\"partial\"");
-        assert!(r.is_err(), "unknown discriminator must fail to parse");
+    fn accepts_unknown_discriminator_as_other() {
+        // Finalized schema: `ResultType = "complete" | "input_required" | string`.
+        // An unknown discriminator is preserved verbatim, not rejected.
+        let r: ResultType = serde_json::from_str("\"partial\"").unwrap();
+        assert_eq!(r, ResultType::Other("partial".to_string()));
+    }
+
+    #[test]
+    fn other_round_trips_verbatim() {
+        let v = serde_json::to_value(ResultType::Other("partial".to_string())).unwrap();
+        assert_eq!(v, "partial");
+        let back: ResultType = serde_json::from_value(v).unwrap();
+        assert_eq!(back, ResultType::Other("partial".to_string()));
     }
 
     #[test]
     fn as_str_matches_wire_string() {
         assert_eq!(ResultType::Complete.as_str(), "complete");
         assert_eq!(ResultType::InputRequired.as_str(), "input_required");
+        assert_eq!(ResultType::Other("x".to_string()).as_str(), "x");
     }
 }

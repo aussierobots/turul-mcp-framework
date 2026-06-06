@@ -315,7 +315,7 @@ impl HasMeta for CompleteResult {
 
 impl HasResultType for CompleteResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 

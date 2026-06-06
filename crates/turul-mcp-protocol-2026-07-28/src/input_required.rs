@@ -43,7 +43,13 @@ use crate::sampling::{CreateMessageRequest, CreateMessageResult};
 /// can continue to ask clients for sampling/roots input via the MRTR pattern
 /// (SEP-2322). After the deprecated features are removed, the corresponding
 /// variants will be removed from this enum.
+// Variant sizes are inherently uneven: `CreateMessageRequest` (the largest) is a
+// full sampling request, while `ListRootsRequest`/`ElicitRequest` are small. These
+// are untagged unions over deprecated (SEP-2577) types retained only for the
+// SEP-2322 migration window, deserialized off the hot path — boxing soon-to-be-removed
+// variants buys no runtime benefit, so the size lint is suppressed rather than chased.
 #[allow(deprecated)]
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum InputRequest {
@@ -98,6 +104,7 @@ impl<'de> Deserialize<'de> for InputRequest {
 /// types deprecated per SEP-2577. They remain valid during the deprecation
 /// window so clients can respond to legacy server-initiated requests.
 #[allow(deprecated)]
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum InputResponse {
@@ -201,7 +208,7 @@ impl InputRequiredResult {
 // the structured fields generically.
 impl crate::traits::HasResultType for InputRequiredResult {
     fn result_type(&self) -> ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 impl crate::traits::HasMeta for InputRequiredResult {

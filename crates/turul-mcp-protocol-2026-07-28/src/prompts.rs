@@ -487,7 +487,7 @@ impl HasMeta for ListPromptsResult {
 
 impl HasResultType for ListPromptsResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 
@@ -561,7 +561,7 @@ impl HasMeta for GetPromptResult {
 
 impl HasResultType for GetPromptResult {
     fn result_type(&self) -> crate::result_type::ResultType {
-        self.result_type
+        self.result_type.clone()
     }
 }
 

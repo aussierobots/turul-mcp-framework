@@ -1998,10 +1998,13 @@ mod removed_methods {
     /// serde rename.
     #[test]
     fn schema_protocol_version_constant_matches_crate() {
+        let expected = format!("LATEST_PROTOCOL_VERSION = \"{}\"", turul_mcp_protocol_2026_07_28::MCP_VERSION);
         assert!(
-            SCHEMA_TS.contains("LATEST_PROTOCOL_VERSION = \"DRAFT-2026-v1\""),
-            "Schema's LATEST_PROTOCOL_VERSION drifted from `DRAFT-2026-v1`; \
-             update `MCP_VERSION` in src/lib.rs and the serde rename in src/version.rs."
+            SCHEMA_TS.contains(&expected),
+            "Schema's LATEST_PROTOCOL_VERSION no longer matches crate `MCP_VERSION` \
+             ({:?}); re-vendor drifted the wire string — update `MCP_VERSION` in \
+             src/lib.rs and the serde rename in src/version.rs to match.",
+            turul_mcp_protocol_2026_07_28::MCP_VERSION
         );
     }
 }
@@ -2238,11 +2241,12 @@ mod result_discrimination {
     }
 
     #[test]
-    fn unknown_result_type_value_is_rejected() {
-        // Wire JSON with an unsupported discriminator must fail to parse.
-        let bad = json!("partial");
-        let r: Result<ResultType, _> = serde_json::from_value(bad);
-        assert!(r.is_err());
+    fn unknown_result_type_value_is_preserved_as_other() {
+        // Finalized schema: `ResultType = "complete" | "input_required" | string`.
+        // An unknown discriminator is carried verbatim (open union), not rejected.
+        let parsed: ResultType = serde_json::from_value(json!("partial")).unwrap();
+        assert_eq!(parsed, ResultType::Other("partial".to_string()));
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), json!("partial"));
     }
 }
 

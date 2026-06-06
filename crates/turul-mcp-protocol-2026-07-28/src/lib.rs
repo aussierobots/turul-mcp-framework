@@ -1,8 +1,9 @@
-//! # Model Context Protocol (MCP) — DRAFT-2026-v1
+//! # Model Context Protocol (MCP) — 2026-07-28
 //!
-//! Faithful 1:1 Rust implementation of the upstream MCP draft schema
+//! Faithful 1:1 Rust implementation of the upstream MCP schema
 //! ([`schema.ts` vendored at `schema/draft-schema.ts`](../../../schema/draft-schema.ts)).
-//! Wire-version string is [`MCP_VERSION`] = `"DRAFT-2026-v1"`.
+//! Wire-version string is [`MCP_VERSION`] = `"2026-07-28"` (the pre-finalization
+//! draft literal `"DRAFT-2026-v1"` is still accepted on deserialize for back-compat).
 //!
 //! Every `export interface`/`export type`/`export const` in the vendored
 //! `schema/draft-schema.ts` has a corresponding Rust binding here. Every
@@ -31,8 +32,7 @@
 //! - **Result discrimination** — [`result_type::ResultType`] required on every
 //!   `Result`.
 //! - **Extensions** ([SEP-2133]) — `extensions` map on capabilities; extension
-//!   *types* live in separate `turul-mcp-ext-*` crates per
-//!   `docs/adr/028-extensions-strategy.md`.
+//!   *types* live in separate `turul-mcp-ext-*` crates, not in this crate.
 //! - **Error codes** ([SEP-2164]) — JSON-RPC standard codes; missing
 //!   tool/resource/prompt → `-32602`; MCP-specific `-32003`/`-32004` for
 //!   capability/version negotiation failures.
@@ -50,9 +50,11 @@
 //! - Streamable HTTP headers ([SEP-2243]): [`HTTP_HEADER_PROTOCOL_VERSION`],
 //!   [`HTTP_HEADER_METHOD`], [`HTTP_HEADER_NAME`], [`HTTP_HEADER_CUSTOM_PREFIX`].
 //!
-//! ⚠ **DRAFT.** The upstream `schema.ts` is still in flux. When the final
-//! 2026-07-28 spec ships, [`MCP_VERSION`] flips to a stable date string. See
-//! [`docs/adr/027`](../../../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
+//! The upstream `schema.ts` has finalized the wire-version literal to
+//! `"2026-07-28"` (was `"DRAFT-2026-v1"` pre-finalization). The vendored
+//! `schema/draft-schema.ts` still lives under the `schema/draft/` upstream path
+//! and may continue to receive field-level revisions; `schema/README.md`
+//! records the pin provenance and re-pin procedure.
 //!
 //! [SEP-2106]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2106-tool-output-schema.md
 //! [SEP-2133]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2133-extensions.md
@@ -198,12 +200,12 @@ pub use turul_rpc::{
 pub use turul_rpc::RequestParams as JsonRpcParams;
 
 /// The MCP protocol version string this crate currently targets, exactly as it appears
-/// on the wire in `LATEST_PROTOCOL_VERSION` of the upstream draft `schema.ts`.
+/// on the wire in `LATEST_PROTOCOL_VERSION` of the upstream `schema.ts`.
 ///
-/// ⚠ **DRAFT** — this is the in-progress 2026-07-28 spec. The wire string will likely
-/// change to a stable date (e.g. `"2026-07-28"`) when the final specification publishes.
-/// See `docs/adr/027-targeting-mcp-draft-2026-v1.md` for the regeneration trigger.
-pub const MCP_VERSION: &str = "DRAFT-2026-v1";
+/// The finalized schema emits the stable date literal `"2026-07-28"` (the
+/// pre-finalization draft emitted `"DRAFT-2026-v1"`, still accepted on
+/// deserialize by [`McpVersion`](crate::version::McpVersion) for back-compat).
+pub const MCP_VERSION: &str = "2026-07-28";
 
 /// Common result type for MCP operations
 pub type McpResult<T> = Result<T, McpError>;
