@@ -90,7 +90,24 @@ use turul_mcp_protocol_2025_06_18::*;   // FORBIDDEN
 **Only exceptions**:
 1. `crates/turul-mcp-protocol/` (the re-export crate itself).
 2. `crates/turul-mcp-protocol-2025-11-25/` (its own source).
-3. **`crates/turul-mcp-client/`** — the bilingual client links **both** versioned protocol crates directly (`turul-mcp-protocol-2025-11-25` and `turul-mcp-protocol-2026-07-28`, gated by the `client-bilingual` / `client-2025-only` / `client-2026-only` features) so a single client can negotiate and speak either wire spec per connection. It does **not** route through the `turul-mcp-protocol` alias. This is the one consumer-side exception; it is documented in ADR-030 and ADR-001's revision log.
+3. **`crates/turul-mcp-client/`** — the bilingual client links **both** versioned protocol crates directly (`turul-mcp-protocol-2025-11-25` and `turul-mcp-protocol-2026-07-28`, gated by the `client-bilingual` / `client-2025-11-25-only` / `client-2026-07-28-only` features) so a single client can negotiate and speak either wire spec per connection. It does **not** route through the `turul-mcp-protocol` alias. This is the one consumer-side exception; it is documented in ADR-030 and ADR-001's revision log.
+
+### Spec-Version Naming: ALWAYS the full date, NEVER a bare year
+
+**Identify an MCP spec version by its full `YYYY-MM-DD` (or `YYYY_MM_DD`) date — never by year alone.** A bare year is ambiguous: 2025 shipped **two** specs (`2025-06-18` and `2025-11-25`). `v2026` / `client-2026-only` / `protocol-2025` are FORBIDDEN.
+
+```rust
+// CORRECT — full date, unambiguous
+mod v2026_07_28;                         McpVersion::V2026_07_28
+feature = "client-2026-07-28-only"       feature = "protocol-2025-11-25"
+fn send_2026_07_28(...)                  // crates/turul-mcp-ext-tasks (no date = spec-neutral)
+
+// WRONG — bare year, ambiguous
+mod v2026;                               feature = "client-2026-only"
+fn send_2026(...)                        "protocol-2025"
+```
+
+Applies to module names, function/identifier names, cargo features, type/enum variants, and prose. The only spec-version tokens that omit a date are deliberately spec-NEUTRAL names (e.g. a single `turul-mcp-ext-tasks` crate that spans specs — see ADR-028).
 
 **Import Hierarchy** (prefer top):
 - `turul_mcp_server::prelude::*` — re-exports everything (protocol + builders + server types)
