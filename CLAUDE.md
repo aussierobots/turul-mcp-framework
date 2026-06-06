@@ -401,10 +401,11 @@ cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
 
 ### Comments
 
-**Comments describe what the code IS and what's non-obvious about it.** Not session history, not internal phase tags, not line numbers that will rot.
+**Comments describe what the code IS and what's non-obvious to a human reading it.** Not session history, not internal phase tags, not decision-record citations, not line numbers that will rot. Keep them clean and minimal — a comment earns its place only by explaining something the code itself cannot.
 
 **Forbidden:**
 - **Internal development phases** — `Phase 3.4`, `Slice 1`, `Batch N`, `Group A`, `Migration step 2`. These mean nothing once the session ends.
+- **Internal decision-record (ADR) references** — `per ADR-025`, `see ADR-029`, `cuts the shim per ADR-025`, `ADR-030 §Decision`. ADRs record *why we decided*, which is process history that belongs in the ADR, the CHANGELOG, or the commit — not in source. State the code's actual constraint instead (e.g. `the frozen 2025-* crates keep turul-rpc 0.1`, not `per ADR-025`). This applies to `.rs` **and** `Cargo.toml`/manifest comments. (Project docs — CHANGELOG.md, ADRs, COMPLIANCE.md, plan docs — may cite ADRs freely; source comments must not.) **External MCP spec anchors are different and remain allowed** — a `SEP-####` or `@see` reference names the *wire contract the code implements* (what it IS), see the Allowed list below.
 - **Upstream schema line numbers** — `Schema line 2627`, `lines 943–949`. Line numbers shift every time we re-pin the schema (`refresh --write`); the comment quietly becomes wrong without anyone noticing.
 - **Tombstones / dev log narratives** — `was removed in v0.3.42`, `formerly known as X`, `pending Phase 5`. Git history is the log; code comments are not.
 - **Comparative claims you haven't verified** — `unlike every other Result type`, `the only place we do X`. Either grep and enumerate (`X, Y, Z all share this shape`) or don't claim it.

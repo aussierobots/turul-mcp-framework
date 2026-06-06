@@ -176,6 +176,7 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply �
 - Naming: `snake_case` (items), `CamelCase` (types/traits), `SCREAMING_SNAKE_CASE` (consts).
 - Errors via `thiserror`; avoid `unwrap()` outside tests.
 - Logging with `tracing`; prefer structured fields and UUID v7 correlation.
+- **Comments describe the code as-is and what is non-obvious to a human — nothing else.** Keep them clean and minimal; default to no comment when the code already reads clearly. Forbidden in source (`.rs` and `Cargo.toml`/manifests): internal phase/slice/batch tags, decision-record (ADR) citations (`per ADR-025`, `see ADR-029`), CLAUDE.md/AGENTS.md self-references, tombstones/dev-log narratives (`was removed in vX`, `formerly known as`), unverified comparative claims, and speculation about author intent. Decision history belongs in the ADR/CHANGELOG/commit, not in source. **External MCP spec anchors (`SEP-####`, schema `@see` links) remain allowed** — they name the wire contract the code implements. Full rule: CLAUDE.md §Comments.
 
 ## Testing Guidelines
 - Use `#[tokio::test]` for async. Key suites: `session_context_macro_tests`, `framework_integration_tests`, `mcp_compliance_tests`.
