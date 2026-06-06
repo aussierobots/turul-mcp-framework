@@ -417,7 +417,7 @@ This compatibility architecture ensures the turul-mcp-framework works seamlessly
 The architecture successfully resolves the MCP Inspector timeout issues while preserving all advanced MCP 2025-06-18 Streamable HTTP capabilities for compliant clients.
 ## DRAFT-2026-v1: Stateless variant; GET SSE is 2025-only
 
-**Status: Added 2026-05-31. Relevant when the server runs with default (DRAFT-2026-v1) protocol per ADR-027. The behavior described above for 2025-11-25 still applies under `--features legacy-2025-11-25`.**
+**Status: Added 2026-05-31. Relevant when the server runs with default (DRAFT-2026-v1) protocol per ADR-027. The behavior described above for 2025-11-25 still applies under `--features protocol-2025-11-25`.**
 
 ### What changes in DRAFT-2026-v1
 
@@ -473,7 +473,7 @@ Updated routing table for the framework's `McpRequestHandler` (see ADR-009 amend
 
 | Spec mode | POST request-response | POST streaming | GET SSE |
 |---|---|---|---|
-| 2025-11-25 (`legacy-2025-11-25` feature) | Yes | Yes (under combined Accept) | Yes (with `Mcp-Session-Id`) |
+| 2025-11-25 (`protocol-2025-11-25` feature) | Yes | Yes (under combined Accept) | Yes (with `Mcp-Session-Id`) |
 | DRAFT-2026-v1 (default in 0.4.0) | Yes | Yes (under combined Accept) | **No** (no session header) |
 
 ### Lambda compatibility under DRAFT-2026-v1

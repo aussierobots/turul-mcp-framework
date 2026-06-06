@@ -1,4 +1,4 @@
-# ADR-029: Spec-version coexistence via mutually-exclusive cargo features (default `DRAFT-2026-v1`)
+# ADR-029: Spec-version coexistence via mutually-exclusive cargo features
 
 **Status:** Accepted
 **Date:** 2026-05-31
@@ -38,16 +38,16 @@ The `turul-mcp-protocol` re-export crate (`crates/turul-mcp-protocol/src/lib.rs`
 ```rust
 // crates/turul-mcp-protocol/src/lib.rs (post-cutover)
 
-#[cfg(all(feature = "protocol-2026-07-28", feature = "legacy-2025-11-25"))]
+#[cfg(all(feature = "protocol-2026-07-28", feature = "protocol-2025-11-25"))]
 compile_error!(
-    "turul-mcp-protocol: features `protocol-2026-07-28` and `legacy-2025-11-25` \
+    "turul-mcp-protocol: features `protocol-2026-07-28` and `protocol-2025-11-25` \
      are mutually exclusive. Pick exactly one."
 );
 
-#[cfg(not(any(feature = "protocol-2026-07-28", feature = "legacy-2025-11-25")))]
+#[cfg(not(any(feature = "protocol-2026-07-28", feature = "protocol-2025-11-25")))]
 compile_error!(
     "turul-mcp-protocol: enable exactly one of `protocol-2026-07-28` (default) \
-     or `legacy-2025-11-25`."
+     or `protocol-2025-11-25`."
 );
 
 #[cfg(feature = "protocol-2026-07-28")]
@@ -58,10 +58,10 @@ pub mod prelude {
     pub use turul_mcp_protocol_2026_07_28::prelude::*;
 }
 
-#[cfg(feature = "legacy-2025-11-25")]
+#[cfg(feature = "protocol-2025-11-25")]
 pub use turul_mcp_protocol_2025_11_25::*;
 
-#[cfg(feature = "legacy-2025-11-25")]
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod prelude {
     pub use turul_mcp_protocol_2025_11_25::prelude::*;
 }
@@ -73,18 +73,18 @@ pub mod prelude {
 [features]
 default = ["protocol-2026-07-28"]
 protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
-legacy-2025-11-25 = ["dep:turul-mcp-protocol-2025-11-25"]
+protocol-2025-11-25 = ["dep:turul-mcp-protocol-2025-11-25"]
 ```
 
 Both versioned crates are `optional = true` workspace dependencies. The compile-time `compile_error!` macros guarantee that any consumer who manages to enable both, or neither, gets a build-time diagnostic — not a silent type-soup link error.
 
 ### Default = `protocol-2026-07-28`
 
-Per the user-locked decision: `0.4.0` defaults to DRAFT-2026-v1. A bare `turul-mcp-protocol = "0.4"` dependency in a downstream `Cargo.toml` resolves to the 2026 types. The `legacy-2025-11-25` feature is the explicit opt-out for consumers who need to stay on the old spec without pinning to the frozen `0.3.x` line.
+Per the user-locked decision: `0.4.0` defaults to DRAFT-2026-v1. A bare `turul-mcp-protocol = "0.4"` dependency in a downstream `Cargo.toml` resolves to the 2026 types. The `protocol-2025-11-25` feature is the explicit opt-out for consumers who need to stay on the old spec without pinning to the frozen `0.3.x` line.
 
 ### Cascade rule for the downstream framework crates
 
-Every framework crate that depends on `turul-mcp-protocol` (`turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-builders`, `turul-mcp-aws-lambda`, `turul-mcp-derive`, `turul-mcp-session-storage`, `turul-mcp-task-storage`, examples) MUST declare its dependency as `{ workspace = true, default-features = false }` and MUST forward the spec choice explicitly through its own features. A bare `turul-mcp-protocol.workspace = true` is forbidden on this branch: under Cargo feature unification it pins `protocol-2026-07-28` ON for every transitive consumer (via the alias crate's default features), so any attempt to enable `legacy-2025-11-25` at the leaf would activate BOTH features simultaneously and trip the `compile_error!` mutex at line 41 of `crates/turul-mcp-protocol/src/lib.rs`. A leaf binary's `--no-default-features` only disables the leaf's own default features; it does not cascade through transitive deps.
+Every framework crate that depends on `turul-mcp-protocol` (`turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-builders`, `turul-mcp-aws-lambda`, `turul-mcp-derive`, `turul-mcp-session-storage`, `turul-mcp-task-storage`, examples) MUST declare its dependency as `{ workspace = true, default-features = false }` and MUST forward the spec choice explicitly through its own features. A bare `turul-mcp-protocol.workspace = true` is forbidden on this branch: under Cargo feature unification it pins `protocol-2026-07-28` ON for every transitive consumer (via the alias crate's default features), so any attempt to enable `protocol-2025-11-25` at the leaf would activate BOTH features simultaneously and trip the `compile_error!` mutex at line 41 of `crates/turul-mcp-protocol/src/lib.rs`. A leaf binary's `--no-default-features` only disables the leaf's own default features; it does not cascade through transitive deps.
 
 Each consumer crate's `[features]` section therefore looks like:
 
@@ -92,7 +92,7 @@ Each consumer crate's `[features]` section therefore looks like:
 [features]
 default = ["protocol-2026-07-28"]
 protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28"]
-legacy-2025-11-25 = ["turul-mcp-protocol/legacy-2025-11-25"]
+protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25"]
 ```
 
 And its dep line is:
@@ -101,9 +101,9 @@ And its dep line is:
 turul-mcp-protocol = { workspace = true, default-features = false }
 ```
 
-This topology means the bare `cargo build` path still picks 2026 (via the consumer crate's own default), and switching to legacy is `cargo build --no-default-features --features legacy-2025-11-25` at the leaf — which propagates through the forwarding chain. The `compile_error!` mutex is satisfied in both configurations because exactly one feature reaches the alias crate.
+This topology means the bare `cargo build` path still picks 2026 (via the consumer crate's own default), and switching to legacy is `cargo build --no-default-features --features protocol-2025-11-25` at the leaf — which propagates through the forwarding chain. The `compile_error!` mutex is satisfied in both configurations because exactly one feature reaches the alias crate.
 
-Crates that aggregate multiple framework crates (e.g. a Lambda binary depending on both `turul-mcp-server` and `turul-mcp-aws-lambda`) MUST forward `legacy-2025-11-25` to every transitive turul crate they depend on:
+Crates that aggregate multiple framework crates (e.g. a Lambda binary depending on both `turul-mcp-server` and `turul-mcp-aws-lambda`) MUST forward `protocol-2025-11-25` to every transitive turul crate they depend on:
 
 ```toml
 [features]
@@ -112,9 +112,9 @@ protocol-2026-07-28 = [
   "turul-mcp-server/protocol-2026-07-28",
   "turul-mcp-aws-lambda/protocol-2026-07-28",
 ]
-legacy-2025-11-25 = [
-  "turul-mcp-server/legacy-2025-11-25",
-  "turul-mcp-aws-lambda/legacy-2025-11-25",
+protocol-2025-11-25 = [
+  "turul-mcp-server/protocol-2025-11-25",
+  "turul-mcp-aws-lambda/protocol-2025-11-25",
 ]
 ```
 
@@ -126,32 +126,32 @@ The atomic cutover slice (the "flip" of ADR-027 Phase 9.4) ships:
 
 1. The feature-gated `crates/turul-mcp-protocol/src/lib.rs` shown above, plus `Cargo.toml` features.
 2. Workspace-wide `turul-rpc` pin bumped from `0.1` to `0.2.2` (currently isolated to `turul-mcp-protocol-2026-07-28`; required for the 2026 protocol types to flow through every consumer — see `docs/plans/2026-07-28-PARKED.md:121`).
-3. Source updates in every consumer crate for the breaking surface deltas: `initialize` handshake → `server/discover`; `Mcp-Session-Id` header path → `_meta`-carried capability handshake; error code `-32002` → `-32602`; tasks calls routed to `turul-mcp-ext-tasks-2026-07-28` (scaffolding follows; until then, tasks-using code is gated behind `legacy-2025-11-25`).
+3. Source updates in every consumer crate for the breaking surface deltas: `initialize` handshake → `server/discover`; `Mcp-Session-Id` header path → `_meta`-carried capability handshake; error code `-32002` → `-32602`; tasks calls routed to `turul-mcp-ext-tasks-2026-07-28` (scaffolding follows; until then, tasks-using code is gated behind `protocol-2025-11-25`).
 4. Roots/Sampling/Logging deprecation cascade: `#[allow(deprecated)]` on every framework-internal site that touches those types (consumers see the `#[deprecated]` warnings; the framework itself does not emit them spuriously).
 5. The Phase 9.4 strategy commitment: **flip-all-at-once.** The three options ADR-027 flagged (flip-all-at-once / dual-import / crate-by-crate) collapse to one under the user-locked decision — dual-import contradicts "one source of truth per process," crate-by-crate contradicts "0.4.0 ships with default = 2026 today, not staged." The atomicity is enforced by the `compile_error!` macros: a half-migrated workspace will not compile.
 
 ### Feature-gating rollout plan
 
-A separate plan document (`docs/plans/2026-07-28-feature-gating-rollout.md`, to be authored as part of the cutover slice) enumerates the per-crate `#[cfg(feature = "...")]` gates needed for downstream sources to compile under both feature configurations. Initial estimate: ~400–600 `#[cfg]` gates across `turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-builders`, derive macros, and the example fleet. The plan document is the verification artifact; the CI matrix (two configurations: default and `--no-default-features --features legacy-2025-11-25`) is the gate.
+A separate plan document (`docs/plans/2026-07-28-feature-gating-rollout.md`, to be authored as part of the cutover slice) enumerates the per-crate `#[cfg(feature = "...")]` gates needed for downstream sources to compile under both feature configurations. Initial estimate: ~400–600 `#[cfg]` gates across `turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-builders`, derive macros, and the example fleet. The plan document is the verification artifact; the CI matrix (two configurations: default and `--no-default-features --features protocol-2025-11-25`) is the gate.
 
 ### CI surface
 
 CI will run two matrices for each PR touching the protocol surface:
 
 1. **Default (`protocol-2026-07-28`):** `cargo test --workspace`, `cargo check --workspace`, `cargo doc --no-deps --workspace`.
-2. **Legacy (`legacy-2025-11-25`):** the legacy feature is declared on every consumer crate (per the §"Cascade rule" above), so the CI command activates each leaf's own forwarding feature, NOT the alias-crate feature directly. The correct invocations are:
+2. **Legacy (`protocol-2025-11-25`):** the legacy feature is declared on every consumer crate (per the §"Cascade rule" above), so the CI command activates each leaf's own forwarding feature, NOT the alias-crate feature directly. The correct invocations are:
 
    ```bash
-   # Workspace-wide: every member crate that has a legacy-2025-11-25 feature
+   # Workspace-wide: every member crate that has a protocol-2025-11-25 feature
    # forwards through to the alias. Cargo unification activates the chain.
-   cargo test --workspace --no-default-features --features legacy-2025-11-25
+   cargo test --workspace --no-default-features --features protocol-2025-11-25
 
    # Or target a specific leaf:
-   cargo test -p turul-mcp-server --no-default-features --features legacy-2025-11-25
-   cargo test -p turul-mcp-aws-lambda --no-default-features --features legacy-2025-11-25
+   cargo test -p turul-mcp-server --no-default-features --features protocol-2025-11-25
+   cargo test -p turul-mcp-aws-lambda --no-default-features --features protocol-2025-11-25
    ```
 
-   ❌ **Do not use** `--features turul-mcp-protocol/legacy-2025-11-25` (the alias-crate feature only). That activates the alias's gate but does NOT activate each consumer crate's own `#[cfg(feature = "legacy-2025-11-25")]` blocks — those gates live in the leaf crate's source and require the leaf crate's feature to be enabled, not just the alias's.
+   ❌ **Do not use** `--features turul-mcp-protocol/protocol-2025-11-25` (the alias-crate feature only). That activates the alias's gate but does NOT activate each consumer crate's own `#[cfg(feature = "protocol-2025-11-25")]` blocks — those gates live in the leaf crate's source and require the leaf crate's feature to be enabled, not just the alias's.
 
 Without the legacy matrix, the legacy feature rots silently (called out in the architecture review at `docs/plans/2026-07-28-architecture-review.md` as a high-severity hidden risk). The matrix doubles CI time on the protocol surface; this is the accepted cost.
 
@@ -185,26 +185,28 @@ The user-locked steelman from the decision phase (`docs/plans/2026-07-28-archite
 
 ### Neutral
 
-- **Wire string in `turul-mcp-protocol::MCP_VERSION` flips with the feature.** Under default (`protocol-2026-07-28`), it is `"DRAFT-2026-v1"` (will flip to `"2026-07-28"` when the final spec ships — see ADR-027). Under `legacy-2025-11-25`, it is `"2025-11-25"`. Consumers reading `MCP_VERSION` at runtime see the spec their binary was built against.
-- **Frozen crates unaffected.** `turul-mcp-protocol-2025-11-25@0.3.47` and `turul-mcp-protocol-2025-06-18@0.3.47` remain frozen per CLAUDE.md §"Frozen Protocol Crates". The `legacy-2025-11-25` feature pulls in the frozen `0.3.47` crate; it does not reopen those crates to ongoing edits.
+- **Wire string in `turul-mcp-protocol::MCP_VERSION` flips with the feature.** Under default (`protocol-2026-07-28`), it is `"DRAFT-2026-v1"` (will flip to `"2026-07-28"` when the final spec ships — see ADR-027). Under `protocol-2025-11-25`, it is `"2025-11-25"`. Consumers reading `MCP_VERSION` at runtime see the spec their binary was built against.
+- **Frozen crates unaffected.** `turul-mcp-protocol-2025-11-25@0.3.47` and `turul-mcp-protocol-2025-06-18@0.3.47` remain frozen per CLAUDE.md §"Frozen Protocol Crates". The `protocol-2025-11-25` feature pulls in the frozen `0.3.47` crate; it does not reopen those crates to ongoing edits.
 - **Per-crate independent versioning (per ADR-027 §Crate version) continues unchanged.** The feature gating lives in the re-export crate; the versioned protocol crates remain on independent semvers.
 
 ## Connection to sibling ADRs
 
 - **ADR-027 (Targeting DRAFT-2026-v1)** established the wire-string target and the per-crate `0.4.0` version policy. Phase 9.4 ("flip the alias") was the parked open question; this ADR is the answer (flip-all-at-once, gated by mutually-exclusive features, default = 2026).
-- **ADR-028 (Extensions strategy)** established that tasks live in `turul-mcp-ext-tasks-2026-07-28` (not in the protocol crate). Under the default feature, framework code that used to call `tasks/list` etc. must move to the extension crate; under `legacy-2025-11-25`, tasks remain in core. The migration recipe in §"Migration from 2025-11-25 task users" of ADR-028 is the consumer guide.
+- **ADR-028 (Extensions strategy)** established that tasks live in `turul-mcp-ext-tasks-2026-07-28` (not in the protocol crate). Under the default feature, framework code that used to call `tasks/list` etc. must move to the extension crate; under `protocol-2025-11-25`, tasks remain in core. The migration recipe in §"Migration from 2025-11-25 task users" of ADR-028 is the consumer guide.
 - **ADR-030 (Client coexistence — bilingual by default)** governs `turul-mcp-client`. The client does NOT use the `turul-mcp-protocol` alias; it imports both `turul-mcp-protocol-2025-11-25` and `turul-mcp-protocol-2026-07-28` directly and routes per-connection. The server constraints in this ADR do not apply to the client. ADR-030 is the load-bearing decision for client architecture.
 
 ## Open items
 
 - **Author `docs/plans/2026-07-28-feature-gating-rollout.md`** before committing the cutover slice. Enumerate the `#[cfg]` sites; sequence them by crate so each crate's PR is bisectable.
 - **CI matrix configuration** for the two-feature-configuration build. Add to GitHub Actions / Cirrus workflow in the cutover slice.
-- **End-to-end test of the `legacy-2025-11-25` feature.** PARKED.md §"What's specifically NOT done" flags this as untested. Required before the cutover slice ships; otherwise collapse to Pattern E.
+- **End-to-end test of the `protocol-2025-11-25` feature.** PARKED.md §"What's specifically NOT done" flags this as untested. Required before the cutover slice ships; otherwise collapse to Pattern E.
 - **`turul-mcp-ext-tasks-2026-07-28` scaffolding.** Required for the default-feature build to compile any tasks-using consumer code. ADR-028 Phase 5.2.
 - **Final 2026-07-28 spec publication** will re-trigger schema regeneration per ADR-027 §"Regeneration trigger". The wire string will flip from `"DRAFT-2026-v1"` to `"2026-07-28"`; that flip is internal to `turul-mcp-protocol-2026-07-28` and does NOT change the feature-gating mechanism in this ADR.
 
 ## Revision log
 
-- **2026-05-31** — initial. Decision: mutually-exclusive cargo features (`protocol-2026-07-28` default, `legacy-2025-11-25` opt-in) at the `turul-mcp-protocol` re-export boundary. `compile_error!` macros guard both-on and neither-on. Phase 9.4 strategy committed to flip-all-at-once. Cutover slice scope, CI matrix doubling, and feature-gating rollout plan called out as required-before-cutover. Architecture-review evidence at `docs/plans/2026-07-28-architecture-review.md`; parked-branch state at `docs/plans/2026-07-28-PARKED.md`.
-- **2026-05-31 (correction)** — §"Cascade rule for the downstream framework crates" rewritten. The initial wording ("downstream crates do not declare their own protocol features; the choice flows up from the leaf binary") was internally inconsistent with the planned `compile_error!` mutex under Cargo feature unification. With bare workspace deps, `default = ["protocol-2026-07-28"]` would always be active transitively, so enabling `legacy-2025-11-25` at the leaf would trip the mutex. Corrected to mandate `default-features = false` on every consumer's `turul-mcp-protocol` dep, plus a per-crate `legacy-2025-11-25` forwarding feature. The rollout plan (`docs/plans/2026-07-28-feature-gating-rollout.md`) already assumed this topology in Phases 1/2/3/5 (forwarding via `turul-mcp-protocol/legacy-2025-11-25`); the ADR now matches.
+- **2026-05-31** — initial. Decision: mutually-exclusive cargo features (`protocol-2026-07-28` default, `protocol-2025-11-25` opt-in) at the `turul-mcp-protocol` re-export boundary. `compile_error!` macros guard both-on and neither-on. Phase 9.4 strategy committed to flip-all-at-once. Cutover slice scope, CI matrix doubling, and feature-gating rollout plan called out as required-before-cutover. Architecture-review evidence at `docs/plans/2026-07-28-architecture-review.md`; parked-branch state at `docs/plans/2026-07-28-PARKED.md`.
+- **2026-05-31 (correction)** — §"Cascade rule for the downstream framework crates" rewritten. The initial wording ("downstream crates do not declare their own protocol features; the choice flows up from the leaf binary") was internally inconsistent with the planned `compile_error!` mutex under Cargo feature unification. With bare workspace deps, `default = ["protocol-2026-07-28"]` would always be active transitively, so enabling `protocol-2025-11-25` at the leaf would trip the mutex. Corrected to mandate `default-features = false` on every consumer's `turul-mcp-protocol` dep, plus a per-crate `protocol-2025-11-25` forwarding feature. The rollout plan (`docs/plans/2026-07-28-feature-gating-rollout.md`) already assumed this topology in Phases 1/2/3/5 (forwarding via `turul-mcp-protocol/protocol-2025-11-25`); the ADR now matches.
 
+
+- **2026-06-07 (amendment — symmetric feature names)** — **Coexistence feature identifiers are symmetric spec-version names; the `legacy-` framing is dropped.** The opt-in feature is `protocol-2025-11-25` (was `legacy-2025-11-25`) — neither feature is named `default` or `legacy`; both are `protocol-<spec-version>`. The Cargo `default = ["protocol-2026-07-28"]` array is retained (the maintainer-locked "server default = 2026", §"Status update") — it *points at* a spec-version feature, it does not *name* one "default". The title parenthetical and any "legacy" prose in the body are superseded by this naming. The wire string also finalized `"DRAFT-2026-v1"` → `"2026-07-28"` (ADR-027 2026-06-07), so `DRAFT-2026-v1` in this ADR's prose now denotes the same spec by its finalized literal. No code exists for these features yet (Phase 9.4 unbuilt), so the rename is doc-only.

@@ -195,7 +195,7 @@ The solution enables Lambda deployment while maintaining the framework's design 
 ### What changes
 
 - **No session restore on cold start.** The 2025-11-25 cold-start path reads any in-flight session record from DynamoDB to attach the incoming request to its persisted state. DRAFT-2026-v1 has no session record to restore — every invocation is independent. Cold starts become cheaper: no `get_session` DynamoDB read on the request path, no `mcp:tool_fingerprint` read-before-write, no `notifications/initialized` 202 short-circuit.
-- **No session storage backend required.** The `with_session_storage(DynamoDbSessionStorage::new(...))` builder call is a 2025-only configuration. In default 0.4.0 (DRAFT-2026-v1), session storage is unused; the builder method either compile-gates behind `legacy-2025-11-25` or accepts the configuration silently as a no-op.
+- **No session storage backend required.** The `with_session_storage(DynamoDbSessionStorage::new(...))` builder call is a 2025-only configuration. In default 0.4.0 (DRAFT-2026-v1), session storage is unused; the builder method either compile-gates behind `protocol-2025-11-25` or accepts the configuration silently as a no-op.
 - **Task storage is decoupled from session storage.** Tasks in DRAFT-2026-v1 are an SEP-2663 extension (see ADR-028). `turul-mcp-ext-tasks-2026-07-28` (when scaffolded) carries its own storage abstraction; the existing `turul-mcp-task-storage` crate continues to provide the durable backend implementations but its API surface integrates with the extension crate rather than with the session lifecycle.
 - **`server/discover` instead of `initialize`.** The dispatcher routes `server/discover` to a per-request capability synthesis instead of a session-creating handler. No state is mutated; the response is computed from the current `LambdaMcpServerBuilder` registration.
 - **No `notifications/initialized` 202 response.** The dispatcher rejects this notification with `-32601 Method Not Found` (it's not a 2026 method).
@@ -216,7 +216,7 @@ This is simpler than the 2025-11-25 sequence (which carries `validate_session_ex
 
 ### What downstream consumers need to change
 
-- Drop the `DynamoDbSessionStorage` configuration step from the builder if running in default 0.4.0 (DRAFT-2026-v1). It is unused. Keep it if running under `--features legacy-2025-11-25`.
+- Drop the `DynamoDbSessionStorage` configuration step from the builder if running in default 0.4.0 (DRAFT-2026-v1). It is unused. Keep it if running under `--features protocol-2025-11-25`.
 - Drop any reliance on persisted session state across invocations. If session-equivalent state is needed (e.g., conversational memory, per-user history), it must be re-architected as either (a) an extension under SEP-2133, (b) explicit per-request `_meta` carriage, or (c) external state outside the MCP envelope.
 - Plan for the eventual `turul-mcp-ext-tasks-2026-07-28` extension crate (per ADR-028) for any tasks-based workflow. The current `turul-mcp-task-storage` backends (SQLite, PostgreSQL, DynamoDB) remain — they will be the storage layer behind the extension crate's API.
 

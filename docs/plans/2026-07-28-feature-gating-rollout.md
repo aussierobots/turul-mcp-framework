@@ -2,7 +2,7 @@
 
 **Branch**: `feat/turul-mcp-protocol-2026-07-28` (sub-branch of `2026-07-28-MCP-Specification`; branch lock binding — no merge to `main` without express maintainer authorization).
 
-**Goal**: Wire a workspace-wide cargo feature topology so the framework can compile and run against either MCP 2025-11-25 **or** DRAFT-2026-v1, with **DRAFT-2026-v1 as the 0.4.0 default**. The 2025-11-25 surface lives behind opt-in cargo feature `legacy-2025-11-25`. `turul-mcp-client` ships **bilingual by default** per ADR-030 with narrowing features `client-2026-only` / `client-2025-only`.
+**Goal**: Wire a workspace-wide cargo feature topology so the framework can compile and run against either MCP 2025-11-25 **or** DRAFT-2026-v1, with **DRAFT-2026-v1 as the 0.4.0 default**. The 2025-11-25 surface lives behind opt-in cargo feature `protocol-2025-11-25`. `turul-mcp-client` ships **bilingual by default** per ADR-030 with narrowing features `client-2026-only` / `client-2025-only`.
 
 **Source decisions** (locked by maintainer, not re-debated in this plan):
 
@@ -32,7 +32,7 @@
 
 **Files touched**:
 
-- `crates/turul-mcp-protocol/Cargo.toml` — add `[features]` section with mutually-exclusive `protocol-2026-07-28` (default) and `legacy-2025-11-25`. Drop the unconditional `turul-mcp-protocol-2025-11-25.workspace = true`; make both protocol-version deps `optional = true` and gated.
+- `crates/turul-mcp-protocol/Cargo.toml` — add `[features]` section with mutually-exclusive `protocol-2026-07-28` (default) and `protocol-2025-11-25`. Drop the unconditional `turul-mcp-protocol-2025-11-25.workspace = true`; make both protocol-version deps `optional = true` and gated.
 - `crates/turul-mcp-protocol/src/lib.rs` — replace the unconditional `pub use turul_mcp_protocol_2025_11_25::*` with two `#[cfg(feature = "...")]` re-export blocks. Add `compile_error!` mutex if both features are enabled simultaneously, and a second `compile_error!` if neither is enabled. `CURRENT_VERSION` const + the `tests` module move under matching cfg blocks.
 - `Cargo.toml` (root) — `turul-mcp-protocol-2026-07-28` becomes a `workspace.dependencies` pin alongside the existing `turul-mcp-protocol-2025-11-25` pin. No change to other workspace pins.
 
@@ -48,16 +48,16 @@ cargo check -p turul-mcp-protocol
 cargo test -p turul-mcp-protocol
 
 # Legacy (2025): both compile and test
-cargo check -p turul-mcp-protocol --no-default-features --features legacy-2025-11-25
-cargo test -p turul-mcp-protocol --no-default-features --features legacy-2025-11-25
+cargo check -p turul-mcp-protocol --no-default-features --features protocol-2025-11-25
+cargo test -p turul-mcp-protocol --no-default-features --features protocol-2025-11-25
 
 # Mutex enforcement: both at once must fail at compile time
-! cargo check -p turul-mcp-protocol --features legacy-2025-11-25
+! cargo check -p turul-mcp-protocol --features protocol-2025-11-25
 # Neither set: must fail at compile time
 ! cargo check -p turul-mcp-protocol --no-default-features
 ```
 
-Add an integration test asserting `turul_mcp_protocol::CURRENT_VERSION == "DRAFT-2026-v1"` under default features and `== "2025-11-25"` under `legacy-2025-11-25`.
+Add an integration test asserting `turul_mcp_protocol::CURRENT_VERSION == "DRAFT-2026-v1"` under default features and `== "2025-11-25"` under `protocol-2025-11-25`.
 
 ---
 
@@ -67,9 +67,9 @@ Add an integration test asserting `turul_mcp_protocol::CURRENT_VERSION == "DRAFT
 
 **Files touched**:
 
-- `crates/turul-mcp-session-storage/src/traits.rs` — `pub is_initialized: bool` (line 38), default values (lines 60, 75), test (line 484) all gated `#[cfg(feature = "legacy-2025-11-25")]`. Trait methods that flip the flag wrapped similarly.
+- `crates/turul-mcp-session-storage/src/traits.rs` — `pub is_initialized: bool` (line 38), default values (lines 60, 75), test (line 484) all gated `#[cfg(feature = "protocol-2025-11-25")]`. Trait methods that flip the flag wrapped similarly.
 - `crates/turul-mcp-session-storage/src/{in_memory,sqlite,postgres,dynamodb}.rs` — backend impls of the gated methods become no-ops or removed under 2026. Storage schema (CREATE TABLE statements) **stays unchanged** — the `is_initialized` column remains in the DDL so cross-spec rollback is non-destructive.
-- `crates/turul-mcp-session-storage/Cargo.toml` — add `[features]` section with `legacy-2025-11-25` opt-in (default off), forwarded from `turul-mcp-protocol` via the `turul-mcp-protocol/legacy-2025-11-25` feature link.
+- `crates/turul-mcp-session-storage/Cargo.toml` — add `[features]` section with `protocol-2025-11-25` opt-in (default off), forwarded from `turul-mcp-protocol` via the `turul-mcp-protocol/protocol-2025-11-25` feature link.
 - `crates/turul-mcp-session-storage/src/session_view.rs` — `StorageBackedSessionView::is_initialized()` gated; 2026 callers must not invoke it. Provide a `compile_error!` stub in the 2026 path if anyone tries.
 
 **LOC estimate**: ~150–200 LOC of `#[cfg]` gates across 7 files; ~50 LOC of fallback no-ops. Plus ~30 LOC of new tests.
@@ -85,10 +85,10 @@ cargo check -p turul-mcp-session-storage
 cargo test -p turul-mcp-session-storage
 
 # Legacy: is_initialized works
-cargo test -p turul-mcp-session-storage --no-default-features --features legacy-2025-11-25,sqlite
+cargo test -p turul-mcp-session-storage --no-default-features --features protocol-2025-11-25,sqlite
 
 # Cross-spec rollback: write under 2026, read under 2025, no panic
-cargo test -p turul-mcp-session-storage --features legacy-2025-11-25 --test cross_spec_rollback
+cargo test -p turul-mcp-session-storage --features protocol-2025-11-25 --test cross_spec_rollback
 ```
 
 New test `cross_spec_rollback.rs` writes a session under 2026 build, opens the same SQLite file under 2025 build, asserts `is_initialized == false` (default), and confirms no migration error.
@@ -101,12 +101,12 @@ New test `cross_spec_rollback.rs` writes a session under 2026 build, opens the s
 
 **Files touched**:
 
-- `crates/turul-mcp-server/src/session.rs` — `initialize` request handler gated `#[cfg(feature = "legacy-2025-11-25")]`. Strict-lifecycle pre-initialize rejection (the `-32031 SessionError` path per AGENTS.md §"Release Readiness Notes") is gated. The `notifications/initialized` consumer (lines that set `is_initialized = true`) is gated.
-- `crates/turul-mcp-server/src/handlers/` — new `discover.rs` (2026-only, `#[cfg(not(feature = "legacy-2025-11-25"))]`) implementing `server/discover`. Existing `initialize.rs` handler (if separate) gated 2025-only.
+- `crates/turul-mcp-server/src/session.rs` — `initialize` request handler gated `#[cfg(feature = "protocol-2025-11-25")]`. Strict-lifecycle pre-initialize rejection (the `-32031 SessionError` path per AGENTS.md §"Release Readiness Notes") is gated. The `notifications/initialized` consumer (lines that set `is_initialized = true`) is gated.
+- `crates/turul-mcp-server/src/handlers/` — new `discover.rs` (2026-only, `#[cfg(not(feature = "protocol-2025-11-25"))]`) implementing `server/discover`. Existing `initialize.rs` handler (if separate) gated 2025-only.
 - `crates/turul-mcp-server/src/builder.rs` — `McpServer::builder().with_strict_lifecycle(...)` becomes a 2025-only method. `with_discover_capabilities(...)` is the 2026 equivalent (capabilities published in the discover response, not in `InitializeResult`).
 - `crates/turul-mcp-server/src/server.rs` — capability advertisement code branches: 2025 publishes via `InitializeResult`, 2026 publishes via `DiscoverResult` AND echoes the spec-relevant capability subset in every response's `_meta`.
 - `crates/turul-mcp-server/src/dispatch/` — request dispatcher routing: `"initialize"` method → 2025 handler; `"server/discover"` → 2026 handler. Method-not-found error MUST surface for the wrong-spec call.
-- `crates/turul-mcp-server/Cargo.toml` — propagate `legacy-2025-11-25` feature; forward to `turul-mcp-protocol/legacy-2025-11-25` and `turul-mcp-session-storage/legacy-2025-11-25`.
+- `crates/turul-mcp-server/Cargo.toml` — propagate `protocol-2025-11-25` feature; forward to `turul-mcp-protocol/protocol-2025-11-25` and `turul-mcp-session-storage/protocol-2025-11-25`.
 
 **LOC estimate**: ~300–400 LOC of `#[cfg]` gates concentrated in `session.rs`, plus ~150 LOC of new `discover.rs`, plus ~80 LOC of capability-routing branching. Approximately 70–100 individual gate sites.
 
@@ -120,14 +120,14 @@ cargo test -p turul-mcp-server --test discover_handshake
 cargo test -p turul-mcp-server --test no_initialize_under_2026
 
 # Legacy (2025): initialize handshake works; server/discover returns method-not-found
-cargo test -p turul-mcp-server --no-default-features --features legacy-2025-11-25 --test initialize_handshake
-cargo test -p turul-mcp-server --no-default-features --features legacy-2025-11-25 --test no_discover_under_2025
+cargo test -p turul-mcp-server --no-default-features --features protocol-2025-11-25 --test initialize_handshake
+cargo test -p turul-mcp-server --no-default-features --features protocol-2025-11-25 --test no_discover_under_2025
 
 # Capability truthfulness: 2026 server's discover response must NOT advertise initialize support
 cargo test -p turul-mcp-server --test capability_truthfulness
 ```
 
-Revert-and-fail check: remove the `#[cfg(not(feature = "legacy-2025-11-25"))]` gate on the discover handler — the 2025 build must then fail to compile because of duplicate-handler registration.
+Revert-and-fail check: remove the `#[cfg(not(feature = "protocol-2025-11-25"))]` gate on the discover handler — the 2025 build must then fail to compile because of duplicate-handler registration.
 
 ---
 
@@ -137,7 +137,7 @@ Revert-and-fail check: remove the `#[cfg(not(feature = "legacy-2025-11-25"))]` g
 
 **Files touched**:
 
-- `crates/turul-http-mcp-server/src/streamable_http.rs` — every `Mcp-Session-Id` reference (~12 sites per grep at lines 160, 162, 260, 262, 280, 296, 549, 992, 1086, 1295, 1310, 1372, 1438, 1447) gated `#[cfg(feature = "legacy-2025-11-25")]`. GET-SSE handler (lines ~250–600) gated 2025-only. New `subscriptions/listen` POST-stream handler added under 2026-only gate.
+- `crates/turul-http-mcp-server/src/streamable_http.rs` — every `Mcp-Session-Id` reference (~12 sites per grep at lines 160, 162, 260, 262, 280, 296, 549, 992, 1086, 1295, 1310, 1372, 1438, 1447) gated `#[cfg(feature = "protocol-2025-11-25")]`. GET-SSE handler (lines ~250–600) gated 2025-only. New `subscriptions/listen` POST-stream handler added under 2026-only gate.
 - `crates/turul-http-mcp-server/src/session_handler.rs` — entire legacy-protocol (≤ 2024-11-05) GET-SSE pathway becomes 2025-only.
 - `crates/turul-http-mcp-server/src/mcp_session.rs` — strict-lifecycle 400 vs 404 distinction (AGENTS.md §"Session Status Codes") gated 2025-only; 2026 has no missing-session-header error because there is no session header.
 - `crates/turul-http-mcp-server/src/notification_bridge.rs` — `notifications/initialized` reception path gated 2025-only.
@@ -158,8 +158,8 @@ cargo test -p turul-http-mcp-server --test subscriptions_listen_e2e
 cargo test -p turul-http-mcp-server --test no_session_header_under_2026
 
 # Legacy (2025): GET SSE works; missing Mcp-Session-Id returns 400
-cargo test -p turul-http-mcp-server --no-default-features --features legacy-2025-11-25 --test get_sse_handshake
-cargo test -p turul-http-mcp-server --no-default-features --features legacy-2025-11-25 --test missing_session_header_400
+cargo test -p turul-http-mcp-server --no-default-features --features protocol-2025-11-25 --test get_sse_handshake
+cargo test -p turul-http-mcp-server --no-default-features --features protocol-2025-11-25 --test missing_session_header_400
 
 # Wire-layer rule (CLAUDE.md §"Test Coverage Discipline" #3): exercise the bytes hitting hyper
 cargo test -p turul-http-mcp-server --test wire_bytes_per_spec
@@ -223,7 +223,7 @@ ADR-030 must land **before** this phase begins; the version-detection mechanism 
 
 **Files touched**:
 
-- `crates/turul-mcp-aws-lambda/src/handler.rs` — current handler (session-routed) gated `#[cfg(feature = "legacy-2025-11-25")]`. New `stateless_handler.rs` (2026-only) implementing the simpler request-response loop.
+- `crates/turul-mcp-aws-lambda/src/handler.rs` — current handler (session-routed) gated `#[cfg(feature = "protocol-2025-11-25")]`. New `stateless_handler.rs` (2026-only) implementing the simpler request-response loop.
 - `crates/turul-mcp-aws-lambda/src/builder.rs` — `LambdaMcpServerBuilder::with_session_routing(...)` becomes 2025-only. 2026 builder skips routing config entirely.
 - `crates/turul-mcp-aws-lambda/src/streaming.rs` — Lambda Runtime API streaming wire bytes (the v0.3.42 hot site per CLAUDE.md §"Test Coverage Discipline" footnote) unchanged at the byte level; only the trigger for keeping a stream open differs (GET-SSE under 2025, `subscriptions/listen` POST stream under 2026 — routed at the transport layer in Phase 3).
 - `crates/turul-mcp-aws-lambda/src/adapter.rs` — adapter dispatch table gates `initialize` and `notifications/initialized` paths.
@@ -240,7 +240,7 @@ ADR-030 must land **before** this phase begins; the version-detection mechanism 
 cargo test -p turul-mcp-aws-lambda --test stateless_handler
 
 # Legacy (2025): session-routed Lambda handler honors Mcp-Session-Id stickiness
-cargo test -p turul-mcp-aws-lambda --no-default-features --features legacy-2025-11-25 --test session_routing
+cargo test -p turul-mcp-aws-lambda --no-default-features --features protocol-2025-11-25 --test session_routing
 
 # Cold start under 2026 must not need to recover any session state
 cargo test -p turul-mcp-aws-lambda --test cold_start_stateless
@@ -254,7 +254,7 @@ cargo test -p turul-mcp-aws-lambda --test cold_start_stateless
 
 **Files touched**:
 
-- 62× `examples/*/Cargo.toml` — each gets an explicit `default-features = false, features = ["legacy-2025-11-25"]` block on its `turul-mcp-*` deps if it's a 2025-only example, or no change (default 2026) if it's spec-neutral or 2026-targeted. Estimated split: ~10 examples pin legacy explicitly (lifecycle / handshake demos), ~50 work under both, ~5 new 2026-only examples added.
+- 62× `examples/*/Cargo.toml` — each gets an explicit `default-features = false, features = ["protocol-2025-11-25"]` block on its `turul-mcp-*` deps if it's a 2025-only example, or no change (default 2026) if it's spec-neutral or 2026-targeted. Estimated split: ~10 examples pin legacy explicitly (lifecycle / handshake demos), ~50 work under both, ~5 new 2026-only examples added.
 - 8× `tests/*/Cargo.toml` (`tests/elicitation`, `tests/prompts`, `tests/resources`, `tests/roots`, `tests/sampling`, `tests/tools`, `tests/shared`, `tests/test_helpers`) — likewise pin explicitly.
 - `tests/consolidated/` — split into `consolidated_2025.rs` and `consolidated_2026.rs` where the spec divergence is unbridgeable (e.g., lifecycle E2E tests).
 - `examples/client-initialise-server/` (the canonical handshake example) — split or rename. Under default it becomes `client-discover-server` demonstrating `server/discover`; under legacy it remains the initialize-handshake demo.
@@ -271,11 +271,11 @@ cargo test -p turul-mcp-aws-lambda --test cold_start_stateless
 cargo build --workspace --examples
 
 # Every example compiles under legacy
-cargo build --workspace --examples --features legacy-2025-11-25
+cargo build --workspace --examples --features protocol-2025-11-25
 
 # Integration tests pass under both modes
 cargo test --workspace
-cargo test --workspace --features legacy-2025-11-25
+cargo test --workspace --features protocol-2025-11-25
 
 # No example accidentally pins the wrong spec — explicit check
 grep -L 'turul-mcp-protocol' examples/*/Cargo.toml  # all should match (none missing)
@@ -285,12 +285,12 @@ grep -L 'turul-mcp-protocol' examples/*/Cargo.toml  # all should match (none mis
 
 ## Phase 7 — CI matrix
 
-**Scope**: The branch-tip review (workflow `wf_d6984699-a5a` and follow-ups) flagged that CI currently exercises one path. Once the legacy feature is real, CI must cover both code paths or the legacy surface will rot silently. Add a matrix dimension for `legacy-2025-11-25` vs default.
+**Scope**: The branch-tip review (workflow `wf_d6984699-a5a` and follow-ups) flagged that CI currently exercises one path. Once the legacy feature is real, CI must cover both code paths or the legacy surface will rot silently. Add a matrix dimension for `protocol-2025-11-25` vs default.
 
 **Files touched**:
 
-- `.github/workflows/ci.yml` (or equivalent CI manifest — confirm the actual filename when this phase starts) — add a `protocol` matrix axis: `[default, legacy-2025-11-25]`. Every existing job (build, test, clippy, doc) runs under both.
-- `scripts/test_middleware_live.sh` — add a `--legacy` flag that adds `--features legacy-2025-11-25` to the cargo invocations.
+- `.github/workflows/ci.yml` (or equivalent CI manifest — confirm the actual filename when this phase starts) — add a `protocol` matrix axis: `[default, protocol-2025-11-25]`. Every existing job (build, test, clippy, doc) runs under both.
+- `scripts/test_middleware_live.sh` — add a `--legacy` flag that adds `--features protocol-2025-11-25` to the cargo invocations.
 - `scripts/ci_matrix.sh` (new) — helper script invoking each variant for local-CI parity.
 
 **LOC estimate**: ~80 LOC of YAML + ~50 LOC of shell. Small in code, **doubles compute cost** of CI — call this out explicitly.
@@ -306,7 +306,7 @@ grep -L 'turul-mcp-protocol' examples/*/Cargo.toml  # all should match (none mis
 bash scripts/ci_matrix.sh
 
 # Confirm both axes exist in CI manifest
-grep -E 'protocol:|legacy-2025-11-25' .github/workflows/ci.yml
+grep -E 'protocol:|protocol-2025-11-25' .github/workflows/ci.yml
 ```
 
 ---
@@ -335,7 +335,7 @@ grep -rEn 'server/discover|subscriptions/listen|InputRequiredResult' \
   | grep -v 'cfg(feature' | grep -v 'cfg(not(feature'
 
 # Examples Cargo.toml all explicitly opt one way or the other (none ambiguous)
-# Expected: every match either has `legacy-2025-11-25` listed or it doesn't — both are fine,
+# Expected: every match either has `protocol-2025-11-25` listed or it doesn't — both are fine,
 # but a Cargo.toml that depends on turul-mcp-protocol without an explicit features block is suspect.
 for f in examples/*/Cargo.toml tests/*/Cargo.toml; do
   if grep -q 'turul-mcp-protocol' "$f" && ! grep -qE 'features.*=|default-features' "$f"; then
@@ -350,10 +350,10 @@ grep -rEn 'was removed|no longer:|formerly known|deleted with' \
   crates/turul-http-mcp-server/src/
 
 # COMPLIANCE.md still accurate under default; CHANGELOG mentions the new feature
-grep -E 'protocol-2026-07-28|legacy-2025-11-25' CHANGELOG.md
+grep -E 'protocol-2026-07-28|protocol-2025-11-25' CHANGELOG.md
 
 # CI matrix actually built (double-check after Phase 7)
-test -f .github/workflows/ci.yml && grep -c 'legacy-2025-11-25' .github/workflows/ci.yml
+test -f .github/workflows/ci.yml && grep -c 'protocol-2025-11-25' .github/workflows/ci.yml
 ```
 
 For each non-zero hit (other than the expected ones), surface it in the phase summary with explicit disposition (intentional historical reference vs gate leak vs missing `#[cfg]`). Never silently let an unexpected hit pass — this is exactly the failure mode CLAUDE.md §"Slice Completion Gate" exists to prevent.
@@ -367,7 +367,7 @@ These are flagged from the prior architecture-review output and the devils-advoc
 1. **Upstream RC churn.** DRAFT-2026-v1's ETag will change between now and the final 2026-07-28 publication. Slice A' already absorbed 8 schema-fidelity defects. If the upstream schema shifts again, every phase below may need follow-up. Mitigation: pin tightly, refresh on a deliberate slice, never silently re-vendor.
 2. **Legacy feature testedness.** PARKED.md called out that the 2025-only path has no end-to-end test today. Phase 7 (CI matrix) is the proof — until Phase 7 lands, treat the legacy feature as "compiles, may not work."
 3. **`turul-rpc` 0.1 → 0.2.2 workspace bump.** Currently isolated to the 2026 protocol crate (ADR-025). Once Phase 3 (transport) needs the 0.2.2 wire-message union, this bump becomes a prerequisite. Sequence it as Phase 3 prep work, not a separate phase — but call it out in the Phase 3 commit message.
-4. **Protocol-alias flip vs feature-gating.** This plan does NOT touch the alias semantics — `turul-mcp-protocol` always re-exports one or the other based on its own features. ADR-027 Phase 9.4 ("flip the alias") is a separate, **already-resolved** concern: under this plan, the alias defaults to 2026, and `legacy-2025-11-25` is the escape hatch. There is no separate "alias flip" slice.
+4. **Protocol-alias flip vs feature-gating.** This plan does NOT touch the alias semantics — `turul-mcp-protocol` always re-exports one or the other based on its own features. ADR-027 Phase 9.4 ("flip the alias") is a separate, **already-resolved** concern: under this plan, the alias defaults to 2026, and `protocol-2025-11-25` is the escape hatch. There is no separate "alias flip" slice.
 5. **Extension crates** (`turul-mcp-ext-tasks-2026-07-28` per SEP-2663, `turul-mcp-ext-apps-2026-07-28` per SEP-1865) are out of scope for this rollout. They are additive opt-ins; the framework's core feature gating does not block them.
 
 ---

@@ -141,13 +141,13 @@ In 0.4.0, **`McpProtocolVersion` becomes feature-exclusive**. The protocol versi
 | Cargo features on consumer crate | `McpProtocolVersion` variant available | `turul-mcp-protocol` alias resolves to |
 |---|---|---|
 | (default, no features) | `V2026_07_28` (wire string `"DRAFT-2026-v1"`) | `turul-mcp-protocol-2026-07-28` |
-| `legacy-2025-11-25` | `V2025_11_25` (wire string `"2025-11-25"`) | `turul-mcp-protocol-2025-11-25` |
+| `protocol-2025-11-25` | `V2025_11_25` (wire string `"2025-11-25"`) | `turul-mcp-protocol-2025-11-25` |
 
 **These are mutually exclusive.** A single build of the framework can only host one protocol type hierarchy at a time. Reasons:
 
 1. The handshake state machines differ. 2025-11-25 has `initialize` → `notifications/initialized` → `Mcp-Session-Id`-tagged requests. DRAFT-2026-v1 has `server/discover` + per-request `_meta` carrier. The dispatcher cannot serve both simultaneously without per-request branching to the right schema-validated payload deserializer — which would require carrying both protocol crates in every consumer binary.
 2. Types diverge structurally. `RequestParams` in 2026-07-28 has a required `_meta: RequestMetaObject` field; in 2025-11-25 it has an optional `meta: Option<HashMap>` (different name, different shape, different requiredness). The `Tool`, `Resource`, `Prompt`, `ContentBlock`, and `ServerCapabilities` types similarly diverge. Linking both via re-exports under the same module path is not viable.
-3. The Cargo dependency tree is the natural cutover boundary. Each consumer crate's `Cargo.toml` selects the protocol crate via `turul-mcp-protocol` (the alias) and the `legacy-2025-11-25` feature; the rest of the consumer's code is unchanged.
+3. The Cargo dependency tree is the natural cutover boundary. Each consumer crate's `Cargo.toml` selects the protocol crate via `turul-mcp-protocol` (the alias) and the `protocol-2025-11-25` feature; the rest of the consumer's code is unchanged.
 
 ### Routing in DRAFT-2026-v1 mode
 
@@ -170,22 +170,22 @@ match header_version {
 
 **`SessionMcpHandler` is gone in the default build.** Its responsibilities (HTTP+SSE with `Last-Event-ID` replay, session-stored request/response persistence) are concepts that don't exist in DRAFT-2026-v1. The 2024-11-05 legacy path is unreachable from a 2026 build.
 
-### Routing in `legacy-2025-11-25` mode
+### Routing in `protocol-2025-11-25` mode
 
-With `--features legacy-2025-11-25`, the original ADR-009 routing logic applies unchanged. `SessionMcpHandler` for ≤2024-11-05 (still supported because the 2025-11-25 protocol crate carries `V2024_11_05`), `StreamableHttpHandler` for 2025-11-25.
+With `--features protocol-2025-11-25`, the original ADR-009 routing logic applies unchanged. `SessionMcpHandler` for ≤2024-11-05 (still supported because the 2025-11-25 protocol crate carries `V2024_11_05`), `StreamableHttpHandler` for 2025-11-25.
 
 ### Cross-version client connectivity
 
 A client that needs to talk to both a 2025-11-25 server and a DRAFT-2026-v1 server cannot do so with one build of the framework. The client must either:
 
-1. **Ship one build per target.** Two binaries, two `Cargo.toml`s, one with `legacy-2025-11-25` and one without.
+1. **Ship one build per target.** Two binaries, two `Cargo.toml`s, one with `protocol-2025-11-25` and one without.
 2. **Use a future bilingual client design.** A planned client-only ADR (separate, TBD-numbered) may carve out cross-version support inside `turul-mcp-client` because the client side does not have the same compile-time-fixed handshake constraints the server has. The server's `McpProtocolVersion` is process-global; the client's is per-connection.
 
 Until that client ADR is decided, treat the protocol version as a per-build constant.
 
 ### Migration impact
 
-- Consumers of `McpProtocolVersion::*` enum variants that don't exist in the active feature set get a `not found in scope` compile error. Match arms for `V2024_11_05` in default builds either compile-gate (`#[cfg(feature = "legacy-2025-11-25")]`) or get removed.
+- Consumers of `McpProtocolVersion::*` enum variants that don't exist in the active feature set get a `not found in scope` compile error. Match arms for `V2024_11_05` in default builds either compile-gate (`#[cfg(feature = "protocol-2025-11-25")]`) or get removed.
 - Tests that iterate over all variants need feature-gate awareness. The compliance test in the 2026-07-28 protocol crate iterates the 2026 variants; the equivalent in the 2025-11-25 crate is unchanged.
 - HTTP client integration tests that assert against `"2025-11-25"` in default 0.4.0 builds will fail until updated — the default header is `"DRAFT-2026-v1"`.
 

@@ -301,7 +301,7 @@ turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
 
 ## DRAFT-2026-v1: per-request fingerprint persistence
 
-**Status: Added 2026-05-31. Relevant when the server runs with default (DRAFT-2026-v1) protocol per ADR-027. The 2025-11-25 behavior above still applies under `--features legacy-2025-11-25`.**
+**Status: Added 2026-05-31. Relevant when the server runs with default (DRAFT-2026-v1) protocol per ADR-027. The 2025-11-25 behavior above still applies under `--features protocol-2025-11-25`.**
 
 ### What stays the same
 
