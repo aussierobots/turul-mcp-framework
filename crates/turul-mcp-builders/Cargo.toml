@@ -10,9 +10,14 @@ description = "Runtime builders for MCP (Model Context Protocol) components"
 keywords = ["mcp", "protocol", "builders", "runtime"]
 categories = ["development-tools", "api-bindings"]
 
+[features]
+default = ["protocol-2025-11-25"]
+protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25"]
+protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28"]
+
 [dependencies]
 # Protocol alias for current version
-turul-mcp-protocol = { workspace = true }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }
 turul-mcp-json-rpc-server = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true

@@ -20,8 +20,7 @@ uuid = { workspace = true, features = ["v4", "v7"] }
 chrono = { workspace = true, features = ["serde"] }
 
 # Protocol types
-turul-mcp-protocol.workspace = true
-
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }
 # Optional database support
 sqlx = { workspace = true, optional = true }
 
@@ -33,7 +32,9 @@ aws-sdk-dynamodb = { workspace = true, optional = true }
 base64 = { workspace = true, optional = true }
 
 [features]
-default = ["in-memory"]
+default = ["in-memory", "protocol-2025-11-25"]
+protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25"]
+protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28"]
 in-memory = ["tokio"]
 sqlite = ["sqlx", "tokio"]
 postgres = ["sqlx", "tokio"]
