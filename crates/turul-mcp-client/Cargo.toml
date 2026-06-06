@@ -9,8 +9,14 @@ homepage.workspace = true
 description = "Comprehensive MCP client library with multi-transport support"
 
 [dependencies]
-# MCP framework dependencies
+# MCP framework dependencies.
+# The client links each versioned protocol crate directly (gated by the
+# client-bilingual / client-2025-only / client-2026-only features) so one client
+# can speak both wire specs. turul-mcp-protocol (the alias) is retained
+# transitionally while existing code paths migrate to version-routed modules.
 turul-mcp-protocol = { workspace = true }
+turul-mcp-protocol-2025-11-25 = { workspace = true, optional = true }
+turul-mcp-protocol-2026-07-28 = { workspace = true, optional = true }
 turul-rpc = { workspace = true }
 
 # Async runtime
@@ -40,13 +46,22 @@ tracing = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"], optional = true }
 
 [features]
-default = ["http", "sse"]
+default = ["http", "sse", "client-bilingual"]
 # Transport features
 http = []
 sse = ["tokio-util"]
 stdio = ["tokio-util"]
 # All transports
 all-transports = ["http", "sse", "stdio"]
+
+# Spec-coexistence (mutually exclusive — enforced by compile_error! in lib.rs).
+# Bilingual (default) links both protocol crates; one McpClient negotiates the
+# wire spec per connection at connect() time.
+client-bilingual = ["dep:turul-mcp-protocol-2025-11-25", "dep:turul-mcp-protocol-2026-07-28"]
+# Narrowing: each links exactly ONE protocol crate. Requires --no-default-features
+# (otherwise client-bilingual is also active and the mutex fires).
+client-2025-only = ["dep:turul-mcp-protocol-2025-11-25"]
+client-2026-only = ["dep:turul-mcp-protocol-2026-07-28"]
 
 [dev-dependencies]
 tokio-test.workspace = true

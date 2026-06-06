@@ -196,6 +196,31 @@
 //! - [`turul-mcp-protocol`](https://crates.io/crates/turul-mcp-protocol) - Protocol types
 //! - [`turul-mcp-derive`](https://crates.io/crates/turul-mcp-derive) - Macros for tools/resources
 
+// Spec-coexistence features are mutually exclusive. Bilingual (default) links
+// both protocol crates; narrowing to one requires --no-default-features.
+#[cfg(any(
+    all(feature = "client-bilingual", feature = "client-2025-only"),
+    all(feature = "client-bilingual", feature = "client-2026-only"),
+    all(feature = "client-2025-only", feature = "client-2026-only"),
+))]
+compile_error!(
+    "turul-mcp-client: `client-bilingual` (default), `client-2025-only`, and \
+     `client-2026-only` are mutually exclusive. To narrow:  \
+     `cargo build --no-default-features --features http,sse,client-2025-only`. \
+     Bilingual is the default — a bare `cargo build` is enough."
+);
+
+#[cfg(not(any(
+    feature = "client-bilingual",
+    feature = "client-2025-only",
+    feature = "client-2026-only"
+)))]
+compile_error!(
+    "turul-mcp-client: enable exactly one of `client-bilingual` (default), \
+     `client-2025-only`, or `client-2026-only`. If you used \
+     `--no-default-features`, add one explicitly."
+);
+
 pub mod client;
 pub mod config;
 pub mod error;
@@ -203,6 +228,7 @@ pub mod prelude;
 pub mod session;
 pub mod streaming;
 pub mod transport;
+pub mod version;
 
 // Re-export main types
 /// High-level MCP client with session management and automatic reconnection
@@ -213,6 +239,8 @@ pub use config::{ClientConfig, RetryConfig, TimeoutConfig};
 pub use error::{McpClientError, McpClientResult};
 /// Session management types for tracking connection state and statistics
 pub use session::{SessionInfo, SessionManager, SessionState};
+/// Per-connection MCP wire-version negotiation
+pub use version::McpVersion;
 
 // Re-export transport types
 /// Transport layer abstractions for different MCP connection types
