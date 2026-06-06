@@ -87,7 +87,10 @@ use turul_mcp_protocol_2025_11_25::*;   // FORBIDDEN
 use turul_mcp_protocol_2025_06_18::*;   // FORBIDDEN
 ```
 
-**Only exceptions**: `crates/turul-mcp-protocol/` (the re-export crate itself) and `crates/turul-mcp-protocol-2025-11-25/` (its own source).
+**Only exceptions**:
+1. `crates/turul-mcp-protocol/` (the re-export crate itself).
+2. `crates/turul-mcp-protocol-2025-11-25/` (its own source).
+3. **`crates/turul-mcp-client/`** — the bilingual client links **both** versioned protocol crates directly (`turul-mcp-protocol-2025-11-25` and `turul-mcp-protocol-2026-07-28`, gated by the `client-bilingual` / `client-2025-only` / `client-2026-only` features) so a single client can negotiate and speak either wire spec per connection. It does **not** route through the `turul-mcp-protocol` alias. This is the one consumer-side exception; it is documented in ADR-030 and ADR-001's revision log.
 
 **Import Hierarchy** (prefer top):
 - `turul_mcp_server::prelude::*` — re-exports everything (protocol + builders + server types)

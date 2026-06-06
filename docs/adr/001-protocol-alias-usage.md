@@ -60,3 +60,6 @@ This rule applies to:
 - **Positive**: Consistent import patterns across codebase
 - **Positive**: Easier protocol upgrades
 - **Risk**: Must maintain strict import discipline
+## Revision log
+
+- **2026-06-07** — **Third exception added: `turul-mcp-client` may import both versioned protocol crates directly.** The bilingual client links `turul-mcp-protocol-2025-11-25` and `turul-mcp-protocol-2026-07-28` directly (gated by the `client-bilingual` / `client-2025-only` / `client-2026-only` features) so one client can negotiate and speak either wire spec per connection; it does NOT route through the `turul-mcp-protocol` alias. This is the only consumer-side exception to the rule above. See ADR-030 (client bilingual coexistence). The alias rule remains MANDATORY for every other consumer (server, http-server, builders, aws-lambda, derive, examples).
