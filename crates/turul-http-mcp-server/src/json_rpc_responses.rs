@@ -58,7 +58,7 @@ pub fn jsonrpc_success_response(
     id: RequestId,
     result: Value,
 ) -> Result<Response<JsonRpcBody>, hyper::Error> {
-    let response = JsonRpcResponse::success(id, result);
+    let response = JsonRpcResponse::success(id, result.into());
 
     let body_bytes = serde_json::to_vec(&response).unwrap_or_else(|e| {
         error!("Failed to serialize JSON-RPC response: {}", e);

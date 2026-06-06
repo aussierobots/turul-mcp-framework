@@ -152,11 +152,9 @@ http-body = "1"
 bytes = "1"
 
 # turul-rpc — generic JSON-RPC 2.0 framework, upstream of turul-mcp-json-rpc-server.
-# Workspace pin is 0.1 because the shim (`turul-mcp-json-rpc-server` 0.4) and
-# its downstream consumers (turul-http-mcp-server, etc.) were written against
-# the 0.1 API. The 2026-07-28 protocol crate pins 0.2.1 directly in its own
-# Cargo.toml — see ADR-025.
-turul-rpc = { version = "0.1", default-features = false }
+# This branch standardizes on the published `turul-rpc` 0.2 from crates.io for
+# every crate; 0.1 is not referenced anywhere on this branch.
+turul-rpc = { version = "0.2", default-features = false }
 
 # Internal crate dependencies.
 # Per-crate independent versioning: each crate publishes at its own semver.
