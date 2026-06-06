@@ -21,3 +21,8 @@ Cargo.lock
 # Test outputs
 /tmp/test_output.log
 .worktrees/
+
+# Local Claude Code artifacts (workflow scripts, review reports, worktrees, etc.).
+# .claude/agents/ is intentionally tracked (shared subagents); everything else is local.
+.claude/*
+!.claude/agents/
