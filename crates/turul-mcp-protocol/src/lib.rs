@@ -67,12 +67,30 @@
 //!
 //! Currently aliases: `turul-mcp-protocol-2025-11-25`
 
-// Re-export the current MCP protocol version
-pub use turul_mcp_protocol_2025_11_25::*;
+// Exactly one protocol-<date> feature must be active.
+#[cfg(all(feature = "protocol-2025-11-25", feature = "protocol-2026-07-28"))]
+compile_error!(
+    "turul-mcp-protocol: features `protocol-2025-11-25` and `protocol-2026-07-28` \
+     are mutually exclusive — a build re-exports exactly one MCP spec. Enable one."
+);
+#[cfg(not(any(feature = "protocol-2025-11-25", feature = "protocol-2026-07-28")))]
+compile_error!(
+    "turul-mcp-protocol: enable exactly one of `protocol-2025-11-25` (default) or \
+     `protocol-2026-07-28`. If you used `--no-default-features`, add one explicitly."
+);
 
-// Explicitly re-export the prelude module for convenient imports
+// Re-export the selected MCP protocol version.
+#[cfg(feature = "protocol-2025-11-25")]
+pub use turul_mcp_protocol_2025_11_25::*;
+#[cfg(feature = "protocol-2026-07-28")]
+pub use turul_mcp_protocol_2026_07_28::*;
+
+// Explicitly re-export the prelude module for convenient imports.
 pub mod prelude {
+    #[cfg(feature = "protocol-2025-11-25")]
     pub use turul_mcp_protocol_2025_11_25::prelude::*;
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub use turul_mcp_protocol_2026_07_28::prelude::*;
 }
 
 /// The current MCP protocol version implemented by this crate
