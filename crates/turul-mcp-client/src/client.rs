@@ -807,6 +807,21 @@ impl McpClient {
     ) -> McpClientResult<ListToolsResult> {
         debug!("Listing tools with pagination");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra = match cursor {
+                Some(ref c) => json!({ "cursor": c.as_str() }),
+                None => json!({}),
+            };
+            return self
+                .send_2026_07_28(
+                    "tools/list",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_list_tools_result,
+                )
+                .await;
+        }
+
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
         } else {
@@ -961,6 +976,21 @@ impl McpClient {
     ) -> McpClientResult<ListResourcesResult> {
         debug!("Listing resources with pagination");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra = match cursor {
+                Some(ref c) => json!({ "cursor": c.as_str() }),
+                None => json!({}),
+            };
+            return self
+                .send_2026_07_28(
+                    "resources/list",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_list_resources_result,
+                )
+                .await;
+        }
+
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
         } else {
@@ -1049,6 +1079,21 @@ impl McpClient {
     ) -> McpClientResult<ListResourceTemplatesResult> {
         debug!("Listing resource templates with pagination");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra = match cursor {
+                Some(ref c) => json!({ "cursor": c.as_str() }),
+                None => json!({}),
+            };
+            return self
+                .send_2026_07_28(
+                    "resources/templates/list",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_list_resource_templates_result,
+                )
+                .await;
+        }
+
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
         } else {
@@ -1132,6 +1177,21 @@ impl McpClient {
         cursor: Option<Cursor>,
     ) -> McpClientResult<ListPromptsResult> {
         debug!("Listing prompts with pagination");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra = match cursor {
+                Some(ref c) => json!({ "cursor": c.as_str() }),
+                None => json!({}),
+            };
+            return self
+                .send_2026_07_28(
+                    "prompts/list",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_list_prompts_result,
+                )
+                .await;
+        }
 
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })

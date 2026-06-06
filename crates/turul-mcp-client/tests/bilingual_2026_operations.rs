@@ -140,3 +140,40 @@ async fn removed_methods_are_rejected_on_2026_connection() {
         "`tasks/list` is not in 2026-07-28 core — must be rejected on a 2026 connection"
     );
 }
+
+#[tokio::test]
+async fn paginated_list_routes_through_2026_with_meta_and_cursor() {
+    let server = start_2026_server().await;
+    // The matcher requires BOTH the 2026 `_meta` and the cursor, so it only
+    // responds if the paginated call routed through the 2026 path with `_meta`.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({
+            "method": "resources/list",
+            "params": {
+                "_meta": { "io.modelcontextprotocol/protocolVersion": "2026-07-28" },
+                "cursor": "page-2"
+            }
+        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0", "id": "x",
+                    "result": {
+                        "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+                        "resources": [{ "uri": "file:///b", "name": "b" }],
+                        "nextCursor": "page-3"
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let client = connect_2026(&server).await;
+    let page = client
+        .list_resources_paginated(Some(turul_mcp_protocol::meta::Cursor::new("page-2")))
+        .await
+        .expect("paginated resources/list must round-trip through the 2026 path");
+    assert_eq!(page.resources.len(), 1);
+    assert_eq!(page.next_cursor.as_ref().map(|c| c.as_str()), Some("page-3"));
+}

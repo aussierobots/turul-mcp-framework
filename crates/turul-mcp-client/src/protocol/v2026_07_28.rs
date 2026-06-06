@@ -87,3 +87,34 @@ pub(crate) fn parse_get_prompt(
     let r: p::prompts::GetPromptResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
+
+// Full-result parsers for the paginated list ops (preserve `nextCursor`). The
+// 2026 result's `resultType`/`ttlMs`/`cacheScope` are dropped by the remap into
+// the public (alias) result type.
+pub(crate) fn parse_list_tools_result(
+    result: &Value,
+) -> McpClientResult<turul_mcp_protocol::ListToolsResult> {
+    let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
+    remap(&r)
+}
+
+pub(crate) fn parse_list_resources_result(
+    result: &Value,
+) -> McpClientResult<turul_mcp_protocol::ListResourcesResult> {
+    let r: p::resources::ListResourcesResult = serde_json::from_value(result.clone())?;
+    remap(&r)
+}
+
+pub(crate) fn parse_list_resource_templates_result(
+    result: &Value,
+) -> McpClientResult<turul_mcp_protocol::resources::ListResourceTemplatesResult> {
+    let r: p::resources::ListResourceTemplatesResult = serde_json::from_value(result.clone())?;
+    remap(&r)
+}
+
+pub(crate) fn parse_list_prompts_result(
+    result: &Value,
+) -> McpClientResult<turul_mcp_protocol::ListPromptsResult> {
+    let r: p::prompts::ListPromptsResult = serde_json::from_value(result.clone())?;
+    remap(&r)
+}
