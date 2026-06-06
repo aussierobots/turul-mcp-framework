@@ -54,6 +54,8 @@ pub struct McpClient {
     cached_prompts: Arc<RwLock<Option<Vec<Prompt>>>>,
     /// User-supplied notification callback
     notification_callback: Option<NotificationCallback>,
+    /// Wire spec negotiated at `connect()`, locked for this client's lifetime.
+    protocol_version: Arc<RwLock<Option<crate::version::McpVersion>>>,
 }
 
 impl Drop for McpClient {
@@ -129,6 +131,7 @@ impl McpClient {
             cached_resources: Arc::new(RwLock::new(None)),
             cached_prompts: Arc::new(RwLock::new(None)),
             notification_callback,
+            protocol_version: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -226,11 +229,120 @@ impl McpClient {
             }
         }
 
-        // Initialize session
-        self.initialize_session().await?;
+        // Negotiate the wire spec and run the version-appropriate handshake.
+        self.negotiate_protocol().await?;
 
         info!("Successfully connected to MCP server");
         Ok(())
+    }
+
+    /// The wire spec negotiated for this connection, or `None` before `connect()`.
+    pub async fn negotiated_version(&self) -> Option<crate::version::McpVersion> {
+        *self.protocol_version.read().await
+    }
+
+    async fn lock_version(&self, v: crate::version::McpVersion) -> McpClientResult<()> {
+        *self.protocol_version.write().await = Some(v);
+        info!(version = %v, "Negotiated MCP wire version");
+        Ok(())
+    }
+
+    /// Bilingual negotiation: explicit hint wins; otherwise probe `server/discover`
+    /// and apply the [`classify_probe`](crate::version::classify_probe) rule.
+    #[cfg(feature = "client-bilingual")]
+    async fn negotiate_protocol(&self) -> McpClientResult<()> {
+        use crate::version::{classify_probe, McpVersion, ProbeDecision};
+
+        if let Some(hint) = self.config.mcp_protocol_version {
+            match hint {
+                McpVersion::V2025_11_25 => self.initialize_session().await?,
+                // 2026-07-28 stateless core: no initialize handshake.
+                McpVersion::V2026_07_28 => {}
+            }
+            return self.lock_version(hint).await;
+        }
+
+        let probe = self.probe_discover().await?;
+        match classify_probe(probe, self.config.allow_legacy_gateway_fallback) {
+            ProbeDecision::Use2026 => self.lock_version(McpVersion::V2026_07_28).await,
+            ProbeDecision::FallbackTo2025 => {
+                self.initialize_session().await?;
+                self.lock_version(McpVersion::V2025_11_25).await
+            }
+            ProbeDecision::Abort(reason) => {
+                Err(crate::error::ProtocolError::NegotiationFailed(reason).into())
+            }
+        }
+    }
+
+    #[cfg(feature = "client-2025-only")]
+    async fn negotiate_protocol(&self) -> McpClientResult<()> {
+        self.initialize_session().await?;
+        self.lock_version(crate::version::McpVersion::V2025_11_25).await
+    }
+
+    #[cfg(feature = "client-2026-only")]
+    async fn negotiate_protocol(&self) -> McpClientResult<()> {
+        match self.probe_discover().await? {
+            crate::version::DiscoverProbe::Discovered => {
+                self.lock_version(crate::version::McpVersion::V2026_07_28).await
+            }
+            _ => Err(crate::error::ProtocolError::UnsupportedVersion(
+                "client-2026-only: server did not answer server/discover — not a 2026-07-28 server"
+                    .to_string(),
+            )
+            .into()),
+        }
+    }
+
+    /// Probe the server with a `server/discover` request and classify the outcome
+    /// into a [`DiscoverProbe`](crate::version::DiscoverProbe). A valid result =>
+    /// 2026; a JSON-RPC error => carries the code; an HTTP non-2xx => carries the status.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-only"))]
+    async fn probe_discover(&self) -> McpClientResult<crate::version::DiscoverProbe> {
+        use crate::error::TransportError;
+        use crate::version::DiscoverProbe;
+        use turul_mcp_protocol_2026_07_28 as p2026;
+
+        let meta = p2026::meta::RequestMetaObject::new(
+            p2026::MCP_VERSION,
+            p2026::initialize::Implementation::new(
+                self.config.client_info.name.clone(),
+                self.config.client_info.version.clone(),
+            ),
+            p2026::initialize::ClientCapabilities::default(),
+        );
+        let discover = p2026::discover::DiscoverRequest::new(meta);
+        let params = serde_json::to_value(&discover.params).map_err(|e| {
+            McpClientError::generic(format!("Failed to serialize server/discover params: {}", e))
+        })?;
+        let envelope = self.build_request("server/discover", params);
+
+        match timeout(
+            self.config.timeouts.initialization,
+            self.send_request_with_headers_internal(envelope),
+        )
+        .await
+        {
+            Err(_) => Err(McpClientError::Timeout),
+            Ok(Ok(resp)) => {
+                if let Some(err) = resp.body.get("error") {
+                    let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
+                    Ok(DiscoverProbe::JsonRpcError(code))
+                } else if resp.body.get("result").is_some() {
+                    Ok(DiscoverProbe::Discovered)
+                } else {
+                    Err(crate::error::ProtocolError::InvalidResponse(
+                        "server/discover response carried neither result nor error".to_string(),
+                    )
+                    .into())
+                }
+            }
+            Ok(Err(McpClientError::Transport(TransportError::HttpStatus { status, .. }))) => {
+                Ok(DiscoverProbe::HttpStatus(status))
+            }
+            Ok(Err(other)) => Err(other),
+        }
     }
 
     /// Disconnect from the MCP server
@@ -1428,8 +1540,16 @@ mod tests {
 
         async fn send_request_with_headers(
             &self,
-            _request: Value,
+            request: Value,
         ) -> McpClientResult<TransportResponse> {
+            // A real 2025-11-25 server answers `server/discover` with JSON-RPC
+            // -32601, which drives the bilingual client to fall back to `initialize`.
+            if request.get("method").and_then(|m| m.as_str()) == Some("server/discover") {
+                return Ok(TransportResponse::new(
+                    json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+                    HashMap::new(),
+                ));
+            }
             // Return a valid initialize response with session ID
             let mut headers = HashMap::new();
             headers.insert("mcp-session-id".to_string(), "mock-session-123".to_string());
@@ -1844,8 +1964,16 @@ mod tests {
 
         async fn send_request_with_headers(
             &self,
-            _request: Value,
+            request: Value,
         ) -> McpClientResult<TransportResponse> {
+            // Answer the version probe like a 2025-11-25 server (-32601) without
+            // consuming a queued init response, so fallback drives initialize.
+            if request.get("method").and_then(|m| m.as_str()) == Some("server/discover") {
+                return Ok(TransportResponse::new(
+                    json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+                    HashMap::new(),
+                ));
+            }
             self.init_responses
                 .lock()
                 .unwrap()
@@ -2588,8 +2716,16 @@ mod tests {
 
         async fn send_request_with_headers(
             &self,
-            _request: Value,
+            request: Value,
         ) -> McpClientResult<TransportResponse> {
+            // Answer the version probe like a 2025-11-25 server (-32601) without
+            // consuming a queued init response, so fallback drives initialize.
+            if request.get("method").and_then(|m| m.as_str()) == Some("server/discover") {
+                return Ok(TransportResponse::new(
+                    json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+                    HashMap::new(),
+                ));
+            }
             self.init_responses
                 .lock()
                 .unwrap()

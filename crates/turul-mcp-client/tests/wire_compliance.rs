@@ -426,6 +426,16 @@ async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() 
         .mount(&mock_server)
         .await;
 
+    // server/discover probe: a 2025-11-25 server answers -32601, driving the
+    // bilingual client to fall back to the initialize handshake.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .respond_with(ResponseTemplate::new(200).insert_header("Content-Type", "application/json").set_body_json(
+            serde_json::json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+        ))
+        .mount(&mock_server)
+        .await;
+
     // initialize: return a session ID and a minimal valid InitializeResult.
     Mock::given(method("POST"))
         .and(body_partial_json(serde_json::json!({"method": "initialize"})))
@@ -555,6 +565,16 @@ async fn test_mcp_client_call_tool_preserves_array_argument_values_on_wire() {
 
     Mock::given(method("GET"))
         .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    // server/discover probe: a 2025-11-25 server answers -32601, driving the
+    // bilingual client to fall back to the initialize handshake.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .respond_with(ResponseTemplate::new(200).insert_header("Content-Type", "application/json").set_body_json(
+            serde_json::json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+        ))
         .mount(&mock_server)
         .await;
 

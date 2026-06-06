@@ -20,6 +20,16 @@ pub struct ClientConfig {
 
     /// Logging configuration
     pub logging: LoggingConfig,
+
+    /// Explicit wire-spec hint. When set, `connect()` skips auto-detection and
+    /// drives the handshake for this version directly. `None` (default) =
+    /// try `server/discover` then fall back to `initialize` on JSON-RPC -32601.
+    pub mcp_protocol_version: Option<crate::version::McpVersion>,
+
+    /// When `true`, broadens the version-downgrade fallback to also accept HTTP
+    /// 404/405 from `server/discover` (for gateways that return those for unknown
+    /// methods). Off by default; enabling it weakens protocol-downgrade resistance.
+    pub allow_legacy_gateway_fallback: bool,
 }
 
 /// Client identification information
