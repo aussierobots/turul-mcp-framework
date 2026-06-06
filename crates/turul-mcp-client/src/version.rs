@@ -35,7 +35,7 @@ impl std::fmt::Display for McpVersion {
 }
 
 /// Outcome of the `server/discover` probe sent during negotiation.
-// Unused in single-spec `client-2025-only` builds (no probe), hence dead_code there.
+// Unused in single-spec `client-2025-11-25-only` builds (no probe), hence dead_code there.
 #[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DiscoverProbe {

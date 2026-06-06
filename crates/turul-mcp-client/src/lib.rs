@@ -199,25 +199,25 @@
 // Spec-coexistence features are mutually exclusive. Bilingual (default) links
 // both protocol crates; narrowing to one requires --no-default-features.
 #[cfg(any(
-    all(feature = "client-bilingual", feature = "client-2025-only"),
-    all(feature = "client-bilingual", feature = "client-2026-only"),
-    all(feature = "client-2025-only", feature = "client-2026-only"),
+    all(feature = "client-bilingual", feature = "client-2025-11-25-only"),
+    all(feature = "client-bilingual", feature = "client-2026-07-28-only"),
+    all(feature = "client-2025-11-25-only", feature = "client-2026-07-28-only"),
 ))]
 compile_error!(
-    "turul-mcp-client: `client-bilingual` (default), `client-2025-only`, and \
-     `client-2026-only` are mutually exclusive. To narrow:  \
-     `cargo build --no-default-features --features http,sse,client-2025-only`. \
+    "turul-mcp-client: `client-bilingual` (default), `client-2025-11-25-only`, and \
+     `client-2026-07-28-only` are mutually exclusive. To narrow:  \
+     `cargo build --no-default-features --features http,sse,client-2025-11-25-only`. \
      Bilingual is the default — a bare `cargo build` is enough."
 );
 
 #[cfg(not(any(
     feature = "client-bilingual",
-    feature = "client-2025-only",
-    feature = "client-2026-only"
+    feature = "client-2025-11-25-only",
+    feature = "client-2026-07-28-only"
 )))]
 compile_error!(
     "turul-mcp-client: enable exactly one of `client-bilingual` (default), \
-     `client-2025-only`, or `client-2026-only`. If you used \
+     `client-2025-11-25-only`, or `client-2026-07-28-only`. If you used \
      `--no-default-features`, add one explicitly."
 );
 

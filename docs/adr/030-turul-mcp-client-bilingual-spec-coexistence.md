@@ -33,7 +33,7 @@ The crate compiles `turul-mcp-protocol-2025-11-25` and `turul-mcp-protocol-2026-
 
 Bilingual is the **explicit default feature**: `default = ["http", "sse", "client-bilingual"]`. An "implicit default via absence of narrowing flag" was tried in an earlier revision (see Revision log entry for codex P1-4) but is not executable: `optional = true` deps are only linked when a feature activates them via `dep:` syntax, and Cargo features can only ADD deps, never REMOVE them. So bilingual MUST be an explicit feature that pulls both protocol crates in.
 
-The trade-off: narrowing to one protocol requires `--no-default-features` on the leaf consumer. This is standard Cargo idiom (it is how `serde`, `tokio`, `reqwest` all handle mutually-exclusive default features). The `compile_error!` mutex catches the common footgun (`cargo build --features client-2025-only` without `--no-default-features` → both `client-bilingual` and `client-2025-only` active → compile error with explanatory message).
+The trade-off: narrowing to one protocol requires `--no-default-features` on the leaf consumer. This is standard Cargo idiom (it is how `serde`, `tokio`, `reqwest` all handle mutually-exclusive default features). The `compile_error!` mutex catches the common footgun (`cargo build --features client-2025-11-25-only` without `--no-default-features` → both `client-bilingual` and `client-2025-11-25-only` active → compile error with explanatory message).
 
 ```toml
 # crates/turul-mcp-client/Cargo.toml
@@ -59,8 +59,8 @@ client-bilingual = [
 # Narrowing features: each links exactly ONE protocol crate. Use
 # --no-default-features when enabling these (otherwise client-bilingual is
 # also active and the compile_error! mutex fires).
-client-2025-only = ["dep:turul-mcp-protocol-2025-11-25"]
-client-2026-only = ["dep:turul-mcp-protocol-2026-07-28"]
+client-2025-11-25-only = ["dep:turul-mcp-protocol-2025-11-25"]
+client-2026-07-28-only = ["dep:turul-mcp-protocol-2026-07-28"]
 ```
 
 All three protocol features are mutually exclusive (any two simultaneously is a build error):
@@ -68,21 +68,21 @@ All three protocol features are mutually exclusive (any two simultaneously is a 
 ```rust
 // crates/turul-mcp-client/src/lib.rs
 #[cfg(any(
-    all(feature = "client-bilingual",  feature = "client-2025-only"),
-    all(feature = "client-bilingual",  feature = "client-2026-only"),
-    all(feature = "client-2025-only",  feature = "client-2026-only"),
+    all(feature = "client-bilingual",  feature = "client-2025-11-25-only"),
+    all(feature = "client-bilingual",  feature = "client-2026-07-28-only"),
+    all(feature = "client-2025-11-25-only",  feature = "client-2026-07-28-only"),
 ))]
 compile_error!(
-    "turul-mcp-client: `client-bilingual` (default), `client-2025-only`, and \
-     `client-2026-only` are mutually exclusive. Narrowing usage:  \
-     `cargo build --no-default-features --features http,sse,client-2025-only`. \
+    "turul-mcp-client: `client-bilingual` (default), `client-2025-11-25-only`, and \
+     `client-2026-07-28-only` are mutually exclusive. Narrowing usage:  \
+     `cargo build --no-default-features --features http,sse,client-2025-11-25-only`. \
      Bilingual is the default; just `cargo build` is enough."
 );
 
-#[cfg(not(any(feature = "client-bilingual", feature = "client-2025-only", feature = "client-2026-only")))]
+#[cfg(not(any(feature = "client-bilingual", feature = "client-2025-11-25-only", feature = "client-2026-07-28-only")))]
 compile_error!(
     "turul-mcp-client: enable exactly one of `client-bilingual` (default), \
-     `client-2025-only`, or `client-2026-only`. If you used \
+     `client-2025-11-25-only`, or `client-2026-07-28-only`. If you used \
      `--no-default-features`, add one of these explicitly."
 );
 ```
@@ -90,9 +90,9 @@ compile_error!(
 Usage matrix:
 
 - `cargo add turul-mcp-client` → bilingual (default; both protocols linked)
-- `cargo add turul-mcp-client --no-default-features --features http,sse,client-2025-only` → 2025-only; binary excludes the 2026 protocol crate from the dep graph
-- `cargo add turul-mcp-client --no-default-features --features http,sse,client-2026-only` → 2026-only; binary excludes 2025
-- `cargo add turul-mcp-client --features client-2025-only` (NO `--no-default-features`) → **compile error** with the message above explaining the fix
+- `cargo add turul-mcp-client --no-default-features --features http,sse,client-2025-11-25-only` → 2025-only; binary excludes the 2026 protocol crate from the dep graph
+- `cargo add turul-mcp-client --no-default-features --features http,sse,client-2026-07-28-only` → 2026-only; binary excludes 2025
+- `cargo add turul-mcp-client --features client-2025-11-25-only` (NO `--no-default-features`) → **compile error** with the message above explaining the fix
 - `cargo add turul-mcp-client --no-default-features --features http,sse` (no protocol feature) → **compile error** demanding one be chosen
 
 Bilingual is the only configuration tested against the full deployment-scenario matrix; the `*-only` features are opt-in narrowing for binary-size-sensitive consumers (embedded, wasm, legacy CLI).
@@ -100,10 +100,10 @@ Bilingual is the only configuration tested against the full deployment-scenario 
 Internal modules use the `#[cfg(feature = "...")]` gates directly on their `pub use` and `mod` lines, e.g.:
 
 ```rust
-#[cfg(any(feature = "client-bilingual", feature = "client-2025-only"))]
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 pub(crate) mod v2025;
 
-#[cfg(any(feature = "client-bilingual", feature = "client-2026-only"))]
+#[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 pub(crate) mod v2026;
 
 #[cfg(feature = "client-bilingual")]
@@ -162,7 +162,7 @@ A hybrid scheme, with explicit caller hint taking precedence over auto-probe:
 
 3. **Per-connection immutability.** Once a version is locked for an `McpClient` instance, it does not change. Callers that need to talk to a server that has been upgraded mid-session must `disconnect()` and construct a new client. This is consistent with the existing 404-driven re-initialization (`crates/turul-mcp-client/src/client.rs:452-466`) which already requires fresh handshake on session loss.
 
-### `client-2025-only` / `client-2026-only` narrowing
+### `client-2025-11-25-only` / `client-2026-07-28-only` narrowing
 
 When either single-spec feature is active, the version field becomes `Arc<RwLock<McpVersion>>` (no `Option`, no probe). `connect()` drives the corresponding handshake directly and treats spec mismatch as a hard error (`McpClientError::ServerUnsupported`). This is the legacy-CLI / embedded path and intentionally trades flexibility for binary size.
 
@@ -178,7 +178,7 @@ When either single-spec feature is active, the version field becomes `Arc<RwLock
 
 **Negative / trade-offs:**
 
-- Client binary is meaningfully larger by default. Both protocol crates are linked. Estimated overhead: 1.3-2.0k LOC of routing/serialization glue plus the two protocol crates' types. Mitigation: build the leaf binary with `cargo build --no-default-features --features http,sse,client-2025-only` (or `…,client-2026-only`) to narrow. The `--no-default-features` is mandatory: without it the `client-bilingual` default also activates, all three protocol features are mutually exclusive, and the `compile_error!` mutex fires.
+- Client binary is meaningfully larger by default. Both protocol crates are linked. Estimated overhead: 1.3-2.0k LOC of routing/serialization glue plus the two protocol crates' types. Mitigation: build the leaf binary with `cargo build --no-default-features --features http,sse,client-2025-11-25-only` (or `…,client-2026-07-28-only`) to narrow. The `--no-default-features` is mandatory: without it the `client-bilingual` default also activates, all three protocol features are mutually exclusive, and the `compile_error!` mutex fires.
 - Probe-then-fallback adds round-trip latency to first `connect()` against a 2025-11-25 server (one extra failed `server/discover` request before the `initialize` retry). Mitigation: callers who know their server's spec set `mcp_protocol_version` explicitly to skip the probe.
 - Two protocol-type universes inside one crate raises the cost of refactors that touch protocol types — internal helpers must be aware of which version they're dispatching to. Mitigation: keep the `protocol/v2025.rs` and `protocol/v2026.rs` modules cleanly separated; public client API stays version-agnostic.
 - Behavior-difference matrix between specs (stateful vs stateless, session-id vs `_meta`, deprecated `notifications/cancelled` semantics, error code `-32602` vs `-32002`) must be encoded in the routing layer. Each behavior is documented inline with a citation to the relevant ADR-027 §"Schema-fidelity corrections" entry.
@@ -189,7 +189,7 @@ When either single-spec feature is active, the version field becomes `Arc<RwLock
 - **2026 client → 2026 server behind misconfigured auth gateway.** Gateway returns HTTP 401 or 403. Client surfaces `McpClientError::ConnectionFailed { status: 401, ... }`; **does NOT downgrade.** The user fixes the gateway, not the protocol.
 - **2026 client → 2026 server behind misconfigured route.** Gateway returns HTTP 404 or 405. Client surfaces `McpClientError::ConnectionFailed { status: 404, ... }`; **does NOT downgrade.** Escape: set `ClientConfig.allow_legacy_gateway_fallback = true` to broaden the fallback trigger, with the caveat that this weakens downgrade resistance.
 - **2026 client → server that responds with `-32700`/`-32600`/`-32602`/`-32603`** for `server/discover`. The server understood the request and rejected it. Client surfaces `McpClientError::ProtocolError`; **does NOT downgrade.**
-- **2025-only client → 2026 server** *(only when the client was built with `--no-default-features --features http,sse,client-2025-only`)*. `initialize` returns `-32601` (the 2026 server has no such method). Client fails with `McpClientError::ServerUnsupported { suggested: V2026_07_28 }`. Caller must rebuild without `--no-default-features` (gets bilingual) or with `client-2026-only` instead.
+- **2025-only client → 2026 server** *(only when the client was built with `--no-default-features --features http,sse,client-2025-11-25-only`)*. `initialize` returns `-32601` (the 2026 server has no such method). Client fails with `McpClientError::ServerUnsupported { suggested: V2026_07_28 }`. Caller must rebuild without `--no-default-features` (gets bilingual) or with `client-2026-07-28-only` instead.
 - **2026 client → 2026 server, but server is mid-deploy** *(stateless server quirks)*. `server/discover` returns a transient 5xx. Existing retry policy in transport applies; `connect()` propagates the eventual terminal error per `McpClientError::ConnectionFailed`.
 - **Bilingual client → 2025 server, then operator upgrades server mid-session.** The locked-at-`connect()` version becomes wrong. Subsequent requests fail with 404 (session lost on the now-stateless server). Existing 404 path tears down the session (`crates/turul-mcp-client/src/client.rs:452-466`); but bilingual auto-redetection on re-init is **out of scope for the initial slice** — caller must `disconnect()` and reconnect for the new spec to be negotiated. Tracked as a follow-up.
 
@@ -213,11 +213,11 @@ When either single-spec feature is active, the version field becomes `Arc<RwLock
 
 ## Revision log
 
-- **2026-05-31** — initial. Bilingual-default strategy for `turul-mcp-client`; per-connection version detection (explicit hint then try-discover-then-fallback); features `client-2025-only` / `client-2026-only` for binary-size narrowing; failure modes and out-of-scope items documented. ADR authored to complement ADR-029 (server-side single-spec) and ADR-027 (protocol-crate targeting). Implementation slice not yet scheduled — to be tracked in `docs/plans/2026-07-28-PARKED.md`.
+- **2026-05-31** — initial. Bilingual-default strategy for `turul-mcp-client`; per-connection version detection (explicit hint then try-discover-then-fallback); features `client-2025-11-25-only` / `client-2026-07-28-only` for binary-size narrowing; failure modes and out-of-scope items documented. ADR authored to complement ADR-029 (server-side single-spec) and ADR-027 (protocol-crate targeting). Implementation slice not yet scheduled — to be tracked in `docs/plans/2026-07-28-PARKED.md`.
 - **2026-05-31 (correction, codex P1-4) — SUPERSEDED by the 2026-05-31 re-correction entry below.** §"Cargo topology" was rewritten at this point to drop `bilingual` from the default features list and treat it as the implicit default (absence of any narrowing flag). That intermediate design did not survive the next codex pass and is documented here only for audit history; the operative design lives in the current §"Cargo topology" and in the re-correction entry below.
 - **2026-05-31 (correction, codex P1-5)** — §"Version detection mechanism" and §"Failure modes documented" tightened. Initial wording allowed fallback to 2025-11-25 on JSON-RPC `-32601` *or HTTP 4xx indicating an unknown method*; that latter clause silently downgrades on auth failures, gateway misroutes, and missing-header errors. Corrected: fallback is triggered **only** by a valid JSON-RPC response carrying `error.code == -32601`. HTTP 4xx surfaces as `McpClientError::ConnectionFailed` without downgrade. An opt-in `ClientConfig.allow_legacy_gateway_fallback` escape hatch broadens the rule for known-broken gateways with explicit operator acknowledgment.
 - **2026-05-31 (re-correction, codex P0 second pass) — this is the OPERATIVE design.** §"Cargo topology" was rewritten *again*. The intermediate codex P1-4 design (see superseded entry above) was not executable: `optional = true` deps are only linked when a feature activates them via `dep:` syntax, and Cargo features cannot REMOVE deps — without a feature flag pulling them in, the default build would link NEITHER protocol crate. The operative design is the **explicit `client-bilingual` default feature** (the standard Cargo idiom used by `serde`, `tokio`, `reqwest` for mutually-exclusive defaults). Narrowing requires `--no-default-features` on the leaf; the `compile_error!` mutex catches the common footgun (forgetting `--no-default-features` → both the default `client-bilingual` and a narrowing feature active → compile error with explanatory message). A second `compile_error!` catches the no-protocol-feature case.
-- **2026-06-01 (codex third pass, P2 narrowing-shorthand cleanup)** — §"Negative / trade-offs" mitigation bullet and §"Failure modes documented" entry for "2025-only client → 2026 server" both used stale shorthand (`--features client-2025-only`) without `--no-default-features`. That phrasing pointed readers at the exact footgun the mutex was designed to catch. Both occurrences now spell out `cargo build --no-default-features --features http,sse,client-2025-only` (and `…client-2026-only`) and document that `--no-default-features` is mandatory because the default `client-bilingual` is mutually exclusive with the narrowing features. The §"Cargo topology" section itself was already correct; this is purely a shorthand-in-prose cleanup.
+- **2026-06-01 (codex third pass, P2 narrowing-shorthand cleanup)** — §"Negative / trade-offs" mitigation bullet and §"Failure modes documented" entry for "2025-only client → 2026 server" both used stale shorthand (`--features client-2025-11-25-only`) without `--no-default-features`. That phrasing pointed readers at the exact footgun the mutex was designed to catch. Both occurrences now spell out `cargo build --no-default-features --features http,sse,client-2025-11-25-only` (and `…client-2026-07-28-only`) and document that `--no-default-features` is mandatory because the default `client-bilingual` is mutually exclusive with the narrowing features. The §"Cargo topology" section itself was already correct; this is purely a shorthand-in-prose cleanup.
 - **2026-06-01 (codex fourth pass, P3 revision-log hygiene)** — The codex P1-4 and codex-P0-second-pass entries above were literally quoting the intermediate design's broken Cargo snippets, which read identically to operative content to a naive grep. Both entries are now labeled "SUPERSEDED" / "OPERATIVE" inline and the literal `default = ["http", "sse"]` and `implicit default` strings have been paraphrased away. The audit history is preserved but no future reader (or grep gate) can mistake them for current guidance.
 
 

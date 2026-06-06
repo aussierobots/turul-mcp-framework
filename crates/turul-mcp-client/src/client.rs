@@ -283,20 +283,20 @@ impl McpClient {
         }
     }
 
-    #[cfg(feature = "client-2025-only")]
+    #[cfg(feature = "client-2025-11-25-only")]
     async fn negotiate_protocol(&self) -> McpClientResult<()> {
         self.initialize_session().await?;
         self.lock_version(crate::version::McpVersion::V2025_11_25).await
     }
 
-    #[cfg(feature = "client-2026-only")]
+    #[cfg(feature = "client-2026-07-28-only")]
     async fn negotiate_protocol(&self) -> McpClientResult<()> {
         match self.probe_discover().await? {
             crate::version::DiscoverProbe::Discovered => {
                 self.lock_version(crate::version::McpVersion::V2026_07_28).await
             }
             _ => Err(crate::error::ProtocolError::UnsupportedVersion(
-                "client-2026-only: server did not answer server/discover — not a 2026-07-28 server"
+                "client-2026-07-28-only: server did not answer server/discover — not a 2026-07-28 server"
                     .to_string(),
             )
             .into()),
@@ -306,7 +306,7 @@ impl McpClient {
     /// Probe the server with a `server/discover` request and classify the outcome
     /// into a [`DiscoverProbe`](crate::version::DiscoverProbe). A valid result =>
     /// 2026; a JSON-RPC error => carries the code; an HTTP non-2xx => carries the status.
-    #[cfg(any(feature = "client-bilingual", feature = "client-2026-only"))]
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
     async fn probe_discover(&self) -> McpClientResult<crate::version::DiscoverProbe> {
         use crate::error::TransportError;
         use crate::version::DiscoverProbe;
@@ -754,15 +754,15 @@ impl McpClient {
 
     /// Fetch tools from the server (no cache interaction).
     async fn fetch_tools(&self) -> McpClientResult<Vec<Tool>> {
-        #[cfg(any(feature = "client-bilingual", feature = "client-2026-only"))]
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
         if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
-            return self.fetch_tools_2026().await;
+            return self.fetch_tools_2026_07_28().await;
         }
-        self.fetch_tools_2025().await
+        self.fetch_tools_2025_11_25().await
     }
 
     /// `tools/list` for a 2025-11-25 connection (the historical alias path).
-    async fn fetch_tools_2025(&self) -> McpClientResult<Vec<Tool>> {
+    async fn fetch_tools_2025_11_25(&self) -> McpClientResult<Vec<Tool>> {
         debug!("Fetching tools from server (2025-11-25)");
 
         let request = self.build_request("tools/list", json!({}));
@@ -777,20 +777,22 @@ impl McpClient {
 
     /// `tools/list` for a 2026-07-28 connection: request carries `_meta`, and the
     /// 2026-shaped result (`resultType`/`ttlMs`/`cacheScope` + tools) is parsed
-    /// via the [`protocol::v2026`](crate::protocol::v2026) module.
-    #[cfg(any(feature = "client-bilingual", feature = "client-2026-only"))]
-    async fn fetch_tools_2026(&self) -> McpClientResult<Vec<Tool>> {
+    /// via the [`protocol::v2026`](crate::protocol::v2026_07_28) module.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn fetch_tools_2026_07_28(&self) -> McpClientResult<Vec<Tool>> {
         debug!("Fetching tools from server (2026-07-28)");
 
-        let meta = crate::protocol::v2026::request_meta(
+        let meta = crate::protocol::v2026_07_28::request_meta(
             &self.config.client_info.name,
             &self.config.client_info.version,
         );
-        let request =
-            self.build_request("tools/list", crate::protocol::v2026::list_tools_params(&meta));
+        let request = self.build_request(
+            "tools/list",
+            crate::protocol::v2026_07_28::params_with_meta(&meta, json!({})),
+        );
 
         let response = self.send_request_internal(request).await?;
-        let tools = crate::protocol::v2026::parse_list_tools(
+        let tools = crate::protocol::v2026_07_28::parse_list_tools(
             &response.get("result").cloned().unwrap_or(Value::Null),
         )?;
 
@@ -825,9 +827,52 @@ impl McpClient {
         Ok(tools_response)
     }
 
+    /// Issue a 2026-07-28 operation: build the request with the required per-request
+    /// `_meta`, send it, and parse the 2026-shaped result via the supplied parser.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn send_2026_07_28<T>(
+        &self,
+        method: &str,
+        extra: Value,
+        parse: impl Fn(&Value) -> McpClientResult<T>,
+    ) -> McpClientResult<T> {
+        let meta = crate::protocol::v2026_07_28::request_meta(
+            &self.config.client_info.name,
+            &self.config.client_info.version,
+        );
+        let request =
+            self.build_request(method, crate::protocol::v2026_07_28::params_with_meta(&meta, extra));
+        let response = self.send_request_internal(request).await?;
+        parse(&response.get("result").cloned().unwrap_or(Value::Null))
+    }
+
+    /// Reject an operation whose method was removed from the 2026-07-28 core when the
+    /// connection negotiated 2026. The method remains available on a 2025-11-25 connection.
+    async fn reject_if_2026_07_28(&self, _method: &str) -> McpClientResult<()> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return Err(crate::error::ProtocolError::MethodNotFound(format!(
+                "`{_method}` is not part of MCP 2026-07-28 (removed from core); this connection negotiated 2026"
+            ))
+            .into());
+        }
+        Ok(())
+    }
+
     /// Call a tool
     pub async fn call_tool(&self, name: &str, arguments: Value) -> McpClientResult<CallToolResult> {
         debug!(tool = name, "Calling tool");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "tools/call",
+                    json!({ "name": name, "arguments": arguments.clone() }),
+                    crate::protocol::v2026_07_28::parse_call_tool,
+                )
+                .await;
+        }
 
         let request = self.build_request(
             "tools/call",
@@ -885,6 +930,17 @@ impl McpClient {
     async fn fetch_resources(&self) -> McpClientResult<Vec<Resource>> {
         debug!("Fetching resources from server");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "resources/list",
+                    json!({}),
+                    crate::protocol::v2026_07_28::parse_list_resources,
+                )
+                .await;
+        }
+
         let request = self.build_request("resources/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
@@ -932,6 +988,18 @@ impl McpClient {
     ) -> McpClientResult<Vec<turul_mcp_protocol::ResourceContent>> {
         debug!(uri = uri, "Reading resource");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let r = self
+                .send_2026_07_28(
+                    "resources/read",
+                    json!({ "uri": uri }),
+                    crate::protocol::v2026_07_28::parse_read_resource,
+                )
+                .await?;
+            return Ok(r.contents);
+        }
+
         let request = self.build_request("resources/read", json!({ "uri": uri }));
 
         let response = self.send_request_internal(request).await?;
@@ -949,6 +1017,17 @@ impl McpClient {
     /// List available resource templates
     pub async fn list_resource_templates(&self) -> McpClientResult<Vec<ResourceTemplate>> {
         debug!("Listing resource templates");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "resources/templates/list",
+                    json!({}),
+                    crate::protocol::v2026_07_28::parse_list_resource_templates,
+                )
+                .await;
+        }
 
         let request = self.build_request("resources/templates/list", json!({}));
 
@@ -1026,6 +1105,17 @@ impl McpClient {
     async fn fetch_prompts(&self) -> McpClientResult<Vec<Prompt>> {
         debug!("Fetching prompts from server");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "prompts/list",
+                    json!({}),
+                    crate::protocol::v2026_07_28::parse_list_prompts,
+                )
+                .await;
+        }
+
         let request = self.build_request("prompts/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
@@ -1071,6 +1161,21 @@ impl McpClient {
     ) -> McpClientResult<GetPromptResult> {
         debug!(prompt = name, "Getting prompt");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let mut extra = json!({ "name": name });
+            if let Some(ref args) = arguments {
+                extra["arguments"] = args.clone();
+            }
+            return self
+                .send_2026_07_28(
+                    "prompts/get",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_get_prompt,
+                )
+                .await;
+        }
+
         let mut params = json!({
             "name": name
         });
@@ -1097,6 +1202,8 @@ impl McpClient {
     pub async fn ping(&self) -> McpClientResult<()> {
         debug!("Sending ping");
 
+        self.reject_if_2026_07_28("ping").await?;
+
         let request = self.build_request("ping", json!({}));
 
         self.send_request_internal(request).await?;
@@ -1109,6 +1216,8 @@ impl McpClient {
     /// Get a task by ID
     pub async fn get_task(&self, task_id: &str) -> McpClientResult<Task> {
         debug!(task_id = task_id, "Getting task");
+
+        self.reject_if_2026_07_28("tasks/get").await?;
 
         let request = self.build_request("tasks/get", json!({ "taskId": task_id }));
 
@@ -1123,6 +1232,8 @@ impl McpClient {
     /// List tasks
     pub async fn list_tasks(&self) -> McpClientResult<Vec<Task>> {
         debug!("Listing tasks");
+
+        self.reject_if_2026_07_28("tasks/list").await?;
 
         let request = self.build_request("tasks/list", json!({}));
 
@@ -1140,6 +1251,8 @@ impl McpClient {
         cursor: Option<Cursor>,
     ) -> McpClientResult<ListTasksResult> {
         debug!("Listing tasks with pagination");
+
+        self.reject_if_2026_07_28("tasks/list").await?;
 
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
@@ -1165,6 +1278,8 @@ impl McpClient {
     pub async fn cancel_task(&self, task_id: &str) -> McpClientResult<Task> {
         debug!(task_id = task_id, "Cancelling task");
 
+        self.reject_if_2026_07_28("tasks/cancel").await?;
+
         let request = self.build_request("tasks/cancel", json!({ "taskId": task_id }));
 
         let response = self.send_request_internal(request).await?;
@@ -1181,6 +1296,8 @@ impl McpClient {
     /// response until it completes. Use a longer timeout for this operation.
     pub async fn get_task_result(&self, task_id: &str) -> McpClientResult<Value> {
         debug!(task_id = task_id, "Getting task result");
+
+        self.reject_if_2026_07_28("tasks/result").await?;
 
         let request = self.build_request("tasks/result", json!({ "taskId": task_id }));
 
@@ -1208,6 +1325,8 @@ impl McpClient {
         ttl_ms: Option<i64>,
     ) -> McpClientResult<ToolCallResponse> {
         debug!(tool = name, "Calling tool with task augmentation");
+
+        self.reject_if_2026_07_28("tasks (task-augmented tools/call)").await?;
 
         let mut params = json!({
             "name": name,

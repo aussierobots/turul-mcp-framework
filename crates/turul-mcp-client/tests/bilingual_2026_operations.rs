@@ -1,0 +1,142 @@
+//! Wire-level acceptance: a bilingual client, locked to 2026-07-28, routes every
+//! supported operation through the 2026 path (each request carries the required
+//! per-request `_meta`) and parses the 2026-shaped result. Removed-from-core
+//! methods (`ping`, `tasks/*`) are rejected on a 2026 connection.
+//!
+//! The 2026 server is a wiremock peer returning 2026 wire shapes; every op mock
+//! matches on `params._meta.io.modelcontextprotocol/protocolVersion = "2026-07-28"`,
+//! so a stub only responds if the client actually sent a 2026 request.
+
+use turul_mcp_client::config::ClientConfig;
+use turul_mcp_client::transport::http::HttpTransport;
+use turul_mcp_client::{McpClient, McpVersion};
+use wiremock::matchers::{body_partial_json, method};
+use wiremock::{Mock, MockServer, ResponseTemplate};
+
+fn meta_match(rpc_method: &str) -> serde_json::Value {
+    serde_json::json!({
+        "method": rpc_method,
+        "params": { "_meta": { "io.modelcontextprotocol/protocolVersion": "2026-07-28" } }
+    })
+}
+
+async fn mount_2026_result(server: &MockServer, rpc_method: &str, result: serde_json::Value) {
+    Mock::given(method("POST"))
+        .and(body_partial_json(meta_match(rpc_method)))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({ "jsonrpc": "2.0", "id": "x", "result": result })),
+        )
+        .mount(server)
+        .await;
+}
+
+async fn start_2026_server() -> MockServer {
+    let server = MockServer::start().await;
+    // SSE GET listener -> 404 terminal.
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    // server/discover => locks the connection to 2026-07-28.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0", "id": "d",
+                    "result": {
+                        "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"], "capabilities": {},
+                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+    server
+}
+
+async fn connect_2026(server: &MockServer) -> McpClient {
+    let url = format!("{}/mcp", server.uri());
+    let transport = Box::new(HttpTransport::new(&url).unwrap());
+    let client = McpClient::new(transport, ClientConfig::default());
+    client.connect().await.expect("connect to 2026 server");
+    assert_eq!(client.negotiated_version().await, Some(McpVersion::V2026_07_28));
+    client
+}
+
+#[tokio::test]
+async fn all_supported_ops_route_through_2026_path() {
+    let server = start_2026_server().await;
+
+    mount_2026_result(
+        &server, "tools/call",
+        serde_json::json!({"resultType":"complete","content":[{"type":"text","text":"ok"}],"isError":false}),
+    ).await;
+    mount_2026_result(
+        &server, "resources/list",
+        serde_json::json!({"resultType":"complete","ttlMs":0,"cacheScope":"public","resources":[{"uri":"file:///a","name":"a"}]}),
+    ).await;
+    mount_2026_result(
+        &server, "resources/read",
+        serde_json::json!({"resultType":"complete","ttlMs":0,"cacheScope":"public","contents":[{"uri":"file:///a","text":"hello","mimeType":"text/plain"}]}),
+    ).await;
+    mount_2026_result(
+        &server, "resources/templates/list",
+        serde_json::json!({"resultType":"complete","ttlMs":0,"cacheScope":"public","resourceTemplates":[{"uriTemplate":"file:///{id}","name":"t"}]}),
+    ).await;
+    mount_2026_result(
+        &server, "prompts/list",
+        serde_json::json!({"resultType":"complete","ttlMs":0,"cacheScope":"public","prompts":[{"name":"p"}]}),
+    ).await;
+    mount_2026_result(
+        &server, "prompts/get",
+        serde_json::json!({"resultType":"complete","messages":[{"role":"user","content":{"type":"text","text":"hi"}}]}),
+    ).await;
+
+    let client = connect_2026(&server).await;
+
+    let call = client.call_tool("echo", serde_json::json!({})).await.expect("call_tool");
+    assert_eq!(call.is_error, Some(false));
+
+    let resources = client.list_resources().await.expect("list_resources");
+    assert_eq!(resources.len(), 1);
+    assert_eq!(resources[0].uri, "file:///a");
+
+    let contents = client.read_resource("file:///a").await.expect("read_resource");
+    assert_eq!(contents.len(), 1);
+
+    let templates = client.list_resource_templates().await.expect("list_resource_templates");
+    assert_eq!(templates.len(), 1);
+
+    let prompts = client.list_prompts().await.expect("list_prompts");
+    assert_eq!(prompts.len(), 1);
+    assert_eq!(prompts[0].name, "p");
+
+    let prompt = client.get_prompt("p", None).await.expect("get_prompt");
+    assert_eq!(prompt.messages.len(), 1);
+}
+
+#[tokio::test]
+async fn removed_methods_are_rejected_on_2026_connection() {
+    // No ping/tasks stubs mounted: the client must reject BEFORE sending, so the
+    // request never reaches the wire. (On a 2025 connection these would be sent.)
+    let server = start_2026_server().await;
+    let client = connect_2026(&server).await;
+
+    assert!(
+        client.ping().await.is_err(),
+        "`ping` was removed from MCP 2026-07-28 core — must be rejected on a 2026 connection"
+    );
+    assert!(
+        client.get_task("t1").await.is_err(),
+        "`tasks/*` moved to an extension in 2026-07-28 — must be rejected on a 2026 connection"
+    );
+    assert!(
+        client.list_tasks().await.is_err(),
+        "`tasks/list` is not in 2026-07-28 core — must be rejected on a 2026 connection"
+    );
+}
