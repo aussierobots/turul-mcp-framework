@@ -1385,6 +1385,30 @@ impl StreamableHttpHandler {
                         JsonRpcMessage::Notification(_) => None,
                     };
 
+                    // A 2026-07-28 client probes `server/discover` to detect the spec;
+                    // this 2025-11-25 server has no such method. Answer with the trusted
+                    // JSON-RPC method-not-found (-32601) at HTTP 200 so the bilingual
+                    // client downgrades via its secure signal path — it deliberately does
+                    // not treat a bare 400 as a version cue (a downgrade-attack vector).
+                    if method_name == "server/discover" {
+                        let not_found = turul_mcp_json_rpc_server::JsonRpcError::new(
+                            request_id.clone(),
+                            JsonRpcErrorObject::method_not_found("server/discover"),
+                        );
+                        let body =
+                            serde_json::to_string(&not_found).unwrap_or_else(|_| "{}".to_string());
+                        return Response::builder()
+                            .status(StatusCode::OK)
+                            .header(CONTENT_TYPE, "application/json")
+                            .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                            .body(
+                                Full::new(Bytes::from(body))
+                                    .map_err(|never| match never {})
+                                    .boxed_unsync(),
+                            )
+                            .unwrap();
+                    }
+
                     warn!("Missing session ID for method: {}", method_name);
 
                     let error_response = turul_mcp_json_rpc_server::JsonRpcError::new(
