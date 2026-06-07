@@ -515,6 +515,9 @@ mod tests {
         );
     }
 
+    // Exercises the logging-message builder, whose LoggingMessageNotification fields
+    // are deprecated-but-present in 2026-07-28 (SEP-2577).
+    #[allow(deprecated)]
     #[test]
     fn test_convenience_methods() {
         // Test standard list changed notifications
