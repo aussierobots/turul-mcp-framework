@@ -16,7 +16,11 @@ use crate::traits::{
 // Import protocol types
 use turul_mcp_protocol::icons::Icon;
 use turul_mcp_protocol::schema::JsonSchema;
-use turul_mcp_protocol::tools::{ToolAnnotations, ToolExecution, ToolSchema};
+use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
+// Per-tool task support (`ToolExecution`) exists only in the 2025-11-25 spec; the
+// 2026-07-28 core has no Tool execution field (tasks moved to an extension).
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::tools::ToolExecution;
 
 /// Type alias for dynamic tool execution function
 pub type DynamicToolFn =
@@ -27,9 +31,13 @@ pub struct ToolBuilder {
     name: String,
     title: Option<String>,
     description: Option<String>,
-    input_schema: ToolSchema,
+    // Input parameters are accumulated as structured `JsonSchema` and projected to
+    // the active spec's `ToolSchema.properties` value type in `build()`.
+    properties: HashMap<String, JsonSchema>,
+    required: Vec<String>,
     output_schema: Option<ToolSchema>,
     annotations: Option<ToolAnnotations>,
+    #[cfg(feature = "protocol-2025-11-25")]
     execution: Option<ToolExecution>,
     icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
@@ -43,9 +51,11 @@ impl ToolBuilder {
             name: name.into(),
             title: None,
             description: None,
-            input_schema: ToolSchema::object(),
+            properties: HashMap::new(),
+            required: Vec::new(),
             output_schema: None,
             annotations: None,
+            #[cfg(feature = "protocol-2025-11-25")]
             execution: None,
             icons: None,
             meta: None,
@@ -67,26 +77,15 @@ impl ToolBuilder {
 
     /// Add a parameter to the input schema
     pub fn param<T: Into<String>>(mut self, name: T, schema: JsonSchema) -> Self {
-        let param_name = name.into();
-        if let Some(properties) = &mut self.input_schema.properties {
-            // Store JsonSchema directly
-            properties.insert(param_name, schema);
-        } else {
-            // Store JsonSchema directly
-            self.input_schema.properties = Some(HashMap::from([(param_name, schema)]));
-        }
+        self.properties.insert(name.into(), schema);
         self
     }
 
     /// Add a required parameter
     pub fn required_param<T: Into<String>>(mut self, name: T, schema: JsonSchema) -> Self {
         let param_name = name.into();
-        self = self.param(&param_name, schema);
-        if let Some(required) = &mut self.input_schema.required {
-            required.push(param_name);
-        } else {
-            self.input_schema.required = Some(vec![param_name]);
-        }
+        self.properties.insert(param_name.clone(), schema);
+        self.required.push(param_name);
         self
     }
 
@@ -120,10 +119,10 @@ impl ToolBuilder {
     pub fn number_output(mut self) -> Self {
         self.output_schema = Some(
             ToolSchema::object()
-                .with_properties(HashMap::from([(
+                .with_properties(crate::tool_props(HashMap::from([(
                     "result".to_string(),
                     JsonSchema::number(),
-                )]))
+                )])))
                 .with_required(vec!["result".to_string()]),
         );
         self
@@ -133,10 +132,10 @@ impl ToolBuilder {
     pub fn string_output(mut self) -> Self {
         self.output_schema = Some(
             ToolSchema::object()
-                .with_properties(HashMap::from([(
+                .with_properties(crate::tool_props(HashMap::from([(
                     "result".to_string(),
                     JsonSchema::string(),
-                )]))
+                )])))
                 .with_required(vec!["result".to_string()]),
         );
         self
@@ -148,7 +147,8 @@ impl ToolBuilder {
         self
     }
 
-    /// Set execution configuration (per-tool task support)
+    /// Set execution configuration (per-tool task support). 2025-11-25 only.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn execution(mut self, execution: ToolExecution) -> Self {
         self.execution = Some(execution);
         self
@@ -180,13 +180,22 @@ impl ToolBuilder {
     pub fn build(self) -> Result<DynamicTool, String> {
         let execute_fn = self.execute_fn.ok_or("Execution function is required")?;
 
+        let mut input_schema = ToolSchema::object();
+        if !self.properties.is_empty() {
+            input_schema = input_schema.with_properties(crate::tool_props(self.properties));
+        }
+        if !self.required.is_empty() {
+            input_schema = input_schema.with_required(self.required);
+        }
+
         Ok(DynamicTool {
             name: self.name,
             title: self.title,
             description: self.description,
-            input_schema: self.input_schema,
+            input_schema,
             output_schema: self.output_schema,
             annotations: self.annotations,
+            #[cfg(feature = "protocol-2025-11-25")]
             execution: self.execution,
             icons: self.icons,
             meta: self.meta,
@@ -203,6 +212,7 @@ pub struct DynamicTool {
     input_schema: ToolSchema,
     output_schema: Option<ToolSchema>,
     annotations: Option<ToolAnnotations>,
+    #[cfg(feature = "protocol-2025-11-25")]
     execution: Option<ToolExecution>,
     icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
@@ -270,12 +280,17 @@ impl HasIcons for DynamicTool {
     }
 }
 
-/// Implements HasExecution for DynamicTool providing task support configuration
+/// Implements HasExecution for DynamicTool providing task support configuration.
+/// Under 2026-07-28 `HasExecution` is a marker (no Tool execution field).
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasExecution for DynamicTool {
     fn execution(&self) -> Option<ToolExecution> {
         self.execution.clone()
     }
 }
+
+#[cfg(feature = "protocol-2026-07-28")]
+impl HasExecution for DynamicTool {}
 
 // ToolDefinition is automatically implemented via blanket impl!
 

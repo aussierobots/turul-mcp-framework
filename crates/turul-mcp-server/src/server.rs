@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tracing::{debug, error, info};
-#[cfg(feature = "protocol-2025-11-25")]
+#[cfg(any(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
 use tracing::warn;
 
 use crate::handlers::McpHandler;
@@ -1568,6 +1568,7 @@ impl JsonRpcHandler for ListToolsHandler {
         // Convert tools to descriptors and sort by name for stable pagination.
         // In Dynamic mode, read from live registry instead of static snapshot.
         #[cfg(feature = "dynamic-tools")]
+        #[cfg_attr(not(feature = "protocol-2025-11-25"), allow(unused_mut))]
         let mut tools: Vec<Tool> = if let Some(ref registry) = self.tool_registry {
             registry.list_active_tools().await
         } else {

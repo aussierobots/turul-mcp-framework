@@ -147,7 +147,6 @@ pub mod notification;
 pub mod prompt;
 pub mod resource;
 pub mod root;
-#[cfg(feature = "protocol-2025-11-25")]
 pub mod tool;
 
 // Schemars integration for JSON schema generation
@@ -193,7 +192,6 @@ pub use root::RootBuilder;
 #[cfg(feature = "protocol-2025-11-25")]
 pub use root::{ListRootsRequestBuilder, RootsNotificationBuilder};
 /// Builder for executable tool definitions with parameters and handlers
-#[cfg(feature = "protocol-2025-11-25")]
 pub use tool::ToolBuilder;
 
 // Common types used across builders

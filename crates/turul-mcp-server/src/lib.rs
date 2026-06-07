@@ -254,7 +254,6 @@ pub use turul_mcp_protocol::*;
 
 // Re-export builder pattern for Level 3 tool creation
 /// Dynamic tool creation with runtime configuration and type-safe builders
-#[cfg(feature = "protocol-2025-11-25")]
 pub use turul_mcp_builders::tool::{DynamicTool, DynamicToolFn, ToolBuilder};
 
 // Explicitly re-export error types for convenience
@@ -279,7 +278,6 @@ pub type Result<T> = McpResult<T>;
 ///
 /// This implementation bridges DynamicTool's builder pattern with the framework's
 /// session-aware execution model, enabling runtime tool construction with type safety.
-#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait::async_trait]
 impl McpTool for DynamicTool {
     async fn call(
