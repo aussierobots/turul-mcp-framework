@@ -83,6 +83,7 @@ pub trait McpCompletion: CompletionDefinition + Send + Sync {
 ///
 /// This is a convenience function for converting completion definitions
 /// to protocol requests.
+#[cfg(feature = "protocol-2025-11-25")]
 pub fn completion_to_request(completion: &dyn McpCompletion) -> CompleteRequest {
     completion.to_complete_request()
 }

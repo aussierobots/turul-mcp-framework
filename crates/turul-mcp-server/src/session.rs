@@ -367,10 +367,10 @@ impl SessionContext {
         );
         other.insert("progress".to_string(), serde_json::json!(progress));
 
-        let params = turul_mcp_protocol::RequestParams { meta: None, other };
-        let notification =
-            turul_mcp_protocol::JsonRpcNotification::new("notifications/progress".to_string())
-                .with_params(params);
+        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+            "notifications/progress".to_string(),
+            other,
+        );
         self.notify(SessionEvent::Notification(
             serde_json::to_value(notification).unwrap(),
         ))
@@ -392,10 +392,10 @@ impl SessionContext {
         other.insert("progress".to_string(), serde_json::json!(progress));
         other.insert("total".to_string(), serde_json::json!(total));
 
-        let params = turul_mcp_protocol::RequestParams { meta: None, other };
-        let notification =
-            turul_mcp_protocol::JsonRpcNotification::new("notifications/progress".to_string())
-                .with_params(params);
+        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+            "notifications/progress".to_string(),
+            other,
+        );
         self.notify(SessionEvent::Notification(
             serde_json::to_value(notification).unwrap(),
         ))
@@ -470,7 +470,7 @@ impl SessionContext {
 
     /// Send a resource list changed notification
     pub async fn notify_resources_changed(&self) {
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
             "notifications/resources/list_changed".to_string(),
         );
         self.notify(SessionEvent::Notification(
@@ -484,11 +484,10 @@ impl SessionContext {
         let mut other = std::collections::HashMap::new();
         other.insert("uri".to_string(), serde_json::json!(uri.into()));
 
-        let params = turul_mcp_protocol::RequestParams { meta: None, other };
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
             "notifications/resources/updated".to_string(),
-        )
-        .with_params(params);
+            other,
+        );
         self.notify(SessionEvent::Notification(
             serde_json::to_value(notification).unwrap(),
         ))
@@ -497,7 +496,7 @@ impl SessionContext {
 
     /// Send a tools list changed notification
     pub async fn notify_tools_changed(&self) {
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
         );
         self.notify(SessionEvent::Notification(
@@ -621,6 +620,7 @@ impl SessionView for SessionContext {
 // ============================================================================
 
 /// Implement LoggingTarget trait from turul-mcp-builders to enable session-aware logging
+#[cfg(feature = "protocol-2025-11-25")]
 impl turul_mcp_builders::logging::LoggingTarget for SessionContext {
     fn should_log(&self, level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
         self.should_log_sync(level)

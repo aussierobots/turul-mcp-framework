@@ -13,6 +13,7 @@ use async_trait::async_trait;
 use tracing::{debug, error, info, warn};
 
 use crate::handlers::McpHandler;
+use crate::handlers::extract_request_meta_extra;
 use crate::session::SessionEventDispatcher;
 
 /// Event dispatcher backed by StreamManager for guaranteed persistence + live delivery.
@@ -49,7 +50,7 @@ struct SessionManagerToolNotifier {
 #[async_trait]
 impl turul_http_mcp_server::ToolChangeNotifier for SessionManagerToolNotifier {
     async fn notify_tools_changed(&self, session_id: &str) -> std::result::Result<(), String> {
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
         );
         let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
@@ -439,7 +440,9 @@ impl McpServer {
             tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
         }
 
-        // Create session-aware initialize handler
+        // Create session-aware initialize handler (2025-11-25 stateful handshake;
+        // the DRAFT-2026-v1 stateless core has no `initialize` method).
+        #[cfg(feature = "protocol-2025-11-25")]
         #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
         let mut init_handler = SessionAwareInitializeHandler::new(
             self.implementation.clone(),
@@ -449,7 +452,7 @@ impl McpServer {
             self.strict_lifecycle,
             self.tool_fingerprint.clone(),
         );
-        #[cfg(feature = "dynamic-tools")]
+        #[cfg(all(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
         if let Some(ref registry) = self.tool_registry {
             init_handler = init_handler.with_tool_registry(Arc::clone(registry));
         }
@@ -471,7 +474,6 @@ impl McpServer {
                 .tool_notifier(Arc::new(SessionManagerToolNotifier {
                     session_manager: Arc::clone(&self.session_manager),
                 }))
-                .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(vec!["tools/list".to_string()], {
                     #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
                     let mut lth = ListToolsHandler::new_with_session_manager(
@@ -487,6 +489,11 @@ impl McpServer {
                     lth
                 })
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
+
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            builder = builder.register_handler(vec!["initialize".to_string()], init_handler);
+        }
 
         // Pass allow_unauthenticated_ping config to HTTP layer
         if let Some(allow) = self.allow_unauthenticated_ping {
@@ -686,7 +693,9 @@ impl McpServer {
             tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
         }
 
-        // Create session-aware initialize handler
+        // Create session-aware initialize handler (2025-11-25 stateful handshake;
+        // the DRAFT-2026-v1 stateless core has no `initialize` method).
+        #[cfg(feature = "protocol-2025-11-25")]
         #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
         let mut init_handler = SessionAwareInitializeHandler::new(
             self.implementation.clone(),
@@ -696,7 +705,7 @@ impl McpServer {
             self.strict_lifecycle,
             self.tool_fingerprint.clone(),
         );
-        #[cfg(feature = "dynamic-tools")]
+        #[cfg(all(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
         if let Some(ref registry) = self.tool_registry {
             init_handler = init_handler.with_tool_registry(Arc::clone(registry));
         }
@@ -718,7 +727,6 @@ impl McpServer {
                 .tool_notifier(Arc::new(SessionManagerToolNotifier {
                     session_manager: Arc::clone(&self.session_manager),
                 }))
-                .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(vec!["tools/list".to_string()], {
                     #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
                     let mut lth = ListToolsHandler::new_with_session_manager(
@@ -734,6 +742,11 @@ impl McpServer {
                     lth
                 })
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
+
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            builder = builder.register_handler(vec!["initialize".to_string()], init_handler);
+        }
 
         // Pass allow_unauthenticated_ping config to HTTP layer
         if let Some(allow) = self.allow_unauthenticated_ping {
@@ -955,6 +968,7 @@ fn extract_session_id_from_params(
 }
 
 /// Session-aware handler for initialize requests
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct SessionAwareInitializeHandler {
     implementation: Implementation,
     capabilities: ServerCapabilities,
@@ -969,6 +983,7 @@ pub struct SessionAwareInitializeHandler {
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl SessionAwareInitializeHandler {
     pub fn new(
         implementation: Implementation,
@@ -1104,6 +1119,7 @@ impl SessionAwareInitializeHandler {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait]
 impl JsonRpcHandler for SessionAwareInitializeHandler {
     type Error = McpError;
@@ -1397,7 +1413,7 @@ impl JsonRpcHandler for ListToolsHandler {
         params: Option<turul_mcp_json_rpc_server::RequestParams>,
         session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
-        use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
+        use turul_mcp_protocol::meta::Cursor;
 
         debug!("Handling {} request", method);
 
@@ -1427,17 +1443,21 @@ impl JsonRpcHandler for ListToolsHandler {
             )));
         }
 
-        // Parse typed parameters for cursor and meta propagation
-        use turul_mcp_protocol::tools::{ListToolsParams, ListToolsResult};
-        let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListToolsParams>(params_value.to_value()).map_err(|e| {
-                McpError::InvalidParameters(format!("Invalid parameters for tools/list: {}", e))
-            })?
-        } else {
-            ListToolsParams::new()
-        };
+        // Read cursor, limit, and caller `_meta` extras loosely from raw params:
+        // `limit` is a framework DoS-protection extension, not a typed param field.
+        use turul_mcp_protocol::tools::ListToolsResult;
+        let params_value: Option<serde_json::Value> = params.map(|p| p.to_value());
 
-        let cursor = list_params.cursor;
+        let cursor = params_value
+            .as_ref()
+            .and_then(|p| p.get("cursor"))
+            .and_then(|c| c.as_str())
+            .map(Cursor::from);
+        let requested_limit = params_value
+            .as_ref()
+            .and_then(|p| p.get("limit"))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32);
         debug!("Listing tools with cursor: {:?}", cursor);
 
         // Convert tools to descriptors and sort by name for stable pagination.
@@ -1478,7 +1498,7 @@ impl JsonRpcHandler for ListToolsHandler {
         const MAX_LIMIT: u32 = 100; // Framework-specific DoS protection
 
         // Validate limit parameter - MCP spec requires positive integer
-        if let Some(limit) = list_params.limit
+        if let Some(limit) = requested_limit
             && limit == 0
         {
             return Err(McpError::InvalidParameters(
@@ -1487,8 +1507,7 @@ impl JsonRpcHandler for ListToolsHandler {
         }
 
         // Apply limit clamping for DoS protection (framework extension)
-        let page_size = list_params
-            .limit
+        let page_size = requested_limit
             .map(|l| std::cmp::min(l, MAX_LIMIT) as usize)
             .unwrap_or(DEFAULT_PAGE_SIZE);
 
@@ -1534,31 +1553,52 @@ impl JsonRpcHandler for ListToolsHandler {
         let mut base_response = ListToolsResult::new(page_tools);
         let total = Some(tools.len() as u64);
 
-        // Set top-level nextCursor field on the result before wrapping
         if let Some(ref cursor) = next_cursor {
             base_response = base_response.with_next_cursor(cursor.clone());
         }
 
-        let next_cursor_clone = next_cursor.clone();
-        let mut paginated_response =
-            PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
+        let request_meta_extra = extract_request_meta_extra(&params_value);
 
-        // Propagate optional _meta from request to response (MCP 2025-11-25 compliance)
-        if let Some(request_meta) = list_params.meta {
-            // Get existing meta from PaginatedResponse or use pagination defaults
-            let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
-                turul_mcp_protocol::meta::Meta::with_pagination(next_cursor_clone, total, has_more)
-            });
-
-            // Merge request's _meta fields into extra without clobbering pagination
-            for (key, value) in request_meta {
-                response_meta.extra.insert(key, value);
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            let _ = &total;
+            let mut paginated_response = turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
+                base_response,
+                next_cursor,
+                total,
+                has_more,
+            );
+            if !request_meta_extra.is_empty() {
+                use turul_mcp_protocol::meta::WithMeta;
+                let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
+                    turul_mcp_protocol::meta::Meta::with_pagination(None, total, has_more)
+                });
+                for (key, value) in request_meta_extra {
+                    response_meta.extra.insert(key, value);
+                }
+                paginated_response = paginated_response.with_meta(response_meta);
             }
-
-            paginated_response = paginated_response.with_meta(response_meta);
+            serde_json::to_value(paginated_response).map_err(McpError::SerializationError)
         }
-
-        serde_json::to_value(paginated_response).map_err(McpError::SerializationError)
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        {
+            let _ = (&next_cursor, &total, &has_more);
+            let mut value =
+                serde_json::to_value(base_response).map_err(McpError::SerializationError)?;
+            if !request_meta_extra.is_empty()
+                && let Some(obj) = value.as_object_mut()
+            {
+                let meta = obj
+                    .entry("_meta")
+                    .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+                if let Some(meta_obj) = meta.as_object_mut() {
+                    for (key, val) in request_meta_extra {
+                        meta_obj.insert(key, val);
+                    }
+                }
+            }
+            Ok(value)
+        }
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -1663,7 +1703,11 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // Use the parameter extraction pattern from the other project
         use turul_mcp_protocol::param_extraction::extract_params;
 
+        #[cfg(feature = "protocol-2025-11-25")]
         let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)?;
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        let call_params: turul_mcp_protocol::tools::CallToolRequestParams =
+            extract_params(params)?;
 
         // Find the tool — from live registry in Dynamic mode, or static map otherwise.
         // In both cases, we clone the Arc and release any lock before the await boundary.

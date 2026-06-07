@@ -118,14 +118,17 @@
 pub mod builder;
 pub mod cancellation;
 pub mod completion;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod elicitation;
 pub mod handlers;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod logging;
 pub mod middleware;
 pub mod notifications;
 pub mod prompt;
 pub mod resource;
 pub mod roots;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod sampling;
 pub mod server;
 pub mod session;
@@ -160,10 +163,12 @@ pub use completion::McpCompletion;
 /// Request dispatching and middleware support for MCP operations
 pub use dispatch::{DispatchContext, DispatchMiddleware, McpDispatcher};
 /// Elicitation handler for interactive form-based data collection
+#[cfg(feature = "protocol-2025-11-25")]
 pub use elicitation::McpElicitation;
 /// Collection of built-in MCP request handlers
 pub use handlers::*;
 /// Logging provider for structured application logs
+#[cfg(feature = "protocol-2025-11-25")]
 pub use logging::McpLogger;
 /// Notification system for real-time client updates via SSE
 pub use notifications::McpNotification;
@@ -174,14 +179,18 @@ pub use resource::McpResource;
 /// Root provider for workspace and project context
 pub use roots::McpRoot;
 /// Sampling configuration for LLM inference parameters
+#[cfg(feature = "protocol-2025-11-25")]
 pub use sampling::McpSampling;
 /// Security middleware and access control components
 pub use security::{
     AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,
 };
 /// Core MCP server and session-aware handlers
+#[cfg(feature = "protocol-2025-11-25")]
+pub use server::SessionAwareInitializeHandler;
+/// Core MCP server and session-aware handlers
 pub use server::{
-    ListToolsHandler, McpServer, SessionAwareInitializeHandler, SessionAwareMcpHandlerBridge,
+    ListToolsHandler, McpServer, SessionAwareMcpHandlerBridge,
     SessionAwareToolHandler,
 };
 /// Session management and context for stateful operations
@@ -245,6 +254,7 @@ pub use turul_mcp_protocol::*;
 
 // Re-export builder pattern for Level 3 tool creation
 /// Dynamic tool creation with runtime configuration and type-safe builders
+#[cfg(feature = "protocol-2025-11-25")]
 pub use turul_mcp_builders::tool::{DynamicTool, DynamicToolFn, ToolBuilder};
 
 // Explicitly re-export error types for convenience
@@ -269,6 +279,7 @@ pub type Result<T> = McpResult<T>;
 ///
 /// This implementation bridges DynamicTool's builder pattern with the framework's
 /// session-aware execution model, enabling runtime tool construction with type safety.
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait::async_trait]
 impl McpTool for DynamicTool {
     async fn call(

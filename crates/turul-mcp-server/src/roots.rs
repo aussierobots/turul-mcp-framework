@@ -7,8 +7,10 @@ use std::path::PathBuf;
 use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
-    roots::{ListRootsRequest, ListRootsResult, RootsListChangedNotification},
+    roots::{ListRootsRequest, ListRootsResult},
 };
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::roots::RootsListChangedNotification;
 
 /// File information for root directory listings
 #[derive(Debug, Clone)]
@@ -112,6 +114,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
     ///
     /// This method should be called when the list of roots changes
     /// to notify clients about the update.
+    #[cfg(feature = "protocol-2025-11-25")]
     async fn notify_roots_changed(&self) -> McpResult<RootsListChangedNotification> {
         Ok(RootsListChangedNotification::new())
     }

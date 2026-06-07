@@ -9,9 +9,9 @@ use std::sync::Arc;
 use crate::handlers::*;
 use crate::resource::McpResource;
 use crate::tool::tool_to_descriptor;
-use crate::{
-    McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpRoot, McpSampling,
-};
+use crate::{McpCompletion, McpNotification, McpPrompt, McpRoot};
+#[cfg(feature = "protocol-2025-11-25")]
+use crate::{McpElicitation, McpLogger, McpSampling};
 use crate::{McpServer, McpTool, Result};
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::initialize::*;
@@ -41,15 +41,18 @@ pub struct McpServerBuilder {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 
     /// Elicitations registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     elicitations: HashMap<String, Arc<dyn McpElicitation>>,
 
     /// Sampling providers registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     sampling: HashMap<String, Arc<dyn McpSampling>>,
 
     /// Completion providers registered with the server
     completions: HashMap<String, Arc<dyn McpCompletion>>,
 
     /// Loggers registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
 
     /// Root providers registered with the server
@@ -145,13 +148,16 @@ impl McpServerBuilder {
             "prompts/get".to_string(),
             Arc::new(PromptsGetHandler::new()),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "sampling/createMessage".to_string(),
             Arc::new(SamplingHandler),
         );
         // Note: resources/templates/list is only registered if template resources are configured (see build method)
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "elicitation/create".to_string(),
             Arc::new(ElicitationHandler::with_mock_provider()),
@@ -218,9 +224,12 @@ impl McpServerBuilder {
             resources: HashMap::new(),
             template_resources: Vec::new(),
             prompts: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             elicitations: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             sampling: HashMap::new(),
             completions: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
             root_providers: HashMap::new(),
             notifications: HashMap::new(),
@@ -853,6 +862,7 @@ impl McpServerBuilder {
     }
 
     /// Register an elicitation provider with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitation<E: McpElicitation + 'static>(mut self, elicitation: E) -> Self {
         let key = format!("elicitation_{}", self.elicitations.len());
         self.elicitations.insert(key, Arc::new(elicitation));
@@ -860,6 +870,7 @@ impl McpServerBuilder {
     }
 
     /// Register multiple elicitation providers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitations<E: McpElicitation + 'static, I: IntoIterator<Item = E>>(
         mut self,
         elicitations: I,
@@ -871,6 +882,7 @@ impl McpServerBuilder {
     }
 
     /// Register a sampling provider with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_provider<S: McpSampling + 'static>(mut self, sampling: S) -> Self {
         let key = format!("sampling_{}", self.sampling.len());
         self.sampling.insert(key, Arc::new(sampling));
@@ -878,6 +890,7 @@ impl McpServerBuilder {
     }
 
     /// Register multiple sampling providers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_providers<S: McpSampling + 'static, I: IntoIterator<Item = S>>(
         mut self,
         sampling: I,
@@ -907,6 +920,7 @@ impl McpServerBuilder {
     }
 
     /// Register a logger with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn logger<L: McpLogger + 'static>(mut self, logger: L) -> Self {
         let key = format!("logger_{}", self.loggers.len());
         self.loggers.insert(key, Arc::new(logger));
@@ -914,6 +928,7 @@ impl McpServerBuilder {
     }
 
     /// Register multiple loggers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn loggers<L: McpLogger + 'static, I: IntoIterator<Item = L>>(
         mut self,
         loggers: I,
@@ -1013,6 +1028,7 @@ impl McpServerBuilder {
 
     /// Register a sampler - convenient alias for sampling_provider
     /// Automatically uses "sampling/createMessage" method
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampler<S: McpSampling + 'static>(self, sampling: S) -> Self {
         self.sampling_provider(sampling)
     }
@@ -1127,6 +1143,7 @@ impl McpServerBuilder {
     }
 
     /// Add logging support
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_logging(mut self) -> Self {
         self.capabilities.logging = Some(LoggingCapabilities::default());
         self.handler(LoggingHandler)
@@ -1146,6 +1163,7 @@ impl McpServerBuilder {
     }
 
     /// Add sampling support
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_sampling(self) -> Self {
         self.handler(SamplingHandler)
     }
@@ -1154,6 +1172,7 @@ impl McpServerBuilder {
     ///
     /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
     /// The server requests elicitation from the client; it doesn't advertise it.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_elicitation(self) -> Self {
         self.handler(ElicitationHandler::with_mock_provider())
     }
@@ -1162,6 +1181,7 @@ impl McpServerBuilder {
     ///
     /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
     /// The server requests elicitation from the client; it doesn't advertise it.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(self, provider: P) -> Self {
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
@@ -1543,12 +1563,16 @@ impl McpServerBuilder {
         let has_tools = !self.tools.is_empty();
         let has_prompts = !self.prompts.is_empty();
         let has_roots = !self.roots.is_empty();
+        #[cfg(feature = "protocol-2025-11-25")]
         let has_elicitations = !self.elicitations.is_empty();
         let has_completions = !self.completions.is_empty();
-        let has_samplings = !self.sampling.is_empty();
-        tracing::debug!("🔧 Has sampling configured: {}", has_samplings);
-        let has_logging = !self.loggers.is_empty();
-        tracing::debug!("🔧 Has logging configured: {}", has_logging);
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            let has_samplings = !self.sampling.is_empty();
+            tracing::debug!("🔧 Has sampling configured: {}", has_samplings);
+            let has_logging = !self.loggers.is_empty();
+            tracing::debug!("🔧 Has logging configured: {}", has_logging);
+        }
 
         // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
@@ -1591,6 +1615,7 @@ impl McpServerBuilder {
 
         // Elicitation is a client-side capability per MCP 2025-11-25.
         // The server doesn't advertise elicitation support; it requests it from the client.
+        #[cfg(feature = "protocol-2025-11-25")]
         let _ = has_elicitations; // suppress unused warning
 
         // Completion capabilities - enable if completion handlers are registered
@@ -1639,6 +1664,7 @@ impl McpServerBuilder {
         tracing::debug!("   - Resources: {}", has_resources);
         tracing::debug!("   - Prompts: {}", has_prompts);
         tracing::debug!("   - Roots: {}", has_roots);
+        #[cfg(feature = "protocol-2025-11-25")]
         tracing::debug!("   - Elicitation: {}", has_elicitations);
         tracing::debug!("   - Completions: {}", has_completions);
         #[cfg(feature = "protocol-2025-11-25")]
@@ -1691,6 +1717,7 @@ impl McpServerBuilder {
         // Add ProvidedSamplingHandler if sampling providers were configured
         // This replaces the default SamplingHandler with one that actually calls
         // the registered providers' validate_request() and sample() methods
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.sampling.is_empty() {
             handlers.insert(
                 "sampling/createMessage".to_string(),
