@@ -11,9 +11,11 @@ use tracing::{debug, info};
 use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
 use turul_mcp_server::{
-    McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpResource, McpRoot,
-    McpSampling, McpTool, handlers::McpHandler, session::SessionManager,
+    McpCompletion, McpNotification, McpPrompt, McpResource, McpRoot, McpTool, handlers::McpHandler,
+    session::SessionManager,
 };
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_server::{McpElicitation, McpLogger, McpSampling};
 use turul_mcp_session_storage::BoxedSessionStorage;
 
 use crate::error::Result;
@@ -39,12 +41,15 @@ pub struct LambdaMcpServer {
     /// Registered prompts
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
     /// Registered elicitations
+    #[cfg(feature = "protocol-2025-11-25")]
     elicitations: HashMap<String, Arc<dyn McpElicitation>>,
     /// Registered sampling providers
+    #[cfg(feature = "protocol-2025-11-25")]
     sampling: HashMap<String, Arc<dyn McpSampling>>,
     /// Registered completion providers
     completions: HashMap<String, Arc<dyn McpCompletion>>,
     /// Registered loggers
+    #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
     /// Registered root providers
     root_providers: HashMap<String, Arc<dyn McpRoot>>,
@@ -76,6 +81,7 @@ pub struct LambdaMcpServer {
     /// Custom route registry (e.g., .well-known endpoints)
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Optional task runtime for MCP task support
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
     /// Stable fingerprint of the registered tool set for session versioning
     tool_fingerprint: String,
@@ -96,10 +102,13 @@ impl LambdaMcpServer {
         tools: HashMap<String, Arc<dyn McpTool>>,
         resources: HashMap<String, Arc<dyn McpResource>>,
         prompts: HashMap<String, Arc<dyn McpPrompt>>,
-        elicitations: HashMap<String, Arc<dyn McpElicitation>>,
-        sampling: HashMap<String, Arc<dyn McpSampling>>,
+        #[cfg(feature = "protocol-2025-11-25")] elicitations: HashMap<
+            String,
+            Arc<dyn McpElicitation>,
+        >,
+        #[cfg(feature = "protocol-2025-11-25")] sampling: HashMap<String, Arc<dyn McpSampling>>,
         completions: HashMap<String, Arc<dyn McpCompletion>>,
-        loggers: HashMap<String, Arc<dyn McpLogger>>,
+        #[cfg(feature = "protocol-2025-11-25")] loggers: HashMap<String, Arc<dyn McpLogger>>,
         root_providers: HashMap<String, Arc<dyn McpRoot>>,
         notifications: HashMap<String, Arc<dyn McpNotification>>,
         handlers: HashMap<String, Arc<dyn McpHandler>>,
@@ -113,7 +122,9 @@ impl LambdaMcpServer {
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
         middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
-        task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
+        #[cfg(feature = "protocol-2025-11-25")] task_runtime: Option<
+            Arc<turul_mcp_server::TaskRuntime>,
+        >,
         tool_fingerprint: String,
         #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
         #[cfg(feature = "dynamic-tools")] server_state_storage: Option<
@@ -157,9 +168,12 @@ impl LambdaMcpServer {
             tools,
             resources,
             prompts,
+            #[cfg(feature = "protocol-2025-11-25")]
             elicitations,
+            #[cfg(feature = "protocol-2025-11-25")]
             sampling,
             completions,
+            #[cfg(feature = "protocol-2025-11-25")]
             loggers,
             root_providers,
             notifications,
@@ -176,6 +190,7 @@ impl LambdaMcpServer {
             cors_config,
             middleware_stack,
             route_registry,
+            #[cfg(feature = "protocol-2025-11-25")]
             task_runtime,
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
@@ -188,6 +203,18 @@ impl LambdaMcpServer {
     /// Get a reference to the server capabilities.
     pub fn capabilities(&self) -> &ServerCapabilities {
         &self.capabilities
+    }
+
+    /// Whether a task runtime is configured (always false when tasks are not part of the spec).
+    fn has_task_runtime(&self) -> bool {
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            self.task_runtime.is_some()
+        }
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        {
+            false
+        }
     }
 
     /// Create a Lambda handler ready for use with Lambda runtime
@@ -239,6 +266,7 @@ impl LambdaMcpServer {
 
         // Cold-start recovery: handler() is called once per Lambda cold start from main().
         // The returned LambdaMcpHandler is Clone'd for each request — recovery runs exactly once.
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             match runtime.recover_stuck_tasks().await {
                 Ok(recovered) if !recovered.is_empty() => {
@@ -329,22 +357,26 @@ impl LambdaMcpServer {
         use turul_mcp_json_rpc_server::JsonRpcDispatcher;
         let mut dispatcher = JsonRpcDispatcher::new();
 
-        // Create session-aware initialize handler (reuse MCP server handler)
-        use turul_mcp_server::SessionAwareInitializeHandler;
-        #[allow(unused_mut)]
-        let mut init_handler = SessionAwareInitializeHandler::new(
-            self.implementation.clone(),
-            self.capabilities.clone(),
-            self.instructions.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-            self.tool_fingerprint.clone(),
-        );
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry {
-            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
+        // Create session-aware initialize handler (2025-11-25 stateful handshake;
+        // the DRAFT-2026-v1 stateless core has no `initialize` method).
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            use turul_mcp_server::SessionAwareInitializeHandler;
+            #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
+            let mut init_handler = SessionAwareInitializeHandler::new(
+                self.implementation.clone(),
+                self.capabilities.clone(),
+                self.instructions.clone(),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+                self.tool_fingerprint.clone(),
+            );
+            #[cfg(feature = "dynamic-tools")]
+            if let Some(ref registry) = self.tool_registry {
+                init_handler = init_handler.with_tool_registry(Arc::clone(registry));
+            }
+            dispatcher.register_method("initialize".to_string(), init_handler);
         }
-        dispatcher.register_method("initialize".to_string(), init_handler);
 
         // Create session-aware tools/list handler (reuse MCP server handler)
         use turul_mcp_server::ListToolsHandler;
@@ -353,7 +385,7 @@ impl LambdaMcpServer {
             self.tools.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
-            self.task_runtime.is_some(),
+            self.has_task_runtime(),
         );
         #[cfg(feature = "dynamic-tools")]
         if let Some(ref registry) = self.tool_registry {
@@ -368,6 +400,7 @@ impl LambdaMcpServer {
             self.session_manager.clone(),
             self.strict_lifecycle,
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
         }
@@ -428,7 +461,7 @@ impl LambdaMcpServer {
                     &self,
                     session_id: &str,
                 ) -> std::result::Result<(), String> {
-                    let notification = turul_mcp_protocol::JsonRpcNotification::new(
+                    let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
                         "notifications/tools/list_changed".to_string(),
                     );
                     let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;

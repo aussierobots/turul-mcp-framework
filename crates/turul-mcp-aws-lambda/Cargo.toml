@@ -11,8 +11,8 @@ autoexamples = false                                                   # Disable
 
 [features]
 default = ["cors", "sse", "protocol-2025-11-25"]
-protocol-2025-11-25 = ["turul-http-mcp-server/protocol-2025-11-25", "turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25"]
-protocol-2026-07-28 = ["turul-http-mcp-server/protocol-2026-07-28", "turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28"]
+protocol-2025-11-25 = ["turul-http-mcp-server/protocol-2025-11-25", "turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25", "turul-mcp-server/protocol-2025-11-25", "turul-mcp-derive/protocol-2025-11-25", "turul-mcp-server/http", "turul-mcp-server/sse"]
+protocol-2026-07-28 = ["turul-http-mcp-server/protocol-2026-07-28", "turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-mcp-server/protocol-2026-07-28", "turul-mcp-derive/protocol-2026-07-28", "turul-mcp-server/http", "turul-mcp-server/sse"]
 cors = []                                         # CORS header injection for Lambda responses
 sse = []                                          # Server-Sent Events stream adaptation
 streaming = ["sse"]                               # Enable real SSE streaming with run_with_streaming_response
@@ -23,13 +23,13 @@ dynamic-tools = ["turul-mcp-server/dynamic-tools", "turul-mcp-server-state-stora
 
 [dependencies]
 # Core MCP framework
-turul-mcp-server = { workspace = true }
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.4.0", default-features = false }
 turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.0", default-features = false }
 turul-mcp-json-rpc-server = { workspace = true }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0", default-features = false }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.0", default-features = false }
-turul-mcp-derive = { workspace = true }
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4.0", default-features = false }
 turul-mcp-server-state-storage = { workspace = true, optional = true }
 
 # AWS Lambda runtime

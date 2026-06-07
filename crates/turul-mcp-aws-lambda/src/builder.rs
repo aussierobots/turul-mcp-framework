@@ -10,9 +10,10 @@ use turul_http_mcp_server::{ServerConfig, StreamConfig};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
 use turul_mcp_server::handlers::{McpHandler, *};
 use turul_mcp_server::{
-    McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpResource, McpRoot,
-    McpSampling, McpTool,
+    McpCompletion, McpNotification, McpPrompt, McpResource, McpRoot, McpTool,
 };
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_server::{McpElicitation, McpLogger, McpSampling};
 use turul_mcp_session_storage::BoxedSessionStorage;
 
 use crate::error::Result;
@@ -92,15 +93,18 @@ pub struct LambdaMcpServerBuilder {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 
     /// Elicitations registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     elicitations: HashMap<String, Arc<dyn McpElicitation>>,
 
     /// Sampling providers registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     sampling: HashMap<String, Arc<dyn McpSampling>>,
 
     /// Completion providers registered with the server
     completions: HashMap<String, Arc<dyn McpCompletion>>,
 
     /// Loggers registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
 
     /// Root providers registered with the server
@@ -141,8 +145,10 @@ pub struct LambdaMcpServerBuilder {
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
     /// Optional task runtime for MCP task support
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
     /// Recovery timeout for stuck tasks (milliseconds)
+    #[cfg(feature = "protocol-2025-11-25")]
     task_recovery_timeout_ms: u64,
 
     /// Tool change detection and notification mode
@@ -187,14 +193,17 @@ impl LambdaMcpServerBuilder {
             "prompts/get".to_string(),
             Arc::new(PromptsGetHandler::new()),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "sampling/createMessage".to_string(),
             Arc::new(SamplingHandler),
         );
         // Note: resources/templates/list is NOT registered here — only added in
         // build() when template resources exist, matching HTTP server behavior.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "elicitation/create".to_string(),
             Arc::new(ElicitationHandler::with_mock_provider()),
@@ -259,9 +268,12 @@ impl LambdaMcpServerBuilder {
             resources: HashMap::new(),
             template_resources: Vec::new(),
             prompts: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             elicitations: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             sampling: HashMap::new(),
             completions: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
             root_providers: HashMap::new(),
             notifications: HashMap::new(),
@@ -277,7 +289,9 @@ impl LambdaMcpServerBuilder {
             stream_config: StreamConfig::default(),
             middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack::new(),
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            #[cfg(feature = "protocol-2025-11-25")]
             task_runtime: None,
+            #[cfg(feature = "protocol-2025-11-25")]
             task_recovery_timeout_ms: 300_000, // 5 minutes
             tool_change_mode: turul_mcp_server::ToolChangeMode::Static,
             #[cfg(feature = "dynamic-tools")]
@@ -411,6 +425,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register an elicitation provider with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitation<E: McpElicitation + 'static>(mut self, elicitation: E) -> Self {
         let key = format!("elicitation_{}", self.elicitations.len());
         self.elicitations.insert(key, Arc::new(elicitation));
@@ -418,6 +433,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register multiple elicitation providers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitations<E: McpElicitation + 'static, I: IntoIterator<Item = E>>(
         mut self,
         elicitations: I,
@@ -429,6 +445,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register a sampling provider with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_provider<S: McpSampling + 'static>(mut self, sampling: S) -> Self {
         let key = format!("sampling_{}", self.sampling.len());
         self.sampling.insert(key, Arc::new(sampling));
@@ -436,6 +453,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register multiple sampling providers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_providers<S: McpSampling + 'static, I: IntoIterator<Item = S>>(
         mut self,
         sampling: I,
@@ -465,6 +483,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register a logger with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn logger<L: McpLogger + 'static>(mut self, logger: L) -> Self {
         let key = format!("logger_{}", self.loggers.len());
         self.loggers.insert(key, Arc::new(logger));
@@ -472,6 +491,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register multiple loggers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn loggers<L: McpLogger + 'static, I: IntoIterator<Item = L>>(
         mut self,
         loggers: I,
@@ -523,6 +543,7 @@ impl LambdaMcpServerBuilder {
     // =============================================================================
 
     /// Register a sampler - convenient alias for sampling_provider
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampler<S: McpSampling + 'static>(self, sampling: S) -> Self {
         self.sampling_provider(sampling)
     }
@@ -624,6 +645,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add logging support
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_logging(mut self) -> Self {
         use turul_mcp_protocol::initialize::LoggingCapabilities;
         self.capabilities.logging = Some(LoggingCapabilities::default());
@@ -636,20 +658,26 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add sampling support
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_sampling(self) -> Self {
         self.handler(SamplingHandler)
     }
 
     /// Add elicitation support with default mock provider
+    ///
+    /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
+    /// The server requests elicitation from the client; it doesn't advertise it.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_elicitation(self) -> Self {
-        // Elicitation is a client-side capability per MCP 2025-11-25
-        // Server just registers the handler, no capability advertisement needed
         self.handler(ElicitationHandler::with_mock_provider())
     }
 
     /// Add elicitation support with custom provider
+    ///
+    /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
+    /// The server requests elicitation from the client; it doesn't advertise it.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(self, provider: P) -> Self {
-        // Elicitation is a client-side capability per MCP 2025-11-25
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
@@ -672,6 +700,7 @@ impl LambdaMcpServerBuilder {
     ///
     /// **Lambda note**: Use a durable backend (DynamoDB recommended) since Lambda
     /// invocations are stateless. `InMemoryTaskStorage` will lose state between invocations.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_storage(
         mut self,
         storage: Arc<dyn turul_mcp_server::task_storage::TaskStorage>,
@@ -685,6 +714,7 @@ impl LambdaMcpServerBuilder {
     /// Configure task support with a pre-built `TaskRuntime`.
     ///
     /// Use this when you need fine-grained control over the task runtime configuration.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_runtime(mut self, runtime: Arc<turul_mcp_server::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
         self
@@ -694,6 +724,7 @@ impl LambdaMcpServerBuilder {
     ///
     /// On Lambda cold start, tasks in non-terminal states older than this timeout
     /// will be marked as `Failed`. Default: 300,000 ms (5 minutes).
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn task_recovery_timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.task_recovery_timeout_ms = timeout_ms;
         self
@@ -991,10 +1022,14 @@ impl LambdaMcpServerBuilder {
         let has_tools = !self.tools.is_empty();
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
         let has_prompts = !self.prompts.is_empty();
+        #[cfg(feature = "protocol-2025-11-25")]
         let has_elicitations = !self.elicitations.is_empty();
         let has_completions = !self.completions.is_empty();
-        let has_logging = !self.loggers.is_empty();
-        tracing::debug!("🔧 Has logging configured: {}", has_logging);
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            let has_logging = !self.loggers.is_empty();
+            tracing::debug!("🔧 Has logging configured: {}", has_logging);
+        }
 
         // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
@@ -1024,6 +1059,7 @@ impl LambdaMcpServerBuilder {
 
         // Elicitation is a client-side capability per MCP 2025-11-25
         // Server does NOT advertise elicitation capabilities
+        #[cfg(feature = "protocol-2025-11-25")]
         let _ = has_elicitations; // Acknowledge the variable without using it
 
         // Completion capabilities - truthful reporting (only set if completions are registered)
@@ -1047,6 +1083,7 @@ impl LambdaMcpServerBuilder {
         });
 
         // Tasks capabilities — auto-configure when task runtime is set
+        #[cfg(feature = "protocol-2025-11-25")]
         if self.task_runtime.is_some() {
             use turul_mcp_protocol::initialize::*;
             capabilities.tasks = Some(TasksCapabilities {
@@ -1074,6 +1111,7 @@ impl LambdaMcpServerBuilder {
         }
 
         // Add task handlers if task runtime is configured
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             use turul_mcp_server::{
                 TasksCancelHandler, TasksGetHandler, TasksListHandler, TasksResultHandler,
@@ -1137,9 +1175,12 @@ impl LambdaMcpServerBuilder {
             self.tools,
             self.resources,
             self.prompts,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.elicitations,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.sampling,
             self.completions,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.loggers,
             self.root_providers,
             self.notifications,
@@ -1155,6 +1196,7 @@ impl LambdaMcpServerBuilder {
             self.cors_config,
             self.middleware_stack,
             self.route_registry,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.task_runtime,
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
