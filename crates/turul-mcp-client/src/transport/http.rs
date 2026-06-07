@@ -49,6 +49,12 @@ pub struct HttpTransport {
     /// via `RequestBuilder::header(…)`, which overrides any same-named entry in
     /// `default_headers`. Shared with the SSE GET listener task.
     auth_override: Arc<parking_lot::RwLock<Option<String>>>,
+    /// Negotiated MCP spec version, sent as the `MCP-Protocol-Version` header.
+    /// Defaults to 2025-11-25; the client sets it after negotiation so a 2026-07-28
+    /// connection advertises 2026-07-28 (the schema requires the header to match the
+    /// per-request `_meta` protocolVersion). A 2026-07-28 (stateless) connection also
+    /// stops sending the removed `Mcp-Session-Id` header.
+    protocol_version: Arc<parking_lot::RwLock<String>>,
 }
 
 impl HttpTransport {
@@ -87,6 +93,7 @@ impl HttpTransport {
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
+            protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
         })
     }
 
@@ -154,6 +161,7 @@ impl HttpTransport {
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
+            protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
         })
     }
 
@@ -172,6 +180,7 @@ impl HttpTransport {
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
+            protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
         })
     }
 
@@ -179,6 +188,16 @@ impl HttpTransport {
     pub fn set_session_id(&self, session_id: String) {
         debug!("Setting session ID: {}", session_id);
         *self.session_id.lock() = Some(session_id);
+    }
+
+    /// Set the negotiated MCP spec version, advertised on the `MCP-Protocol-Version`
+    /// header. A stateless version (2026-07-28) also drops any captured session id —
+    /// the stateless core has no `Mcp-Session-Id`.
+    pub fn set_protocol_version(&self, version: &str) {
+        *self.protocol_version.write() = version.to_string();
+        if version == "2026-07-28" {
+            *self.session_id.lock() = None;
+        }
     }
 
     /// Clear the session ID (used during 404 re-initialization)
@@ -303,7 +322,8 @@ impl HttpTransport {
         }
 
         // Capture session ID from response headers if present
-        if let Some(session_header) = response.headers().get("mcp-session-id")
+        if *self.protocol_version.read() != "2026-07-28"
+            && let Some(session_header) = response.headers().get("mcp-session-id")
             && let Ok(session_str) = session_header.to_str()
         {
             debug!("Captured session ID from response: {}", session_str);
@@ -599,7 +619,7 @@ impl Transport for HttpTransport {
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", MCP_POST_ACCEPT)
-            .header("MCP-Protocol-Version", "2025-11-25");
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
         req_builder = self.apply_auth_override(req_builder);
 
@@ -667,7 +687,7 @@ impl Transport for HttpTransport {
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", MCP_POST_ACCEPT)
-            .header("MCP-Protocol-Version", "2025-11-25");
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
         req_builder = self.apply_auth_override(req_builder);
 
@@ -724,7 +744,7 @@ impl Transport for HttpTransport {
             .post(self.endpoint.clone())
             .header("Accept", MCP_POST_ACCEPT)
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-11-25");
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
         req_builder = self.apply_auth_override(req_builder);
 
@@ -778,7 +798,7 @@ impl Transport for HttpTransport {
             .client
             .delete(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-11-25")
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone())
             .header("Mcp-Session-Id", session_id);
 
         // Apply live bearer override so callers that rotated the M2M token
@@ -865,6 +885,7 @@ impl Transport for HttpTransport {
         let url = self.endpoint.clone();
         let session_id = self.session_id.clone();
         let auth_override = self.auth_override.clone();
+        let protocol_version = self.protocol_version.clone();
 
         info!("Starting SSE event listener for GET requests at: {}", url);
 
@@ -874,7 +895,7 @@ impl Transport for HttpTransport {
                 let mut request_builder = client
                     .get(url.as_str())
                     .header("Accept", "text/event-stream")
-                    .header("MCP-Protocol-Version", "2025-11-25");
+                    .header("MCP-Protocol-Version", protocol_version.read().clone());
 
                 // Apply the live bearer override (if any) so token rotation
                 // also reaches the SSE GET. Per-request header overrides
@@ -1132,6 +1153,10 @@ impl Transport for HttpTransport {
         // common and held only for the duration of building one RequestBuilder.
         *self.auth_override.write() = value;
         debug!("HttpTransport: Authorization override updated");
+    }
+
+    fn set_protocol_version(&self, version: &str) {
+        HttpTransport::set_protocol_version(self, version);
     }
 
     fn statistics(&self) -> TransportStatistics {

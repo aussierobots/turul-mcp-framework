@@ -165,6 +165,13 @@ pub trait Transport: Send + Sync {
         // No-op for transports without per-request HTTP auth.
     }
 
+    /// Set the negotiated MCP spec version, sent as `MCP-Protocol-Version`.
+    ///
+    /// The client calls this after negotiation so the transport advertises the
+    /// agreed spec (and, for the 2026-07-28 stateless core, stops sending the
+    /// removed `Mcp-Session-Id`). No-op for transports that don't carry the header.
+    fn set_protocol_version(&self, _version: &str) {}
+
     /// Start listening for server events (if supported).
     ///
     /// # Streamable HTTP listener termination (since 0.3.38)

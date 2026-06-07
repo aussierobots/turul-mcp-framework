@@ -177,3 +177,32 @@ async fn paginated_list_routes_through_2026_with_meta_and_cursor() {
     assert_eq!(page.resources.len(), 1);
     assert_eq!(page.next_cursor.as_ref().map(|c| c.as_str()), Some("page-3"));
 }
+
+#[tokio::test]
+async fn client_advertises_2026_protocol_version_on_the_wire() {
+    use wiremock::matchers::header;
+    let server = start_2026_server().await;
+    // The mock only responds when the request carries `MCP-Protocol-Version: 2026-07-28`,
+    // so a green call_tool proves the client advertises the negotiated spec on the wire
+    // (not a hardcoded 2025-11-25, which would never match this mock).
+    Mock::given(method("POST"))
+        .and(header("MCP-Protocol-Version", "2026-07-28"))
+        .and(body_partial_json(meta_match("tools/call")))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0", "id": "x",
+                    "result": {"resultType":"complete","content":[{"type":"text","text":"ok"}],"isError":false}
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let client = connect_2026(&server).await;
+    let call = client
+        .call_tool("echo", serde_json::json!({}))
+        .await
+        .expect("tools/call must reach the MCP-Protocol-Version: 2026-07-28-gated mock");
+    assert_eq!(call.is_error, Some(false));
+}

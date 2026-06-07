@@ -243,6 +243,9 @@ impl McpClient {
 
     async fn lock_version(&self, v: crate::version::McpVersion) -> McpClientResult<()> {
         *self.protocol_version.write().await = Some(v);
+        // Advertise the negotiated spec on the MCP-Protocol-Version header (and, for
+        // the 2026-07-28 stateless core, stop sending the removed Mcp-Session-Id).
+        self.transport.set_protocol_version(v.as_str());
         // 2026-07-28 is stateless — there is no initialize handshake to mark the
         // session ready, so do it here. (A 2025-11-25 connection is already Active
         // via initialize_session() before this is reached.)
