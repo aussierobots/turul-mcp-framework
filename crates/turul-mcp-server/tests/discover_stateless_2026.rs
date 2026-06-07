@@ -42,6 +42,8 @@ async fn start_server() -> String {
         .name("discover-2026-test")
         .version("0.4.0")
         .tool(EchoTool::default())
+        .with_resources()
+        .with_prompts()
         .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
         .build()
         .expect("build 2026 server");
@@ -149,4 +151,46 @@ async fn tools_call_dispatches_without_session_handshake() {
         text.contains("Echo: hi"),
         "unexpected tool result shape: {body}"
     );
+}
+
+/// Sends a sessionless list request and returns the parsed JSON-RPC body.
+async fn list_request(url: &str, rpc_method: &str) -> serde_json::Value {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 9, "method": rpc_method,
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .unwrap_or_else(|_| panic!("{rpc_method} POST"));
+    assert_eq!(
+        resp.status(),
+        200,
+        "stateless {rpc_method} must dispatch without a session"
+    );
+    resp.json().await.expect("json body")
+}
+
+#[tokio::test]
+async fn resources_list_dispatches_statelessly_with_cacheable_result() {
+    let url = start_server().await;
+    let body = list_request(&url, "resources/list").await;
+    assert!(body.get("error").is_none(), "resources/list errored: {body}");
+    // 2026 list results extend CacheableResult.
+    assert_eq!(body["result"]["resultType"], "complete");
+    assert!(body["result"]["cacheScope"].is_string(), "missing cacheScope: {body}");
+    assert!(body["result"]["resources"].is_array(), "missing resources array: {body}");
+}
+
+#[tokio::test]
+async fn prompts_list_dispatches_statelessly_with_cacheable_result() {
+    let url = start_server().await;
+    let body = list_request(&url, "prompts/list").await;
+    assert!(body.get("error").is_none(), "prompts/list errored: {body}");
+    assert_eq!(body["result"]["resultType"], "complete");
+    assert!(body["result"]["cacheScope"].is_string(), "missing cacheScope: {body}");
+    assert!(body["result"]["prompts"].is_array(), "missing prompts array: {body}");
 }
