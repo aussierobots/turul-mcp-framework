@@ -76,8 +76,8 @@ compile_error!(
 );
 #[cfg(not(any(feature = "protocol-2025-11-25", feature = "protocol-2026-07-28")))]
 compile_error!(
-    "turul-mcp-protocol: enable exactly one of `protocol-2025-11-25` (default) or \
-     `protocol-2026-07-28`. If you used `--no-default-features`, add one explicitly."
+    "turul-mcp-protocol: enable exactly one of `protocol-2026-07-28` (default) or \
+     `protocol-2025-11-25`. If you used `--no-default-features`, add one explicitly."
 );
 
 // Re-export the selected MCP protocol version.

@@ -352,11 +352,17 @@ pub enum ToolChangeMode {
 | Static | Not advertised | Not exposed | N/A |
 | Dynamic | Advertised on every response (under extension key) | `ToolRegistry::activate_tool()` etc. | Via `ServerStateStorage` + per-instance `check_for_changes()` |
 
-The `listChanged` capability flag from the 2025-11-25 capability shape is removed in DRAFT-2026-v1 (the capability negotiation surface moved to the SEP-2133 extension framework). Servers signal mutability via the extension key in their `server/discover` response.
+The `listChanged` capability flag survives in 2026-07-28: it remains on the
+`prompts`, `tools`, and `resources` capabilities (`initialize.rs` `PromptsCapabilities`,
+`ToolsCapabilities`, `ResourcesCapabilities` each carry `list_changed`). What the
+stateless-core redesign removed is the `notifications/roots/list_changed`
+notification (Roots is deprecated and its list-changed notification is absent from
+the 2026 schema). Beyond the capability flag, servers may also signal tool mutability
+via an extension key in their `server/discover` response.
 
 ### References
 
 - ADR-006 §"DRAFT-2026-v1: Stateless variant; GET SSE is 2025-only" — why per-session SSE delivery doesn't exist.
 - ADR-009 §"DRAFT-2026-v1: McpProtocolVersion becomes feature-exclusive" — feature flag mechanics.
-- ADR-027 §"Status update (2026-05-31)" — 0.4.0 default is DRAFT-2026-v1.
+- ADR-027 §"Status update (2026-05-31)" — 0.4.0 default is 2026-07-28 (wire string finalized; `DRAFT-2026-v1` is a deserialize-only alias).
 - ADR-028 (extensions strategy) — the `io.modelcontextprotocol/tools.fingerprint` extension key registration (TBD; identifier not yet finalized upstream).

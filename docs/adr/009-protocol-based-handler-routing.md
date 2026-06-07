@@ -128,9 +128,12 @@ Stale binaries can mask routing changes and cause test failures.
 - [MCP 2025-11-25 Specification](https://modelcontextprotocol.io/specification/2025-11-25)
 - [ADR-005: MCP Message Notifications Architecture](./005-mcp-message-notifications-architecture.md)
 - [CLAUDE.md: HTTP Transport Routing](../../CLAUDE.md#http-transport-routing)
-## DRAFT-2026-v1: McpProtocolVersion becomes feature-exclusive
+## 2026-07-28: McpProtocolVersion becomes feature-exclusive
 
 **Status: Added 2026-05-31. Relevant for the 0.4.0 release per ADR-027.**
+
+> The wire string finalized to `"2026-07-28"`. The earlier `"DRAFT-2026-v1"` label
+> in pre-finalization snapshots is retained as a deserialize-only alias.
 
 ### The change
 
@@ -140,35 +143,35 @@ In 0.4.0, **`McpProtocolVersion` becomes feature-exclusive**. The protocol versi
 
 | Cargo features on consumer crate | `McpProtocolVersion` variant available | `turul-mcp-protocol` alias resolves to |
 |---|---|---|
-| (default, no features) | `V2026_07_28` (wire string `"DRAFT-2026-v1"`) | `turul-mcp-protocol-2026-07-28` |
+| (default, no features) | `V2026_07_28` (wire string `"2026-07-28"`; `"DRAFT-2026-v1"` accepted as a deserialize-only alias) | `turul-mcp-protocol-2026-07-28` |
 | `protocol-2025-11-25` | `V2025_11_25` (wire string `"2025-11-25"`) | `turul-mcp-protocol-2025-11-25` |
 
 **These are mutually exclusive.** A single build of the framework can only host one protocol type hierarchy at a time. Reasons:
 
-1. The handshake state machines differ. 2025-11-25 has `initialize` → `notifications/initialized` → `Mcp-Session-Id`-tagged requests. DRAFT-2026-v1 has `server/discover` + per-request `_meta` carrier. The dispatcher cannot serve both simultaneously without per-request branching to the right schema-validated payload deserializer — which would require carrying both protocol crates in every consumer binary.
+1. The handshake state machines differ. 2025-11-25 has `initialize` → `notifications/initialized` → `Mcp-Session-Id`-tagged requests. 2026-07-28 has `server/discover` + per-request `_meta` carrier. The dispatcher cannot serve both simultaneously without per-request branching to the right schema-validated payload deserializer — which would require carrying both protocol crates in every consumer binary.
 2. Types diverge structurally. `RequestParams` in 2026-07-28 has a required `_meta: RequestMetaObject` field; in 2025-11-25 it has an optional `meta: Option<HashMap>` (different name, different shape, different requiredness). The `Tool`, `Resource`, `Prompt`, `ContentBlock`, and `ServerCapabilities` types similarly diverge. Linking both via re-exports under the same module path is not viable.
 3. The Cargo dependency tree is the natural cutover boundary. Each consumer crate's `Cargo.toml` selects the protocol crate via `turul-mcp-protocol` (the alias) and the `protocol-2025-11-25` feature; the rest of the consumer's code is unchanged.
 
-### Routing in DRAFT-2026-v1 mode
+### Routing in 2026-07-28 mode
 
-With the default (DRAFT-2026-v1) feature set, the `MCP-Protocol-Version` header check still happens but resolves to a single handler:
+With the default (2026-07-28) feature set, the `MCP-Protocol-Version` header check still happens but resolves to a single handler:
 
 ```rust
-// Pseudocode for 0.4.0 default (DRAFT-2026-v1) build:
+// Pseudocode for 0.4.0 default (2026-07-28) build:
 let header_version = req
     .headers()
     .get("MCP-Protocol-Version")
     .and_then(|h| h.to_str().ok())
-    .unwrap_or("DRAFT-2026-v1");
+    .unwrap_or("2026-07-28");
 
 match header_version {
-    "DRAFT-2026-v1" => handler.streamable_handler.handle_request(req).await,
-    "2026-07-28" => /* same as above; alias for the same wire string when final spec lands */ handler.streamable_handler.handle_request(req).await,
+    "2026-07-28" => handler.streamable_handler.handle_request(req).await,
+    "DRAFT-2026-v1" => /* deserialize-only alias for the same wire shape (pre-finalization snapshots) */ handler.streamable_handler.handle_request(req).await,
     other => /* reject: 426 Upgrade Required or 400 Bad Request; the build doesn't speak that version */,
 }
 ```
 
-**`SessionMcpHandler` is gone in the default build.** Its responsibilities (HTTP+SSE with `Last-Event-ID` replay, session-stored request/response persistence) are concepts that don't exist in DRAFT-2026-v1. The 2024-11-05 legacy path is unreachable from a 2026 build.
+**`SessionMcpHandler` is gone in the default build.** Its responsibilities (HTTP+SSE with `Last-Event-ID` replay, session-stored request/response persistence) are concepts that don't exist in 2026-07-28. The 2024-11-05 legacy path is unreachable from a 2026 build.
 
 ### Routing in `protocol-2025-11-25` mode
 
@@ -176,7 +179,7 @@ With `--features protocol-2025-11-25`, the original ADR-009 routing logic applie
 
 ### Cross-version client connectivity
 
-A client that needs to talk to both a 2025-11-25 server and a DRAFT-2026-v1 server cannot do so with one build of the framework. The client must either:
+A client that needs to talk to both a 2025-11-25 server and a 2026-07-28 server cannot do so with one build of the framework. The client must either:
 
 1. **Ship one build per target.** Two binaries, two `Cargo.toml`s, one with `protocol-2025-11-25` and one without.
 2. **Use a future bilingual client design.** A planned client-only ADR (separate, TBD-numbered) may carve out cross-version support inside `turul-mcp-client` because the client side does not have the same compile-time-fixed handshake constraints the server has. The server's `McpProtocolVersion` is process-global; the client's is per-connection.
@@ -187,14 +190,22 @@ Until that client ADR is decided, treat the protocol version as a per-build cons
 
 - Consumers of `McpProtocolVersion::*` enum variants that don't exist in the active feature set get a `not found in scope` compile error. Match arms for `V2024_11_05` in default builds either compile-gate (`#[cfg(feature = "protocol-2025-11-25")]`) or get removed.
 - Tests that iterate over all variants need feature-gate awareness. The compliance test in the 2026-07-28 protocol crate iterates the 2026 variants; the equivalent in the 2025-11-25 crate is unchanged.
-- HTTP client integration tests that assert against `"2025-11-25"` in default 0.4.0 builds will fail until updated — the default header is `"DRAFT-2026-v1"`.
+- HTTP client integration tests that assert against `"2025-11-25"` in default 0.4.0 builds will fail until updated — the default header is `"2026-07-28"`.
 
 ### Why not runtime selection
 
-A runtime selector (e.g., "if the request header is `DRAFT-2026-v1`, decode as 2026; if `2025-11-25`, decode as 2025") would require both protocol crates linked into every binary, doubling the dependency footprint and forcing every consumer to ship code for a spec they may never use. Cargo feature gating localizes the cost to the consumer's actual deployment target. Per ADR-027 §"Status update (2026-05-31)" #2, this is the intended cutover model for 0.4.0.
+A runtime selector (e.g., "if the request header is `2026-07-28`, decode as 2026; if `2025-11-25`, decode as 2025") would require both protocol crates linked into every binary, doubling the dependency footprint and forcing every consumer to ship code for a spec they may never use. Cargo feature gating localizes the cost to the consumer's actual deployment target. Per ADR-027 §"Status update (2026-05-31)" #2, this is the intended cutover model for 0.4.0.
 
 ### References
 
 - ADR-006 §"DRAFT-2026-v1: Stateless variant; GET SSE is 2025-only" — transport behavior under the new default.
 - ADR-027 §"Status update (2026-05-31)" — feature flag mechanics.
 - ADR-023 §"DRAFT-2026-v1: per-request fingerprint persistence" — tool change detection in stateless mode.
+
+## Revision log
+
+- **2026-06-08** — Reconciled the default wire string with the landed cutover: code
+  `MCP_VERSION = "2026-07-28"`. This ADR previously recorded the 2026 default as
+  `"DRAFT-2026-v1"` (a pre-finalization snapshot label); that string is now retained
+  only as a deserialize-only alias. Updated the routing table, the routing pseudocode
+  default, the mode-name prose, and the migration-impact note accordingly.

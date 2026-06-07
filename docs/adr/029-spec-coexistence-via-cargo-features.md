@@ -8,25 +8,25 @@
 
 ## Context
 
-`turul-mcp-protocol-2026-07-28` (v0.4.0) now passes 342 tests (159 lib + 179 integration + 3 fixture + 1 doctest), zero warnings, against the vendored `DRAFT-2026-v1` schema (see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md:1-26`). All 22 schema-declared methods are bound at the canonical wire spelling; `_meta` carriers match the schema shape exactly; SEP-2577 deprecations are annotated on Roots/Sampling/Logging. The protocol crate is spec-aligned.
+`turul-mcp-protocol-2026-07-28` (v0.4.0) now passes 342 tests (159 lib + 179 integration + 3 fixture + 1 doctest), zero warnings, against the vendored `2026-07-28` schema (see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md:1-26`). All 22 schema-declared methods are bound at the canonical wire spelling; `_meta` carriers match the schema shape exactly; SEP-2577 deprecations are annotated on Roots/Sampling/Logging. The protocol crate is spec-aligned.
 
 The framework crates that consume it are not. `turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-client`, `turul-mcp-aws-lambda`, the derive macros, and ~55 example crates still depend on `turul-mcp-protocol` — and that alias still re-exports `turul-mcp-protocol-2025-11-25` (see `crates/turul-mcp-protocol/src/lib.rs:71-76`). ADR-027 Phase 9.4 ("flip the alias") was originally parked pending a strategy decision; **this ADR makes that decision**: flip-all-at-once via mutually-exclusive cargo features at the alias boundary (see §"What the cutover slice ships" item 5 below).
 
 ### Why coexistence, not "just flip it"
 
-The 2025-11-25 and DRAFT-2026-v1 specifications are not wire-format variants of the same protocol. They are different protocols. The cleavage points that prevent a single process from speaking both simultaneously:
+The 2025-11-25 and 2026-07-28 specifications are not wire-format variants of the same protocol. They are different protocols. The cleavage points that prevent a single process from speaking both simultaneously:
 
-1. **Stateful vs stateless core.** 2025-11-25 requires `initialize` → `notifications/initialized` → `Mcp-Session-Id` header on every subsequent request. DRAFT-2026-v1 removes `initialize` entirely; servers expose `server/discover` (un-sessioned) and every request carries `_meta.io.modelcontextprotocol/clientInfo` + `_meta.io.modelcontextprotocol/clientCapabilities` (see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md:44-56` for the `_meta` carrier rules). A server cannot serve both handshakes through one router without bespoke per-request routing.
-2. **`_meta` shape required, not optional.** `RequestParams._meta: RequestMetaObject` is REQUIRED in DRAFT-2026, with three required namespaced fields (`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`). In 2025-11-25 the equivalent fields are positional in the `initialize` payload. The Rust `RequestParams` type literally cannot be both at once.
-3. **JSON-RPC error code drift.** DRAFT-2026 uses `-32602` for invalid-params (`-32002` reserved differently). 2025-11-25 used `-32002`. A handler dispatcher binding both at once would serve the wrong error code to the wrong client.
-4. **Tasks moved to extension (SEP-2663).** 2025-11-25 has tasks in core. DRAFT-2026 removed them — the protocol crate has no `Task`/`TaskStatus`/`TasksCapabilities`/`tasks/*` methods (see `docs/adr/028-extensions-strategy.md:21-28`). Tasks-using code authored against 2025 will not compile against 2026; it must move to the (not-yet-scaffolded) `turul-mcp-ext-tasks-2026-07-28` crate.
+1. **Stateful vs stateless core.** 2025-11-25 requires `initialize` → `notifications/initialized` → `Mcp-Session-Id` header on every subsequent request. The 2026-07-28 stateless core replaces `initialize` with `server/discover` (un-sessioned — `InitializeRequest` is absent from the pinned schema) and every request carries `_meta.io.modelcontextprotocol/clientInfo` + `_meta.io.modelcontextprotocol/clientCapabilities` (see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md:44-56` for the `_meta` carrier rules). A server cannot serve both handshakes through one router without bespoke per-request routing.
+2. **`_meta` shape required, not optional.** `RequestParams._meta: RequestMetaObject` is REQUIRED in 2026-07-28, with three required namespaced fields (`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`). In 2025-11-25 the equivalent fields are positional in the `initialize` payload. The Rust `RequestParams` type literally cannot be both at once.
+3. **JSON-RPC error code drift.** 2026-07-28 uses `-32602` for invalid-params (`-32002` reserved differently). 2025-11-25 used `-32002`. A handler dispatcher binding both at once would serve the wrong error code to the wrong client.
+4. **Tasks moved to extension (SEP-2663).** 2025-11-25 has tasks in core. 2026-07-28 moves them out of core to an extension — the protocol crate has no `Task`/`TaskStatus`/`TasksCapabilities`/`tasks/*` methods (see `docs/adr/028-extensions-strategy.md:21-28`). Tasks-using code authored against 2025 will not compile against 2026; it must move to the (not-yet-scaffolded) `turul-mcp-ext-tasks-2026-07-28` crate.
 
 These are architectural differences, not surface deltas. The framework must pick one, per process. The decision space is therefore: which to pick by default, and how the other survives as an escape hatch.
 
 ### Constraints feeding the decision
 
 - **Not publishing while RC is unstable.** `DRAFT-2026-v1` schema continues to evolve (Slice A' caught eight schema-fidelity defects on 2026-05-31 alone; see `docs/adr/027-targeting-mcp-draft-2026-v1.md:79-89`). The ETag will change again between now and final 2026-07-28 publication. Internal-only feature-branch work eliminates accidental-pick risk from crates.io.
-- **User-locked decision.** Server default is `DRAFT-2026-v1`. `0.4.0` ships with default = 2026. No "0.5.0 deferred cutover" — that artificial deferral is closed. The escape hatch for 2025-11-25 is a cargo feature, opt-in.
+- **User-locked decision.** Server default is `2026-07-28`. `0.4.0` ships with default = 2026. No "0.5.0 deferred cutover" — that artificial deferral is closed. The escape hatch for 2025-11-25 is a cargo feature, opt-in.
 - **Client lives under a different constraint.** Clients can speak both protocols per-connection (no process-wide state machine collision). Coexistence for the client is "bilingual by default" — see ADR-030.
 
 ## Decision
@@ -80,7 +80,7 @@ Both versioned crates are `optional = true` workspace dependencies. The compile-
 
 ### Default = `protocol-2026-07-28`
 
-Per the user-locked decision: `0.4.0` defaults to DRAFT-2026-v1. A bare `turul-mcp-protocol = "0.4"` dependency in a downstream `Cargo.toml` resolves to the 2026 types. The `protocol-2025-11-25` feature is the explicit opt-out for consumers who need to stay on the old spec without pinning to the frozen `0.3.x` line.
+Per the user-locked decision: `0.4.0` defaults to 2026-07-28. A bare `turul-mcp-protocol = "0.4"` dependency in a downstream `Cargo.toml` resolves to the 2026 types. The `protocol-2025-11-25` feature is the explicit opt-out for consumers who need to stay on the old spec without pinning to the frozen `0.3.x` line.
 
 ### Cascade rule for the downstream framework crates
 
@@ -172,7 +172,7 @@ The user-locked steelman from the decision phase (`docs/plans/2026-07-28-archite
 
 - **Single source of truth per binary.** Each downstream process picks one protocol at build time. No runtime branches, no dispatcher complexity, no two-state-machines-in-one-process hazard.
 - **Lambda simplification.** The Lambda handler stack does not multiplex protocols. One Lambda = one feature = one protocol. Cold-start init paths, session-storage shapes, and `Mcp-Session-Id` parsing all collapse to one branch.
-- **Honest RC tracking.** The 2026 path is the default; CHANGELOG and release notes can state "this release tracks DRAFT-2026-v1 as the primary target." Consumers who pin to 2025-11-25 do so by explicit feature opt-in, not by accident.
+- **Honest RC tracking.** The 2026 path is the default; CHANGELOG and release notes can state "this release tracks 2026-07-28 as the primary target." Consumers who pin to 2025-11-25 do so by explicit feature opt-in, not by accident.
 - **The `compile_error!` macros prevent silent breakage.** A misconfigured downstream Cargo.toml that ends up with both features (e.g. via transitive cargo unification on a test-only dep) gets a clean diagnostic at build time, not a link error from duplicated symbols.
 - **Aligns with ADR-028 extensions strategy.** Extensions (`turul-mcp-ext-tasks-2026-07-28`, `turul-mcp-ext-apps-2026-07-28`) are opt-in by cargo dependency. Spec-version selection is opt-in by cargo feature. Same idiom at both layers.
 
@@ -185,7 +185,7 @@ The user-locked steelman from the decision phase (`docs/plans/2026-07-28-archite
 
 ### Neutral
 
-- **Wire string in `turul-mcp-protocol::MCP_VERSION` flips with the feature.** Under default (`protocol-2026-07-28`), it is `"DRAFT-2026-v1"` (will flip to `"2026-07-28"` when the final spec ships — see ADR-027). Under `protocol-2025-11-25`, it is `"2025-11-25"`. Consumers reading `MCP_VERSION` at runtime see the spec their binary was built against.
+- **Wire string in `turul-mcp-protocol::MCP_VERSION` flips with the feature.** Under default (`protocol-2026-07-28`), it is `"2026-07-28"` (the wire string finalized; the earlier `"DRAFT-2026-v1"` snapshot label is retained only as a deserialize-only alias — see ADR-027). Under `protocol-2025-11-25`, it is `"2025-11-25"`. Consumers reading `MCP_VERSION` at runtime see the spec their binary was built against.
 - **Frozen crates unaffected.** `turul-mcp-protocol-2025-11-25@0.3.47` and `turul-mcp-protocol-2025-06-18@0.3.47` remain frozen per CLAUDE.md §"Frozen Protocol Crates". The `protocol-2025-11-25` feature pulls in the frozen `0.3.47` crate; it does not reopen those crates to ongoing edits.
 - **Per-crate independent versioning (per ADR-027 §Crate version) continues unchanged.** The feature gating lives in the re-export crate; the versioned protocol crates remain on independent semvers.
 
@@ -223,3 +223,4 @@ The user-locked steelman from the decision phase (`docs/plans/2026-07-28-archite
    5. **Tasks gated to 2025-11-25.** The task runtime is `#[cfg(feature = "protocol-2025-11-25")]`; under the 2026 default, tasks are a (not-yet-scaffolded) extension per ADR-028.
    6. **Consumer fleet migrated.** 43 examples migrated to the 2026 default; 8 redundant duplicate examples removed (builders-showcase, comprehensive-server, sampling-with-tools-showcase, task-types-showcase, client-task-lifecycle, dynamic-tools-test-client, performance-testing, lambda-mcp-server-streaming); a small 2025-11-25 regression suite pinned (tasks-e2e pair + logging/sampling/elicitation/client/lambda examples held at the 2025 opt-in), and the integration-test crates pinned to the 2025-11-25 opt-in.
    Default-members build is green at 0 warnings; the framework `compile_error!` mutex fires correctly under both configurations. Publication to crates.io remains gated per ADR-027 (upstream final-spec publication + maintainer go-ahead).
+- **2026-06-08 (doc reconciliation + 2025 regression coverage)** — Current-state prose in this ADR that still named the 2026 spec `DRAFT-2026-v1` (Context status line, the §"Why coexistence" cleavage points, the §Constraints "Server default" line, the §Decision "0.4.0 defaults to…" line, the §Consequences release-notes wording) was reconciled to the finalized wire literal `2026-07-28`. Remaining `DRAFT-2026-v1` mentions are deliberate history: ADR-027's title/subject references and the dated RC-instability rationale. Separately, `roots-server` was found pinned to the 2026 default (its `Root` type resolved to the deprecated 2026 binding), so the 2025 `mcp-roots-tests` e2e suite could not handshake it — all 14 tests failed at server start. Pinning `roots-server` to the 2025 opt-in (matching `sampling-server`/`elicitation-server`) turns the suite green; the roots/sampling/elicitation suites and a `client-initialise-server` build were added to the opt-in-2025 CI lane (they had been absent). `client-initialise-server` itself, an inherently-stateful `initialize`/`Mcp-Session-Id` demo, was moved out of `default-members` and pinned to the 2025 opt-in.

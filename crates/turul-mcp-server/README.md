@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-server.svg)](https://crates.io/crates/turul-mcp-server)
 [![Documentation](https://docs.rs/turul-mcp-server/badge.svg)](https://docs.rs/turul-mcp-server)
 
-High-level framework for building Model Context Protocol (MCP) servers with full MCP 2025-11-25 compliance.
+High-level framework for building Model Context Protocol (MCP) servers. The default build targets the MCP 2026-07-28 stateless core (`server/discover`, per-request `_meta`, no `Mcp-Session-Id`); MCP 2025-11-25 is opt-in via `--no-default-features --features http,sse,protocol-2025-11-25`.
 
 ## Overview
 
@@ -11,13 +11,13 @@ High-level framework for building Model Context Protocol (MCP) servers with full
 
 ## Features
 
-- ✅ **MCP 2025-11-25 Compliance** - Full protocol compliance with latest features
+- ✅ **MCP 2026-07-28 Default** - Stateless core (`server/discover`, per-request `_meta`); 2025-11-25 opt-in
 - ✅ **Zero-Configuration** - Framework auto-determines ALL methods from types  
 - ✅ **Four Tool Creation Levels** - Function/derive/builder/manual approaches
 - ✅ **Real-time Notifications** - SSE streaming with JSON-RPC format
 - ✅ **Session Management** - UUID v7 sessions with automatic cleanup
 - ✅ **Pluggable Storage** - InMemory, SQLite, PostgreSQL, DynamoDB backends
-- ✅ **Task Support** - MCP 2025-11-25 long-running task lifecycle with pluggable storage
+- ✅ **Task Support** - long-running task lifecycle with pluggable storage (core tasks are a 2025-11-25 opt-in feature; 2026-07-28 moves tasks to an extension)
 - ✅ **Type Safety** - Compile-time schema generation and validation
 
 ## Architectural Patterns
@@ -358,7 +358,9 @@ server.run().await
 
 ## Protocol Compliance
 
-### MCP 2025-11-25 Features
+> The default build is the MCP 2026-07-28 stateless core. The features below are the MCP 2025-11-25 opt-in spec lane (`--no-default-features --features http,sse,protocol-2025-11-25`); `initialize`/`notifications/initialized`/`Mcp-Session-Id` apply only there.
+
+### MCP 2025-11-25 Features (opt-in)
 
 - ✅ **Initialize/Initialized** - Capability negotiation
 - ✅ **Tools** - Dynamic tool calling with schema validation
@@ -428,7 +430,7 @@ All MCP components use consistent trait patterns from `turul-mcp-builders`:
 
 See [`turul-mcp-builders`](../turul-mcp-builders/README.md) for trait documentation.
 
-## Task Storage (MCP 2025-11-25)
+## Task Storage (MCP 2025-11-25 opt-in)
 
 Enable long-running task support by adding a `TaskStorage` backend:
 

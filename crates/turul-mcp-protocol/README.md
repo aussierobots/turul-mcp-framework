@@ -3,13 +3,14 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-protocol.svg)](https://crates.io/crates/turul-mcp-protocol)
 [![Documentation](https://docs.rs/turul-mcp-protocol/badge.svg)](https://docs.rs/turul-mcp-protocol)
 
-Model Context Protocol (MCP) specification implementation - Current version alias for future-proofing.
+Model Context Protocol (MCP) specification implementation — version alias. Default build targets the MCP 2026-07-28 stateless core; 2025-11-25 is opt-in.
 
 ## Overview
 
-`turul-mcp-protocol` is a version alias crate that re-exports the current stable version of the Model Context Protocol implementation. This provides future-proofing and consistency across the turul-mcp-framework ecosystem.
+`turul-mcp-protocol` is a version alias crate that re-exports exactly one versioned Model Context Protocol implementation, selected by a mutually-exclusive Cargo feature. This provides future-proofing and consistency across the turul-mcp-framework ecosystem.
 
-**Currently aliases:** `turul-mcp-protocol-2025-11-25`
+**Default alias:** `turul-mcp-protocol-2026-07-28` (the 2026-07-28 stateless core).
+**Opt-in alias:** `turul-mcp-protocol-2025-11-25` — enable with `--no-default-features --features protocol-2025-11-25`.
 
 ## Features
 
@@ -53,11 +54,12 @@ use turul_mcp_protocol_2025_11_25::{Tool, CallToolRequest};
 use turul_mcp_protocol::{CURRENT_VERSION, MCP_VERSION, McpVersion};
 
 fn check_protocol_version() {
-    println!("Current MCP version: {}", CURRENT_VERSION);  // "2025-11-25"
-    println!("Protocol constant: {}", MCP_VERSION);        // "2025-11-25"
+    // Default build (protocol-2026-07-28):
+    println!("Current MCP version: {}", CURRENT_VERSION);  // "2026-07-28"
+    println!("Protocol constant: {}", MCP_VERSION);        // "2026-07-28"
 
     let version = McpVersion::from_str(CURRENT_VERSION).unwrap();
-    assert_eq!(version, McpVersion::V2025_11_25);
+    assert_eq!(version, McpVersion::V2026_07_28);
 }
 ```
 
@@ -82,6 +84,10 @@ fn check_feature_support(version: McpVersion) -> bool {
         }
         McpVersion::V2025_11_25 => {
             // Full feature set: icons, tasks, URL elicitation, sampling tools
+            true
+        }
+        McpVersion::V2026_07_28 => {
+            // Stateless core: server/discover, per-request _meta, no Mcp-Session-Id
             true
         }
     }
@@ -239,9 +245,10 @@ When a new MCP protocol version is released, upgrading is seamless:
 // Your code stays the same
 use turul_mcp_protocol::{Tool, CallToolRequest, CallToolResult};
 
-// Only the dependency version changes in Cargo.toml:
+// The active spec is selected by feature, not by a code change:
 // [dependencies]
-// turul-mcp-protocol = "0.3"  # Now points to MCP 2025-11-25
+// turul-mcp-protocol = "0.4"  # default: MCP 2026-07-28
+// # opt-in 2025-11-25: turul-mcp-protocol = { version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 ```
 
 ### Handling Version-Specific Features
@@ -253,11 +260,11 @@ fn use_version_specific_feature() {
     let current_version = McpVersion::from_str(CURRENT_VERSION).unwrap();
     
     match current_version {
-        McpVersion::V2025_11_25 => {
-            // Use current features like tasks, icons, URL elicitation, sampling tools
-            println!("Using MCP 2025-11-25 features");
+        McpVersion::V2026_07_28 => {
+            // Default build: 2026-07-28 stateless core (server/discover, per-request _meta)
+            println!("Using MCP 2026-07-28 features");
         }
-        // Older versions still supported for backward compatibility
+        // Earlier specs available behind the opt-in protocol-2025-11-25 feature
         _ => {
             println!("Using features from version: {}", CURRENT_VERSION);
         }
@@ -296,9 +303,9 @@ mod tests {
         let capabilities = ClientCapabilities::default();
         assert!(capabilities.roots.is_none());
         
-        // Test version constants
-        assert_eq!(CURRENT_VERSION, "2025-11-25");
-        assert_eq!(MCP_VERSION, "2025-11-25");
+        // Test version constants (default build = protocol-2026-07-28)
+        assert_eq!(CURRENT_VERSION, "2026-07-28");
+        assert_eq!(MCP_VERSION, "2026-07-28");
     }
     
     #[test]

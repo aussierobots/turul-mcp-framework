@@ -204,7 +204,7 @@ pub use turul_rpc::RequestParams as JsonRpcParams;
 ///
 /// The finalized schema emits the stable date literal `"2026-07-28"` (the
 /// pre-finalization draft emitted `"DRAFT-2026-v1"`, still accepted on
-/// deserialize by [`McpVersion`](crate::version::McpVersion) for back-compat).
+/// deserialize by [`McpVersion`] for back-compat).
 pub const MCP_VERSION: &str = "2026-07-28";
 
 /// Common result type for MCP operations

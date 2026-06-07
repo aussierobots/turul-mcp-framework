@@ -132,7 +132,7 @@ pub fn bad_request_response(message: &str) -> Response<JsonRpcBody> {
 /// Build HTTP response for OPTIONS preflight requests.
 ///
 /// Returns a bare 200 OK with an empty body. CORS headers are added by
-/// [`CorsLayer::apply_cors_headers`] in `server.rs` when `enable_cors` is true.
+/// `CorsLayer::apply_cors_headers` in `server.rs` when `enable_cors` is true.
 pub fn options_response() -> Response<JsonRpcBody> {
     Response::builder()
         .status(StatusCode::OK)

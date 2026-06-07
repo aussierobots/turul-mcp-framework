@@ -13,7 +13,8 @@
 //! ## Features
 //!
 //! - **Multi-transport**: HTTP and Server-Sent Events (SSE), with stdio planned
-//! - **Full Protocol**: Complete MCP 2025-11-25 specification support
+//! - **Bilingual Protocol**: Speaks both MCP 2026-07-28 (stateless core) and
+//!   2025-11-25; by default the client negotiates the spec per connection
 //! - **High Performance**: Built on Tokio with async/await throughout
 //! - **Session Management**: Automatic connection handling and recovery
 //! - **Real-time Streaming**: SSE support for progress and notifications
@@ -54,14 +55,19 @@
 //! ### HTTP Transport (Streamable HTTP)
 //!
 //! The Streamable HTTP transport sends each MCP request as an independent HTTP
-//! POST. There is no persistent connection — session continuity is maintained
-//! via the `Mcp-Session-Id` header that the server returns during initialization
-//! and that the client includes on all subsequent requests.
+//! POST. There is no persistent connection. The client negotiates the spec per
+//! connection: on a 2026-07-28 connection it is stateless (no session id; each
+//! request carries `_meta` and the `MCP-Protocol-Version: 2026-07-28` header). On
+//! a connection locked to 2025-11-25, session continuity is maintained via the
+//! `Mcp-Session-Id` header the server returns during initialization and the client
+//! includes on subsequent requests.
 //!
 //! `transport.connect()` only marks the transport as logically ready; it performs
 //! no network I/O. The first real validation happens when `McpClient::connect()`
-//! sends the `initialize` POST followed by `notifications/initialized`. If the
-//! server is unreachable or rejects the handshake, the error surfaces there.
+//! probes `server/discover`. On a 2026-07-28 server discovery answers statelessly;
+//! on a 2025-locked connection the client falls back to the `initialize` POST
+//! followed by `notifications/initialized`. If the server is unreachable or rejects
+//! the probe, the error surfaces there.
 //!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

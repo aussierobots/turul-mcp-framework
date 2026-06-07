@@ -229,7 +229,7 @@ mod tests;
 /// `"type": ["string", "null"]`. When the value is `None`, omitting the field passes validation,
 /// but serializing as `null` fails because the schema expects a string.
 ///
-/// **Note**: Primitive types (String, i32, f64, bool, Vec<T>) don't need JsonSchema
+/// **Note**: Primitive types (`String`, `i32`, `f64`, `bool`, `Vec<T>`) don't need JsonSchema
 ///
 /// # Example
 ///

@@ -101,10 +101,10 @@ Internal modules use the `#[cfg(feature = "...")]` gates directly on their `pub 
 
 ```rust
 #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
-pub(crate) mod v2025;
+pub(crate) mod v2025_11_25;
 
 #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
-pub(crate) mod v2026;
+pub(crate) mod v2026_07_28;
 
 #[cfg(feature = "client-bilingual")]
 pub(crate) mod bilingual_dispatch;
@@ -114,14 +114,19 @@ This is how a single-narrowing build genuinely excludes the other protocol's typ
 
 ### Internal module layout
 
+> **Illustrative sketch only — superseded by the as-built layout.** The shipped
+> layout is `protocol/mod.rs` + `protocol/v2026_07_28.rs`, with the 2025 path inline
+> in `client.rs` (see the 2026-06-07 revision-log entry). Module names use the full
+> spec date, never a bare year (`v2026_07_28`, not `v2026`).
+
 ```
 crates/turul-mcp-client/src/
 ├── client.rs                 // public McpClient API (unchanged surface)
 ├── version.rs                // McpVersion enum, detection, fallback flow (NEW)
 ├── protocol/                 // (NEW)
 │   ├── mod.rs                //   re-exports + version-routing helpers
-│   ├── v2025.rs              //   2025-11-25 request/response serialization
-│   └── v2026.rs              //   DRAFT-2026 request/response serialization
+│   ├── v2025_11_25.rs        //   2025-11-25 request/response serialization
+│   └── v2026_07_28.rs        //   2026-07-28 request/response serialization
 └── transport/                // unchanged; transports stay spec-agnostic
 ```
 
@@ -136,7 +141,7 @@ pub struct McpClient {
 }
 ```
 
-Hot-path request builders read `protocol_version` and dispatch to the appropriate `protocol/v2025` or `protocol/v2026` serializer. `Transport::send_request` / `send_notification` / `send_delete` / SSE GET listener are not modified — they continue to move opaque JSON envelopes.
+Hot-path request builders read `protocol_version` and dispatch to the appropriate `protocol/v2025_11_25` or `protocol/v2026_07_28` serializer. `Transport::send_request` / `send_notification` / `send_delete` / SSE GET listener are not modified — they continue to move opaque JSON envelopes.
 
 ### Version detection mechanism
 
@@ -180,7 +185,7 @@ When either single-spec feature is active, the version field becomes `Arc<RwLock
 
 - Client binary is meaningfully larger by default. Both protocol crates are linked. Estimated overhead: 1.3-2.0k LOC of routing/serialization glue plus the two protocol crates' types. Mitigation: build the leaf binary with `cargo build --no-default-features --features http,sse,client-2025-11-25-only` (or `…,client-2026-07-28-only`) to narrow. The `--no-default-features` is mandatory: without it the `client-bilingual` default also activates, all three protocol features are mutually exclusive, and the `compile_error!` mutex fires.
 - Probe-then-fallback adds round-trip latency to first `connect()` against a 2025-11-25 server (one extra failed `server/discover` request before the `initialize` retry). Mitigation: callers who know their server's spec set `mcp_protocol_version` explicitly to skip the probe.
-- Two protocol-type universes inside one crate raises the cost of refactors that touch protocol types — internal helpers must be aware of which version they're dispatching to. Mitigation: keep the `protocol/v2025.rs` and `protocol/v2026.rs` modules cleanly separated; public client API stays version-agnostic.
+- Two protocol-type universes inside one crate raises the cost of refactors that touch protocol types — internal helpers must be aware of which version they're dispatching to. Mitigation: keep the `protocol/v2025_11_25.rs` and `protocol/v2026_07_28.rs` modules cleanly separated; public client API stays version-agnostic.
 - Behavior-difference matrix between specs (stateful vs stateless, session-id vs `_meta`, deprecated `notifications/cancelled` semantics, error code `-32602` vs `-32002`) must be encoded in the routing layer. Each behavior is documented inline with a citation to the relevant ADR-027 §"Schema-fidelity corrections" entry.
 
 **Failure modes documented (codex P1-5 tightened, 2026-05-31):**
@@ -201,7 +206,7 @@ When either single-spec feature is active, the version field becomes `Arc<RwLock
 
 3. **2026-only client, no fallback (rejected).** Drop 2025-11-25 support entirely in `turul-mcp-client 0.4.0`. Rejected because it strands every user with a still-running 2025-11-25 server — which is the entire `main`-branch installed base. The transition window is non-zero; a client that cannot speak the legacy wire is operationally dead-on-arrival for anyone who has not also rebuilt their servers.
 
-4. **Dual-import via re-export alias (rejected).** Have `turul-mcp-protocol` (the alias crate) export both `mod v2025` and `mod v2026` and let downstream consumers select per-call site. Rejected because it bleeds bilingual complexity to every consumer of the alias (server crates included, where ADR-029's single-spec assumption depends on a single set of imported protocol types). Bilingual concerns belong inside the one crate that needs them — the client.
+4. **Dual-import via re-export alias (rejected).** Have `turul-mcp-protocol` (the alias crate) export both `mod v2025_11_25` and `mod v2026_07_28` and let downstream consumers select per-call site. Rejected because it bleeds bilingual complexity to every consumer of the alias (server crates included, where ADR-029's single-spec assumption depends on a single set of imported protocol types). Bilingual concerns belong inside the one crate that needs them — the client.
 
 5. **Stateless 2025/2026 sniff via response shape (rejected).** Send a neutral ping and inspect the response shape to infer the server's spec. Rejected because there is no fully neutral RPC in MCP — every method that exists in both specs has subtle param/result differences, and the `_meta` carrier is required on 2026 requests but absent on 2025. A probe that distinguishes by method existence (`server/discover` vs `initialize`) is cleaner and more robust.
 

@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-client.svg)](https://crates.io/crates/turul-mcp-client)
 [![Documentation](https://docs.rs/turul-mcp-client/badge.svg)](https://docs.rs/turul-mcp-client)
 
-MCP client library with multi-transport support and full MCP 2025-11-25 protocol compliance.
+MCP client library with multi-transport support. Bilingual by default: it negotiates the spec per connection, speaking either the MCP 2026-07-28 stateless core or MCP 2025-11-25.
 
 ## Overview
 
@@ -12,7 +12,7 @@ MCP client library with multi-transport support and full MCP 2025-11-25 protocol
 ## Features
 
 - ✅ **Multi-Transport Support** - HTTP and SSE transports
-- ✅ **MCP 2025-11-25 Compliance** - Full protocol specification support
+- ✅ **Bilingual Protocol** - Default build negotiates per connection: MCP 2026-07-28 stateless core or 2025-11-25
 - ✅ **Session Management** - Automatic session handling with recovery
 - ✅ **Streaming Support** - Real-time event streaming and progress tracking
 - ✅ **Async/Await** - Built on Tokio for high performance
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### HTTP Transport (Streamable HTTP)
 
-For modern MCP servers supporting MCP 2025-11-25:
+For modern MCP servers (the client negotiates MCP 2026-07-28 or 2025-11-25 per connection):
 
 ```rust
 use turul_mcp_client::transport::HttpTransport;
@@ -281,7 +281,7 @@ let prompt_result = client.get_prompt("greeting", Some(serde_json::json!({
 println!("Prompt messages: {:?}", prompt_result.messages);
 ```
 
-### Tasks (MCP 2025-11-25)
+### Tasks (MCP 2025-11-25 opt-in)
 
 ```rust
 // Call a tool with task augmentation (long-running)
@@ -322,11 +322,14 @@ let stream_handler = client.stream_handler().await;
 
 ### MCP Protocol Version
 
-The client automatically sends the appropriate protocol version header:
+The client automatically sends the negotiated protocol version header. On a
+2026-07-28 connection it is stateless (no session id); the `mcp-session-id`
+below is the 2025-11-25 opt-in lane only:
 
 ```rust
-// Client automatically sends: MCP-Protocol-Version: 2025-11-25
+// On a 2025-11-25 connection the client sends: MCP-Protocol-Version: 2025-11-25
 // Server responds with: mcp-session-id: <session-uuid>
+// (On a 2026-07-28 connection: MCP-Protocol-Version: 2026-07-28, no session id)
 
 // Access session ID from connection status
 let status = client.connection_status().await;
@@ -536,7 +539,8 @@ The client automatically adapts to server capabilities:
 - **2024-11-05**: Basic MCP without streamable HTTP
 - **2025-03-26**: Streamable HTTP with SSE support
 - **2025-06-18**: Full feature set with meta fields and enhanced capabilities
-- **2025-11-25**: Icons, tasks, sampling tools, URL elicitation (current default)
+- **2025-11-25**: Icons, tasks, sampling tools, URL elicitation (opt-in spec lane)
+- **2026-07-28**: Stateless core — `server/discover`, per-request `_meta`, no `Mcp-Session-Id` (default)
 
 ### Transport Compatibility
 

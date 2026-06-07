@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Features
 
-- ✅ **MCP 2025-11-25 Streamable HTTP** - Full protocol compliance with SSE streaming
+- ✅ **MCP 2026-07-28 Streamable HTTP (default)** - Stateless core (`server/discover`, per-request `_meta`, no `Mcp-Session-Id`) with SSE streaming; 2025-11-25 sessionful handshake is opt-in
 - ✅ **Session Management** - UUID v7 session IDs with automatic cleanup
 - ✅ **SSE Resumability** - Last-Event-ID support with event replay
 - ✅ **CORS Support** - Browser client compatibility with configurable origins
@@ -356,8 +356,10 @@ let stream = stream_manager.create_stream(
 The transport layer automatically handles MCP-specific headers:
 
 ```rust
-// Client sends: MCP-Protocol-Version: 2025-11-25
-// Server returns: mcp-session-id: <uuid-v7>
+// On a 2026-07-28 (default) connection, requests are stateless: no session id.
+// On a 2025-11-25 opt-in connection:
+//   Client sends: MCP-Protocol-Version: 2025-11-25
+//   Server returns: mcp-session-id: <uuid-v7>
 
 // The transport layer extracts and processes these headers automatically
 use turul_http_mcp_server::{extract_protocol_version, extract_session_id};
@@ -424,7 +426,8 @@ use turul_http_mcp_server::{ServerStats, StreamStats};
 ### Manual HTTP Testing
 
 ```bash
-# Test session creation
+# Test session creation — 2025-11-25 opt-in lane only
+# (the default 2026-07-28 build is stateless: POST server/discover, no initialize, no Mcp-Session-Id)
 curl -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2025-11-25" \
