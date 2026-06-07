@@ -13,8 +13,10 @@ description = "Comprehensive MCP client library with multi-transport support"
 # The client links each versioned protocol crate directly (gated by the
 # client-bilingual / client-2025-11-25-only / client-2026-07-28-only features) so one client
 # can speak both wire specs. turul-mcp-protocol (the alias) is retained
-# transitionally while existing code paths migrate to version-routed modules.
-turul-mcp-protocol = { workspace = true }
+# transitionally as the public lingua-franca type surface while existing code
+# paths migrate to version-routed modules; it is pinned to protocol-2025-11-25
+# (independent of the workspace default) so those 2025-typed paths keep compiling.
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
 turul-mcp-protocol-2025-11-25 = { workspace = true, optional = true }
 turul-mcp-protocol-2026-07-28 = { workspace = true, optional = true }
 turul-rpc = { workspace = true }
