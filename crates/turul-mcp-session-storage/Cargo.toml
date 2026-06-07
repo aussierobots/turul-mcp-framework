@@ -29,7 +29,7 @@ aws-config = { workspace = true, optional = true }
 aws-sdk-dynamodb = { workspace = true, optional = true }
 
 [features]
-default = ["in-memory", "protocol-2025-11-25"]
+default = ["in-memory", "protocol-2026-07-28"]
 protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25"]
 protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28"]
 in-memory = []

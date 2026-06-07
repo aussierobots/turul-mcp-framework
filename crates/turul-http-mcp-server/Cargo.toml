@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "HTTP transport layer for Model Context Protocol (MCP) servers"
 
 [features]
-default = ["sse", "protocol-2025-11-25"]
+default = ["sse", "protocol-2026-07-28"]
 protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25"]
 protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28"]
 sse = []          # Server-Sent Events support

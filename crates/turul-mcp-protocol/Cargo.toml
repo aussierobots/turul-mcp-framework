@@ -14,7 +14,7 @@ description = "Model Context Protocol (MCP) specification implementation - Curre
 # Default stays 2025-11-25 so existing consumers are unaffected; the 2026-07-28
 # build is opt-in until the server/framework crates are 2026-capable. The
 # eventual default flip to 2026-07-28 is the ADR-029 cutover.
-default = ["protocol-2025-11-25"]
+default = ["protocol-2026-07-28"]
 protocol-2025-11-25 = ["dep:turul-mcp-protocol-2025-11-25"]
 protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
 # server/client forward to whichever versioned crate is active (`?` = only if enabled).

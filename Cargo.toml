@@ -106,6 +106,24 @@ members = [
   "tests/shared",
 ]
 
+# The default `cargo build`/`cargo test` path is the 2026-07-28 spec. Only crates
+# that build under the 2026 default are listed here; the inherently-2025 task-storage
+# (tasks moved to an extension) and the not-yet-migrated examples/tests stay out of
+# the default path and are built explicitly under `--features protocol-2025-11-25`.
+# Examples are added back here as they are migrated to 2026.
+default-members = [
+  "crates/turul-mcp-protocol-2026-07-28",
+  "crates/turul-mcp-protocol",
+  "crates/turul-mcp-session-storage",
+  "crates/turul-mcp-server-state-storage",
+  "crates/turul-http-mcp-server",
+  "crates/turul-mcp-server",
+  "crates/turul-mcp-derive",
+  "crates/turul-mcp-builders",
+  "crates/turul-mcp-aws-lambda",
+  "crates/turul-mcp-oauth",
+]
+
 exclude = [
   # AWS examples for future phase - re-enabled for 0.2.0
 ]

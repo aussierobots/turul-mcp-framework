@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "High-level framework for building Model Context Protocol (MCP) servers"
 
 [features]
-default = ["http", "sse", "protocol-2025-11-25"]
+default = ["http", "sse", "protocol-2026-07-28"]
 protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25", "dep:turul-mcp-task-storage", "turul-mcp-task-storage/protocol-2025-11-25", "turul-http-mcp-server?/protocol-2025-11-25", "turul-mcp-session-storage/in-memory", "turul-mcp-task-storage/in-memory"]
 protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-http-mcp-server?/protocol-2026-07-28", "turul-mcp-session-storage/in-memory"]
 http = ["turul-http-mcp-server"]

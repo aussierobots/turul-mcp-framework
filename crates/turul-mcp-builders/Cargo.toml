@@ -11,7 +11,7 @@ keywords = ["mcp", "protocol", "builders", "runtime"]
 categories = ["development-tools", "api-bindings"]
 
 [features]
-default = ["protocol-2025-11-25"]
+default = ["protocol-2026-07-28"]
 protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25"]
 protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28"]
 

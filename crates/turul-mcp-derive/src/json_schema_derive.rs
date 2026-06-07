@@ -51,18 +51,14 @@ fn generate_struct_schema(struct_name: &syn::Ident, fields: &Fields) -> TokenStr
                     use std::collections::HashMap;
                     use turul_mcp_protocol::schema::JsonSchema;
 
-                    // Generate schema for struct #struct_name
                     let mut properties = HashMap::new();
                     #(
                         properties.insert(#properties.0, #properties.1);
                     )*
 
-                    turul_mcp_protocol::ToolSchema {
-                        schema_type: "object".to_string(),
-                        properties: Some(properties),
-                        required: Some(vec![#(#required_fields),*]),
-                        additional: HashMap::new(),
-                    }
+                    turul_mcp_protocol::ToolSchema::object()
+                        .with_properties(turul_mcp_builders::tool_props(properties))
+                        .with_required(vec![#(#required_fields),*])
                 }
             }
         }

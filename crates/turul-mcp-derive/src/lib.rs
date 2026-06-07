@@ -464,9 +464,13 @@ pub fn schema_for(input: TokenStream) -> TokenStream {
 
 /// Derive macro for automatically implementing McpElicitation
 ///
+/// Elicitation is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::McpElicitation;
 ///
 /// #[derive(McpElicitation)]
@@ -508,9 +512,13 @@ pub fn derive_mcp_prompt(input: TokenStream) -> TokenStream {
 
 /// Derive macro for automatically implementing McpSampling
 ///
+/// Sampling is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::McpSampling;
 /// use turul_mcp_protocol::prelude::*;
 ///
@@ -554,9 +562,13 @@ pub fn derive_mcp_completion(input: TokenStream) -> TokenStream {
 
 /// Derive macro for automatically implementing McpLogger
 ///
+/// Logging is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::McpLogger;
 /// use turul_mcp_builders::prelude::{HasLoggingMetadata, LoggerDefinition, HasLogLevel};
 ///
@@ -707,9 +719,13 @@ pub fn prompt(input: TokenStream) -> TokenStream {
 ///
 /// This provides a concise syntax for sampling configuration.
 ///
+/// Sampling is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::sampling;
 /// use turul_mcp_protocol::prelude::*;
 ///
@@ -789,9 +805,13 @@ pub fn completion(input: TokenStream) -> TokenStream {
 
 /// Declarative macro for creating MCP elicitation handlers with concise syntax.
 ///
+/// Elicitation is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::elicitation;
 ///
 /// elicitation! {
@@ -831,9 +851,13 @@ pub fn roots(input: TokenStream) -> TokenStream {
 
 /// Declarative macro for creating MCP logging handlers with concise syntax.
 ///
+/// Logging is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::logging;
 /// use turul_mcp_protocol::prelude::*;
 /// use turul_mcp_builders::prelude::*;

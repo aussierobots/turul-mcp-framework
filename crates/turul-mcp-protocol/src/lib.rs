@@ -1,10 +1,19 @@
-//! # Model Context Protocol (MCP) - Current Version
+//! # Model Context Protocol (MCP) - Version Alias
 //!
 //! **The official Rust implementation of the Model Context Protocol specification.**
 //!
-//! This crate provides a stable API that aliases the current version of the MCP specification,
-//! ensuring your code stays up-to-date with the latest protocol version while maintaining
-//! compatibility. Currently implements **MCP 2025-11-25** specification.
+//! This crate is a thin alias that re-exports exactly one versioned MCP protocol
+//! crate, selected by a mutually-exclusive Cargo feature:
+//!
+//! - **`protocol-2026-07-28`** (default) — the 2026-07-28 stateless core.
+//! - **`protocol-2025-11-25`** (opt-in) — the previous 2025-11-25 spec. Enable with
+//!   `--no-default-features --features protocol-2025-11-25`.
+//!
+//! Exactly one must be active; enabling both (or neither) is a compile error.
+//!
+//! Flipping the default to 2026-07-28 is the 0.4 cutover. This alias is the
+//! transition mechanism for 0.4; the long-term direction is for framework crates to
+//! depend on the versioned protocol crates directly and retire the alias in 0.5.
 //!
 //! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-protocol.svg)](https://crates.io/crates/turul-mcp-protocol)
 //! [![Documentation](https://docs.rs/turul-mcp-protocol/badge.svg)](https://docs.rs/turul-mcp-protocol)
@@ -14,7 +23,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-protocol = "0.3"
+//! turul-mcp-protocol = "0.4"  # default: protocol-2026-07-28
 //! ```
 //!
 //! ## Quick Start
@@ -22,17 +31,10 @@
 //! ```rust
 //! use turul_mcp_protocol::prelude::*;
 //!
-//! // Create tools, resources, prompts
+//! // Create core MCP types — same surface under either spec.
 //! let tool = Tool::new("calculator", ToolSchema::object());
 //! let resource = Resource::new("file://data.json", "data");
 //! let prompt = Prompt::new("code_review");
-//!
-//! // Handle requests and responses
-//! let request = InitializeRequest::new(
-//!     McpVersion::CURRENT,
-//!     ClientCapabilities::default(),
-//!     Implementation::new("my-client", "1.0.0")
-//! );
 //! ```
 //!
 //! ## Protocol Types
@@ -61,11 +63,10 @@
 //!
 //! ## Version Mapping
 //!
-//! | This Crate | MCP Spec | Implementation Crate |
-//! |------------|----------|---------------------|
-//! | `0.3.x` | `2025-11-25` | `turul-mcp-protocol-2025-11-25` |
-//!
-//! Currently aliases: `turul-mcp-protocol-2025-11-25`
+//! | Feature | MCP Spec | Implementation Crate |
+//! |---------|----------|---------------------|
+//! | `protocol-2026-07-28` (default) | `2026-07-28` | `turul-mcp-protocol-2026-07-28` |
+//! | `protocol-2025-11-25` (opt-in) | `2025-11-25` | `turul-mcp-protocol-2025-11-25` |
 
 // Exactly one protocol-<date> feature must be active.
 #[cfg(all(feature = "protocol-2025-11-25", feature = "protocol-2026-07-28"))]
@@ -100,12 +101,28 @@ pub const CURRENT_VERSION: &str = MCP_VERSION;
 mod tests {
     use super::*;
 
+    #[cfg(feature = "protocol-2026-07-28")]
+    #[test]
+    fn test_current_version() {
+        assert_eq!(CURRENT_VERSION, "2026-07-28");
+        assert_eq!(MCP_VERSION, "2026-07-28");
+    }
+
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_current_version() {
         assert_eq!(CURRENT_VERSION, "2025-11-25");
         assert_eq!(MCP_VERSION, "2025-11-25");
     }
 
+    #[cfg(feature = "protocol-2026-07-28")]
+    #[test]
+    fn test_version_parsing() {
+        let version = "2026-07-28".parse::<McpVersion>().unwrap();
+        assert_eq!(version, McpVersion::V2026_07_28);
+    }
+
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_version_parsing() {
         let version = "2025-11-25".parse::<McpVersion>().unwrap();
