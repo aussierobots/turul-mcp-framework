@@ -1150,6 +1150,9 @@ impl StreamableHttpHandler {
 
         // Parse JSON-RPC message
         use turul_mcp_json_rpc_server::dispatch::{JsonRpcMessage, parse_json_rpc_message};
+        // Feeds only the 2025-11-25 missing-session 400 path; the stateless 2026 core
+        // mints an ephemeral session instead, so the import is unused there.
+        #[cfg(feature = "protocol-2025-11-25")]
         use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
 
         let message = match parse_json_rpc_message(body_str) {
@@ -1287,7 +1290,8 @@ impl StreamableHttpHandler {
             None
         };
 
-        // Validate session requirements based on method
+        // Validate session requirements based on method (2025-11-25 stateful lifecycle).
+        #[cfg(feature = "protocol-2025-11-25")]
         let session_id = match &message {
             JsonRpcMessage::Request(req) if req.method == "initialize" => {
                 // Initialize can create session if none exists
@@ -1389,6 +1393,34 @@ impl StreamableHttpHandler {
                         .unwrap();
                 }
             }
+        };
+
+        // DRAFT-2026-v1 stateless core: there is no Mcp-Session-Id handshake, so a
+        // request is never rejected for lacking a session. Use a client-pinned
+        // session if one was supplied, otherwise mint an ephemeral session so the
+        // dispatch pipeline (which carries a SessionContext) proceeds unchanged; the
+        // client neither sends nor needs a session id.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let session_id = match &context.session_id {
+            Some(existing_id) => existing_id.clone(),
+            None => match self
+                .session_storage
+                .create_session(self.server_capabilities.clone())
+                .await
+            {
+                Ok(session_info) => {
+                    context.session_id = Some(session_info.session_id.clone());
+                    session_info.session_id
+                }
+                Err(err) => {
+                    error!("Failed to create stateless session: {}", err);
+                    return StreamableResponse::Error {
+                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                        message: "Failed to create session".to_string(),
+                    }
+                    .into_boxed_response(&context);
+                }
+            },
         };
 
         debug!("Processing streaming request with session: {}", session_id);

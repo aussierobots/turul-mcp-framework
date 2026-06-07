@@ -495,6 +495,18 @@ impl McpServer {
             builder = builder.register_handler(vec!["initialize".to_string()], init_handler);
         }
 
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            builder = builder.register_handler(
+                vec![SERVER_DISCOVER_METHOD.to_string()],
+                DiscoverHandler::new(
+                    self.implementation.clone(),
+                    self.capabilities.clone(),
+                    self.instructions.clone(),
+                ),
+            );
+        }
+
         // Pass allow_unauthenticated_ping config to HTTP layer
         if let Some(allow) = self.allow_unauthenticated_ping {
             builder = builder.allow_unauthenticated_ping(allow);
@@ -748,6 +760,18 @@ impl McpServer {
             builder = builder.register_handler(vec!["initialize".to_string()], init_handler);
         }
 
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            builder = builder.register_handler(
+                vec![SERVER_DISCOVER_METHOD.to_string()],
+                DiscoverHandler::new(
+                    self.implementation.clone(),
+                    self.capabilities.clone(),
+                    self.instructions.clone(),
+                ),
+            );
+        }
+
         // Pass allow_unauthenticated_ping config to HTTP layer
         if let Some(allow) = self.allow_unauthenticated_ping {
             builder = builder.allow_unauthenticated_ping(allow);
@@ -860,8 +884,11 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
             }
         };
 
-        // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
-        if self.strict_lifecycle
+        // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled).
+        // The DRAFT-2026-v1 stateless core has no initialize/initialized handshake, so there is no
+        // "uninitialized" state to guard against — the check applies only to the 2025-11-25 lifecycle.
+        if cfg!(feature = "protocol-2025-11-25")
+            && self.strict_lifecycle
             && method != "initialize"
             && method != "notifications/initialized"
             && let Some(ref session_ctx) = mcp_session_context
@@ -1353,6 +1380,72 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
 
     fn supported_methods(&self) -> Vec<String> {
         vec!["initialize".to_string()]
+    }
+}
+
+/// Stateless handler for the `server/discover` method.
+///
+/// The DRAFT-2026-v1 core has no `initialize`/`initialized` handshake: a client
+/// discovers server capabilities on demand via `server/discover` and negotiates
+/// the protocol version per request through `_meta`. This handler creates no
+/// session and reads no session state — it answers from the server's static
+/// implementation info and capabilities.
+#[cfg(feature = "protocol-2026-07-28")]
+pub struct DiscoverHandler {
+    implementation: Implementation,
+    capabilities: ServerCapabilities,
+    instructions: Option<String>,
+    supported_versions: Vec<String>,
+}
+
+#[cfg(feature = "protocol-2026-07-28")]
+impl DiscoverHandler {
+    pub fn new(
+        implementation: Implementation,
+        capabilities: ServerCapabilities,
+        instructions: Option<String>,
+    ) -> Self {
+        Self {
+            implementation,
+            capabilities,
+            instructions,
+            supported_versions: vec![McpVersion::V2026_07_28.as_str().to_string()],
+        }
+    }
+}
+
+#[cfg(feature = "protocol-2026-07-28")]
+#[async_trait]
+impl JsonRpcHandler for DiscoverHandler {
+    type Error = McpError;
+
+    async fn handle(
+        &self,
+        method: &str,
+        _params: Option<turul_mcp_json_rpc_server::RequestParams>,
+        _session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+    ) -> std::result::Result<serde_json::Value, McpError> {
+        if method != SERVER_DISCOVER_METHOD {
+            return Err(McpError::InvalidParameters(format!(
+                "Method not supported: {}",
+                method
+            )));
+        }
+
+        let mut result = DiscoverResult::new(
+            self.supported_versions.clone(),
+            self.capabilities.clone(),
+            self.implementation.clone(),
+        );
+        if let Some(instructions) = &self.instructions {
+            result = result.with_instructions(instructions.clone());
+        }
+
+        serde_json::to_value(result).map_err(McpError::SerializationError)
+    }
+
+    fn supported_methods(&self) -> Vec<String> {
+        vec![SERVER_DISCOVER_METHOD.to_string()]
     }
 }
 
