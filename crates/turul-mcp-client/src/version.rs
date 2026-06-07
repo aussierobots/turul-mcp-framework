@@ -88,6 +88,13 @@ pub(crate) fn classify_probe(
              understood the method and refused it — not a version signal, not a downgrade trigger"
         )),
 
+        // A 2026-07-28 server answers `server/discover` with 200 and needs no
+        // session; a 400 means the server bad-requested the method (a 2025-11-25
+        // server rejects the sessionless non-initialize request with 400). That is
+        // an unambiguous "not stateless 2026" signal, distinct from 401/403 auth or
+        // 5xx, so fall back to the 2025 initialize handshake.
+        DiscoverProbe::HttpStatus(400) => ProbeDecision::FallbackTo2025,
+
         // Opt-in escape hatch for gateways that 404/405 unknown methods.
         DiscoverProbe::HttpStatus(status)
             if allow_legacy_gateway_fallback && (status == 404 || status == 405) =>
@@ -148,7 +155,8 @@ mod tests {
 
     #[test]
     fn http_4xx_aborts_by_default_no_downgrade() {
-        for status in [400, 401, 403, 404, 405, 429] {
+        // 401/403/404/405/429 are transport/auth/gateway signals, not version signals.
+        for status in [401, 403, 404, 405, 429] {
             assert!(
                 matches!(
                     classify_probe(DiscoverProbe::HttpStatus(status), false),
@@ -157,6 +165,16 @@ mod tests {
                 "HTTP {status} must abort by default (no silent downgrade)"
             );
         }
+    }
+
+    #[test]
+    fn http_400_falls_back_to_2025() {
+        // A 2026-07-28 server answers server/discover with 200; a 400 means a
+        // 2025-11-25 server rejected the sessionless request — fall back to 2025.
+        assert_eq!(
+            classify_probe(DiscoverProbe::HttpStatus(400), false),
+            ProbeDecision::FallbackTo2025
+        );
     }
 
     #[test]
@@ -169,8 +187,9 @@ mod tests {
             classify_probe(DiscoverProbe::HttpStatus(405), true),
             ProbeDecision::FallbackTo2025
         );
-        // Auth/other failures still abort even with the hatch enabled.
-        for status in [400, 401, 403, 500] {
+        // Auth/server failures still abort even with the hatch enabled (400 is a
+        // version signal handled separately — see http_400_falls_back_to_2025).
+        for status in [401, 403, 500] {
             assert!(
                 matches!(
                     classify_probe(DiscoverProbe::HttpStatus(status), true),
