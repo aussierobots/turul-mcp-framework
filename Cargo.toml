@@ -129,7 +129,6 @@ default-members = [
   "examples/completion-server",
   "examples/derive-macro-server",
   "examples/dynamic-resource-server",
-  "examples/dynamic-tools-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
   "examples/icon-showcase",
@@ -144,9 +143,7 @@ default-members = [
   "examples/oauth-resource-server",
   "examples/pagination-server",
   "examples/prompts-server",
-  "examples/prompts-test-server",
   "examples/resource-server",
-  "examples/resource-test-server",
   "examples/resources-server",
   "examples/session-aware-resource-server",
   "examples/simple-dynamodb-session",
@@ -156,7 +153,6 @@ default-members = [
   "examples/stateful-server",
   "examples/tool-output-introspection",
   "examples/tool-output-schemas",
-  "examples/tools-test-server",
   "examples/zero-config-getting-started",
 ]
 

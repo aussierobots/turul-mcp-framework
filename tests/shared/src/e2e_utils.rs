@@ -398,10 +398,9 @@ impl TestServerManager {
             .join("debug")
             .join(server_name);
 
-        // Auto-build if needed
-        if !binary_path.exists()
-            && let Some(package) = Self::server_package(server_name)
-        {
+        // Always rebuild before spawning so the binary matches the fixture's
+        // current spec pin, not a stale artifact from a prior build.
+        if let Some(package) = Self::server_package(server_name) {
             let build_status = std::process::Command::new("cargo")
                 .args(["build", "--package", package, "--bin", server_name])
                 .current_dir(&workspace_root)
@@ -459,45 +458,39 @@ impl TestServerManager {
             .join("debug")
             .join(server_name);
 
-        // Auto-build the binary if it doesn't exist
-        if !binary_path.exists() {
-            if let Some(package) = Self::server_package(server_name) {
-                info!(
-                    "Binary {} not found, building package {}...",
-                    server_name, package
-                );
-                let build_status = std::process::Command::new("cargo")
-                    .args(["build", "--package", package, "--bin", server_name])
-                    .current_dir(&workspace_root)
-                    .status();
+        // Always rebuild before spawning so the binary matches the fixture's
+        // current spec pin, not a stale artifact from a prior build.
+        if let Some(package) = Self::server_package(server_name) {
+            info!("Building package {} ({})...", package, server_name);
+            let build_status = std::process::Command::new("cargo")
+                .args(["build", "--package", package, "--bin", server_name])
+                .current_dir(&workspace_root)
+                .status();
 
-                match build_status {
-                    Ok(status) if status.success() => {
-                        info!("Successfully built {}", server_name);
-                    }
-                    Ok(status) => {
-                        return Err(format!(
-                            "Failed to build {} (exit code: {:?})",
-                            server_name,
-                            status.code()
-                        )
-                        .into());
-                    }
-                    Err(e) => {
-                        return Err(format!(
-                            "Failed to run cargo build for {}: {}",
-                            server_name, e
-                        )
-                        .into());
-                    }
+            match build_status {
+                Ok(status) if status.success() => {
+                    info!("Successfully built {}", server_name);
                 }
-            } else {
-                return Err(format!(
-                    "Binary {} not found and package mapping unknown. Binary path: {:?}",
-                    server_name, binary_path
-                )
-                .into());
+                Ok(status) => {
+                    return Err(format!(
+                        "Failed to build {} (exit code: {:?})",
+                        server_name,
+                        status.code()
+                    )
+                    .into());
+                }
+                Err(e) => {
+                    return Err(
+                        format!("Failed to run cargo build for {}: {}", server_name, e).into(),
+                    );
+                }
             }
+        } else if !binary_path.exists() {
+            return Err(format!(
+                "Binary {} not found and package mapping unknown. Binary path: {:?}",
+                server_name, binary_path
+            )
+            .into());
         }
 
         let mut server_process = Command::new(&binary_path)
