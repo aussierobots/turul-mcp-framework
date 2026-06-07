@@ -126,7 +126,9 @@ impl McpServerBuilder {
         let tools = HashMap::new();
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
 
-        // Add all standard MCP 2025-11-25 handlers by default
+        // Add all standard MCP handlers by default. `ping` (no PingRequest in the
+        // schema) was removed from the 2026-07-28 core, so it is 2025-only.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
         handlers.insert(
             "completion/complete".to_string(),
@@ -1890,8 +1892,17 @@ mod tests {
         assert!(builder.title.is_none());
         assert!(builder.instructions.is_none());
         assert!(builder.tools.is_empty());
-        assert_eq!(builder.handlers.len(), 21); // MCP 2025-11-25 handlers (spec + legacy compat)
-        assert!(builder.handlers.contains_key("ping"));
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            assert_eq!(builder.handlers.len(), 21); // spec + legacy compat
+            assert!(builder.handlers.contains_key("ping"));
+        }
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            // The stateless core drops ping/initialize and the task methods.
+            assert_eq!(builder.handlers.len(), 17);
+            assert!(!builder.handlers.contains_key("ping"));
+        }
     }
 
     #[test]

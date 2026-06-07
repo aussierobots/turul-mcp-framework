@@ -336,6 +336,8 @@ mod tests {
         );
     }
 
+    // `notifications/roots/list_changed` was removed from the 2026-07-28 core.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_roots_changed_notification() {
         let root = TestRoot {

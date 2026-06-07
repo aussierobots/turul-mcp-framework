@@ -2137,6 +2137,7 @@ mod tests {
             [
                 ("name".to_string(), serde_json::json!("test")),
                 ("arguments".to_string(), serde_json::json!({})),
+                ("_meta".to_string(), crate::tests::request_meta()),
             ]
             .into_iter()
             .collect(),
