@@ -67,12 +67,12 @@ struct CalculatorResult {
 impl JsonSchemaGenerator for CalculatorResult {
     fn json_schema() -> ToolSchema {
         ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 ("result".to_string(), JsonSchema::number()),
                 ("operation".to_string(), JsonSchema::string()),
                 ("a".to_string(), JsonSchema::number()),
                 ("b".to_string(), JsonSchema::number()),
-            ]))
+            ])))
             .with_required(vec![
                 "result".to_string(),
                 "operation".to_string(),
@@ -144,12 +144,12 @@ struct StringResult {
 impl JsonSchemaGenerator for StringResult {
     fn json_schema() -> ToolSchema {
         ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 ("result".to_string(), JsonSchema::string()),
                 ("operation".to_string(), JsonSchema::string()),
                 ("original".to_string(), JsonSchema::string()),
                 ("metadata".to_string(), JsonSchema::object()),
-            ]))
+            ])))
             .with_required(vec![
                 "result".to_string(),
                 "operation".to_string(),
@@ -220,12 +220,12 @@ struct DataResult {
 impl JsonSchemaGenerator for DataResult {
     fn json_schema() -> ToolSchema {
         ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 ("result".to_string(), JsonSchema::object()),
                 ("operation".to_string(), JsonSchema::string()),
                 ("input_type".to_string(), JsonSchema::string()),
                 ("metadata".to_string(), JsonSchema::object()),
-            ]))
+            ])))
             .with_required(vec![
                 "result".to_string(),
                 "operation".to_string(),
@@ -328,13 +328,13 @@ struct CounterResult {
 impl JsonSchemaGenerator for CounterResult {
     fn json_schema() -> ToolSchema {
         ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 ("session_id".to_string(), JsonSchema::string()),
                 ("operation".to_string(), JsonSchema::string()),
                 ("current_value".to_string(), JsonSchema::integer()),
                 ("amount".to_string(), JsonSchema::integer()),
                 ("total_sessions".to_string(), JsonSchema::integer()),
-            ]))
+            ])))
             .with_required(vec![
                 "session_id".to_string(),
                 "operation".to_string(),
@@ -427,14 +427,14 @@ struct ProgressResult {
 impl JsonSchemaGenerator for ProgressResult {
     fn json_schema() -> ToolSchema {
         ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 ("operation".to_string(), JsonSchema::string()),
                 ("duration".to_string(), JsonSchema::number()),
                 ("steps".to_string(), JsonSchema::integer()),
                 ("progress_token".to_string(), JsonSchema::string()),
                 ("status".to_string(), JsonSchema::string()),
                 ("completed_at".to_string(), JsonSchema::string()),
-            ]))
+            ])))
             .with_required(vec![
                 "operation".to_string(),
                 "duration".to_string(),
@@ -519,10 +519,10 @@ struct ErrorResult {
 impl JsonSchemaGenerator for ErrorResult {
     fn json_schema() -> ToolSchema {
         ToolSchema::object()
-            .with_properties(HashMap::from([(
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([(
                 "message".to_string(),
                 JsonSchema::string(),
-            )]))
+            )])))
             .with_required(vec!["message".to_string()])
     }
 }
@@ -584,7 +584,7 @@ struct ValidationResult {
 impl JsonSchemaGenerator for ValidationResult {
     fn json_schema() -> ToolSchema {
         ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 ("validation_result".to_string(), JsonSchema::string()),
                 ("email".to_string(), JsonSchema::string()),
                 ("age".to_string(), JsonSchema::integer()),
@@ -594,7 +594,7 @@ impl JsonSchemaGenerator for ValidationResult {
                 ),
                 ("tag_count".to_string(), JsonSchema::integer()),
                 ("validated_at".to_string(), JsonSchema::string()),
-            ]))
+            ])))
             .with_required(vec![
                 "validation_result".to_string(),
                 "email".to_string(),

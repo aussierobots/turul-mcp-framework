@@ -35,10 +35,10 @@ impl HasInputSchema for CalculatorAddTool {
         INPUT_SCHEMA.get_or_init(|| {
             use turul_mcp_protocol::schema::JsonSchema;
             ToolSchema::object()
-                .with_properties(HashMap::from([
+                .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                     ("a".to_string(), JsonSchema::number()),
                     ("b".to_string(), JsonSchema::number()),
-                ]))
+                ])))
                 .with_required(vec!["a".to_string(), "b".to_string()])
         })
     }

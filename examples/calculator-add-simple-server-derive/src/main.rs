@@ -13,7 +13,10 @@ impl turul_mcp_protocol::schema::JsonSchemaGenerator for AdditionResult {
     fn json_schema() -> turul_mcp_protocol::tools::ToolSchema {
         use turul_mcp_protocol::schema::JsonSchema;
         turul_mcp_protocol::tools::ToolSchema::object()
-            .with_properties(HashMap::from([("sum".to_string(), JsonSchema::number())]))
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([(
+                "sum".to_string(),
+                JsonSchema::number(),
+            )])))
             .with_required(vec!["sum".to_string()])
     }
 }

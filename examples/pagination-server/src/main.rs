@@ -14,7 +14,6 @@ use std::sync::{Arc, OnceLock};
 use tempfile::TempDir;
 use tracing::{error, info};
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::meta::{Cursor, Meta};
 use turul_mcp_protocol::{McpError, McpResult};
 use turul_mcp_server::prelude::*;
 use turul_mcp_server::{McpServer, SessionContext};
@@ -511,16 +510,12 @@ impl ListUsersTool {
                     })
                 }).collect();
 
-                let meta = Meta::with_pagination(
-                    next_cursor.as_ref().map(|c| Cursor::new(c.clone())),
-                    Some(total as u64),
-                    next_cursor.is_some(),
-                );
+                let has_more = next_cursor.is_some();
 
                 let pagination_info = json!({
                     "users": users_data,
                     "pagination": {
-                        "has_more": meta.has_more,
+                        "has_more": has_more,
                         "next_cursor": next_cursor,
                         "total": total,
                         "current_page_size": users.len(),
@@ -540,7 +535,7 @@ impl ListUsersTool {
                     self.filter.as_deref().unwrap_or("None"),
                     self.department.as_deref().unwrap_or("All"),
                     active_only,
-                    meta.has_more.unwrap_or(false),
+                    has_more,
                     next_cursor.unwrap_or_else(|| "None".to_string()),
                     total
                 );
@@ -606,17 +601,13 @@ impl SearchUsersTool {
                     })
                 }).collect();
 
-                let meta = Meta::with_pagination(
-                    next_cursor.as_ref().map(|c| Cursor::new(c.clone())),
-                    Some(total as u64),
-                    next_cursor.is_some(),
-                );
+                let has_more = next_cursor.is_some();
 
                 let response_data = json!({
                     "query": self.query,
                     "results": search_results,
                     "pagination": {
-                        "has_more": meta.has_more,
+                        "has_more": has_more,
                         "next_cursor": next_cursor,
                         "total_matches": total,
                         "current_page_size": users.len()
@@ -633,7 +624,7 @@ impl SearchUsersTool {
                         &search_results.iter().take(3).collect::<Vec<_>>()
                     )
                     .unwrap_or_else(|_| "Error formatting results".to_string()),
-                    meta.has_more.unwrap_or(false),
+                    has_more,
                     next_cursor.unwrap_or_else(|| "None".to_string())
                 );
 

@@ -131,6 +131,8 @@ default-members = [
   "examples/audit-trail-server",
   "examples/calculator-add-builder-server",
   "examples/calculator-add-function-server",
+  "examples/calculator-add-manual-server",
+  "examples/calculator-add-simple-server-derive",
   "examples/client-initialise-report",
   "examples/client-initialise-server",
   "examples/completion-server",
@@ -139,6 +141,7 @@ default-members = [
   "examples/dynamic-tools-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
+  "examples/icon-showcase",
   "examples/lambda-authorizer",
   "examples/manual-tools-server",
   "examples/middleware-auth-lambda",
@@ -148,6 +151,7 @@ default-members = [
   "examples/minimal-server",
   "examples/notification-server",
   "examples/oauth-resource-server",
+  "examples/pagination-server",
   "examples/prompts-server",
   "examples/prompts-test-server",
   "examples/resource-server",
@@ -164,6 +168,7 @@ default-members = [
   "examples/stateful-server",
   "examples/tool-output-introspection",
   "examples/tool-output-schemas",
+  "examples/tools-test-server",
   "examples/zero-config-getting-started",
 ]
 

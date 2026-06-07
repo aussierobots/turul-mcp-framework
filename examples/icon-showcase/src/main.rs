@@ -17,10 +17,10 @@ fn main() {
     let calculator_tool = Tool::new(
         "calculator",
         ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 ("a".to_string(), JsonSchema::number()),
                 ("b".to_string(), JsonSchema::number()),
-            ]))
+            ])))
             .with_required(vec!["a".to_string(), "b".to_string()]),
     )
     .with_title("Calculator")
@@ -39,7 +39,10 @@ fn main() {
     let search_tool = Tool::new(
         "search",
         ToolSchema::object()
-            .with_properties(HashMap::from([("query".to_string(), JsonSchema::string())]))
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([(
+                "query".to_string(),
+                JsonSchema::string(),
+            )])))
             .with_required(vec!["query".to_string()]),
     )
     .with_title("Search")
