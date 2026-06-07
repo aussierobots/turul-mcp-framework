@@ -1,3 +1,17 @@
+> # 🚧 Work In Progress — MCP 2026-07-28 adoption
+>
+> **This branch (`feat/turul-mcp-protocol-2026-07-28`) is migrating the framework to the
+> [MCP 2026-07-28 release candidate](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
+> (stateless core: `server/discover` instead of `initialize`, per-request `_meta`, no
+> `Mcp-Session-Id`; tasks moved to an extension; Roots/Sampling/Logging deprecated).**
+> It is **not** merged to `main`, which continues to track the stable 2025-11-25 line.
+>
+> - **`cargo build` / `cargo test` default to the 2026-07-28 spec.**
+> - **2025-11-25 is still supported** as an opt-in:
+>   `--no-default-features --features protocol-2025-11-25`.
+> - Servers are single-spec per build; the client (`turul-mcp-client`) is bilingual.
+> - Expect churn: examples, docs, and E2E tests are still being migrated to 2026 semantics.
+
 # Turul MCP Framework - Beta Rust Implementation
 
 A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-11-25 specification**.

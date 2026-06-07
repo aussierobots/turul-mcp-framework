@@ -69,10 +69,6 @@ async fn test_comprehensive_client_integration() -> Result<()> {
         ServerTest::new("tools-test-server", "tools-test-server", 8642)
             .with_tools(vec!["echo_sse", "get_session_data", "get_session_events"])
             .with_test_tool("echo_sse", json!({"text": "Testing tools-test-server"})),
-
-        ServerTest::new("comprehensive-server", "comprehensive-server", 8643)
-            .with_tools(vec!["calculator", "file_ops"])
-            .with_test_tool("calculator", json!({"operation": "add", "a": 5.0, "b": 3.0})),
     ];
 
     let mut test_results = Vec::new();

@@ -12,9 +12,6 @@
 //! This version uses SSE snapshot approach - returns recent events when requested
 //! rather than real-time streaming. This is compatible with standard Lambda
 //! runtime and doesn't require `run_with_streaming_response`.
-//!
-//! **Note**: For real-time SSE streaming, see the `lambda-mcp-server-streaming` example
-//! which uses `run_with_streaming_response` (may incur higher Lambda costs).
 
 mod session_aware_logging_demo;
 mod tools;
@@ -122,7 +119,6 @@ async fn main() -> Result<(), Error> {
     info!("  - POST /mcp - JSON-RPC requests");
     info!("  - GET /mcp - 405 Method Not Allowed (SSE disabled)");
     info!("  - OPTIONS * - CORS preflight");
-    info!("  - For SSE support, use lambda-mcp-server-streaming with streaming features");
 
     info!("📋 Environment variables:");
     info!(
