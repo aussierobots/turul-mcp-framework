@@ -1062,14 +1062,14 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                             use turul_mcp_protocol::schema::JsonSchema;
                             use std::collections::HashMap;
                             turul_mcp_protocol::tools::ToolSchema::object()
-                                .with_properties(HashMap::from([
+                                .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                                     (#field_name.to_string(), JsonSchema::Object {
                                         description: Some("JSON object or value".to_string()),
                                         properties: None,
                                         required: None,
                                         additional_properties: Some(true),
                                     })
-                                ]))
+                                ])))
                                 .with_required(vec![#field_name.to_string()])
                         }))
                     }
@@ -1085,14 +1085,14 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                             use turul_mcp_protocol::schema::JsonSchema;
                             use std::collections::HashMap;
                             turul_mcp_protocol::tools::ToolSchema::object()
-                                .with_properties(HashMap::from([
+                                .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                                     (#field_name.to_string(), JsonSchema::Array {
                                         description: Some("Array of items".to_string()),
                                         items: None,
                                         min_items: None,
                                         max_items: None,
                                     })
-                                ]))
+                                ])))
                                 .with_required(vec![#field_name.to_string()])
                         }))
                     }
@@ -1109,9 +1109,9 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
                                     use turul_mcp_protocol::schema::JsonSchema;
                                     turul_mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        std::collections::HashMap::from([
+                                        turul_mcp_builders::tool_props(std::collections::HashMap::from([
                                             (#field_name.to_string(), JsonSchema::number())
-                                        ])
+                                        ]))
                                     ).with_required(vec![#field_name.to_string()])
                                 }))
                             }
@@ -1125,9 +1125,9 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
                                     use turul_mcp_protocol::schema::JsonSchema;
                                     turul_mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        std::collections::HashMap::from([
+                                        turul_mcp_builders::tool_props(std::collections::HashMap::from([
                                             (#field_name.to_string(), JsonSchema::integer())
-                                        ])
+                                        ]))
                                     ).with_required(vec![#field_name.to_string()])
                                 }))
                             }
@@ -1140,9 +1140,9 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
                                     use turul_mcp_protocol::schema::JsonSchema;
                                     turul_mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        std::collections::HashMap::from([
+                                        turul_mcp_builders::tool_props(std::collections::HashMap::from([
                                             (#field_name.to_string(), JsonSchema::string())
-                                        ])
+                                        ]))
                                     ).with_required(vec![#field_name.to_string()])
                                 }))
                             }
@@ -1155,9 +1155,9 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
                                     use turul_mcp_protocol::schema::JsonSchema;
                                     turul_mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        std::collections::HashMap::from([
+                                        turul_mcp_builders::tool_props(std::collections::HashMap::from([
                                             (#field_name.to_string(), JsonSchema::boolean())
-                                        ])
+                                        ]))
                                     ).with_required(vec![#field_name.to_string()])
                                 }))
                             }
@@ -1174,9 +1174,9 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                                     use turul_mcp_protocol::schema::JsonSchema;
                                     use std::collections::HashMap;
                                     turul_mcp_protocol::tools::ToolSchema::object()
-                                        .with_properties(HashMap::from([
+                                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                                             (#field_name.to_string(), JsonSchema::object())
-                                        ]))
+                                        ])))
                                         .with_required(vec![#field_name.to_string()])
                                 }))
                             }
@@ -1388,25 +1388,26 @@ fn extract_struct_schema_content(
         use turul_mcp_protocol::schema::JsonSchema;
         use std::collections::HashMap;
 
-        // Create schema for the struct content
-        let struct_schema = turul_mcp_protocol::tools::ToolSchema::object()
-            .with_properties(HashMap::from([
-                #(#property_definitions),*
-            ]))
-            .with_required(vec![
-                #(#required_fields),*
-            ]);
+        // Structured properties for the inner object; kept JsonSchema-typed so the
+        // nested schema is identical under both specs (only the outer ToolSchema's
+        // property values are projected for the active spec).
+        let struct_properties: HashMap<String, JsonSchema> = HashMap::from([
+            #(#property_definitions),*
+        ]);
+        let struct_required: Vec<String> = vec![
+            #(#required_fields),*
+        ];
 
         // Wrap in outer object with custom output field name
         turul_mcp_protocol::tools::ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 (#output_field_name.to_string(), JsonSchema::Object {
                     description: None,
-                    properties: struct_schema.properties.clone(),
-                    required: struct_schema.required.clone(),
+                    properties: Some(struct_properties),
+                    required: Some(struct_required),
                     additional_properties: Some(false),
                 })
-            ]))
+            ])))
             .with_required(vec![#output_field_name.to_string()])
     }
 }
@@ -1547,9 +1548,9 @@ pub fn generate_output_schema_auto(
 
                 // Wrap in output field
                 turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
+                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                         (#field_name.to_string(), inner_schema)
-                    ]))
+                    ])))
                     .with_required(vec![#field_name.to_string()])
             }))
         }
@@ -1576,9 +1577,9 @@ fn generate_basic_type_schema_content(ty: &syn::Type, field_name: &str) -> Token
                     use std::collections::HashMap;
 
                     turul_mcp_protocol::tools::ToolSchema::object()
-                        .with_properties(HashMap::from([
+                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                             (#field_name.to_string(), #schema_type)
-                        ]))
+                        ])))
                         .with_required(vec![#field_name.to_string()])
                 }
             } else {

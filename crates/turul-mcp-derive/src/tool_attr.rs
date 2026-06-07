@@ -310,9 +310,9 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
             fn get_input_schema() -> turul_mcp_protocol::tools::ToolSchema {
                 use std::collections::HashMap;
                 turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
+                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                         #(#schema_properties),*
-                    ]))
+                    ])))
                     .with_required(vec![
                         #(#required_fields),*
                     ])

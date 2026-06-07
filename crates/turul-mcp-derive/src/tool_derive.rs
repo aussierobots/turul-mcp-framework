@@ -261,9 +261,9 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 INPUT_SCHEMA.get_or_init(|| {
                     use std::collections::HashMap;
                     turul_mcp_protocol::tools::ToolSchema::object()
-                        .with_properties(HashMap::from([
+                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                             #(#schema_properties),*
-                        ]))
+                        ])))
                         .with_required(vec![
                             #(#required_fields),*
                         ])
@@ -319,9 +319,9 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 };
 
                 turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
+                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                         (field_name.to_string(), field_schema)
-                    ]))
+                    ])))
                     .with_required(vec![field_name.to_string()])
             }
 
@@ -371,9 +371,9 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 let field_schema = infer_schema(value);
 
                 turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
+                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                         (field_name.to_string(), field_schema)
-                    ]))
+                    ])))
                     .with_required(vec![field_name.to_string()])
             }
         }
@@ -435,9 +435,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                             // Check if the schema needs correction based on actual return value
                             let needs_correction = if let Some(props) = &schema.properties {
                                 if let Some(output_schema) = props.get(&field_name) {
-                                    // Check if schema says "object" but value is array
-                                    use turul_mcp_protocol::schema::JsonSchema;
-                                    matches!(output_schema, JsonSchema::Object { .. }) && result_value.is_array()
+                                    // Schema says "object" but the value is an array.
+                                    turul_mcp_builders::tool_prop_is_object(output_schema) && result_value.is_array()
                                 } else {
                                     false
                                 }
@@ -456,7 +455,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                                     max_items: None,
                                 };
                                 Some(turul_mcp_protocol::tools::ToolSchema::object()
-                                    .with_properties(HashMap::from([(field_name.clone(), array_schema)]))
+                                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([(field_name.clone(), array_schema)])))
                                     .with_required(vec![field_name.clone()]))
                             } else {
                                 Some(schema.clone())

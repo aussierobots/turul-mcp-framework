@@ -5,7 +5,6 @@
 
 pub mod completion_traits;
 pub mod elicitation_traits;
-#[cfg(feature = "protocol-2025-11-25")]
 pub mod execution_traits;
 pub mod icon_traits;
 pub mod logging_traits;
@@ -20,7 +19,6 @@ pub mod tool_traits;
 // Re-export all traits at traits module level
 pub use completion_traits::*;
 pub use elicitation_traits::*;
-#[cfg(feature = "protocol-2025-11-25")]
 pub use execution_traits::*;
 pub use icon_traits::*;
 pub use logging_traits::*;
