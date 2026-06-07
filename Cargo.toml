@@ -125,7 +125,6 @@ default-members = [
   "examples/calculator-add-function-server",
   "examples/calculator-add-manual-server",
   "examples/calculator-add-simple-server-derive",
-  "examples/client-initialise-server",
   "examples/completion-server",
   "examples/derive-macro-server",
   "examples/dynamic-resource-server",

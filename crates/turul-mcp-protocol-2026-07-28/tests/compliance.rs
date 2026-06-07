@@ -771,7 +771,7 @@ mod content_alignment {
              got error: {:?}",
             parsed.err()
         );
-        let v = serde_json::to_value(&parsed.unwrap()).unwrap();
+        let v = serde_json::to_value(parsed.unwrap()).unwrap();
         assert_eq!(v["type"], "resource_link");
         assert_eq!(v["uri"], "file:///x");
     }
@@ -796,15 +796,13 @@ mod content_alignment {
     }
 }
 
-/// elicitation.rs enum schema variants.
+/// elicitation.rs enum schema variants and the URL-mode discriminated union.
 ///
-/// Verifies wire shape of all four new DRAFT-2026-v1 enum schema types:
+/// Verifies wire shape of all four enum schema types:
 /// - `UntitledSingleSelectEnumSchema` — `{type:"string", enum:[]}`
 /// - `TitledSingleSelectEnumSchema` — `{type:"string", oneOf:[{const,title}]}`
 /// - `UntitledMultiSelectEnumSchema` — `{type:"array", items:{type:"string", enum:[]}}`
 /// - `TitledMultiSelectEnumSchema` — `{type:"array", items:{anyOf:[{const,title}]}}`
-
-/// URL-mode elicitation discriminated union.
 #[cfg(test)]
 mod elicitation_modes {
     use turul_mcp_protocol_2026_07_28::elicitation::{
@@ -1017,12 +1015,6 @@ mod elicitation_enum_schemas {
     }
 }
 
-/// prompts.rs schema alignment.
-///
-/// Verifies wire shape of `ListPromptsResult` (extends PaginatedResult,
-/// CacheableResult), `GetPromptResult` (extends Result), and `GetPromptRequestParams`
-/// (extends InputResponseRequestParams).
-
 /// `SamplingMessage` single|array content + 5-variant `SamplingMessageContentBlock`
 /// and `CreateMessageResult extends SamplingMessage`.
 #[cfg(test)]
@@ -1150,6 +1142,11 @@ mod sampling_message_alignment {
     }
 }
 
+/// prompts.rs schema alignment.
+///
+/// Verifies wire shape of `ListPromptsResult` (extends PaginatedResult,
+/// CacheableResult), `GetPromptResult` (extends Result), and `GetPromptRequestParams`
+/// (extends InputResponseRequestParams).
 #[cfg(test)]
 mod prompts_alignment {
     use turul_mcp_protocol_2026_07_28::caching::{CacheScope, CacheableResult};
@@ -1549,12 +1546,14 @@ mod capabilities_shape {
     #[test]
     fn client_sampling_subcapabilities_serialize_with_camelcase() {
         // `ClientCapabilities.sampling?: { context?, tools? }`.
-        let mut caps = ClientCapabilities::default();
-        caps.sampling = Some(SamplingCapabilities {
-            context: Some(HashMap::new()),
-            tools: Some(HashMap::new()),
-            extra: HashMap::new(),
-        });
+        let caps = ClientCapabilities {
+            sampling: Some(SamplingCapabilities {
+                context: Some(HashMap::new()),
+                tools: Some(HashMap::new()),
+                extra: HashMap::new(),
+            }),
+            ..Default::default()
+        };
         let v = serde_json::to_value(&caps).unwrap();
         assert!(v["sampling"]["context"].is_object());
         assert!(v["sampling"]["tools"].is_object());
@@ -1562,8 +1561,10 @@ mod capabilities_shape {
 
     #[test]
     fn client_sampling_subcapabilities_omitted_when_none() {
-        let mut caps = ClientCapabilities::default();
-        caps.sampling = Some(SamplingCapabilities::default());
+        let caps = ClientCapabilities {
+            sampling: Some(SamplingCapabilities::default()),
+            ..Default::default()
+        };
         let v = serde_json::to_value(&caps).unwrap();
         // Empty SamplingCapabilities → just `{}` for sampling
         assert!(
@@ -1579,12 +1580,14 @@ mod capabilities_shape {
     #[test]
     fn client_elicitation_subcapabilities_serialize_with_camelcase() {
         // `ClientCapabilities.elicitation?: { form?, url? }`.
-        let mut caps = ClientCapabilities::default();
-        caps.elicitation = Some(ElicitationCapabilities {
-            form: Some(HashMap::new()),
-            url: Some(HashMap::new()),
-            extra: HashMap::new(),
-        });
+        let caps = ClientCapabilities {
+            elicitation: Some(ElicitationCapabilities {
+                form: Some(HashMap::new()),
+                url: Some(HashMap::new()),
+                extra: HashMap::new(),
+            }),
+            ..Default::default()
+        };
         let v = serde_json::to_value(&caps).unwrap();
         assert!(v["elicitation"]["form"].is_object());
         assert!(v["elicitation"]["url"].is_object());
@@ -1638,20 +1641,22 @@ mod capabilities_shape {
     #[test]
     fn capabilities_round_trip_through_json() {
         // End-to-end round-trip with the new fields populated.
-        let mut client = ClientCapabilities::default();
-        client.sampling = Some(SamplingCapabilities {
-            context: None,
-            tools: Some(HashMap::new()),
-            extra: HashMap::new(),
-        });
-        client.elicitation = Some(ElicitationCapabilities {
-            form: Some(HashMap::new()),
-            url: None,
-            extra: HashMap::new(),
-        });
         let mut exts = HashMap::new();
         exts.insert("io.modelcontextprotocol/tasks".to_string(), json!({}));
-        client.extensions = Some(exts);
+        let client = ClientCapabilities {
+            sampling: Some(SamplingCapabilities {
+                context: None,
+                tools: Some(HashMap::new()),
+                extra: HashMap::new(),
+            }),
+            elicitation: Some(ElicitationCapabilities {
+                form: Some(HashMap::new()),
+                url: None,
+                extra: HashMap::new(),
+            }),
+            extensions: Some(exts),
+            ..Default::default()
+        };
 
         let s = serde_json::to_string(&client).unwrap();
         let parsed: ClientCapabilities = serde_json::from_str(&s).unwrap();
@@ -2653,7 +2658,7 @@ mod error_codes {
     #[test]
     fn resource_not_found_maps_to_invalid_params() {
         let err = McpError::ResourceNotFound("file:///missing.txt".to_string());
-        let v = serde_json::to_value(&err.to_error_object()).unwrap();
+        let v = serde_json::to_value(err.to_error_object()).unwrap();
         assert_eq!(v["code"], -32602, "resource not found must be InvalidParams (-32602)");
         assert!(v["message"].as_str().unwrap().contains("file:///missing.txt"));
     }
@@ -2661,7 +2666,7 @@ mod error_codes {
     #[test]
     fn prompt_not_found_maps_to_invalid_params() {
         let err = McpError::PromptNotFound("code_review".to_string());
-        let v = serde_json::to_value(&err.to_error_object()).unwrap();
+        let v = serde_json::to_value(err.to_error_object()).unwrap();
         assert_eq!(v["code"], -32602, "prompt not found must be InvalidParams (-32602)");
         assert!(v["message"].as_str().unwrap().contains("code_review"));
     }
@@ -2676,7 +2681,7 @@ mod error_codes {
         let err = McpError::MissingRequiredClientCapability {
             required: required_caps.clone(),
         };
-        let v = serde_json::to_value(&err.to_error_object()).unwrap();
+        let v = serde_json::to_value(err.to_error_object()).unwrap();
         assert_eq!(v["code"], -32003, "MissingRequiredClientCapability wire code");
         assert!(
             v["data"]["requiredCapabilities"].is_object(),
@@ -2697,7 +2702,7 @@ mod error_codes {
             supported: vec!["DRAFT-2026-v1".to_string(), "2025-11-25".to_string()],
             requested: "1999-01-01".to_string(),
         };
-        let v = serde_json::to_value(&err.to_error_object()).unwrap();
+        let v = serde_json::to_value(err.to_error_object()).unwrap();
         assert_eq!(v["code"], -32004, "UnsupportedProtocolVersion wire code");
         let supported = v["data"]["supported"].as_array().unwrap();
         assert_eq!(supported.len(), 2);
@@ -2727,7 +2732,7 @@ mod error_codes {
                 message: "broken".to_string(),
             },
         ] {
-            let v = serde_json::to_value(&err.to_error_object()).unwrap();
+            let v = serde_json::to_value(err.to_error_object()).unwrap();
             assert_eq!(
                 v["code"], -32602,
                 "all parameter-validation variants must emit InvalidParams (-32602); variant was: {:?}",
@@ -2817,7 +2822,7 @@ mod error_codes {
         ];
 
         for err in samples {
-            let v = serde_json::to_value(&err.to_error_object()).unwrap();
+            let v = serde_json::to_value(err.to_error_object()).unwrap();
             let code = v["code"].as_i64().expect("wire code must be i64");
             assert!(
                 allowed.contains(&code),

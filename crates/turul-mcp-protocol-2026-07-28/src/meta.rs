@@ -379,6 +379,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)] // 2.71828 is an arbitrary test float, not E
     fn test_progress_token_float_round_trips() {
         // Schema says `ProgressToken = string | number`; `number` is IEEE-754.
         // 1.5 is a spec-valid token. Pre-fix `Number(i64)` rejected this shape.
@@ -408,6 +409,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)] // 3.14 is an arbitrary test float, not PI
     fn test_progress_token_deserializes_from_both_shapes() {
         let s: ProgressToken = serde_json::from_value(serde_json::json!("op-7")).unwrap();
         assert_eq!(s, ProgressToken::String("op-7".to_string()));

@@ -4,6 +4,8 @@ name: CI
 #   - default lane is MCP 2026-07-28 (stateless core)
 #   - 2025-11-25 is the opt-in legacy lane
 # Gates derived from docs/plans/2026-07-28-final-readiness-audit.md §7.
+# All jobs use standard ubuntu-latest runners (free on public repos).
+# The same gates run locally via scripts/ci-gates.sh.
 
 on:
   push:
@@ -64,12 +66,16 @@ jobs:
           cargo build  -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
           cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
           cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
+          cargo build  -p client-initialise-server --no-default-features
       - name: 2025-11-25 regression E2E (real servers)
         run: |
           set -euxo pipefail
           cargo test -p mcp-tools-tests
           cargo test -p mcp-resources-tests
           cargo test -p mcp-prompts-tests
+          cargo test -p mcp-roots-tests
+          cargo test -p mcp-sampling-tests
+          cargo test -p mcp-elicitation-tests
           cargo test -p turul-mcp-framework-integration-tests --test tasks_e2e_inmemory
 
   spec-mutex:
