@@ -943,7 +943,8 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
 
         // MCP Lifecycle Guard for notifications: Allow notifications/initialized to pass through
         // but enforce lifecycle for other notifications if strict mode is enabled
-        if self.strict_lifecycle
+        if cfg!(feature = "protocol-2025-11-25")
+            && self.strict_lifecycle
             && method != "notifications/initialized"
             && let Some(ref session_ctx) = mcp_session_context
         {
@@ -1511,7 +1512,8 @@ impl JsonRpcHandler for ListToolsHandler {
         debug!("Handling {} request", method);
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
-        if self.strict_lifecycle
+        if cfg!(feature = "protocol-2025-11-25")
+            && self.strict_lifecycle
             && let (Some(session_manager), Some(session_ctx)) =
                 (&self.session_manager, &session_context)
         {
@@ -1763,7 +1765,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         }
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing tool operations (if strict mode enabled)
-        if self.strict_lifecycle {
+        if cfg!(feature = "protocol-2025-11-25") && self.strict_lifecycle {
             if let Some(ref session_ctx) = session_context {
                 let session_initialized = self
                     .session_manager

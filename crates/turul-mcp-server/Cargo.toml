@@ -48,5 +48,10 @@ once_cell.workspace = true
 urlencoding.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
-turul-mcp-builders.workspace = true
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+# Protocol feature comes from the server's own normal-dep forwarding; the dev-dep
+# must not also pull a default (protocol-2025-11-25), or the alias sees both specs.
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0", default-features = false }
+turul-mcp-derive = { path = "../turul-mcp-derive" }
+reqwest = { workspace = true }
+serde_json.workspace = true
