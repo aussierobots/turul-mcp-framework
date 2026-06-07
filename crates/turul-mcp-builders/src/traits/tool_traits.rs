@@ -59,6 +59,7 @@ pub trait HasToolMeta {
 /// This trait represents a complete MCP tool that can be registered with a server
 /// and invoked by clients. When you implement the required metadata traits, you automatically
 /// get `ToolDefinition` for free via blanket implementation.
+#[cfg(feature = "protocol-2025-11-25")]
 pub trait ToolDefinition:
     HasBaseMetadata +           // name, title
     HasDescription +            // description
@@ -66,8 +67,8 @@ pub trait ToolDefinition:
     HasOutputSchema +           // outputSchema
     HasAnnotations +            // annotations
     HasToolMeta +               // _meta (tool-specific)
-    super::icon_traits::HasIcons + // icons (MCP 2025-11-25)
-    super::execution_traits::HasExecution + // execution.taskSupport (MCP 2025-11-25)
+    super::icon_traits::HasIcons + // icons
+    super::execution_traits::HasExecution + // execution.taskSupport
     Send +
     Sync
 {
@@ -96,7 +97,7 @@ pub trait ToolDefinition:
     }
 }
 
-/// Blanket implementation: any type implementing all required traits gets ToolDefinition
+#[cfg(feature = "protocol-2025-11-25")]
 impl<T> ToolDefinition for T
 where
     T: HasBaseMetadata
@@ -107,6 +108,58 @@ where
         + HasToolMeta
         + super::icon_traits::HasIcons
         + super::execution_traits::HasExecution
+        + Send
+        + Sync,
+{
+    // Default implementations provided by trait definition
+}
+
+#[cfg(feature = "protocol-2026-07-28")]
+pub trait ToolDefinition:
+    HasBaseMetadata +           // name, title
+    HasDescription +            // description
+    HasInputSchema +            // inputSchema
+    HasOutputSchema +           // outputSchema
+    HasAnnotations +            // annotations
+    HasToolMeta +               // _meta (tool-specific)
+    super::icon_traits::HasIcons + // icons
+    Send +
+    Sync
+{
+    /// Display name precedence: title > name (matches TypeScript spec)
+    fn display_name(&self) -> &str {
+        if let Some(title) = self.title() {
+            title
+        } else {
+            self.name()
+        }
+    }
+
+    /// Convert to concrete Tool struct for protocol serialization
+    fn to_tool(&self) -> Tool {
+        Tool {
+            name: self.name().to_string(),
+            title: self.title().map(String::from),
+            description: self.description().map(String::from),
+            input_schema: self.input_schema().clone(),
+            output_schema: None,
+            annotations: self.annotations().cloned(),
+            icons: self.icons().cloned(),
+            meta: self.tool_meta().cloned(),
+        }
+    }
+}
+
+#[cfg(feature = "protocol-2026-07-28")]
+impl<T> ToolDefinition for T
+where
+    T: HasBaseMetadata
+        + HasDescription
+        + HasInputSchema
+        + HasOutputSchema
+        + HasAnnotations
+        + HasToolMeta
+        + super::icon_traits::HasIcons
         + Send
         + Sync,
 {

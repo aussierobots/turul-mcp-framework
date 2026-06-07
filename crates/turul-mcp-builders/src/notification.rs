@@ -10,11 +10,13 @@ use std::collections::HashMap;
 use turul_mcp_json_rpc_server::types::RequestId;
 use turul_mcp_protocol::logging::LoggingLevel;
 use turul_mcp_protocol::notifications::{
-    CancelledNotification, InitializedNotification, LoggingMessageNotification, Notification,
-    NotificationParams, ProgressNotification, PromptListChangedNotification,
-    ResourceListChangedNotification, ResourceUpdatedNotification, RootsListChangedNotification,
-    ToolListChangedNotification,
+    CancelledNotification, LoggingMessageNotification, Notification, NotificationParams,
+    ProgressNotification, PromptListChangedNotification, ResourceListChangedNotification,
+    ResourceUpdatedNotification, ToolListChangedNotification,
 };
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::notifications::{InitializedNotification, RootsListChangedNotification};
 
 // Import framework traits from local crate
 use crate::traits::{HasNotificationMetadata, HasNotificationPayload, HasNotificationRules};
@@ -336,11 +338,13 @@ impl NotificationBuilder {
     }
 
     /// Create a roots list changed notification
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn roots_list_changed() -> RootsListChangedNotification {
         RootsListChangedNotification::new()
     }
 
     /// Create an initialized notification
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn initialized() -> InitializedNotification {
         InitializedNotification::new()
     }

@@ -4,7 +4,10 @@
 
 use serde_json::Value;
 use std::collections::HashMap;
-use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitationSchema};
+use turul_mcp_protocol::elicitation::ElicitationSchema;
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::elicitation::ElicitCreateRequest;
 
 pub trait HasElicitationMetadata {
     /// The message to present to the user
@@ -167,6 +170,7 @@ pub trait ElicitationDefinition:
     HasElicitationMetadata + HasElicitationSchema + HasElicitationHandling
 {
     /// Convert this elicitation definition to a protocol ElicitCreateRequest
+    #[cfg(feature = "protocol-2025-11-25")]
     fn to_create_request(&self) -> ElicitCreateRequest {
         ElicitCreateRequest::new(self.message(), self.requested_schema().clone())
     }

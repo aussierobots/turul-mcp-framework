@@ -52,6 +52,7 @@ pub trait CompletionDefinition:
     HasCompletionMetadata + HasCompletionContext + HasCompletionHandling
 {
     /// Convert this completion definition to a protocol CompleteRequest
+    #[cfg(feature = "protocol-2025-11-25")]
     fn to_complete_request(&self) -> CompleteRequest {
         let mut request = CompleteRequest::new(self.reference().clone(), self.argument().clone());
         if let Some(context) = self.context() {

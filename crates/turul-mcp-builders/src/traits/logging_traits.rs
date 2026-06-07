@@ -3,7 +3,10 @@
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
 use serde_json::Value;
-use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest};
+use turul_mcp_protocol::logging::LoggingLevel;
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::logging::{LoggingMessageNotification, SetLevelRequest};
 
 /// Trait for logging metadata (method, logger name)
 pub trait HasLoggingMetadata {
@@ -62,6 +65,7 @@ pub trait HasLogTransport {
 /// This trait represents a complete, working MCP logger.
 /// When you implement the required traits, you automatically get
 /// `LoggerDefinition` for free via blanket implementation.
+#[cfg(feature = "protocol-2025-11-25")]
 pub trait LoggerDefinition:
     HasLoggingMetadata + HasLogLevel + HasLogFormat + HasLogTransport
 {
@@ -81,6 +85,7 @@ pub trait LoggerDefinition:
 }
 
 // Blanket implementation: any type implementing the fine-grained traits automatically gets LoggerDefinition
+#[cfg(feature = "protocol-2025-11-25")]
 impl<T> LoggerDefinition for T where
     T: HasLoggingMetadata + HasLogLevel + HasLogFormat + HasLogTransport
 {

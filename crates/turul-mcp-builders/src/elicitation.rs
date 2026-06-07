@@ -8,9 +8,12 @@ use std::collections::HashMap;
 
 // Import protocol types
 use turul_mcp_protocol::elicitation::{
-    BooleanSchema, ElicitCreateRequest, ElicitResult, ElicitationSchema, EnumSchema, NumberSchema,
+    BooleanSchema, ElicitResult, ElicitationSchema, EnumSchema, NumberSchema,
     PrimitiveSchemaDefinition, StringFormat, StringSchema,
 };
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::elicitation::ElicitCreateRequest;
 
 // Import framework traits from local crate
 use crate::traits::{HasElicitationHandling, HasElicitationMetadata, HasElicitationSchema};
@@ -222,6 +225,7 @@ impl ElicitationBuilder {
     }
 
     /// Build the elicitation request
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn build(self) -> ElicitCreateRequest {
         let mut request = ElicitCreateRequest::new(self.message, self.schema);
         if let Some(meta) = self.meta {

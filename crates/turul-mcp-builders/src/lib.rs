@@ -132,14 +132,18 @@ pub mod prelude;
 pub mod protocol_impls;
 pub mod traits;
 
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod completion;
 pub mod elicitation;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod logging;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod message;
 pub mod notification;
 pub mod prompt;
 pub mod resource;
 pub mod root;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod tool;
 
 // Schemars integration for JSON schema generation
@@ -161,12 +165,15 @@ pub use traits::*;
 
 // Re-export all builders for convenience
 /// Builder for completion provider configuration with sampling parameters
+#[cfg(feature = "protocol-2025-11-25")]
 pub use completion::CompletionBuilder;
 /// Builders for interactive data collection and result formatting
 pub use elicitation::{ElicitResultBuilder, ElicitationBuilder};
 /// Builders for structured logging messages and level configuration
+#[cfg(feature = "protocol-2025-11-25")]
 pub use logging::{LoggingBuilder, SetLevelBuilder};
 /// Builder for constructing prompt messages with role and content
+#[cfg(feature = "protocol-2025-11-25")]
 pub use message::MessageBuilder;
 /// Builders for various MCP notification types (progress, cancellation, resource updates)
 pub use notification::{
@@ -178,8 +185,11 @@ pub use prompt::PromptBuilder;
 /// Builder for resource definitions with content and metadata
 pub use resource::ResourceBuilder;
 /// Builders for root directory listings and workspace notifications
-pub use root::{ListRootsRequestBuilder, RootBuilder, RootsNotificationBuilder};
+pub use root::RootBuilder;
+#[cfg(feature = "protocol-2025-11-25")]
+pub use root::{ListRootsRequestBuilder, RootsNotificationBuilder};
 /// Builder for executable tool definitions with parameters and handlers
+#[cfg(feature = "protocol-2025-11-25")]
 pub use tool::ToolBuilder;
 
 // Common types used across builders

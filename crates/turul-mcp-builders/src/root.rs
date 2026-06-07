@@ -7,11 +7,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-// Import protocol types
-use turul_mcp_protocol::roots::{ListRootsRequest, RootsListChangedNotification};
-
 // Import framework traits from local crate
 use crate::traits::{HasRootAnnotations, HasRootFiltering, HasRootMetadata, HasRootPermissions};
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::roots::{ListRootsRequest, RootsListChangedNotification};
 
 /// Builder for creating root configurations at runtime
 pub struct RootBuilder {
@@ -234,10 +234,12 @@ impl HasRootAnnotations for DynamicRoot {
 // RootDefinition is automatically implemented via blanket impl!
 
 /// Builder for ListRootsRequest
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct ListRootsRequestBuilder {
     meta: Option<HashMap<String, Value>>,
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl ListRootsRequestBuilder {
     pub fn new() -> Self {
         Self { meta: None }
@@ -268,6 +270,7 @@ impl ListRootsRequestBuilder {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl Default for ListRootsRequestBuilder {
     fn default() -> Self {
         Self::new()
@@ -275,10 +278,12 @@ impl Default for ListRootsRequestBuilder {
 }
 
 /// Builder for RootsListChangedNotification
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct RootsNotificationBuilder {
     meta: Option<HashMap<String, Value>>,
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl RootsNotificationBuilder {
     pub fn new() -> Self {
         Self { meta: None }
@@ -309,6 +314,7 @@ impl RootsNotificationBuilder {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl Default for RootsNotificationBuilder {
     fn default() -> Self {
         Self::new()

@@ -365,6 +365,7 @@ impl ToolSchemaExt for ToolSchema {
         }
 
         // Convert each property using the centralized converter
+        #[cfg(feature = "protocol-2025-11-25")]
         let properties = obj
             .get("properties")
             .and_then(|v| v.as_object())
@@ -377,6 +378,19 @@ impl ToolSchemaExt for ToolSchema {
                             convert_value_to_json_schema_with_defs(v, &definitions),
                         )
                     })
+                    .collect()
+            });
+
+        // 2026 `ToolSchema.properties` holds arbitrary JSON Schema 2020-12 `Value`s.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let properties = obj
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .map(|props| {
+                let _ = &definitions;
+                props
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
                     .collect()
             });
 

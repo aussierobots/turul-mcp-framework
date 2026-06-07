@@ -3,6 +3,8 @@
 //! **IMPORTANT**: This is a framework feature, NOT part of the MCP specification.
 //! The execution field on Tool (MCP 2025-11-25) declares per-tool task support.
 
+#![cfg(feature = "protocol-2025-11-25")]
+
 use turul_mcp_protocol::tools::ToolExecution;
 
 /// Execution trait - provides optional execution configuration for MCP tools
