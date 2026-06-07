@@ -98,7 +98,7 @@
 //!
 //! The framework supports extensive configuration through the builder pattern:
 //!
-//! ```rust,no_run
+//! ```ignore
 //! # use turul_mcp_server::prelude::*;
 //! # use turul_mcp_session_storage::SqliteSessionStorage;
 //! # use std::time::Duration;

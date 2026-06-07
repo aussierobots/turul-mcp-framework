@@ -377,7 +377,7 @@ impl McpServerBuilder {
     ///             props.insert("a".to_string(), JsonSchema::number().with_description("First number"));
     ///             props.insert("b".to_string(), JsonSchema::number().with_description("Second number"));
     ///             turul_mcp_protocol::ToolSchema::object()
-    ///                 .with_properties(props)
+    ///                 .with_properties(turul_mcp_builders::tool_props(props))
     ///                 .with_required(vec!["a".to_string(), "b".to_string()])
     ///         })
     ///     }
