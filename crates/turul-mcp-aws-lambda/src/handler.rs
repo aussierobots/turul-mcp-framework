@@ -915,6 +915,7 @@ mod tests {
     // ── Strict lifecycle tests over handle_streaming() ────────────────
 
     /// Helper: build a Lambda handler with strict lifecycle and a test tool via the builder.
+    #[cfg(feature = "protocol-2025-11-25")]
     async fn build_strict_streaming_handler() -> LambdaMcpHandler {
         use crate::LambdaMcpServerBuilder;
         use turul_mcp_session_storage::InMemorySessionStorage;
@@ -934,19 +935,23 @@ mod tests {
     }
 
     // Test tool for lifecycle tests — satisfies all required traits
+    #[cfg(feature = "protocol-2025-11-25")]
     #[derive(Clone, Default)]
     struct LifecycleTestTool;
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasBaseMetadata for LifecycleTestTool {
         fn name(&self) -> &str {
             "ping_tool"
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasDescription for LifecycleTestTool {
         fn description(&self) -> Option<&str> {
             Some("test tool")
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasInputSchema for LifecycleTestTool {
         fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
             static SCHEMA: std::sync::OnceLock<turul_mcp_protocol::ToolSchema> =
@@ -954,25 +959,31 @@ mod tests {
             SCHEMA.get_or_init(turul_mcp_protocol::ToolSchema::object)
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasOutputSchema for LifecycleTestTool {
         fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
             None
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasAnnotations for LifecycleTestTool {
         fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
             None
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasToolMeta for LifecycleTestTool {
         fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
             None
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasIcons for LifecycleTestTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasExecution for LifecycleTestTool {}
 
     #[async_trait::async_trait]
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_server::McpTool for LifecycleTestTool {
         async fn call(
             &self,
@@ -986,6 +997,7 @@ mod tests {
     }
 
     /// Helper: create a Lambda POST request for handle_streaming()
+    #[cfg(feature = "protocol-2025-11-25")]
     fn streaming_mcp_request(body: &str, session_id: Option<&str>) -> LambdaRequest {
         let mut builder = Request::builder()
             .method("POST")
@@ -1002,6 +1014,7 @@ mod tests {
     }
 
     /// Helper: collect streaming response body into a string
+    #[cfg(feature = "protocol-2025-11-25")]
     async fn collect_streaming_body(
         response: lambda_http::Response<
             http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
@@ -1026,6 +1039,7 @@ mod tests {
     }
 
     /// Helper: extract session ID from a streaming response
+    #[cfg(feature = "protocol-2025-11-25")]
     fn extract_session_id(
         response: &lambda_http::Response<
             http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
@@ -1039,6 +1053,7 @@ mod tests {
     }
 
     /// Helper: parse JSON from a response body (handles SSE "data: " prefix)
+    #[cfg(feature = "protocol-2025-11-25")]
     fn parse_response_json(body: &str) -> serde_json::Value {
         // Strip SSE framing if present
         let json_str = body
@@ -1222,6 +1237,9 @@ mod tests {
     }
 
     /// P0: tools/list succeeds immediately after notifications/initialized (race fix proof)
+    // The initialize/initialized handshake is 2025-11-25 only; the 2026-07-28 stateless
+    // core has no handshake and requires a per-request _meta on tools/list.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_initialized_is_effective_immediately() {
         let handler = build_strict_streaming_handler().await;
@@ -1279,6 +1297,7 @@ mod tests {
     }
 
     /// P1: Lenient mode allows operations without notifications/initialized
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_lenient_mode_allows_without_initialized() {
         use crate::LambdaMcpServerBuilder;

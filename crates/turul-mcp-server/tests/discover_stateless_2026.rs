@@ -194,3 +194,67 @@ async fn prompts_list_dispatches_statelessly_with_cacheable_result() {
     assert!(body["result"]["cacheScope"].is_string(), "missing cacheScope: {body}");
     assert!(body["result"]["prompts"].is_array(), "missing prompts array: {body}");
 }
+
+/// POST `body`, asserting the 2026 server rejects it with HTTP 400 + JSON-RPC -32602.
+async fn assert_rejected_invalid_params(url: &str, header_version: Option<&str>, body: serde_json::Value) {
+    let client = reqwest::Client::new();
+    let mut req = client.post(url).header("Accept", "application/json");
+    if let Some(v) = header_version {
+        req = req.header("MCP-Protocol-Version", v);
+    }
+    let resp = req.json(&body).send().await.expect("POST");
+    assert_eq!(resp.status(), 400, "must be rejected with HTTP 400: {body}");
+    let out: serde_json::Value = resp.json().await.expect("json body");
+    assert_eq!(out["error"]["code"], -32602, "must be JSON-RPC -32602: {out}");
+}
+
+#[tokio::test]
+async fn missing_meta_is_rejected_with_invalid_params() {
+    let url = start_server().await;
+    // 2026 requires params._meta on every request — a tools/call without it is invalid.
+    assert_rejected_invalid_params(
+        &url,
+        None,
+        serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "echo", "arguments": { "message": "hi" } }
+        }),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn incomplete_meta_missing_client_capabilities_is_rejected() {
+    let url = start_server().await;
+    assert_rejected_invalid_params(
+        &url,
+        None,
+        serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientInfo": { "name": "t", "version": "1.0.0" }
+                    // missing io.modelcontextprotocol/clientCapabilities
+                },
+                "name": "echo", "arguments": { "message": "hi" }
+            }
+        }),
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn header_body_protocol_version_mismatch_is_rejected() {
+    let url = start_server().await;
+    // _meta says 2026-07-28 (via meta()); the MCP-Protocol-Version header says 2025-11-25.
+    assert_rejected_invalid_params(
+        &url,
+        Some("2025-11-25"),
+        serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "_meta": meta(), "name": "echo", "arguments": { "message": "hi" } }
+        }),
+    )
+    .await;
+}

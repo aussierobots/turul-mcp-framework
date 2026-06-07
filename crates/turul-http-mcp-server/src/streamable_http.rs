@@ -1437,11 +1437,62 @@ impl StreamableHttpHandler {
             }
         };
 
-        // DRAFT-2026-v1 stateless core: there is no Mcp-Session-Id handshake, so a
-        // request is never rejected for lacking a session. Use a client-pinned
-        // session if one was supplied, otherwise mint an ephemeral session so the
-        // dispatch pipeline (which carries a SessionContext) proceeds unchanged; the
-        // client neither sends nor needs a session id.
+        // 2026-07-28: every request MUST carry a per-request `_meta` (RequestMetaObject)
+        // with protocolVersion/clientInfo/clientCapabilities (schema: RequestParams._meta
+        // is required), and its protocolVersion MUST match the MCP-Protocol-Version header.
+        // Reject -32602 (HTTP 400) on a missing/incomplete `_meta` or a header/body mismatch.
+        #[cfg(feature = "protocol-2026-07-28")]
+        if let JsonRpcMessage::Request(req) = &message {
+            let v = serde_json::to_value(req).unwrap_or(serde_json::Value::Null);
+            let header_version = context.protocol_version.as_str();
+            let reason = match v.get("params").and_then(|p| p.get("_meta")) {
+                Some(meta) if meta.is_object() => {
+                    let pv = meta
+                        .get("io.modelcontextprotocol/protocolVersion")
+                        .and_then(|x| x.as_str());
+                    if pv.is_none() {
+                        Some("missing required _meta.io.modelcontextprotocol/protocolVersion".to_string())
+                    } else if meta.get("io.modelcontextprotocol/clientInfo").is_none() {
+                        Some("missing required _meta.io.modelcontextprotocol/clientInfo".to_string())
+                    } else if meta.get("io.modelcontextprotocol/clientCapabilities").is_none() {
+                        Some("missing required _meta.io.modelcontextprotocol/clientCapabilities".to_string())
+                    } else if pv != Some(header_version) {
+                        Some(format!(
+                            "_meta protocolVersion '{}' disagrees with MCP-Protocol-Version header '{}'",
+                            pv.unwrap_or(""),
+                            header_version
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                _ => Some("missing required params._meta (RequestMetaObject)".to_string()),
+            };
+            if let Some(reason) = reason {
+                warn!("Rejecting 2026 request (method={}): {}", req.method, reason);
+                let err = turul_mcp_json_rpc_server::JsonRpcError::new(
+                    Some(req.id.clone()),
+                    turul_mcp_json_rpc_server::error::JsonRpcErrorObject::invalid_params(&reason),
+                );
+                let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", header_version)
+                    .body(
+                        Full::new(Bytes::from(body))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap();
+            }
+        }
+
+        // The stateless core has no Mcp-Session-Id handshake, so a request is never
+        // rejected for lacking a session. Use a client-pinned session if one was
+        // supplied, otherwise mint an ephemeral session so the dispatch pipeline (which
+        // carries a SessionContext) proceeds unchanged; the client neither sends nor
+        // needs a session id.
         #[cfg(feature = "protocol-2026-07-28")]
         let session_id = match &context.session_id {
             Some(existing_id) => existing_id.clone(),
