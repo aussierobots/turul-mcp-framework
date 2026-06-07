@@ -5,6 +5,7 @@ edition.workspace = true
 publish = false
 autotests = false
 
+# 2025-11-25 E2E regression crate; no framework protocol-bearing deps, so nothing to pin here.
 [dependencies]
 reqwest = { workspace = true, features = ["json", "stream"] }
 serde_json.workspace = true

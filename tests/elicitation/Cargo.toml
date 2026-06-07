@@ -6,9 +6,10 @@ autotests = false
 
 [dependencies]
 # Core framework
-turul-mcp-server.workspace = true
-turul-mcp-protocol.workspace = true
-turul-mcp-builders.workspace = true
+# 2025-11-25 E2E regression crate; framework deps pinned to the 2025 opt-in independent of the workspace 2026 default.
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4.0", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
 
 # Shared test utilities
 mcp-e2e-shared.workspace = true
