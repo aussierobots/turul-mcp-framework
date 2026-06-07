@@ -1,0 +1,100 @@
+name: CI
+
+# Dual-spec feature matrix for the 2026-07-28 cutover branch:
+#   - default lane is MCP 2026-07-28 (stateless core)
+#   - 2025-11-25 is the opt-in legacy lane
+# Gates derived from docs/plans/2026-07-28-final-readiness-audit.md §7.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+# Warnings are denied via the explicit `cargo clippy -- -D warnings` step and the
+# test-build warning sweep, not a global RUSTFLAGS (which would also fail on any
+# transient workspace-crate warning outside the audited gates).
+
+jobs:
+  default-2026:
+    name: Default lane (2026-07-28)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (default = protocol-2026-07-28)
+        run: cargo build
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test
+      - name: Warning sweep on the test build
+        run: |
+          n=$(cargo test --no-run 2>&1 | grep -c 'warning:' || true)
+          echo "test-build warnings: $n"
+          test "$n" = "0"
+      - name: 2026 stateless acceptance (real HTTP)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test discover_stateless_2026
+      - name: protocol-2026 compliance + upstream wire fixtures
+        run: cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
+      - name: Bilingual client (not in default-members)
+        run: cargo test -p turul-mcp-client
+
+  opt-in-2025:
+    name: Opt-in lane (2025-11-25)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Per-crate 2025-11-25 build matrix
+        run: |
+          set -euxo pipefail
+          cargo build  -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25
+          cargo clippy -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25 -- -D warnings
+          cargo build  -p turul-mcp-builders    --no-default-features --features protocol-2025-11-25
+          cargo build  -p turul-http-mcp-server --no-default-features --features sse,protocol-2025-11-25
+          cargo build  -p turul-mcp-derive      --no-default-features --features protocol-2025-11-25
+          cargo build  -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
+          cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
+          cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
+      - name: 2025-11-25 regression E2E (real servers)
+        run: |
+          set -euxo pipefail
+          cargo test -p mcp-tools-tests
+          cargo test -p mcp-resources-tests
+          cargo test -p mcp-prompts-tests
+          cargo test -p turul-mcp-framework-integration-tests --test tasks_e2e_inmemory
+
+  spec-mutex:
+    name: Spec mutex (both features must not compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Enabling both protocol features must be a compile_error
+        run: |
+          if cargo build -p turul-mcp-protocol --features protocol-2025-11-25,protocol-2026-07-28 2>/dev/null; then
+            echo "ERROR: the spec mutex did not fire — both protocol features compiled together"
+            exit 1
+          fi
+          echo "OK: spec mutex fired as expected"
+
+  docs:
+    name: Rustdoc (deny warnings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc (deny rustdoc warnings)
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --no-deps
