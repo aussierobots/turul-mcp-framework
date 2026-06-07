@@ -169,6 +169,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for TestTool {}
 
     // ToolDefinition is automatically implemented via blanket impl!
@@ -241,6 +242,7 @@ mod tests {
     /// Regression test: verify that HasExecution is wired through to_tool() → Tool → JSON.
     /// A tool with task_support=optional must serialize `execution.taskSupport = "optional"`.
     /// A tool without execution must omit the field entirely.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_execution_wiring_in_descriptor() {
         use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};
@@ -376,6 +378,7 @@ mod tests {
         }
     }
     impl HasIcons for AnotherTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for AnotherTool {}
     #[async_trait]
     impl McpTool for AnotherTool {
@@ -531,6 +534,7 @@ mod tests {
             }
         }
         impl HasIcons for OrderTestTool {}
+        #[cfg(feature = "protocol-2025-11-25")]
         impl HasExecution for OrderTestTool {}
         #[async_trait]
         impl McpTool for OrderTestTool {
@@ -607,6 +611,7 @@ mod tests {
             }
         }
         impl HasIcons for NestedTestTool {}
+        #[cfg(feature = "protocol-2025-11-25")]
         impl HasExecution for NestedTestTool {}
         #[async_trait]
         impl McpTool for NestedTestTool {
@@ -722,6 +727,7 @@ mod tests {
             }
         }
         impl HasIcons for AnnotatedTool {}
+        #[cfg(feature = "protocol-2025-11-25")]
         impl HasExecution for AnnotatedTool {}
         #[async_trait]
         impl McpTool for AnnotatedTool {

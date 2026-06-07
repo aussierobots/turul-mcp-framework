@@ -129,6 +129,7 @@ pub mod roots;
 pub mod sampling;
 pub mod server;
 pub mod session;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod task;
 pub mod tool;
 #[cfg(feature = "dynamic-tools")]
@@ -136,6 +137,7 @@ pub mod tool_registry;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
 // Re-export task storage from separate crate
+#[cfg(feature = "protocol-2025-11-25")]
 pub use turul_mcp_task_storage as task_storage;
 pub mod dispatch;
 pub mod prelude;
@@ -185,14 +187,18 @@ pub use server::{
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionEventDispatcher, SessionManager};
 /// Task executor abstraction for pluggable execution backends
+#[cfg(feature = "protocol-2025-11-25")]
 pub use task::executor::{TaskExecutor, TaskHandle};
 /// Task handlers for tasks/get, tasks/list, tasks/cancel, tasks/result
+#[cfg(feature = "protocol-2025-11-25")]
 pub use task::handlers::{
     TasksCancelHandler, TasksGetHandler, TasksListHandler, TasksResultHandler,
 };
 /// Task runtime for managing long-running operations
+#[cfg(feature = "protocol-2025-11-25")]
 pub use task::runtime::TaskRuntime;
 /// Default Tokio-based task executor
+#[cfg(feature = "protocol-2025-11-25")]
 pub use task::tokio_executor::TokioTaskExecutor;
 /// Tool trait for executable MCP functions
 pub use tool::McpTool;

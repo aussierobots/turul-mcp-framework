@@ -10,13 +10,13 @@ description = "High-level framework for building Model Context Protocol (MCP) se
 
 [features]
 default = ["http", "sse", "protocol-2025-11-25"]
-protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25", "turul-mcp-task-storage/protocol-2025-11-25", "turul-http-mcp-server?/protocol-2025-11-25", "turul-mcp-session-storage/in-memory", "turul-mcp-task-storage/in-memory"]
-protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-mcp-task-storage/protocol-2026-07-28", "turul-http-mcp-server?/protocol-2026-07-28", "turul-mcp-session-storage/in-memory", "turul-mcp-task-storage/in-memory"]
+protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25", "dep:turul-mcp-task-storage", "turul-mcp-task-storage/protocol-2025-11-25", "turul-http-mcp-server?/protocol-2025-11-25", "turul-mcp-session-storage/in-memory", "turul-mcp-task-storage/in-memory"]
+protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-http-mcp-server?/protocol-2026-07-28", "turul-mcp-session-storage/in-memory"]
 http = ["turul-http-mcp-server"]
 sse = ["turul-http-mcp-server/sse"]
-sqlite = ["turul-mcp-session-storage/sqlite", "turul-mcp-task-storage/sqlite", "turul-mcp-server-state-storage?/sqlite"]
-postgres = ["turul-mcp-session-storage/postgres", "turul-mcp-task-storage/postgres", "turul-mcp-server-state-storage?/postgres"]
-dynamodb = ["turul-mcp-session-storage/dynamodb", "turul-mcp-task-storage/dynamodb", "turul-mcp-server-state-storage?/dynamodb"]
+sqlite = ["turul-mcp-session-storage/sqlite", "turul-mcp-task-storage?/sqlite", "turul-mcp-server-state-storage?/sqlite"]
+postgres = ["turul-mcp-session-storage/postgres", "turul-mcp-task-storage?/postgres", "turul-mcp-server-state-storage?/postgres"]
+dynamodb = ["turul-mcp-session-storage/dynamodb", "turul-mcp-task-storage?/dynamodb", "turul-mcp-server-state-storage?/dynamodb"]
 dynamic-tools = ["turul-mcp-server-state-storage"]
 test-utils = []
 
@@ -26,7 +26,7 @@ turul-mcp-json-rpc-server.workspace = true
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.0", default-features = false }
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0", default-features = false }
-turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4.0", default-features = false }
+turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4.0", default-features = false, optional = true }
 turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.0", default-features = false, optional = true }
 turul-mcp-server-state-storage = {workspace = true, optional = true}
 

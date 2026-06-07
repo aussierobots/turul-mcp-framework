@@ -75,9 +75,11 @@ pub struct McpServerBuilder {
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
 
     /// Task storage / runtime (None = tasks not supported)
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
 
     /// Recovery timeout for stuck tasks (milliseconds), default 5 minutes
+    #[cfg(feature = "protocol-2025-11-25")]
     task_recovery_timeout_ms: u64,
 
     /// MCP Lifecycle enforcement configuration
@@ -228,7 +230,9 @@ impl McpServerBuilder {
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
             session_storage: None,             // Default: InMemory storage
+            #[cfg(feature = "protocol-2025-11-25")]
             task_runtime: None,                // Default: tasks not supported
+            #[cfg(feature = "protocol-2025-11-25")]
             task_recovery_timeout_ms: 300_000, // Default: 5 minutes
             strict_lifecycle: true,            // MCP 2025-11-25: require notifications/initialized
             test_mode: false,                  // Default: production mode with security
@@ -1287,6 +1291,7 @@ impl McpServerBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_storage(
         mut self,
         storage: Arc<dyn turul_mcp_task_storage::TaskStorage>,
@@ -1300,6 +1305,7 @@ impl McpServerBuilder {
     /// Configure task support with a pre-built `TaskRuntime`.
     ///
     /// Use this when you need fine-grained control over the task runtime configuration.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
         self
@@ -1309,6 +1315,7 @@ impl McpServerBuilder {
     ///
     /// On server startup, tasks in non-terminal states older than this timeout
     /// will be marked as `Failed`. Default: 300,000 ms (5 minutes).
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn task_recovery_timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.task_recovery_timeout_ms = timeout_ms;
         self
@@ -1508,6 +1515,7 @@ impl McpServerBuilder {
         // when no explicit server_state_storage is provided.
 
         // Coherence guard: reject taskSupport=required without task runtime
+        #[cfg(feature = "protocol-2025-11-25")]
         if self.task_runtime.is_none() {
             for (name, tool) in &self.tools {
                 let descriptor = tool_to_descriptor(tool.as_ref());
@@ -1605,7 +1613,9 @@ impl McpServerBuilder {
         });
 
         // Tasks capabilities — auto-configure when task runtime is set
+        #[cfg(feature = "protocol-2025-11-25")]
         let has_tasks = self.task_runtime.is_some();
+        #[cfg(feature = "protocol-2025-11-25")]
         if has_tasks {
             use turul_mcp_protocol::initialize::*;
 
@@ -1631,6 +1641,7 @@ impl McpServerBuilder {
         tracing::debug!("   - Roots: {}", has_roots);
         tracing::debug!("   - Elicitation: {}", has_elicitations);
         tracing::debug!("   - Completions: {}", has_completions);
+        #[cfg(feature = "protocol-2025-11-25")]
         tracing::debug!("   - Tasks: {}", has_tasks);
         tracing::debug!("   - Logging: enabled");
 
@@ -1688,6 +1699,7 @@ impl McpServerBuilder {
         }
 
         // Add task handlers if task runtime is configured
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             handlers.insert(
                 "tasks/get".to_string(),
@@ -1733,6 +1745,7 @@ impl McpServerBuilder {
             self.session_timeout_minutes,
             self.session_cleanup_interval_seconds,
             self.session_storage,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.task_runtime,
             self.strict_lifecycle,
             self.middleware_stack,
@@ -1826,6 +1839,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for TestTool {}
 
     #[async_trait]
@@ -2305,6 +2319,7 @@ mod tests {
     }
 
     /// Coherence guard: taskSupport=required without task runtime must fail at build().
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_coherence_guard_rejects_required_without_runtime() {
         use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};
@@ -2389,6 +2404,7 @@ mod tests {
     }
 
     /// Coherence guard: taskSupport=optional without runtime should succeed (optional is fine).
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_coherence_guard_allows_optional_without_runtime() {
         use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};

@@ -91,6 +91,7 @@ pub struct McpServer {
     /// Middleware stack for request/response processing
     middleware_stack: crate::middleware::MiddlewareStack,
     /// Task runtime for long-running operations (None = tasks not supported)
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
     /// Custom HTTP route registry
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
@@ -128,7 +129,9 @@ impl McpServer {
         session_timeout_minutes: Option<u64>,
         session_cleanup_interval_seconds: Option<u64>,
         session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
-        task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+        #[cfg(feature = "protocol-2025-11-25")] task_runtime: Option<
+            Arc<crate::task::runtime::TaskRuntime>,
+        >,
         strict_lifecycle: bool,
         middleware_stack: crate::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
@@ -217,6 +220,7 @@ impl McpServer {
             handlers,
             session_manager,
             session_storage,
+            #[cfg(feature = "protocol-2025-11-25")]
             task_runtime,
             instructions,
             strict_lifecycle,
@@ -320,8 +324,21 @@ impl McpServer {
     }
 
     /// Get the task runtime, if task support is configured.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn task_runtime(&self) -> Option<&Arc<crate::task::runtime::TaskRuntime>> {
         self.task_runtime.as_ref()
+    }
+
+    /// Whether a task runtime is configured (always false when tasks are not part of the spec).
+    fn has_task_runtime(&self) -> bool {
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            self.task_runtime.is_some()
+        }
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        {
+            false
+        }
     }
 
     /// Run the server with the default transport (HTTP if available)
@@ -356,6 +373,7 @@ impl McpServer {
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
         // Recover stuck tasks on startup (tasks stuck in Working/InputRequired after unclean shutdown)
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             match runtime.recover_stuck_tasks().await {
                 Ok(recovered) if !recovered.is_empty() => {
@@ -412,6 +430,7 @@ impl McpServer {
             self.session_manager.clone(),
             self.strict_lifecycle,
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
         }
@@ -459,7 +478,7 @@ impl McpServer {
                         self.tools.clone(),
                         self.session_manager.clone(),
                         self.strict_lifecycle,
-                        self.task_runtime.is_some(),
+                        self.has_task_runtime(),
                     );
                     #[cfg(feature = "dynamic-tools")]
                     if let Some(ref registry) = self.tool_registry {
@@ -601,6 +620,7 @@ impl McpServer {
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
         // Recover stuck tasks on startup (tasks stuck in Working/InputRequired after unclean shutdown)
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             match runtime.recover_stuck_tasks().await {
                 Ok(recovered) if !recovered.is_empty() => {
@@ -657,6 +677,7 @@ impl McpServer {
             self.session_manager.clone(),
             self.strict_lifecycle,
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
         }
@@ -704,7 +725,7 @@ impl McpServer {
                         self.tools.clone(),
                         self.session_manager.clone(),
                         self.strict_lifecycle,
-                        self.task_runtime.is_some(),
+                        self.has_task_runtime(),
                     );
                     #[cfg(feature = "dynamic-tools")]
                     if let Some(ref registry) = self.tool_registry {
@@ -1324,6 +1345,7 @@ pub struct ListToolsHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
     session_manager: Option<Arc<SessionManager>>,
     strict_lifecycle: bool,
+    #[cfg_attr(not(feature = "protocol-2025-11-25"), allow(dead_code))]
     has_tasks: bool,
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
@@ -1444,6 +1466,7 @@ impl JsonRpcHandler for ListToolsHandler {
         };
 
         // Strip execution field when server has no task capability (truthful advertisement)
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.has_tasks {
             for tool in &mut tools {
                 tool.execution = None;
@@ -1550,6 +1573,7 @@ pub struct SessionAwareToolHandler {
     strict_lifecycle: bool,
     /// Optional task runtime — when present AND request has `params.task`,
     /// the handler creates a task and executes asynchronously.
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
@@ -1565,12 +1589,14 @@ impl SessionAwareToolHandler {
             tools,
             session_manager,
             strict_lifecycle,
+            #[cfg(feature = "protocol-2025-11-25")]
             task_runtime: None,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
         self
@@ -1694,6 +1720,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // - Required + task absent: reject (clients MUST use task augmentation)
         // - Optional: either path is valid
         // - None (no declaration): reject task-augmented calls (experimental; no declaration = no support)
+        #[cfg(feature = "protocol-2025-11-25")]
         {
             use turul_mcp_protocol::tools::TaskSupport;
             let tool_descriptor = tool.to_tool();
@@ -1719,6 +1746,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         }
 
         // Reject task-augmented calls when no task runtime is configured
+        #[cfg(feature = "protocol-2025-11-25")]
         if call_params.task.is_some() && self.task_runtime.is_none() {
             return Err(McpError::InvalidParameters(
                 "Task-augmented tool calls require the server to have task support configured"
@@ -1726,6 +1754,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             ));
         }
 
+        #[cfg(feature = "protocol-2025-11-25")]
         if let (Some(task_meta), Some(runtime)) = (call_params.task, self.task_runtime.as_ref()) {
             use turul_mcp_protocol::tasks::{CreateTaskResult, Task};
             use turul_mcp_task_storage::{TaskOutcome, TaskRecord};
@@ -1822,17 +1851,15 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                 meta: None,
             };
             let result = CreateTaskResult { task, meta: None };
-            serde_json::to_value(result).map_err(McpError::SerializationError)
-        } else {
-            // Synchronous execution (no task augmentation or no runtime)
-            match tool.call(args, mcp_session_context).await {
-                Ok(response) => {
-                    serde_json::to_value(response).map_err(McpError::SerializationError)
-                }
-                Err(error_msg) => {
-                    error!("Tool execution error: {}", error_msg);
-                    Err(error_msg)
-                }
+            return serde_json::to_value(result).map_err(McpError::SerializationError);
+        }
+
+        // Synchronous execution (no task augmentation or no runtime)
+        match tool.call(args, mcp_session_context).await {
+            Ok(response) => serde_json::to_value(response).map_err(McpError::SerializationError),
+            Err(error_msg) => {
+                error!("Tool execution error: {}", error_msg);
+                Err(error_msg)
             }
         }
     }
@@ -1916,6 +1943,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for TestTool {}
 
     #[async_trait]
