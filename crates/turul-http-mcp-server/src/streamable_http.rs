@@ -36,8 +36,11 @@ pub enum McpProtocolVersion {
     /// Protocol with structured _meta, cursor, progressToken, and elicitation (2025-06-18)
     V2025_06_18,
     /// Protocol with tasks, icons, URL elicitation, and sampling tools (2025-11-25)
-    #[default]
+    #[cfg_attr(feature = "protocol-2025-11-25", default)]
     V2025_11_25,
+    /// Stateless core: server/discover, per-request _meta, no Mcp-Session-Id (2026-07-28)
+    #[cfg_attr(feature = "protocol-2026-07-28", default)]
+    V2026_07_28,
 }
 
 impl McpProtocolVersion {
@@ -48,6 +51,7 @@ impl McpProtocolVersion {
             "2025-03-26" => Some(Self::V2025_03_26),
             "2025-06-18" => Some(Self::V2025_06_18),
             "2025-11-25" => Some(Self::V2025_11_25),
+            "2026-07-28" => Some(Self::V2026_07_28),
             _ => None,
         }
     }
@@ -59,6 +63,7 @@ impl McpProtocolVersion {
             Self::V2025_03_26 => "2025-03-26",
             Self::V2025_06_18 => "2025-06-18",
             Self::V2025_11_25 => "2025-11-25",
+            Self::V2026_07_28 => "2026-07-28",
         }
     }
 
@@ -66,38 +71,51 @@ impl McpProtocolVersion {
     pub fn supports_streamable_http(&self) -> bool {
         matches!(
             self,
-            Self::V2025_03_26 | Self::V2025_06_18 | Self::V2025_11_25
+            Self::V2025_03_26 | Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
         )
     }
 
     /// Returns whether this version supports _meta fields
     pub fn supports_meta_fields(&self) -> bool {
-        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
+        matches!(
+            self,
+            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
+        )
     }
 
     /// Returns whether this version supports cursor-based pagination
     pub fn supports_cursors(&self) -> bool {
-        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
+        matches!(
+            self,
+            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
+        )
     }
 
     /// Returns whether this version supports progress tokens
     pub fn supports_progress_tokens(&self) -> bool {
-        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
+        matches!(
+            self,
+            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
+        )
     }
 
-    /// Returns whether this version supports elicitation
+    /// Returns whether this version supports elicitation (deprecated-but-present in 2026-07-28)
     pub fn supports_elicitation(&self) -> bool {
-        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
+        matches!(
+            self,
+            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
+        )
     }
 
-    /// Returns whether this version supports the task system (experimental)
+    /// Returns whether this version supports the task system (2025-11-25 core only;
+    /// moved to an extension in 2026-07-28)
     pub fn supports_tasks(&self) -> bool {
         matches!(self, Self::V2025_11_25)
     }
 
     /// Returns whether this version supports icons
     pub fn supports_icons(&self) -> bool {
-        matches!(self, Self::V2025_11_25)
+        matches!(self, Self::V2025_11_25 | Self::V2026_07_28)
     }
 
     /// Get list of supported features for this version

@@ -528,18 +528,23 @@ impl McpServer {
             builder = builder.register_handler(vec![method.clone()], bridge_handler);
         }
 
-        // Register special initialized notification handler that can mark sessions as initialized
-        use crate::handlers::InitializedNotificationHandler;
-        let initialized_handler = InitializedNotificationHandler::new(self.session_manager.clone());
-        let initialized_bridge = SessionAwareMcpHandlerBridge::new(
-            Arc::new(initialized_handler),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        builder = builder.register_handler(
-            vec!["notifications/initialized".to_string()],
-            initialized_bridge,
-        );
+        // notifications/initialized exists only in the 2025-11-25 lifecycle; the
+        // 2026-07-28 stateless core has no initialize/initialized handshake.
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            use crate::handlers::InitializedNotificationHandler;
+            let initialized_handler =
+                InitializedNotificationHandler::new(self.session_manager.clone());
+            let initialized_bridge = SessionAwareMcpHandlerBridge::new(
+                Arc::new(initialized_handler),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+            );
+            builder = builder.register_handler(
+                vec!["notifications/initialized".to_string()],
+                initialized_bridge,
+            );
+        }
 
         let http_server = builder.build();
 
@@ -798,18 +803,23 @@ impl McpServer {
             builder = builder.register_handler(vec![method.clone()], bridge_handler);
         }
 
-        // Register special initialized notification handler that can mark sessions as initialized
-        use crate::handlers::InitializedNotificationHandler;
-        let initialized_handler = InitializedNotificationHandler::new(self.session_manager.clone());
-        let initialized_bridge = SessionAwareMcpHandlerBridge::new(
-            Arc::new(initialized_handler),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        builder = builder.register_handler(
-            vec!["notifications/initialized".to_string()],
-            initialized_bridge,
-        );
+        // notifications/initialized exists only in the 2025-11-25 lifecycle; the
+        // 2026-07-28 stateless core has no initialize/initialized handshake.
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            use crate::handlers::InitializedNotificationHandler;
+            let initialized_handler =
+                InitializedNotificationHandler::new(self.session_manager.clone());
+            let initialized_bridge = SessionAwareMcpHandlerBridge::new(
+                Arc::new(initialized_handler),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+            );
+            builder = builder.register_handler(
+                vec!["notifications/initialized".to_string()],
+                initialized_bridge,
+            );
+        }
 
         let http_server = builder.build();
 

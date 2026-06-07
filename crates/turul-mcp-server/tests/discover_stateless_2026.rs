@@ -93,6 +93,14 @@ async fn server_discover_answers_without_a_session() {
         200,
         "server/discover must succeed without an Mcp-Session-Id"
     );
+    // The server must advertise 2026-07-28 on the wire, not fall back to 2025-11-25.
+    assert_eq!(
+        resp.headers()
+            .get("MCP-Protocol-Version")
+            .and_then(|v| v.to_str().ok()),
+        Some("2026-07-28"),
+        "a 2026 server must echo MCP-Protocol-Version: 2026-07-28"
+    );
     let body: serde_json::Value = resp.json().await.expect("json body");
     assert_eq!(body["result"]["resultType"], "complete");
     assert_eq!(
