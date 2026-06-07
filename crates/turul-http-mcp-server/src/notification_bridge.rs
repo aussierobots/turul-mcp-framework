@@ -9,6 +9,10 @@
 //! Without this bridge: Tools send notifications → NotificationBroadcaster → VOID
 //! With this bridge: Tools send notifications → NotificationBroadcaster → StreamManager → SSE clients ✅
 
+// `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); this bridge
+// still carries logging notifications over SSE, which remains a valid feature.
+#![allow(deprecated)]
+
 use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::{debug, error, info};

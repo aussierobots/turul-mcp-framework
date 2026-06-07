@@ -117,6 +117,8 @@ pub struct LambdaMcpServerBuilder {
     handlers: HashMap<String, Arc<dyn McpHandler>>,
 
     /// Roots configured for the server
+    // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+    #[allow(deprecated)]
     roots: Vec<turul_mcp_protocol::roots::Root>,
 
     /// Optional instructions for clients
@@ -580,6 +582,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add a single root directory
+    #[allow(deprecated)]
     pub fn root(mut self, root: turul_mcp_protocol::roots::Root) -> Self {
         self.roots.push(root);
         self

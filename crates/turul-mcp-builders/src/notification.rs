@@ -9,6 +9,9 @@ use std::collections::HashMap;
 // Import protocol types
 use turul_mcp_json_rpc_server::types::RequestId;
 use turul_mcp_protocol::logging::LoggingLevel;
+// `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
+// remains a valid feature the framework supports.
+#[allow(deprecated)]
 use turul_mcp_protocol::notifications::{
     CancelledNotification, LoggingMessageNotification, Notification, NotificationParams,
     ProgressNotification, PromptListChangedNotification, ResourceListChangedNotification,
@@ -368,6 +371,7 @@ impl NotificationBuilder {
     }
 
     /// Create a logging message notification builder
+    #[allow(deprecated)]
     pub fn logging_message(level: LoggingLevel, data: Value) -> LoggingMessageNotification {
         LoggingMessageNotification::new(level, data)
     }

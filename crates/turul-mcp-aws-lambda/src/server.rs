@@ -58,6 +58,8 @@ pub struct LambdaMcpServer {
     /// Registered handlers
     handlers: HashMap<String, Arc<dyn McpHandler>>,
     /// Configured roots
+    // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+    #[allow(deprecated)]
     roots: Vec<turul_mcp_protocol::roots::Root>,
     /// Optional client instructions
     instructions: Option<String>,
@@ -96,6 +98,8 @@ pub struct LambdaMcpServer {
 impl LambdaMcpServer {
     /// Create a new Lambda MCP server (use builder instead)
     #[allow(clippy::too_many_arguments)]
+    // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+    #[allow(deprecated)]
     pub(crate) fn new(
         implementation: Implementation,
         capabilities: ServerCapabilities,
@@ -395,6 +399,10 @@ impl LambdaMcpServer {
 
         // Create session-aware tool handler for tools/call (reuse MCP server handler)
         use turul_mcp_server::SessionAwareToolHandler;
+        #[cfg_attr(
+            not(any(feature = "protocol-2025-11-25", feature = "dynamic-tools")),
+            allow(unused_mut)
+        )]
         let mut tool_handler = SessionAwareToolHandler::new(
             self.tools.clone(),
             self.session_manager.clone(),

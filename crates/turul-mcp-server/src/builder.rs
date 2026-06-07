@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::handlers::*;
 use crate::resource::McpResource;
+#[cfg(feature = "protocol-2025-11-25")]
 use crate::tool::tool_to_descriptor;
 use crate::{McpCompletion, McpNotification, McpPrompt, McpRoot};
 #[cfg(feature = "protocol-2025-11-25")]
@@ -65,6 +66,8 @@ pub struct McpServerBuilder {
     handlers: HashMap<String, Arc<dyn McpHandler>>,
 
     /// Roots configured for the server
+    // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+    #[allow(deprecated)]
     roots: Vec<turul_mcp_protocol::roots::Root>,
 
     /// Optional instructions for clients
@@ -1159,6 +1162,7 @@ impl McpServerBuilder {
     }
 
     /// Add a single root directory
+    #[allow(deprecated)]
     pub fn root(mut self, root: turul_mcp_protocol::roots::Root) -> Self {
         self.roots.push(root);
         self

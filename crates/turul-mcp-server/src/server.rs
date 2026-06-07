@@ -10,7 +10,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
+#[cfg(feature = "protocol-2025-11-25")]
+use tracing::warn;
 
 use crate::handlers::McpHandler;
 use crate::handlers::extract_request_meta_extra;
@@ -426,6 +428,10 @@ impl McpServer {
         }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
+        #[cfg_attr(
+            not(any(feature = "protocol-2025-11-25", feature = "dynamic-tools")),
+            allow(unused_mut)
+        )]
         let mut tool_handler = SessionAwareToolHandler::new(
             self.tools.clone(),
             self.session_manager.clone(),
@@ -691,6 +697,10 @@ impl McpServer {
         }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
+        #[cfg_attr(
+            not(any(feature = "protocol-2025-11-25", feature = "dynamic-tools")),
+            allow(unused_mut)
+        )]
         let mut tool_handler = SessionAwareToolHandler::new(
             self.tools.clone(),
             self.session_manager.clone(),
@@ -1570,6 +1580,7 @@ impl JsonRpcHandler for ListToolsHandler {
             t
         };
         #[cfg(not(feature = "dynamic-tools"))]
+        #[cfg_attr(not(feature = "protocol-2025-11-25"), allow(unused_mut))]
         let mut tools: Vec<Tool> = {
             let mut t: Vec<Tool> = self
                 .tools

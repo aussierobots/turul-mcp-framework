@@ -6,7 +6,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(feature = "protocol-2025-11-25")]
+use serde_json::json;
 use tracing::debug;
 
 use crate::resource::{McpResource, resource_to_descriptor};
@@ -887,6 +889,8 @@ impl McpHandler for LoggingHandler {
 }
 
 /// Roots handler for roots/list endpoint
+// `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+#[allow(deprecated)]
 pub struct RootsHandler {
     roots: Vec<turul_mcp_protocol::roots::Root>,
 }
@@ -897,6 +901,7 @@ impl Default for RootsHandler {
     }
 }
 
+#[allow(deprecated)]
 impl RootsHandler {
     pub fn new() -> Self {
         Self { roots: Vec::new() }
@@ -909,6 +914,7 @@ impl RootsHandler {
 }
 
 #[async_trait]
+#[allow(deprecated)]
 impl McpHandler for RootsHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         use turul_mcp_protocol::meta::Cursor;

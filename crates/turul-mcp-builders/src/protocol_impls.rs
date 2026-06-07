@@ -16,6 +16,8 @@ use turul_mcp_protocol::notifications::{
     CancelledNotification, Notification, ProgressNotification, PromptListChangedNotification,
     ResourceListChangedNotification, ResourceUpdatedNotification, ToolListChangedNotification,
 };
+// `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+#[allow(deprecated)]
 use turul_mcp_protocol::roots::Root;
 use turul_mcp_protocol::{Prompt, Resource, Tool, ToolSchema};
 
@@ -204,6 +206,7 @@ impl HasExecution for Tool {
 // Root trait implementations
 // ============================================================================
 
+#[allow(deprecated)]
 impl HasRootMetadata for Root {
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
@@ -214,14 +217,17 @@ impl HasRootMetadata for Root {
     }
 }
 
+#[allow(deprecated)]
 impl HasRootPermissions for Root {
     // Root struct doesn't have permissions field - framework can add later if needed
 }
 
+#[allow(deprecated)]
 impl HasRootFiltering for Root {
     // Root struct doesn't have filtering field - framework can add later if needed
 }
 
+#[allow(deprecated)]
 impl HasRootAnnotations for Root {
     fn annotations(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         self.meta.as_ref()

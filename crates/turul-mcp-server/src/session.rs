@@ -403,6 +403,9 @@ impl SessionContext {
     }
 
     /// Send a logging message notification (with session-aware level filtering)
+    // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
+    // remains a valid feature the framework supports.
+    #[allow(deprecated)]
     pub async fn notify_log(
         &self,
         level: turul_mcp_protocol::logging::LoggingLevel,
@@ -642,6 +645,9 @@ impl turul_mcp_builders::logging::LoggingTarget for SessionContext {
 }
 
 /// Parse notification JSON and send via actual NotificationBroadcaster to StreamManager using proper notification structs
+// `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
+// remains a valid feature the framework supports.
+#[allow(deprecated)]
 async fn parse_and_send_notification_with_broadcaster(
     session_id: &str,
     json_value: &Value,

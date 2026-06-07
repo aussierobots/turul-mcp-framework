@@ -2,6 +2,10 @@
 //!
 //! This module defines the high-level trait for implementing MCP roots functionality.
 
+// Implements the SEP-2577-deprecated-but-present roots feature; the roots protocol types are
+// deprecated in 2026-07-28 but still valid and intentionally supported here.
+#![allow(deprecated)]
+
 use async_trait::async_trait;
 use std::path::PathBuf;
 use turul_mcp_builders::prelude::*;
