@@ -17,11 +17,13 @@
 //!
 //! # Transport: Streamable HTTP (REST API V1)
 //!
-//! This example uses the MCP 2025-11-25 Streamable HTTP transport via REST API (V1).
+//! This example uses the MCP 2026-07-28 Streamable HTTP transport via REST API (V1).
 //! REST API supports standard HTTP POST with full request/response control, making it
 //! compatible with Streamable HTTP. The Lambda adapter converts the API Gateway event
 //! into a standard `hyper::Request`, which the framework's `StreamableHttpHandler`
-//! processes normally.
+//! processes normally. The 2026 core is stateless: there is no `initialize`/
+//! `notifications/initialized` handshake and no `Mcp-Session-Id` — every request
+//! carries its own `_meta` (protocolVersion, clientInfo, clientCapabilities).
 //!
 //! **Note**: HTTP API (V2) authorizer context extraction is fully supported, but
 //! Streamable HTTP transport requires REST API (V1).
@@ -91,18 +93,21 @@
 //! # Usage
 //!
 //! ```bash
-//! # With valid API key
+//! # With valid API key (2026-07-28 stateless: no session handshake;
+//! # each request carries its own `_meta`)
 //! curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
 //!   -H "Content-Type: application/json" \
 //!   -H "Accept: application/json" \
+//!   -H "MCP-Protocol-Version: 2026-07-28" \
 //!   -H "X-API-Key: secret-key-123" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
 //!
-//! # Without API key (should fail)
+//! # Without API key (should fail at the auth layer)
 //! curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
 //!   -H "Content-Type: application/json" \
 //!   -H "Accept: application/json" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+//!   -H "MCP-Protocol-Version: 2026-07-28" \
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
 //! ```
 
 use async_trait::async_trait;
@@ -291,7 +296,7 @@ async fn main() -> Result<(), Error> {
     init_logging();
 
     info!("🚀 Starting AWS Lambda MCP Server with Authentication Middleware");
-    info!("Architecture: MCP 2025-11-25 with middleware auth layer");
+    info!("Architecture: MCP 2026-07-28 (stateless) with middleware auth layer");
     info!("  - X-API-Key header validation");
     info!("  - Lambda authorizer context extraction");
     info!("  - User context injection");

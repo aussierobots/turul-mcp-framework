@@ -1,4 +1,4 @@
-//! MCP 2025-11-25 Icon Support Showcase
+//! MCP 2026-07-28 Icon Support Showcase
 //!
 //! Demonstrates the `icons` field available on Tool, Resource, Prompt,
 //! ResourceTemplate, and Implementation types. Icons use the `Icon` struct
@@ -11,7 +11,7 @@ use turul_mcp_protocol::{
 };
 
 fn main() {
-    println!("=== MCP 2025-11-25 Icon Support Showcase ===\n");
+    println!("=== MCP 2026-07-28 Icon Support Showcase ===\n");
 
     // --- Tool with an HTTPS icon ---
     let calculator_tool = Tool::new(

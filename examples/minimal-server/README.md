@@ -21,18 +21,26 @@ The server will start on `http://127.0.0.1:8641/mcp` and provide:
 
 ## Testing the Server
 
-### 1. Initialize the Connection
+The 2026-07-28 core is stateless: there is no `initialize`/`notifications/initialized`
+handshake and no `Mcp-Session-Id`. Every request carries its own per-request `_meta`
+(`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`) and the
+`MCP-Protocol-Version: 2026-07-28` header.
+
+### 1. Discover the Server
 ```bash
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "initialize",
+    "method": "server/discover",
     "params": {
-      "protocolVersion": "2025-11-25",
-      "capabilities": {},
-      "clientInfo": {"name": "test-client", "version": "1.0.0"}
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
     }
   }'
 ```
@@ -41,11 +49,18 @@ curl -X POST http://127.0.0.1:8641/mcp \
 ```bash
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
     "id": 2,
     "method": "tools/list",
-    "params": {}
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
+    }
   }'
 ```
 
@@ -53,11 +68,17 @@ curl -X POST http://127.0.0.1:8641/mcp \
 ```bash
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
     "id": 3,
     "method": "tools/call",
     "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      },
       "name": "echo",
       "arguments": {"text": "Hello, MCP!"}
     }

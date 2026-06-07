@@ -6,6 +6,7 @@
   "headers": {
     "content-type": "application/json",
     "accept": "application/json",
+    "mcp-protocol-version": "2026-07-28",
     "x-api-key": "secret-key-123"
   },
   "requestContext": {
@@ -31,6 +32,6 @@
     "time": "01/Jan/2025:00:00:00 +0000",
     "timeEpoch": 1704067200000
   },
-  "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1.0\"}}}",
+  "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\",\"params\":{\"_meta\":{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientInfo\":{\"name\":\"test\",\"version\":\"1.0\"},\"io.modelcontextprotocol/clientCapabilities\":{}}}}",
   "isBase64Encoded": false
 }

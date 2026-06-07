@@ -69,17 +69,26 @@ cargo run -p resources-server
 ```
 
 ### Verify Server is Working
+
+The 2026-07-28 core is stateless: there is no `initialize`/`notifications/initialized`
+handshake and no `Mcp-Session-Id`. Every request carries its own per-request `_meta`
+(`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`) and the
+`MCP-Protocol-Version: 2026-07-28` header.
+
 ```bash
-# Initialize connection (in another terminal)
+# Discover the server (in another terminal) — no session needed
 curl -X POST http://127.0.0.1:8041/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
-    "method": "initialize",
+    "method": "server/discover",
     "params": {
-      "protocolVersion": "2025-11-25",
-      "capabilities": {},
-      "clientInfo": {"name": "test", "version": "1.0"}
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "1.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
     },
     "id": 1
   }' | jq
@@ -87,10 +96,17 @@ curl -X POST http://127.0.0.1:8041/mcp \
 # List available resources
 curl -X POST http://127.0.0.1:8041/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
     "method": "resources/list",
-    "params": {},
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "1.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
+    },
     "id": 2
   }' | jq
 
@@ -109,10 +125,18 @@ curl -X POST http://127.0.0.1:8041/mcp \
 ```bash
 curl -X POST http://127.0.0.1:8041/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
     "method": "resources/read",
-    "params": {"uri": "docs://project"},
+    "params": {
+      "uri": "docs://project",
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "1.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
+    },
     "id": 1
   }'
 ```

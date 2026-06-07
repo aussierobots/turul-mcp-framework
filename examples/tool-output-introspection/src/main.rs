@@ -11,7 +11,7 @@
 //!
 //! The introspection approach works for:
 //! - Tools that return Self (the struct being derived)
-//! - Simple field types: String, numbers, bool, Option<T>
+//! - Simple field types: String, numbers, bool, `Option<T>`
 //! - NO schemars dependency needed!
 
 use serde::{Deserialize, Serialize};

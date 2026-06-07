@@ -63,18 +63,24 @@ In one terminal, connect to receive real-time updates:
 curl -H "Accept: text/event-stream" http://127.0.0.1:8005/mcp
 ```
 
-### 2. Initialize MCP Connection
-In another terminal, initialize the MCP connection:
+### 2. Discover the Server
+The 2026-07-28 core is stateless: there is no `initialize`/`notifications/initialized`
+handshake and no `Mcp-Session-Id`. Every request carries its own per-request `_meta`
+(`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`) and the
+`MCP-Protocol-Version: 2026-07-28` header. In another terminal:
 ```bash
 curl -X POST http://127.0.0.1:8005/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
-    "method": "initialize",
+    "method": "server/discover",
     "params": {
-      "protocolVersion": "2025-11-25",
-      "capabilities": {},
-      "clientInfo": {"name": "test-client", "version": "1.0.0"}
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
     },
     "id": "1"
   }'
@@ -85,10 +91,16 @@ Send a progress simulation request:
 ```bash
 curl -X POST http://127.0.0.1:8005/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
     "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      },
       "name": "simulate_progress",
       "arguments": {
         "task_name": "File Processing",

@@ -59,9 +59,9 @@ server.run().await
 
 ### For Production
 - **Pluggable Storage**: Start with InMemory, scale to PostgreSQL/AWS
-- **MCP 2025-11-25 Compliance**: Latest specification support
-- **SSE Resumability**: Last-Event-ID header for reconnection
-- **Session Management**: Automatic cleanup and lifecycle handling
+- **MCP 2026-07-28 Compliance**: Latest specification support (stateless core)
+- **Stateless requests**: Each request carries its own `_meta`; no `initialize`/`notifications/initialized` handshake and no `Mcp-Session-Id`
+- **Optional application state**: `SessionContext` typed state when an example needs it, layered above the stateless transport
 
 ## Running
 
@@ -71,16 +71,23 @@ cargo run --package zero-config-getting-started
 
 ## Testing
 
-```bash
-# Initialize connection
-curl -X POST http://127.0.0.1:8000/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+The 2026-07-28 core is stateless: no `initialize`/`notifications/initialized` handshake
+and no `Mcp-Session-Id`. Every request carries its own per-request `_meta`
+(`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`) and the
+`MCP-Protocol-Version: 2026-07-28` header.
 
-# Call calculator tool (framework auto-determined method)  
+```bash
+# Discover the server (no session needed)
 curl -X POST http://127.0.0.1:8000/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"calculator","arguments":{"a":5,"b":3}}}'
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
+
+# Call calculator tool (framework auto-determined method)
+curl -X POST http://127.0.0.1:8000/mcp \
+  -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}},"name":"calculator","arguments":{"a":5,"b":3}}}'
 ```
 
 ## Framework Comparison

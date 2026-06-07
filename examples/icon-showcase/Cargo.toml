@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Example showcasing MCP 2025-11-25 icon support on tools, resources, prompts, and implementations"
+description = "Example showcasing MCP 2026-07-28 icon support on tools, resources, prompts, and implementations"
 
 [dependencies]
 turul-mcp-protocol = { workspace = true }

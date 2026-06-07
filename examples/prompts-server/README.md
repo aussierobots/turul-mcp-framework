@@ -34,28 +34,44 @@ cargo run -p prompts-server
 ```
 
 ### Verify Server is Working
+
+The 2026-07-28 core is stateless: there is no `initialize`/`notifications/initialized`
+handshake and no `Mcp-Session-Id`. Every request carries its own per-request `_meta`
+(`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`) and the
+`MCP-Protocol-Version: 2026-07-28` header.
+
 ```bash
-# Initialize connection (in another terminal)
+# Discover the server (in another terminal) — no session needed
 curl -X POST http://127.0.0.1:8040/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
-    "method": "initialize",
+    "method": "server/discover",
     "params": {
-      "protocolVersion": "2025-11-25",
-      "capabilities": {},
-      "clientInfo": {"name": "test", "version": "1.0"}
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "1.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
     },
     "id": 1
   }' | jq
 
-# Check available prompts  
+# Check available prompts
 curl -X POST http://127.0.0.1:8040/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
     "method": "prompts/list",
-    "params": {},
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "1.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
+    },
     "id": 2
   }' | jq
 
@@ -260,7 +276,7 @@ impl McpPrompt for CodeGenerationPrompt {
 
 ## Protocol Compliance
 
-This example follows the MCP 2025-11-25 specification for prompts:
+This example follows the MCP 2026-07-28 specification for prompts:
 
 - **prompts/list**: Returns available prompts with descriptions
 - **prompts/get**: Generates prompt content based on provided arguments

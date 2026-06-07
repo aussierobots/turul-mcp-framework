@@ -28,12 +28,14 @@
 //! # Discover the authorization server:
 //! curl http://localhost:8080/.well-known/oauth-protected-resource
 //!
-//! # Call with a valid Bearer token:
+//! # Call with a valid Bearer token (2026-07-28 stateless: no session handshake;
+//! # each request carries its own `_meta`):
 //! curl -X POST http://localhost:8080/mcp \
 //!   -H "Content-Type: application/json" \
 //!   -H "Accept: application/json" \
+//!   -H "MCP-Protocol-Version: 2026-07-28" \
 //!   -H "Authorization: Bearer <JWT>" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
 //! ```
 
 use clap::Parser;

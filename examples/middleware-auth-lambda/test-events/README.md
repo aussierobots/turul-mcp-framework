@@ -100,6 +100,6 @@ Examples:
 
 ## Transport
 
-This example uses MCP 2025-11-25 **Streamable HTTP** transport via REST API (V1). REST API supports standard HTTP POST with full request/response control, making it compatible with Streamable HTTP.
+This example uses MCP 2026-07-28 **Streamable HTTP** transport via REST API (V1). REST API supports standard HTTP POST with full request/response control, making it compatible with Streamable HTTP. The 2026 core is stateless: each request carries its own `_meta` (protocolVersion, clientInfo, clientCapabilities); there is no `initialize`/`notifications/initialized` handshake and no `Mcp-Session-Id`.
 
 **Note**: All three authorizer shapes (V1 nested, V1 flat, V2) are supported for context extraction. However, Streamable HTTP transport requires REST API (V1).
