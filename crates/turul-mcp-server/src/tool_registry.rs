@@ -969,7 +969,7 @@ mod tests {
             Arc::new(SchemaTestTool {
                 tool_name: "complex",
                 schema: ToolSchema::object()
-                    .with_properties(props_a)
+                    .with_properties(turul_mcp_builders::tool_props(props_a))
                     .with_required(vec!["name".to_string()]),
             }),
         );
@@ -986,7 +986,7 @@ mod tests {
             Arc::new(SchemaTestTool {
                 tool_name: "complex",
                 schema: ToolSchema::object()
-                    .with_properties(props_b)
+                    .with_properties(turul_mcp_builders::tool_props(props_b))
                     .with_required(vec!["name".to_string()]),
             }),
         );
