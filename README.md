@@ -14,18 +14,18 @@
 
 # Turul MCP Framework - Beta Rust Implementation
 
-A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-11-25 specification**.
+A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. On this branch the default build targets the **MCP 2026-07-28 specification** (stateless core: `server/discover`, per-request `_meta`, no `Mcp-Session-Id`); **MCP 2025-11-25 remains available** as an opt-in (`--no-default-features --features protocol-2025-11-25`).
 
-⚠️ **Beta Status** - Active development with ongoing feature enhancements. Full MCP 2025-11-25 compliance including task storage and runtime. Suitable for development and testing.
+⚠️ **Beta Status** - Active development with ongoing feature enhancements. Default build is MCP 2026-07-28 (stateless); 2025-11-25 is opt-in. Suitable for development and testing.
 
 ## 🧪 **Active Development** - Comprehensive Test Coverage
-**1729+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
+**Broad test coverage across the workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
 
 ## ✨ Key Highlights
 
-- **🏗️ 13 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
-- **📚 58 Comprehensive Examples**: Real-world business applications and framework demonstration examples (all validated through comprehensive testing campaign)
-- **🧪 1729+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
+- **🏗️ 15 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
+- **📚 Comprehensive Examples**: Real-world business applications and framework demonstrations (43 build on the 2026-07-28 default; a small 2025-11-25 regression set is pinned to the opt-in)
+- **🧪 Framework-Native Test Suite**: Core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
 - **🌐 Transport Flexibility**: Streamable HTTP via StreamableHttpHandler with SSE streaming (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
@@ -202,10 +202,12 @@ cargo test -p turul-mcp-framework-integration-tests --test compliance
 # 3. Start a simple server
 cargo run -p minimal-server
 
-# 4. Test the server (in another terminal)
+# 4. Test the server (in another terminal) — 2026-07-28 stateless: no handshake,
+#    capabilities travel in per-request `_meta`, no Mcp-Session-Id header.
 curl -X POST http://127.0.0.1:8641/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}},"id":1}'
 ```
 
 ### Example Servers - Ready to Run
@@ -237,54 +239,54 @@ cargo run -p notification-server
 cargo run -p stateful-server
 ```
 
-### Manual MCP Compliance Verification
+### Manual MCP Compliance Verification (2026-07-28 default)
 
-**Step 1: Initialize Connection**
+The default build is stateless: there is no `initialize` handshake and no `Mcp-Session-Id`
+header. Capabilities, client info, and the protocol version travel in `_meta` on every
+request under the `io.modelcontextprotocol/*` namespace.
+
+**Step 1: Discover the server**
 ```bash
 PORT=8080  # Replace with your server's port
 curl -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
   -d '{
     "jsonrpc": "2.0",
-    "method": "initialize",
+    "method": "server/discover",
     "params": {
-      "protocolVersion": "2025-11-25", 
-      "capabilities": {},
-      "clientInfo": {"name": "test", "version": "1.0"}
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "1.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
     },
     "id": 1
   }' | jq
 ```
 
-**Expected Response:**
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {
-    "protocolVersion": "2025-11-25",
-    "serverInfo": {"name": "server-name", "version": "0.3"},
-    "capabilities": {"tools": {"listChanged": false}}
-  }
-}
+**Step 2: Call operations (no session header)**
+```bash
+# Tools — capabilities ride in per-request `_meta`:
+curl -X POST http://127.0.0.1:$PORT/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}},"id":2}' | jq
+
+# Resources:
+curl -X POST http://127.0.0.1:$PORT/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","method":"resources/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}},"id":3}' | jq
 ```
 
-**Step 2: Test Available Operations**
+**2025-11-25 (opt-in):** build with `--no-default-features --features protocol-2025-11-25`
+and the stateful handshake applies instead — `initialize` → `notifications/initialized` →
+`Mcp-Session-Id` header on every subsequent request:
 ```bash
-# Get session ID from response and test capabilities
-SESSION_ID="your-session-id-here"
-
-# If server has tools capability:
 curl -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
-  -H "Mcp-Session-Id: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":2}' | jq
-
-# If server has resources capability:
-curl -X POST http://127.0.0.1:$PORT/mcp \
-  -H 'Content-Type: application/json' \
-  -H "Mcp-Session-Id: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","method":"resources/list","params":{},"id":3}' | jq
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}' | jq
 ```
 
 ### Comprehensive Testing Guide
@@ -295,7 +297,7 @@ For detailed testing instructions, server running guides, and compliance verific
 
 This guide includes:
 - ✅ All server running instructions with expected outputs
-- ✅ Manual MCP 2025-11-25 compliance verification  
+- ✅ Manual MCP compliance verification (2026-07-28 default; 2025-11-25 opt-in)  
 - ✅ SSE event stream testing procedures
 - ✅ Performance testing and troubleshooting
 - ✅ CI/CD integration examples
@@ -309,12 +311,13 @@ cat > quick_check.sh << 'EOF'
 PORT=${1:-8080}
 echo "🧪 Testing MCP server on port $PORT"
 
-INIT_RESPONSE=$(curl -s -X POST http://127.0.0.1:$PORT/mcp \
+DISCOVER_RESPONSE=$(curl -s -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -d '{"jsonrpc":"2.0","method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}},"id":1}')
 
-if [[ $(echo $INIT_RESPONSE | jq -r '.result.protocolVersion') == "2025-11-25" ]]; then
-    echo "✅ MCP 2025-11-25 compliant"
+if [[ $(echo $DISCOVER_RESPONSE | jq -r '.result.serverInfo.name // empty') != "" ]]; then
+    echo "✅ MCP 2026-07-28 server/discover responded"
 else
     echo "❌ Not compliant"
     exit 1
@@ -416,24 +419,26 @@ impl McpMiddleware for AuthMiddleware {
 - `examples/middleware-auth-lambda` - Full authorizer extraction pattern (V1 nested, V1 flat, V2)
 - Test events: V1 nested, V1 flat, V2 authorizer shapes (`test-events/`)
 
-### Core Framework (13 Crates)
+### Core Framework (15 Crates)
 - **`turul-mcp-server`** - High-level server builder with session management and task runtime
-- **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
+- **`turul-mcp-client`** - Comprehensive client library with HTTP transport support (bilingual: 2026-07-28 + 2025-11-25)
 - **`turul-http-mcp-server`** - HTTP/SSE transport with CORS and streaming
-- **`turul-mcp-protocol`** - Current MCP specification (alias to 2025-11-25)
-- **`turul-mcp-protocol-2025-11-25`** - Complete MCP 2025-11-25 specification implementation
-- **`turul-mcp-protocol-2025-06-18`** - Legacy MCP specification (backward compatibility)
+- **`turul-mcp-protocol`** - Current MCP specification alias (defaults to 2026-07-28; `protocol-2025-11-25` feature for the prior spec)
+- **`turul-mcp-protocol-2026-07-28`** - MCP 2026-07-28 specification implementation (default active spec)
+- **`turul-mcp-protocol-2025-11-25`** - MCP 2025-11-25 specification implementation (frozen historical snapshot; opt-in)
+- **`turul-mcp-protocol-2025-06-18`** - Legacy MCP specification (frozen historical snapshot)
 - **`turul-mcp-derive`** - Procedural macros for all MCP areas
 - **`turul-mcp-builders`** - Runtime builder patterns for dynamic MCP components
 - **`turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
 - **`turul-mcp-session-storage`** - Session storage backends (SQLite, PostgreSQL, DynamoDB)
 - **`turul-mcp-task-storage`** - Task storage for long-running operations (InMemory, with pluggable backends)
+- **`turul-mcp-server-state-storage`** - Server-global state for dynamic tool coordination
 - **`turul-mcp-aws-lambda`** - AWS Lambda integration for serverless deployment
 - **`turul-mcp-oauth`** - OAuth 2.1 Resource Server support (JWT validation, Bearer middleware)
 
 ### Tasks Architecture ADRs
 
-Tasks are an experimental MCP 2025-11-25 capability. The framework provides full implementation support (protocol types, storage, runtime, handlers, and tests). See the architecture decision records for design rationale:
+Tasks are a 2026-07-28 *extension* (and were a core MCP 2025-11-25 capability). On the 2026-07-28 default build the in-tree task runtime is gated to the `protocol-2025-11-25` opt-in (`#[cfg(feature = "protocol-2025-11-25")]`); the framework provides full implementation support (protocol types, storage, runtime, handlers, and tests) under that opt-in. See the architecture decision records for design rationale:
 
 - [ADR-015: Protocol Crate Strategy](docs/adr/015-mcp-2025-11-25-protocol-crate.md) — separate crate for 2025-11-25 spec types including Tasks
 - [ADR-016: Task Storage Architecture](docs/adr/016-task-storage-architecture.md) — `TaskStorage` trait, 4 backends, state machine, parity test suite
@@ -555,7 +560,7 @@ let server = McpServer::builder()
 - ✅ **Session Management** - Stateful operations with UUID v7 correlation IDs
 
 ### Transport Support
-- **Streamable HTTP** - Production transport via `StreamableHttpHandler` (HTTP/1.1 & HTTP/2 with chunked SSE, MCP 2025-11-25)
+- **Streamable HTTP** - Production transport via `StreamableHttpHandler` (HTTP/1.1 & HTTP/2 with chunked SSE; stateless on the 2026-07-28 default, stateful with GET SSE on the 2025-11-25 opt-in)
 - **HTTP+SSE (Legacy)** - Backward-compatible transport via `SessionMcpHandler` (protocol <= 2024-11-05)
 - **AWS Lambda** - Serverless deployment with streaming responses
 - **Stdio** - Planned for future implementation
@@ -613,7 +618,7 @@ sam deploy --guided
 
 ### 🧪 **Comprehensive Test Coverage - Development Quality**
 
-**Framework Excellence**: 1729+ tests across all components with complete async SessionContext integration:
+**Framework Excellence**: broad test coverage across all components with complete async SessionContext integration:
 
 - **✅ Core Framework Tests** - Protocol, server, client, derive macros
 - **✅ SessionContext Integration** - Full session state management
@@ -624,7 +629,7 @@ sam deploy --guided
 - **✅ Example Applications** - Real-world scenario validation
 
 ```bash
-# Run all tests - expect 1729+ passing
+# Run the default-members (2026-07-28) test suite
 cargo test --workspace
 
 # SessionContext integration tests
@@ -942,7 +947,7 @@ let content = client.read_resource("config://app.json").await?;
 
 ### Modern Architecture
 - **UUID v7** - Time-ordered IDs for better database performance and observability
-- **Workspace Dependencies** - Consistent dependency management across 13 core crates and 58 examples
+- **Workspace Dependencies** - Consistent dependency management across the framework crates and examples
 - **Rust 2024 Edition** - Latest language features and performance improvements
 - **Tokio/Hyper** - High-performance async runtime with HTTP/2 support
 
@@ -955,36 +960,39 @@ let content = client.read_resource("config://app.json").await?;
 
 ## 🔍 MCP Protocol Compliance
 
-**Full MCP 2025-11-25 specification support:**
+**Default build targets MCP 2026-07-28 (stateless); 2025-11-25 is opt-in:**
 
 - ✅ **JSON-RPC 2.0** - Complete request/response with `_meta` fields
-- ✅ **Protocol Negotiation** - Version compatibility and capability exchange
+- ✅ **Stateless core (2026-07-28)** - `server/discover`, per-request `_meta` capability negotiation, no `Mcp-Session-Id`
 - ✅ **Progress Tracking** - Long-running operation support
 - ✅ **Cursor Pagination** - Efficient large dataset navigation
-- ✅ **Session Isolation** - Secure multi-client support
+- ✅ **Caching headers (2026-07-28)** - `ttlMs` / `cacheScope` on list/read results
 - ✅ **Transport Agnostic** - Multiple transport implementations
 
-### Testing Your Server
+### Testing Your Server (2026-07-28 default)
 ```bash
-# Test tool execution
+# Test tool execution — capabilities ride in per-request `_meta`, no session header
 curl -X POST http://127.0.0.1:8080/mcp \
   -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2025-11-25" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
     "method": "tools/call",
     "params": {
       "name": "add",
-      "arguments": {"a": 10, "b": 20}
+      "arguments": {"a": 10, "b": 20},
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test", "version": "1.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
     }
   }'
-
-# Test SSE notifications (after getting session ID from above request)
-curl -N -H "Accept: text/event-stream" \
-  -H "Mcp-Session-Id: <session-id>" \
-  http://127.0.0.1:8080/mcp
 ```
+
+> On the `2025-11-25` opt-in build, `tools/call` instead requires the stateful handshake
+> and the `Mcp-Session-Id` header, and GET SSE notifications are available on that stream.
 
 ### MCP Session Management Compliance Testing
 
@@ -1018,7 +1026,7 @@ cargo build --release
 
 ### Running Tests
 
-The framework includes **1729+ comprehensive tests** covering all functionality. Test server binaries are **automatically built** when needed - no manual setup required.
+The framework includes a **comprehensive test suite** covering all functionality. Test server binaries are **automatically built** when needed - no manual setup required.
 
 ```bash
 # Run all tests (recommended - includes E2E integration tests)
@@ -1138,11 +1146,15 @@ cargo test --package mcp-resources-tests test_sse_session_isolation -- --nocaptu
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
 ```
 
-#### Manual SSE Verification
+#### Manual SSE Verification (2025-11-25 opt-in)
+
+GET SSE with a session ID is part of the stateful 2025-11-25 core, which is the opt-in
+build (`--no-default-features --features protocol-2025-11-25`). The default 2026-07-28
+build is stateless and does not hold a session-keyed GET SSE stream.
 
 ```bash
-# 1. Start any MCP server with SSE enabled
-cargo run --example prompts-server
+# 1. Start any MCP server with SSE enabled (build with the 2025-11-25 opt-in)
+cargo run --no-default-features --features protocol-2025-11-25 --example prompts-server
 
 # 2. Get session ID via initialization
 curl -X POST http://127.0.0.1:8080/mcp \
@@ -1216,7 +1228,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 ### 🎯 Current Framework State
 - **Phase 6 Complete**: Session-aware resources implemented with full MCP 2025-11-25 compliance
-- **58 Examples Validated**: Comprehensive testing campaign completed across all framework areas
+- **Examples Validated**: 43 examples build on the 2026-07-28 default; a small 2025-11-25 regression set is pinned to the opt-in
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
 - **Beta Status**: Active development with API stability considerations before 1.0.0
 
@@ -1243,4 +1255,4 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 **🚀 Ready to build MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
 
-**💡 Need help?** Open an issue or check our [58 validated examples](examples/) covering everything from simple calculators to enterprise systems.
+**💡 Need help?** Open an issue or check our [examples](examples/) covering everything from simple calculators to enterprise systems.

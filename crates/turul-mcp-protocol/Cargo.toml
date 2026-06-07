@@ -11,9 +11,8 @@ description = "Model Context Protocol (MCP) specification implementation - Curre
 [features]
 # Spec-version coexistence: exactly one protocol-<date> feature selects which
 # versioned crate this alias re-exports (enforced by compile_error! in lib.rs).
-# Default stays 2025-11-25 so existing consumers are unaffected; the 2026-07-28
-# build is opt-in until the server/framework crates are 2026-capable. The
-# eventual default flip to 2026-07-28 is the ADR-029 cutover.
+# Default is 2026-07-28 (stateless core); 2025-11-25 is the opt-in escape hatch
+# (`--no-default-features --features protocol-2025-11-25`).
 default = ["protocol-2026-07-28"]
 protocol-2025-11-25 = ["dep:turul-mcp-protocol-2025-11-25"]
 protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
