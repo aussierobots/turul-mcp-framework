@@ -493,7 +493,12 @@ mod tests {
             .build();
 
         assert_eq!(notification.method, "notifications/cancelled");
+        // CancelledNotificationParams.request_id is a bare RequestId under 2025-11-25
+        // and Option<RequestId> under 2026-07-28.
+        #[cfg(feature = "protocol-2025-11-25")]
         assert_eq!(notification.params.request_id, RequestId::Number(123));
+        #[cfg(feature = "protocol-2026-07-28")]
+        assert_eq!(notification.params.request_id, Some(RequestId::Number(123)));
         assert_eq!(
             notification.params.reason,
             Some("User cancelled operation".to_string())
@@ -518,11 +523,16 @@ mod tests {
         let prompt_list = NotificationBuilder::prompt_list_changed();
         assert_eq!(prompt_list.method, "notifications/prompts/list_changed");
 
-        let roots_list = NotificationBuilder::roots_list_changed();
-        assert_eq!(roots_list.method, "notifications/roots/list_changed");
+        // Roots and the initialize handshake are gone from the stateless 2026-07-28 core,
+        // so these convenience constructors are 2025-11-25 only.
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            let roots_list = NotificationBuilder::roots_list_changed();
+            assert_eq!(roots_list.method, "notifications/roots/list_changed");
 
-        let initialized = NotificationBuilder::initialized();
-        assert_eq!(initialized.method, "notifications/initialized");
+            let initialized = NotificationBuilder::initialized();
+            assert_eq!(initialized.method, "notifications/initialized");
+        }
 
         // Test logging message
         let logging = NotificationBuilder::logging_message(

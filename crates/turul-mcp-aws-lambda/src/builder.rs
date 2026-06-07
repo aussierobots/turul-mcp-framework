@@ -1644,6 +1644,9 @@ mod tests {
     // Task support tests
     // =========================================================================
 
+    // Tasks moved to the turul-mcp-ext-tasks extension in 2026-07-28; the task
+    // runtime/storage builder surface and the capabilities.tasks field are 2025-only.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_builder_without_tasks_no_capability() {
         let server = LambdaMcpServerBuilder::new()
@@ -1661,6 +1664,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_builder_with_task_storage_advertises_capability() {
         use turul_mcp_server::task_storage::InMemoryTaskStorage;
@@ -1696,6 +1700,7 @@ mod tests {
         assert!(tools.call.is_some(), "tools.call capability should be set");
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_builder_with_task_runtime_advertises_capability() {
         let runtime = Arc::new(turul_mcp_server::TaskRuntime::in_memory());
@@ -1716,6 +1721,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_task_recovery_timeout_configuration() {
         use turul_mcp_server::task_storage::InMemoryTaskStorage;
@@ -1737,6 +1743,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_backward_compatibility_no_tasks() {
         // Existing builder pattern still works unchanged
@@ -1759,21 +1766,26 @@ mod tests {
     }
 
     /// Slow tool that sleeps for 2 seconds — used to prove non-blocking behavior.
+    /// Declares task support, which exists only in the 2025-11-25 spec.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[derive(Clone, Default)]
     struct SlowTool;
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasBaseMetadata for SlowTool {
         fn name(&self) -> &str {
             "slow_tool"
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasDescription for SlowTool {
         fn description(&self) -> Option<&str> {
             Some("A slow tool for testing")
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasInputSchema for SlowTool {
         fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
             use turul_mcp_protocol::ToolSchema;
@@ -1782,25 +1794,30 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasOutputSchema for SlowTool {
         fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
             None
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasAnnotations for SlowTool {
         fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
             None
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasToolMeta for SlowTool {
         fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
             None
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasIcons for SlowTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for SlowTool {
         fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
             Some(turul_mcp_protocol::tools::ToolExecution {
@@ -1809,6 +1826,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[async_trait::async_trait]
     impl McpTool for SlowTool {
         async fn call(
@@ -1823,6 +1841,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_nonblocking_tools_call_with_task() {
         use turul_mcp_json_rpc_server::r#async::JsonRpcHandler;
@@ -2223,6 +2242,7 @@ mod tests {
         assert_eq!(templates[0]["uriTemplate"], "agent://agents/{agent_id}");
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_tasks_get_route_registered() {
         use turul_mcp_server::TasksGetHandler;
@@ -2259,6 +2279,9 @@ mod tests {
     /// HTTP server registers it unconditionally — Lambda must match.
     /// We test by sending a resources/read request through handle() and
     /// verifying we get an MCP error (not "method not found").
+    // Drives the 2025-11-25 initialize handshake to obtain an Mcp-Session-Id;
+    // the 2026-07-28 stateless core has no initialize and returns no session id.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_resources_read_registered_by_default() {
         use lambda_http::Body as LambdaBody;
@@ -2342,6 +2365,7 @@ mod tests {
     /// Verify resources/templates/list is NOT dispatched when no templates exist.
     /// HTTP server only registers it conditionally — Lambda must match.
     /// We prove absence by sending a request and verifying "method not found" (-32601).
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_resources_templates_list_absent_without_templates() {
         use lambda_http::Body as LambdaBody;

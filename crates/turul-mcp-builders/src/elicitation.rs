@@ -541,10 +541,14 @@ impl ElicitResultBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "protocol-2025-11-25")]
     use crate::traits::ElicitationDefinition;
     use serde_json::json;
     use turul_mcp_protocol::elicitation::ElicitAction;
 
+    // ElicitationBuilder::build() produces the 2025-11-25 ElicitCreateRequest, which
+    // the stateless 2026-07-28 core removed; these tests are 2025-11-25 only.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_elicitation_builder_basic() {
         let request = ElicitationBuilder::new("Enter your details")
@@ -577,6 +581,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_elicitation_builder_with_constraints() {
         let request = ElicitationBuilder::new("Create account")
@@ -599,6 +604,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_elicitation_builder_enum_field() {
         let choices = vec!["red".to_string(), "green".to_string(), "blue".to_string()];
@@ -626,6 +632,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_elicitation_builder_meta() {
         let request = ElicitationBuilder::new("Test")
@@ -640,6 +647,7 @@ mod tests {
         assert_eq!(meta.get("priority"), Some(&json!(1)));
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_convenience_builders() {
         // Text input
@@ -823,6 +831,9 @@ mod tests {
         assert!(cancel_result.content.is_none());
     }
 
+    // ElicitationDefinition::to_create_request() builds the 2025-11-25 ElicitCreateRequest,
+    // gated out of the stateless 2026-07-28 core.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_trait_implementations() {
         let elicitation = ElicitationBuilder::new("Test message")

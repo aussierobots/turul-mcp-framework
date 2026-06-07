@@ -1051,6 +1051,9 @@ mod tests {
     }
 
     /// P0: Full strict lifecycle handshake succeeds on handle_streaming()
+    // The initialize/initialized handshake and strict lifecycle exist only in
+    // 2025-11-25; the 2026-07-28 stateless core has neither.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_strict_handshake_succeeds() {
         let handler = build_strict_streaming_handler().await;
@@ -1136,6 +1139,7 @@ mod tests {
     }
 
     /// P0: Strict lifecycle rejects both tools/list and tools/call before notifications/initialized
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_strict_rejects_before_initialized() {
         let handler = build_strict_streaming_handler().await;

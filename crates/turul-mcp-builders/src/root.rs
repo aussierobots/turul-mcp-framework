@@ -409,7 +409,8 @@ impl RootBuilder {
     }
 }
 
-#[cfg(test)]
+// Roots are gone from the stateless 2026-07-28 core; the root builders are 2025-11-25 only.
+#[cfg(all(test, feature = "protocol-2025-11-25"))]
 mod tests {
     use super::*;
     use crate::traits::RootDefinition;

@@ -24,7 +24,11 @@
 //! - Logging message construction with `LoggingBuilder`
 //!
 //! # Example
-//! ```rust
+// The example uses ToolBuilder, MessageBuilder, CompletionBuilder, RootBuilder, and
+// LoggingBuilder, which are gated out of the stateless 2026-07-28 core; run it only
+// under 2025-11-25.
+#![cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#![cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 //! use turul_mcp_builders::{
 //!     ToolBuilder, ResourceBuilder, PromptBuilder, MessageBuilder,
 //!     CompletionBuilder, RootBuilder, ElicitationBuilder,

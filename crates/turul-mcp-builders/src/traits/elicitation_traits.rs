@@ -67,7 +67,11 @@ pub trait HasElicitationHandling {
 ///
 /// Implement these three traits on your struct:
 ///
-/// ```rust
+// The example constructs the 2025-11-25 ElicitationSchema shape and calls
+// to_create_request(), both of which the stateless 2026-07-28 core removed; run it
+// only under 2025-11-25.
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// # use turul_mcp_protocol::elicitation::*;
 /// # use turul_mcp_builders::prelude::*;
 /// # use serde_json::Value;
