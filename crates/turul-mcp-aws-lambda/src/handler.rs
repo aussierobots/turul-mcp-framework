@@ -11,9 +11,9 @@ use tracing::{debug, info};
 use turul_http_mcp_server::{
     ServerConfig, SessionMcpHandler, StreamConfig, StreamManager, StreamableHttpHandler,
 };
-use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 use turul_mcp_protocol::{McpError, ServerCapabilities};
 use turul_mcp_session_storage::BoxedSessionStorage;
+use turul_rpc::JsonRpcDispatcher;
 
 use crate::error::Result;
 

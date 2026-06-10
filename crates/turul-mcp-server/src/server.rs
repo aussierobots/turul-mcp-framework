@@ -52,7 +52,7 @@ struct SessionManagerToolNotifier {
 #[async_trait]
 impl turul_http_mcp_server::ToolChangeNotifier for SessionManagerToolNotifier {
     async fn notify_tools_changed(&self, session_id: &str) -> std::result::Result<(), String> {
-        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
+        let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
         );
         let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
@@ -68,7 +68,7 @@ impl turul_http_mcp_server::ToolChangeNotifier for SessionManagerToolNotifier {
 
 use crate::session::{SessionContext, SessionManager};
 use crate::{McpServerBuilder, McpTool, Result, tool::tool_to_descriptor};
-use turul_mcp_json_rpc_server::JsonRpcHandler;
+use turul_rpc::JsonRpcHandler;
 
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::*;
@@ -878,8 +878,8 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
     async fn handle(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request via session-aware bridge", method);
 
@@ -948,8 +948,8 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
     async fn handle_notification(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<(), McpError> {
         debug!("Handling {} notification via session-aware bridge", method);
 
@@ -1007,9 +1007,7 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
 }
 
 /// Extract session ID from request parameters (placeholder implementation)
-fn extract_session_id_from_params(
-    _params: &Option<turul_mcp_json_rpc_server::RequestParams>,
-) -> Option<String> {
+fn extract_session_id_from_params(_params: &Option<turul_rpc::RequestParams>) -> Option<String> {
     // In a real implementation, this would extract session ID from HTTP headers
     // For now, return None as we'll implement proper session extraction later
     None
@@ -1175,8 +1173,8 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request with session support", method);
 
@@ -1443,8 +1441,8 @@ impl JsonRpcHandler for DiscoverHandler {
     async fn handle(
         &self,
         method: &str,
-        _params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        _session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        _params: Option<turul_rpc::RequestParams>,
+        _session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         if method != SERVER_DISCOVER_METHOD {
             return Err(McpError::InvalidParameters(format!(
@@ -1524,8 +1522,8 @@ impl JsonRpcHandler for ListToolsHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         use turul_mcp_protocol::meta::Cursor;
 
@@ -1775,8 +1773,8 @@ impl JsonRpcHandler for SessionAwareToolHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request with session support", method);
 
@@ -2304,7 +2302,7 @@ mod tests {
         let session_manager = Arc::new(SessionManager::new(ServerCapabilities::default()));
         let handler = SessionAwareToolHandler::new(tools, session_manager, false);
         // Create params matching the CallToolParams structure
-        let params = turul_mcp_json_rpc_server::RequestParams::Object(
+        let params = turul_rpc::RequestParams::Object(
             [
                 ("name".to_string(), serde_json::json!("test")),
                 ("arguments".to_string(), serde_json::json!({})),

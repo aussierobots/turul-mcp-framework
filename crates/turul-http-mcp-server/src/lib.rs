@@ -93,10 +93,10 @@ pub trait ToolChangeNotifier: Send + Sync {
 }
 
 // Re-export foundational types
-/// JSON-RPC 2.0 dispatcher and handler trait for protocol operations
-pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 /// Core MCP protocol types and error handling
 pub use turul_mcp_protocol::*;
+/// JSON-RPC 2.0 dispatcher and handler trait for protocol operations
+pub use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 
 /// Result type for HTTP MCP operations
 pub type Result<T> = std::result::Result<T, HttpMcpError>;
@@ -108,7 +108,7 @@ pub enum HttpMcpError {
     Http(#[from] hyper::Error),
 
     #[error("JSON-RPC error: {0}")]
-    JsonRpc(#[from] turul_mcp_json_rpc_server::JsonRpcError),
+    JsonRpc(#[from] turul_rpc::JsonRpcError),
 
     #[error("MCP protocol error: {0}")]
     Mcp(#[from] turul_mcp_protocol::McpError),

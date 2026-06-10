@@ -118,6 +118,21 @@ pub trait Transport: Send + Sync {
     /// Send a request and wait for response
     async fn send_request(&self, request: Value) -> McpClientResult<Value>;
 
+    /// Open a long-lived streaming request (2026 `subscriptions/listen`):
+    /// POST the request and return a channel of the JSON payloads arriving on
+    /// the response's SSE stream, in order. Dropping the receiver closes the
+    /// stream (Streamable HTTP: closing the response stream IS cancellation).
+    /// Default: unsupported (only the Streamable HTTP transport implements it).
+    async fn send_request_streaming(
+        &self,
+        _request: Value,
+    ) -> McpClientResult<tokio::sync::mpsc::UnboundedReceiver<Value>> {
+        Err(crate::error::TransportError::Http(
+            "this transport does not support streaming requests".to_string(),
+        )
+        .into())
+    }
+
     /// Send a request with additional per-request HTTP headers (SEP-2243
     /// `Mcp-Param-*` mirrors). Non-HTTP transports MAY ignore the annotations
     /// entirely, so the default delegates to [`Self::send_request`].

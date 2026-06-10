@@ -1840,9 +1840,9 @@ mod tests {
     #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_nonblocking_tools_call_with_task() {
-        use turul_mcp_json_rpc_server::r#async::JsonRpcHandler;
         use turul_mcp_server::SessionAwareToolHandler;
         use turul_mcp_server::task_storage::InMemoryTaskStorage;
+        use turul_rpc::r#async::JsonRpcHandler;
 
         let task_storage = Arc::new(InMemoryTaskStorage::new());
         let runtime = Arc::new(turul_mcp_server::TaskRuntime::with_default_executor(
@@ -1871,7 +1871,7 @@ mod tests {
             "arguments": {},
             "task": {}
         });
-        let request_params = turul_mcp_json_rpc_server::RequestParams::Object(
+        let request_params = turul_rpc::RequestParams::Object(
             params
                 .as_object()
                 .unwrap()

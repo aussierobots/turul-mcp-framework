@@ -193,7 +193,7 @@ impl ToolRegistry {
     /// Called AFTER the write lock is released.
     /// Returns `Err(NotificationFailed)` if mandatory persistence fails.
     async fn broadcast_notification(&self) -> Result<(), ToolRegistryError> {
-        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
+        let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
         );
         let data = serde_json::to_value(&notification)

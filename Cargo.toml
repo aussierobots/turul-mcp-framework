@@ -211,7 +211,7 @@ turul-rpc = { version = "0.2", default-features = false }
 # path+version resolution. Frozen historical protocol crates (`2025-06-18`,
 # `2025-11-25`) stay at their last 0.3.x publish — everything else moves on
 # its own cadence.
-turul-mcp-json-rpc-server = { version = "0.4.0", path = "crates/turul-mcp-json-rpc-server" }
+turul-mcp-json-rpc-server = { version = "0.3.47", path = "crates/turul-mcp-json-rpc-server" }
 turul-mcp-protocol-2025-06-18 = { version = "0.3.47", path = "crates/turul-mcp-protocol-2025-06-18" }
 turul-mcp-protocol-2025-11-25 = { version = "0.3.47", path = "crates/turul-mcp-protocol-2025-11-25" }
 turul-mcp-protocol-2026-07-28 = { version = "0.4.0", path = "crates/turul-mcp-protocol-2026-07-28" }

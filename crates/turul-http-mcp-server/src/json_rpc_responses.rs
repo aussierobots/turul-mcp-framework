@@ -9,9 +9,7 @@ use hyper::{Response, StatusCode, header};
 use serde_json::Value;
 use tracing::error;
 
-use turul_mcp_json_rpc_server::{
-    JsonRpcError, JsonRpcResponse, error::JsonRpcErrorObject, types::RequestId,
-};
+use turul_rpc::{JsonRpcError, JsonRpcResponse, error::JsonRpcErrorObject, types::RequestId};
 
 /// HTTP body type for JSON-RPC responses
 type JsonRpcBody = Full<Bytes>;

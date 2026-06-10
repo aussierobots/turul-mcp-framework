@@ -18,8 +18,8 @@ use std::time::Duration;
 use futures::StreamExt;
 use turul_http_mcp_server::notification_bridge::SharedNotificationBroadcaster;
 use turul_mcp_derive::McpTool;
-use turul_mcp_json_rpc_server::JsonRpcNotification;
 use turul_mcp_server::prelude::*;
+use turul_rpc::JsonRpcNotification;
 
 #[derive(McpTool, Clone, Default)]
 #[tool(name = "echo", description = "Echo back the provided message", output = String)]

@@ -89,13 +89,23 @@ picking one.
 
 ## 2. Release checklist
 
-> **Status update (2026-06-10, commits `922691fd`…`28524e6a`):** every P0 below
-> is CLOSED — each landed with real-HTTP positive+negative tests in the
-> default-2026 CI lane and a recorded revert-and-fail. The schema pin was
-> re-vendored (`1bf94a60`). ADR-029/-025/-030 and the coverage matrix were
-> reconciled. Remaining open work is the P1 fidelity/oauth list and the P2
-> low sweep, plus the limitations noted per item below. Release disposition
-> remains the maintainer's call per the Branch Lock.
+> **Status update (final, 2026-06-10 release-prep sweep):** every P0 AND every
+> P1 below is CLOSED (real-HTTP tests in the default-2026 CI lane,
+> revert-and-fail recorded per slice). Functional completions beyond the
+> original list: MRTR on all three permitted methods, client-side
+> `subscriptions/listen` (`McpClient::subscriptions_listen` + e2e),
+> `completion/complete` e2e, `resources.subscribe` truthfulness, the ADR-025
+> framework shim cut (shim repinned to terminal `0.3.47`), CIMD/DCR posture
+> dispositioned (RS-only crate), schema pin `1bf94a60`, lossless
+> builders/derive schema pipeline. **True remaining exceptions:**
+> (1) the residual P2 comment/doc lows from the audit journal
+> (`wf_d1bd157b-617`) not covered by the hygiene sweeps;
+> (2) `requestState` integrity (HMAC) is the tool author's concern — the
+> framework does not sign it;
+> (3) cyclic/non-local `$ref` tool schemas are documented rejections;
+> (4) client-side CIMD belongs to a future full MCP OAuth client flow;
+> (5) release/cutover/publish disposition remains the maintainer's call per
+> the Branch Lock.
 
 Status key: ☐ open ☑ done. P0 = spec MUST not met or HIGH defect (release blockers).
 P1 = mediums (spec SHOULDs, fidelity drift, ADR/doc contract drift). P2 = lows.
@@ -200,10 +210,10 @@ P1 = mediums (spec SHOULDs, fidelity drift, ADR/doc contract drift). P2 = lows.
 
 ### P1 — ADR / docs contract drift (workflow-verified)
 
-- ☐ ADR-025: shim still consumed by four non-frozen crates and bumped to 0.4.0,
+- ☑ (2026-06-10, shim cut landed — see ADR-025 revision log) ADR-025: shim still consumed by four non-frozen crates and bumped to 0.4.0,
   contradicting the "terminal 0.3.39, framework drops the dep at 0.4.0" decision.
   Either cut the dep now or revise ADR-025.
-- ☐ ADR-030/ADR-001/CLAUDE.md claim the bilingual client doesn't import the
+- ☑ (2026-06-10, alias dep removed in a0ada8cf) ADR-030/ADR-001/CLAUDE.md claim the bilingual client doesn't import the
   `turul-mcp-protocol` alias — the client manifest pins it with 19 source imports.
 - ☑ ADR-029 prescribes `cargo test --workspace` matrices that cannot compile (§CI surface rewritten 2026-06-10) (feature
   unification trips the alias mutex — empirically verified).

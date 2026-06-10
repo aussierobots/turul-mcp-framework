@@ -688,6 +688,63 @@ impl Transport for HttpTransport {
         Ok(result)
     }
 
+    async fn send_request_streaming(
+        &self,
+        request: Value,
+    ) -> McpClientResult<tokio::sync::mpsc::UnboundedReceiver<Value>> {
+        if !self.is_connected() {
+            return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
+        }
+        let mut request = request;
+        if request.get("id").is_none() {
+            request["id"] = Value::String(self.next_request_id());
+        }
+        let mut req_builder = self
+            .client
+            .post(self.endpoint.clone())
+            .header("Content-Type", "application/json")
+            // The response IS an SSE stream.
+            .header("Accept", "text/event-stream")
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
+        req_builder = self.apply_request_metadata_headers(req_builder, &request);
+        req_builder = self.apply_auth_override(req_builder);
+
+        let response = req_builder
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(TransportError::HttpStatus { status, message }.into());
+        }
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            let mut stream = response.bytes_stream();
+            let mut buffer = String::new();
+            while let Some(chunk) = stream.next().await {
+                let Ok(chunk) = chunk else { break };
+                buffer.push_str(&String::from_utf8_lossy(&chunk));
+                while let Some(pos) = buffer.find("\n\n") {
+                    let event: String = buffer.drain(..pos + 2).collect();
+                    for line in event.lines() {
+                        if let Some(data) = line.strip_prefix("data: ")
+                            && let Ok(json) = serde_json::from_str::<Value>(data)
+                            && tx.send(json).is_err()
+                        {
+                            // Receiver dropped: the subscription is cancelled.
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        Ok(rx)
+    }
+
     async fn send_request_with_extra_headers(
         &self,
         request: Value,

@@ -331,3 +331,98 @@ async fn client_mirrors_mcp_param_headers_from_x_mcp_header_annotations() {
     let text = serde_json::to_string(&result).unwrap_or_default();
     assert!(text.contains("ran in  padded "), "{text}");
 }
+
+#[tokio::test]
+async fn client_subscriptions_listen_receives_filtered_notifications() {
+    // Real server with the broadcast-triggering tool; the client opens a
+    // listen stream, a second request triggers server-wide broadcasts, and
+    // only the opted-in type arrives — stamped with the subscription id.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("e2e-2026-listen")
+        .version("0.4.0")
+        .tool(EmitOnceTool::default())
+        .with_resources()
+        .with_prompts()
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    let transport = Box::new(HttpTransport::new(&url).unwrap());
+    let client = McpClient::new(transport, ClientConfig::default());
+    client.connect().await.expect("connect");
+
+    let mut stream = client
+        .subscriptions_listen(json!({ "resourcesListChanged": true }))
+        .await
+        .expect("listen stream must open with an acknowledgement first");
+    assert_eq!(
+        stream.honored["resourcesListChanged"], true,
+        "honored filter must echo the requested type"
+    );
+    let sub_id = stream.subscription_id.clone().expect("subscription id");
+
+    // Trigger broadcasts (one requested type, one not).
+    client
+        .call_tool("emit_once", json!({}))
+        .await
+        .expect("emit tool");
+
+    let event = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+        .await
+        .expect("a notification must arrive")
+        .expect("stream open");
+    assert_eq!(event["method"], "notifications/resources/list_changed");
+    assert_eq!(
+        event["params"]["_meta"]["io.modelcontextprotocol/subscriptionId"],
+        serde_json::Value::String(sub_id),
+        "stream notifications carry the subscription id: {event}"
+    );
+}
+
+/// Broadcasts one requested and one unrequested notification type.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "emit_once", description = "Broadcast change notifications", output = String)]
+struct EmitOnceTool {}
+
+impl EmitOnceTool {
+    async fn execute(
+        &self,
+        session: Option<turul_mcp_server::SessionContext>,
+    ) -> McpResult<String> {
+        use turul_mcp_server::turul_http_mcp_server::notification_bridge::SharedNotificationBroadcaster;
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        let broadcaster = session
+            .broadcaster
+            .as_ref()
+            .and_then(|a| a.downcast_ref::<SharedNotificationBroadcaster>())
+            .ok_or_else(|| McpError::tool_execution("broadcaster required"))?
+            .clone();
+        let _ = broadcaster
+            .broadcast_to_all_sessions(turul_rpc::JsonRpcNotification::new_no_params(
+                "notifications/resources/list_changed".to_string(),
+            ))
+            .await;
+        let _ = broadcaster
+            .broadcast_to_all_sessions(turul_rpc::JsonRpcNotification::new_no_params(
+                "notifications/prompts/list_changed".to_string(),
+            ))
+            .await;
+        Ok("emitted".to_string())
+    }
+}

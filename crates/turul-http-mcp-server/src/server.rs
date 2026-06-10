@@ -14,9 +14,9 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{debug, error, info, warn};
 
-use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
+use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 
 use crate::streamable_http::{McpProtocolVersion, StreamableHttpHandler};
 use crate::{CorsLayer, Result, SessionMcpHandler, StreamConfig, StreamManager};

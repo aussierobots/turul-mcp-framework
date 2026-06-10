@@ -25,7 +25,7 @@ dynamic-tools = ["turul-mcp-server/dynamic-tools", "turul-mcp-server-state-stora
 # Core MCP framework
 turul-mcp-server = { path = "../turul-mcp-server", version = "0.4.0", default-features = false }
 turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.0", default-features = false }
-turul-mcp-json-rpc-server = { workspace = true }
+turul-rpc = { workspace = true, features = ["async"] }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0", default-features = false }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.0", default-features = false }

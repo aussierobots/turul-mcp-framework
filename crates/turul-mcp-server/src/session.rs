@@ -70,7 +70,7 @@ pub struct SessionContext {
 impl SessionContext {
     /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration
     pub(crate) fn from_json_rpc_with_broadcaster(
-        json_rpc_ctx: turul_mcp_json_rpc_server::SessionContext,
+        json_rpc_ctx: turul_rpc::SessionContext,
         storage: Arc<dyn SessionStorage<Error = SessionStorageError>>,
     ) -> Self {
         let session_id = json_rpc_ctx.session_id.clone();
@@ -251,7 +251,7 @@ impl SessionContext {
     /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration (test helper)
     #[cfg(feature = "test-utils")]
     pub fn from_json_rpc_with_broadcaster_for_tests(
-        json_rpc_ctx: turul_mcp_json_rpc_server::SessionContext,
+        json_rpc_ctx: turul_rpc::SessionContext,
         storage: Arc<dyn SessionStorage<Error = SessionStorageError>>,
     ) -> Self {
         Self::from_json_rpc_with_broadcaster(json_rpc_ctx, storage)
@@ -388,7 +388,7 @@ impl SessionContext {
         );
         other.insert("progress".to_string(), serde_json::json!(progress));
 
-        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
             "notifications/progress".to_string(),
             other,
         );
@@ -413,7 +413,7 @@ impl SessionContext {
         other.insert("progress".to_string(), serde_json::json!(progress));
         other.insert("total".to_string(), serde_json::json!(total));
 
-        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
             "notifications/progress".to_string(),
             other,
         );
@@ -519,7 +519,7 @@ impl SessionContext {
 
     /// Send a resource list changed notification
     pub async fn notify_resources_changed(&self) {
-        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
+        let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/resources/list_changed".to_string(),
         );
         self.notify(SessionEvent::Notification(
@@ -533,7 +533,7 @@ impl SessionContext {
         let mut other = std::collections::HashMap::new();
         other.insert("uri".to_string(), serde_json::json!(uri.into()));
 
-        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
             "notifications/resources/updated".to_string(),
             other,
         );
@@ -545,7 +545,7 @@ impl SessionContext {
 
     /// Send a tools list changed notification
     pub async fn notify_tools_changed(&self) {
-        let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
+        let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
         );
         self.notify(SessionEvent::Notification(
@@ -851,7 +851,7 @@ async fn parse_and_send_notification_with_broadcaster(
                             .map(|(k, v)| (k.clone(), v.clone()))
                             .collect();
                     let json_rpc_notification =
-                        turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+                        turul_rpc::JsonRpcNotification::new_with_object_params(
                             method.to_string(),
                             params_map,
                         );
@@ -2022,7 +2022,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut json_rpc_ctx = turul_mcp_json_rpc_server::SessionContext {
+        let mut json_rpc_ctx = turul_rpc::SessionContext {
             session_id: "test-session".to_string(),
             metadata: HashMap::new(),
             broadcaster: None,

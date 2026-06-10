@@ -1011,6 +1011,76 @@ impl McpClient {
         Ok(call_response)
     }
 
+    /// Open a `subscriptions/listen` stream (2026-07-28 connections only).
+    ///
+    /// `filter` is the wire `SubscriptionFilter` object (e.g.
+    /// `{"toolsListChanged": true, "resourceSubscriptions": ["file:///a"]}`).
+    /// Returns the stream AFTER consuming and validating the mandatory first
+    /// message (`notifications/subscriptions/acknowledged`); the returned
+    /// [`SubscriptionStream`] exposes the honored filter and the subscription
+    /// id, then yields each subsequent notification. Dropping the stream
+    /// closes it, which per Streamable HTTP cancels the subscription.
+    pub async fn subscriptions_listen(&self, filter: Value) -> McpClientResult<SubscriptionStream> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let meta = crate::protocol::v2026_07_28::request_meta(
+                &self.config.client_info.name,
+                &self.config.client_info.version,
+                &self.config.declared_capabilities,
+            );
+            let request = self.build_request(
+                "subscriptions/listen",
+                crate::protocol::v2026_07_28::params_with_meta(
+                    &meta,
+                    json!({ "notifications": filter }),
+                ),
+            );
+            let mut receiver = self.transport.send_request_streaming(request).await?;
+
+            // The server MUST send the acknowledgement first.
+            let ack = tokio::time::timeout(self.config.timeouts.request, receiver.recv())
+                .await
+                .map_err(|_| McpClientError::Timeout)?
+                .ok_or_else(|| {
+                    crate::error::ProtocolError::InvalidResponse(
+                        "subscriptions/listen stream closed before the acknowledgement".to_string(),
+                    )
+                })?;
+            if ack.get("method").and_then(|m| m.as_str())
+                != Some("notifications/subscriptions/acknowledged")
+            {
+                return Err(crate::error::ProtocolError::InvalidResponse(format!(
+                    "first listen-stream message must be the acknowledgement, got: {ack}"
+                ))
+                .into());
+            }
+            let honored = ack
+                .pointer("/params/notifications")
+                .cloned()
+                .unwrap_or(Value::Null);
+            let subscription_id = ack
+                .pointer("/params/_meta/io.modelcontextprotocol~1subscriptionId")
+                .or_else(|| {
+                    ack.get("params")
+                        .and_then(|p| p.get("_meta"))
+                        .and_then(|m| m.get("io.modelcontextprotocol/subscriptionId"))
+                })
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            return Ok(SubscriptionStream {
+                honored,
+                subscription_id,
+                receiver,
+            });
+        }
+
+        let _ = filter;
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "subscriptions/listen requires a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
     /// Retry a `tools/call` after an `InputRequired` outcome (MRTR, SEP-2322):
     /// re-issues the ORIGINAL request (same name/arguments) with the gathered
     /// `input_responses` and the server's `request_state` echoed verbatim,
@@ -1782,6 +1852,25 @@ fn value_to_request_params(params: Value) -> Option<RequestParams> {
             "MCP client requests use object or null params; got scalar: {:?}",
             other
         ),
+    }
+}
+
+/// A live `subscriptions/listen` stream: the acknowledged filter subset, the
+/// server-assigned subscription id, and the ordered notification feed.
+/// Dropping this closes the stream (= cancels the subscription).
+pub struct SubscriptionStream {
+    /// The filter subset the server agreed to honor (the acknowledgement's
+    /// `params.notifications`, verbatim).
+    pub honored: Value,
+    /// `io.modelcontextprotocol/subscriptionId` from the acknowledgement.
+    pub subscription_id: Option<String>,
+    receiver: tokio::sync::mpsc::UnboundedReceiver<Value>,
+}
+
+impl SubscriptionStream {
+    /// Next notification on the stream (`None` when the server closes it).
+    pub async fn next(&mut self) -> Option<Value> {
+        self.receiver.recv().await
     }
 }
 

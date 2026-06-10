@@ -358,7 +358,7 @@ impl LambdaMcpServer {
         }
 
         // Create JSON-RPC dispatcher
-        use turul_mcp_json_rpc_server::JsonRpcDispatcher;
+        use turul_rpc::JsonRpcDispatcher;
         let mut dispatcher = JsonRpcDispatcher::new();
 
         // Create session-aware initialize handler (2025-11-25 stateful handshake;
@@ -469,10 +469,9 @@ impl LambdaMcpServer {
                     &self,
                     session_id: &str,
                 ) -> std::result::Result<(), String> {
-                    let notification =
-                        turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
-                            "notifications/tools/list_changed".to_string(),
-                        );
+                    let notification = turul_rpc::JsonRpcNotification::new_no_params(
+                        "notifications/tools/list_changed".to_string(),
+                    );
                     let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
                     self.session_manager
                         .dispatch_custom_event(

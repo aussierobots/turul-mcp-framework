@@ -250,10 +250,10 @@ pub enum ToolChangeMode {
 pub use turul_mcp_session_storage::SessionView;
 
 // Re-export foundational types
-/// JSON-RPC 2.0 request dispatcher and handler trait for protocol operations
-pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 /// Core MCP protocol types, errors, and specification compliance
 pub use turul_mcp_protocol::*;
+/// JSON-RPC 2.0 request dispatcher and handler trait for protocol operations
+pub use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 
 // Re-export builder pattern for Level 3 tool creation
 /// Dynamic tool creation with runtime configuration and type-safe builders

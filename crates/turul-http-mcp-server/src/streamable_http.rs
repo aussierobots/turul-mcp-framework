@@ -439,7 +439,7 @@ impl StreamableResponse {
 #[derive(Clone)]
 pub struct StreamableHttpHandler {
     config: Arc<ServerConfig>,
-    dispatcher: Arc<turul_mcp_json_rpc_server::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
+    dispatcher: Arc<turul_rpc::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
     session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     stream_manager: Arc<crate::StreamManager>,
     server_capabilities: turul_mcp_protocol::ServerCapabilities,
@@ -451,7 +451,7 @@ pub struct StreamableHttpHandler {
 impl StreamableHttpHandler {
     pub fn new(
         config: Arc<ServerConfig>,
-        dispatcher: Arc<turul_mcp_json_rpc_server::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
+        dispatcher: Arc<turul_rpc::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_manager: Arc<crate::StreamManager>,
         server_capabilities: turul_mcp_protocol::ServerCapabilities,
@@ -829,9 +829,7 @@ impl StreamableHttpHandler {
         debug!("Received legacy POST JSON-RPC request: {}", body_str);
 
         // Parse JSON-RPC message
-        use turul_mcp_json_rpc_server::dispatch::{
-            JsonRpcMessage, JsonRpcMessageResult, parse_json_rpc_message,
-        };
+        use turul_rpc::dispatch::{JsonRpcMessage, JsonRpcMessageResult, parse_json_rpc_message};
 
         let message = match parse_json_rpc_message(body_str) {
             Ok(msg) => msg,
@@ -876,7 +874,7 @@ impl StreamableHttpHandler {
 
                             // Create session context for initialize response
                             use crate::notification_bridge::StreamManagerNotificationBroadcaster;
-                            use turul_mcp_json_rpc_server::r#async::SessionContext;
+                            use turul_rpc::r#async::SessionContext;
 
                             let broadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
                                 Arc::clone(&self.stream_manager),
@@ -899,8 +897,8 @@ impl StreamableHttpHandler {
                         Err(err) => {
                             error!("Failed to create session during legacy initialize: {}", err);
                             let error_msg = format!("Session creation failed: {}", err);
-                            turul_mcp_json_rpc_server::JsonRpcResponse::error(
-                                turul_mcp_json_rpc_server::JsonRpcError::internal_error(
+                            turul_rpc::JsonRpcResponse::error(
+                                turul_rpc::JsonRpcError::internal_error(
                                     Some(request.id),
                                     Some(error_msg),
                                 ),
@@ -914,12 +912,10 @@ impl StreamableHttpHandler {
 
                 // Convert JsonRpcResponse to JsonRpcMessageResult
                 match response {
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp) => {
+                    turul_rpc::JsonRpcResponse::Success(resp) => {
                         JsonRpcMessageResult::Response(resp)
                     }
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Error(err) => {
-                        JsonRpcMessageResult::Error(err)
-                    }
+                    turul_rpc::JsonRpcResponse::Error(err) => JsonRpcMessageResult::Error(err),
                 }
             }
             JsonRpcMessage::Notification(notification) => {
@@ -1193,11 +1189,11 @@ impl StreamableHttpHandler {
         debug!("Streaming POST received JSON-RPC request: {}", body_str);
 
         // Parse JSON-RPC message
-        use turul_mcp_json_rpc_server::dispatch::{JsonRpcMessage, parse_json_rpc_message};
+        use turul_rpc::dispatch::{JsonRpcMessage, parse_json_rpc_message};
         // Feeds only the 2025-11-25 missing-session 400 path; the stateless 2026 core
         // mints an ephemeral session instead, so the import is unused there.
         #[cfg(feature = "protocol-2025-11-25")]
-        use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
+        use turul_rpc::error::JsonRpcErrorObject;
 
         let message = match parse_json_rpc_message(body_str) {
             Ok(msg) => msg,
@@ -1378,7 +1374,7 @@ impl StreamableHttpHandler {
                     requested: requested.to_string(),
                 }
                 .to_error_object();
-                let err = turul_mcp_json_rpc_server::JsonRpcError::new(id, err_obj);
+                let err = turul_rpc::JsonRpcError::new(id, err_obj);
                 let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
                 return Response::builder()
                     .status(StatusCode::BAD_REQUEST)
@@ -1448,9 +1444,9 @@ impl StreamableHttpHandler {
                     JsonRpcMessage::Request(r) => Some(r.id.clone()),
                     JsonRpcMessage::Notification(_) => None,
                 };
-                let err = turul_mcp_json_rpc_server::JsonRpcError::new(
+                let err = turul_rpc::JsonRpcError::new(
                     id,
-                    turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                    turul_rpc::error::JsonRpcErrorObject::server_error(
                         turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
                         &format!("Header mismatch: {reason}"),
                         None::<serde_json::Value>,
@@ -1553,7 +1549,7 @@ impl StreamableHttpHandler {
                     // client downgrades via its secure signal path — it deliberately does
                     // not treat a bare 400 as a version cue (a downgrade-attack vector).
                     if method_name == "server/discover" {
-                        let not_found = turul_mcp_json_rpc_server::JsonRpcError::new(
+                        let not_found = turul_rpc::JsonRpcError::new(
                             request_id.clone(),
                             JsonRpcErrorObject::method_not_found("server/discover"),
                         );
@@ -1573,7 +1569,7 @@ impl StreamableHttpHandler {
 
                     warn!("Missing session ID for method: {}", method_name);
 
-                    let error_response = turul_mcp_json_rpc_server::JsonRpcError::new(
+                    let error_response = turul_rpc::JsonRpcError::new(
                         request_id,
                         JsonRpcErrorObject::server_error(
                             -32001,
@@ -1655,16 +1651,15 @@ impl StreamableHttpHandler {
             if let Some((reason, is_header_mismatch)) = reason {
                 warn!("Rejecting 2026 request (method={}): {}", req.method, reason);
                 let err_obj = if is_header_mismatch {
-                    turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                    turul_rpc::error::JsonRpcErrorObject::server_error(
                         turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
                         &format!("Header mismatch: {reason}"),
                         None::<serde_json::Value>,
                     )
                 } else {
-                    turul_mcp_json_rpc_server::error::JsonRpcErrorObject::invalid_params(&reason)
+                    turul_rpc::error::JsonRpcErrorObject::invalid_params(&reason)
                 };
-                let err =
-                    turul_mcp_json_rpc_server::JsonRpcError::new(Some(req.id.clone()), err_obj);
+                let err = turul_rpc::JsonRpcError::new(Some(req.id.clone()), err_obj);
                 let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
                 return Response::builder()
                     .status(StatusCode::BAD_REQUEST)
@@ -1692,9 +1687,9 @@ impl StreamableHttpHandler {
             && self.dispatcher.default_handler.is_none()
         {
             debug!("Unknown 2026 method '{}' → 404 + -32601", req.method);
-            let err = turul_mcp_json_rpc_server::JsonRpcError::new(
+            let err = turul_rpc::JsonRpcError::new(
                 Some(req.id.clone()),
-                turul_mcp_json_rpc_server::error::JsonRpcErrorObject::method_not_found(&req.method),
+                turul_rpc::error::JsonRpcErrorObject::method_not_found(&req.method),
             );
             let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
             return Response::builder()
@@ -1769,7 +1764,7 @@ impl StreamableHttpHandler {
 
                 // Create session context with notification broadcaster for notifications
                 use crate::notification_bridge::StreamManagerNotificationBroadcaster;
-                use turul_mcp_json_rpc_server::SessionContext;
+                use turul_rpc::SessionContext;
 
                 let broadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(
                     &self.stream_manager,
@@ -1855,23 +1850,21 @@ impl StreamableHttpHandler {
     #[cfg(feature = "protocol-2026-07-28")]
     async fn handle_subscriptions_listen(
         &self,
-        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        request: turul_rpc::JsonRpcRequest,
         session_id: String,
         context: StreamableHttpContext,
     ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
         use http_body_util::StreamBody;
         use tokio_stream::StreamExt;
         use tokio_stream::wrappers::ReceiverStream;
-        use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
         use turul_mcp_protocol::meta::META_KEY_SUBSCRIPTION_ID;
         use turul_mcp_protocol::subscriptions::{
             SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, SubscriptionFilter, SubscriptionsListenRequestParams,
         };
+        use turul_rpc::error::JsonRpcErrorObject;
 
-        let reject_400 = |id: turul_mcp_json_rpc_server::RequestId,
-                          err_obj: JsonRpcErrorObject,
-                          version: &str| {
-            let err = turul_mcp_json_rpc_server::JsonRpcError::new(Some(id), err_obj);
+        let reject_400 = |id: turul_rpc::RequestId, err_obj: JsonRpcErrorObject, version: &str| {
+            let err = turul_rpc::JsonRpcError::new(Some(id), err_obj);
             let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
             Response::builder()
                 .status(StatusCode::BAD_REQUEST)
@@ -1982,7 +1975,7 @@ impl StreamableHttpHandler {
             "_meta".to_string(),
             serde_json::json!({ META_KEY_SUBSCRIPTION_ID: subscription_id }),
         );
-        let ack = turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+        let ack = turul_rpc::JsonRpcNotification::new_with_object_params(
             SUBSCRIPTIONS_ACKNOWLEDGED_METHOD.to_string(),
             ack_params,
         );
@@ -2063,7 +2056,7 @@ impl StreamableHttpHandler {
     /// This enables true progressive responses with Transfer-Encoding: chunked
     async fn create_streaming_response(
         &self,
-        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        request: turul_rpc::JsonRpcRequest,
         session_id: String,
         context: StreamableHttpContext,
         pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
@@ -2086,7 +2079,7 @@ impl StreamableHttpHandler {
         use crate::notification_bridge::{
             SharedNotificationBroadcaster, StreamManagerNotificationBroadcaster,
         };
-        use turul_mcp_json_rpc_server::SessionContext;
+        use turul_rpc::SessionContext;
 
         let broadcaster: SharedNotificationBroadcaster = Arc::new(
             StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)),
@@ -2136,7 +2129,7 @@ impl StreamableHttpHandler {
             let status = match &response {
                 // -32003 MissingRequiredClientCapability and -32001
                 // HeaderMismatch both mandate HTTP 400.
-                turul_mcp_json_rpc_server::JsonRpcResponse::Error(err)
+                turul_rpc::JsonRpcResponse::Error(err)
                     if matches!(err.error.code, -32001 | -32003) =>
                 {
                     StatusCode::BAD_REQUEST
@@ -2318,29 +2311,25 @@ impl StreamableHttpHandler {
             if wants_sse {
                 // For SSE clients, send as streaming frame with SSE framing
                 let final_frame = match response {
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp) => {
-                        turul_mcp_json_rpc_server::JsonRpcFrame::FinalResult {
+                    turul_rpc::JsonRpcResponse::Success(resp) => {
+                        turul_rpc::JsonRpcFrame::FinalResult {
                             request_id: request_id.clone(),
                             result: match resp.result {
-                                turul_mcp_json_rpc_server::response::ResponseResult::Success(
-                                    val,
-                                ) => val,
-                                turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                                turul_rpc::response::ResponseResult::Success(val) => val,
+                                turul_rpc::response::ResponseResult::Null => {
                                     serde_json::Value::Null
                                 }
                             },
                         }
                     }
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Error(err) => {
-                        turul_mcp_json_rpc_server::JsonRpcFrame::Error {
-                            request_id: request_id.clone(),
-                            error: turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
-                                code: err.error.code,
-                                message: err.error.message,
-                                data: err.error.data,
-                            },
-                        }
-                    }
+                    turul_rpc::JsonRpcResponse::Error(err) => turul_rpc::JsonRpcFrame::Error {
+                        request_id: request_id.clone(),
+                        error: turul_rpc::error::JsonRpcErrorObject {
+                            code: err.error.code,
+                            message: err.error.message,
+                            data: err.error.data,
+                        },
+                    },
                 };
 
                 let final_json = final_frame.to_json();
@@ -2555,12 +2544,12 @@ impl StreamableHttpHandler {
     /// after session creation.
     async fn run_middleware_and_dispatch(
         &self,
-        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        request: turul_rpc::JsonRpcRequest,
         headers: HashMap<String, String>,
-        session: Option<turul_mcp_json_rpc_server::SessionContext>,
+        session: Option<turul_rpc::SessionContext>,
         pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
     ) -> (
-        turul_mcp_json_rpc_server::JsonRpcResponse,
+        turul_rpc::JsonRpcResponse,
         Option<crate::middleware::SessionInjection>,
     ) {
         // Fast path: if middleware stack is empty, dispatch directly
@@ -2586,10 +2575,10 @@ impl StreamableHttpHandler {
 
         // Convert params to Option<Value>
         let params = request.params.clone().map(|p| match p {
-            turul_mcp_json_rpc_server::RequestParams::Object(map) => {
+            turul_rpc::RequestParams::Object(map) => {
                 serde_json::Value::Object(map.into_iter().collect())
             }
-            turul_mcp_json_rpc_server::RequestParams::Array(arr) => serde_json::Value::Array(arr),
+            turul_rpc::RequestParams::Array(arr) => serde_json::Value::Array(arr),
         });
         let mut ctx = crate::middleware::RequestContext::new(&method, params);
 
@@ -2667,15 +2656,15 @@ impl StreamableHttpHandler {
 
         // Execute after_dispatch
         let mut dispatcher_result = match &result {
-            turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp) => match &resp.result {
-                turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
+            turul_rpc::JsonRpcResponse::Success(resp) => match &resp.result {
+                turul_rpc::response::ResponseResult::Success(val) => {
                     crate::middleware::DispatcherResult::Success(val.clone())
                 }
-                turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                turul_rpc::response::ResponseResult::Null => {
                     crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
                 }
             },
-            turul_mcp_json_rpc_server::JsonRpcResponse::Error(err) => {
+            turul_rpc::JsonRpcResponse::Error(err) => {
                 crate::middleware::DispatcherResult::Error(err.error.message.clone())
             }
         };
@@ -2704,39 +2693,33 @@ impl StreamableHttpHandler {
     /// - Error → Success: middleware recovered (only when error has request ID)
     /// - Error → Error: error message mutated
     fn apply_dispatcher_result(
-        result: turul_mcp_json_rpc_server::JsonRpcResponse,
+        result: turul_rpc::JsonRpcResponse,
         dispatcher_result: crate::middleware::DispatcherResult,
-    ) -> turul_mcp_json_rpc_server::JsonRpcResponse {
+    ) -> turul_rpc::JsonRpcResponse {
         match dispatcher_result {
             crate::middleware::DispatcherResult::Success(val) => match result {
-                turul_mcp_json_rpc_server::JsonRpcResponse::Success(mut resp) => {
-                    resp.result = turul_mcp_json_rpc_server::response::ResponseResult::Success(val);
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp)
+                turul_rpc::JsonRpcResponse::Success(mut resp) => {
+                    resp.result = turul_rpc::response::ResponseResult::Success(val);
+                    turul_rpc::JsonRpcResponse::Success(resp)
                 }
-                turul_mcp_json_rpc_server::JsonRpcResponse::Error(err) => {
+                turul_rpc::JsonRpcResponse::Error(err) => {
                     // Error→Success recovery: only when error has a request ID
                     match err.id {
-                        Some(id) => {
-                            turul_mcp_json_rpc_server::JsonRpcResponse::success(id, val.into())
-                        }
-                        None => turul_mcp_json_rpc_server::JsonRpcResponse::Error(err),
+                        Some(id) => turul_rpc::JsonRpcResponse::success(id, val.into()),
+                        None => turul_rpc::JsonRpcResponse::Error(err),
                     }
                 }
             },
             crate::middleware::DispatcherResult::Error(msg) => match result {
-                turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp) => {
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Error(
-                        turul_mcp_json_rpc_server::error::JsonRpcError::new(
-                            Some(resp.id),
-                            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::internal_error(
-                                Some(msg),
-                            ),
-                        ),
-                    )
+                turul_rpc::JsonRpcResponse::Success(resp) => {
+                    turul_rpc::JsonRpcResponse::Error(turul_rpc::error::JsonRpcError::new(
+                        Some(resp.id),
+                        turul_rpc::error::JsonRpcErrorObject::internal_error(Some(msg)),
+                    ))
                 }
-                turul_mcp_json_rpc_server::JsonRpcResponse::Error(mut err) => {
+                turul_rpc::JsonRpcResponse::Error(mut err) => {
                     err.error.message = msg;
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Error(err)
+                    turul_rpc::JsonRpcResponse::Error(err)
                 }
             },
         }
@@ -2745,8 +2728,8 @@ impl StreamableHttpHandler {
     /// Map MiddlewareError to JSON-RPC error with semantic error codes
     fn map_middleware_error_to_jsonrpc(
         err: crate::middleware::MiddlewareError,
-        request_id: turul_mcp_json_rpc_server::RequestId,
-    ) -> turul_mcp_json_rpc_server::JsonRpcResponse {
+        request_id: turul_rpc::RequestId,
+    ) -> turul_rpc::JsonRpcResponse {
         use crate::middleware::MiddlewareError;
         use crate::middleware::error::error_codes;
 
@@ -2771,22 +2754,16 @@ impl StreamableHttpHandler {
         };
 
         let error_obj = if let Some(d) = data {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
-                code,
-                &message,
-                Some(d),
-            )
+            turul_rpc::error::JsonRpcErrorObject::server_error(code, &message, Some(d))
         } else {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+            turul_rpc::error::JsonRpcErrorObject::server_error(
                 code,
                 &message,
                 None::<serde_json::Value>,
             )
         };
 
-        turul_mcp_json_rpc_server::JsonRpcResponse::Error(
-            turul_mcp_json_rpc_server::JsonRpcError::new(Some(request_id), error_obj),
-        )
+        turul_rpc::JsonRpcResponse::Error(turul_rpc::JsonRpcError::new(Some(request_id), error_obj))
     }
 }
 

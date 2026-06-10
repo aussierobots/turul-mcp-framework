@@ -18,12 +18,12 @@ use std::sync::Arc;
 use tracing::{debug, error, info};
 
 use crate::StreamManager;
-use turul_mcp_json_rpc_server::JsonRpcNotification;
 use turul_mcp_protocol::notifications::{
     CancelledNotification, LoggingMessageNotification, ProgressNotification,
     PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
     ToolListChangedNotification,
 };
+use turul_rpc::JsonRpcNotification;
 
 /// MCP-compliant notification broadcaster trait for sending ALL notification types over SSE
 ///

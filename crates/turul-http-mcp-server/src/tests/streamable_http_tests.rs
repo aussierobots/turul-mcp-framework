@@ -14,7 +14,7 @@ use serde_json::json;
 
 use crate::streamable_http::{StreamableHttpHandler, StreamableHttpContext, McpProtocolVersion};
 use crate::server::ServerConfig;
-use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
+use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 use turul_mcp_protocol::{JsonRpcRequest, JsonRpcResponse, JsonRpcError, McpError};
 use turul_mcp_session_storage::InMemorySessionStorage;
 use crate::StreamManager;

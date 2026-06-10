@@ -14,9 +14,9 @@ use turul_http_mcp_server::middleware::{
 };
 use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
 use turul_mcp_aws_lambda::LambdaMcpHandler;
-use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 use turul_mcp_protocol::{McpError, ServerCapabilities};
 use turul_mcp_session_storage::{BoxedSessionStorage, InMemorySessionStorage, SessionView};
+use turul_rpc::JsonRpcDispatcher;
 
 /// Test middleware that tracks execution
 struct TrackingMiddleware {

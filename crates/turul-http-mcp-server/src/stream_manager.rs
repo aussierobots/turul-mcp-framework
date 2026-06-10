@@ -686,7 +686,7 @@ impl StreamManager {
     pub async fn create_post_sse_stream(
         &self,
         session_id: String,
-        response: turul_mcp_json_rpc_server::JsonRpcResponse,
+        response: turul_rpc::JsonRpcResponse,
     ) -> Result<
         hyper::Response<
             http_body_util::combinators::BoxBody<bytes::Bytes, std::convert::Infallible>,
@@ -791,7 +791,7 @@ impl StreamManager {
     pub async fn create_post_sse_stream_with_notifications(
         &self,
         session_id: String,
-        response: turul_mcp_json_rpc_server::JsonRpcResponse,
+        response: turul_rpc::JsonRpcResponse,
         notifications: Vec<SseEvent>,
     ) -> Result<
         hyper::Response<

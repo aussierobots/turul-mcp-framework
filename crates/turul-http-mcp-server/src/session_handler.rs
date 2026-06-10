@@ -23,15 +23,15 @@ use hyper::{Method, Request, Response, StatusCode};
 
 use crate::middleware::bearer::{extract_bearer_token, is_bearer_scheme};
 use chrono;
-use turul_mcp_json_rpc_server::{
+use turul_mcp_protocol::McpError;
+use turul_mcp_protocol::ServerCapabilities;
+use turul_mcp_session_storage::{InMemorySessionStorage, SessionView};
+use turul_rpc::{
     JsonRpcDispatcher,
     r#async::SessionContext,
     dispatch::{JsonRpcMessage, JsonRpcMessageResult, parse_json_rpc_message},
     error::{JsonRpcError, JsonRpcErrorObject},
 };
-use turul_mcp_protocol::McpError;
-use turul_mcp_protocol::ServerCapabilities;
-use turul_mcp_session_storage::{InMemorySessionStorage, SessionView};
 use uuid::Uuid;
 
 use crate::{
@@ -517,13 +517,12 @@ impl SessionMcpHandler {
                                 error!("Failed to create session during initialize: {}", err);
                                 // Return error response using proper JSON-RPC error format
                                 let error_msg = format!("Session creation failed: {}", err);
-                                let error_response =
-                                    turul_mcp_json_rpc_server::JsonRpcResponse::error(
-                                        turul_mcp_json_rpc_server::JsonRpcError::internal_error(
-                                            Some(request.id),
-                                            Some(error_msg),
-                                        ),
-                                    );
+                                let error_response = turul_rpc::JsonRpcResponse::error(
+                                    turul_rpc::JsonRpcError::internal_error(
+                                        Some(request.id),
+                                        Some(error_msg),
+                                    ),
+                                );
                                 (error_response, None, Vec::new())
                             }
                         }
@@ -646,12 +645,10 @@ impl SessionMcpHandler {
 
                     // Convert JsonRpcResponse to JsonRpcMessageResult
                     let message_result = match response {
-                        turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp) => {
+                        turul_rpc::JsonRpcResponse::Success(resp) => {
                             JsonRpcMessageResult::Response(resp)
                         }
-                        turul_mcp_json_rpc_server::JsonRpcResponse::Error(err) => {
-                            JsonRpcMessageResult::Error(err)
-                        }
+                        turul_rpc::JsonRpcResponse::Error(err) => JsonRpcMessageResult::Error(err),
                     };
                     (
                         message_result,
@@ -745,9 +742,7 @@ impl SessionMcpHandler {
                         self.stream_manager
                             .create_post_sse_stream_with_notifications(
                                 response_session_id.clone().unwrap(),
-                                turul_mcp_json_rpc_server::JsonRpcResponse::Success(
-                                    response.clone(),
-                                ),
+                                turul_rpc::JsonRpcResponse::Success(response.clone()),
                                 collected_notifications,
                             )
                             .await
@@ -756,9 +751,7 @@ impl SessionMcpHandler {
                         self.stream_manager
                             .create_post_sse_stream(
                                 response_session_id.clone().unwrap(),
-                                turul_mcp_json_rpc_server::JsonRpcResponse::Success(
-                                    response.clone(),
-                                ),
+                                turul_rpc::JsonRpcResponse::Success(response.clone()),
                             )
                             .await
                     };
@@ -774,7 +767,7 @@ impl SessionMcpHandler {
                                 e
                             );
                             Ok(jsonrpc_response_with_session(
-                                turul_mcp_json_rpc_server::JsonRpcResponse::Success(response),
+                                turul_rpc::JsonRpcResponse::Success(response),
                                 response_session_id,
                             )?
                             .map(convert_to_unified_body))
@@ -786,7 +779,7 @@ impl SessionMcpHandler {
                         accept_mode, method_name
                     );
                     Ok(jsonrpc_response_with_session(
-                        turul_mcp_json_rpc_server::JsonRpcResponse::Success(response),
+                        turul_rpc::JsonRpcResponse::Success(response),
                         response_session_id,
                     )?
                     .map(convert_to_unified_body))
@@ -1127,12 +1120,12 @@ impl SessionMcpHandler {
     /// Shared logic between StreamableHttpHandler and SessionMcpHandler
     async fn run_middleware_and_dispatch(
         &self,
-        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        request: turul_rpc::JsonRpcRequest,
         headers: HashMap<String, String>,
-        session: turul_mcp_json_rpc_server::SessionContext,
+        session: turul_rpc::SessionContext,
         pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
     ) -> (
-        turul_mcp_json_rpc_server::JsonRpcResponse,
+        turul_rpc::JsonRpcResponse,
         Option<crate::middleware::SessionInjection>,
     ) {
         // Fast path: if middleware stack is empty, dispatch directly
@@ -1157,10 +1150,10 @@ impl SessionMcpHandler {
 
         // Convert params to Option<Value>
         let params = request.params.clone().map(|p| match p {
-            turul_mcp_json_rpc_server::RequestParams::Object(map) => {
+            turul_rpc::RequestParams::Object(map) => {
                 serde_json::Value::Object(map.into_iter().collect())
             }
-            turul_mcp_json_rpc_server::RequestParams::Array(arr) => serde_json::Value::Array(arr),
+            turul_rpc::RequestParams::Array(arr) => serde_json::Value::Array(arr),
         });
         let mut ctx = crate::middleware::RequestContext::new(&method, params);
 
@@ -1228,15 +1221,15 @@ impl SessionMcpHandler {
         // Execute after_dispatch
         // Convert JsonRpcMessage to DispatcherResult for middleware
         let mut dispatcher_result = match &result {
-            turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp) => match &resp.result {
-                turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
+            turul_rpc::JsonRpcResponse::Success(resp) => match &resp.result {
+                turul_rpc::response::ResponseResult::Success(val) => {
                     crate::middleware::DispatcherResult::Success(val.clone())
                 }
-                turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                turul_rpc::response::ResponseResult::Null => {
                     crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
                 }
             },
-            turul_mcp_json_rpc_server::JsonRpcResponse::Error(err) => {
+            turul_rpc::JsonRpcResponse::Error(err) => {
                 crate::middleware::DispatcherResult::Error(err.error.message.clone())
             }
         };
@@ -1265,39 +1258,33 @@ impl SessionMcpHandler {
     /// - Error → Success: middleware recovered (only when error has request ID)
     /// - Error → Error: error message mutated
     fn apply_dispatcher_result(
-        result: turul_mcp_json_rpc_server::JsonRpcResponse,
+        result: turul_rpc::JsonRpcResponse,
         dispatcher_result: crate::middleware::DispatcherResult,
-    ) -> turul_mcp_json_rpc_server::JsonRpcResponse {
+    ) -> turul_rpc::JsonRpcResponse {
         match dispatcher_result {
             crate::middleware::DispatcherResult::Success(val) => match result {
-                turul_mcp_json_rpc_server::JsonRpcResponse::Success(mut resp) => {
-                    resp.result = turul_mcp_json_rpc_server::response::ResponseResult::Success(val);
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp)
+                turul_rpc::JsonRpcResponse::Success(mut resp) => {
+                    resp.result = turul_rpc::response::ResponseResult::Success(val);
+                    turul_rpc::JsonRpcResponse::Success(resp)
                 }
-                turul_mcp_json_rpc_server::JsonRpcResponse::Error(err) => {
+                turul_rpc::JsonRpcResponse::Error(err) => {
                     // Error→Success recovery: only when error has a request ID
                     match err.id {
-                        Some(id) => {
-                            turul_mcp_json_rpc_server::JsonRpcResponse::success(id, val.into())
-                        }
-                        None => turul_mcp_json_rpc_server::JsonRpcResponse::Error(err),
+                        Some(id) => turul_rpc::JsonRpcResponse::success(id, val.into()),
+                        None => turul_rpc::JsonRpcResponse::Error(err),
                     }
                 }
             },
             crate::middleware::DispatcherResult::Error(msg) => match result {
-                turul_mcp_json_rpc_server::JsonRpcResponse::Success(resp) => {
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Error(
-                        turul_mcp_json_rpc_server::error::JsonRpcError::new(
-                            Some(resp.id),
-                            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::internal_error(
-                                Some(msg),
-                            ),
-                        ),
-                    )
+                turul_rpc::JsonRpcResponse::Success(resp) => {
+                    turul_rpc::JsonRpcResponse::Error(turul_rpc::error::JsonRpcError::new(
+                        Some(resp.id),
+                        turul_rpc::error::JsonRpcErrorObject::internal_error(Some(msg)),
+                    ))
                 }
-                turul_mcp_json_rpc_server::JsonRpcResponse::Error(mut err) => {
+                turul_rpc::JsonRpcResponse::Error(mut err) => {
                     err.error.message = msg;
-                    turul_mcp_json_rpc_server::JsonRpcResponse::Error(err)
+                    turul_rpc::JsonRpcResponse::Error(err)
                 }
             },
         }
@@ -1306,8 +1293,8 @@ impl SessionMcpHandler {
     /// Map MiddlewareError to JSON-RPC error with semantic error codes
     fn map_middleware_error_to_jsonrpc(
         err: crate::middleware::MiddlewareError,
-        request_id: turul_mcp_json_rpc_server::RequestId,
-    ) -> turul_mcp_json_rpc_server::JsonRpcResponse {
+        request_id: turul_rpc::RequestId,
+    ) -> turul_rpc::JsonRpcResponse {
         use crate::middleware::MiddlewareError;
         use crate::middleware::error::error_codes;
 
@@ -1332,22 +1319,16 @@ impl SessionMcpHandler {
         };
 
         let error_obj = if let Some(d) = data {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
-                code,
-                &message,
-                Some(d),
-            )
+            turul_rpc::error::JsonRpcErrorObject::server_error(code, &message, Some(d))
         } else {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+            turul_rpc::error::JsonRpcErrorObject::server_error(
                 code,
                 &message,
                 None::<serde_json::Value>,
             )
         };
 
-        turul_mcp_json_rpc_server::JsonRpcResponse::Error(
-            turul_mcp_json_rpc_server::JsonRpcError::new(Some(request_id), error_obj),
-        )
+        turul_rpc::JsonRpcResponse::Error(turul_rpc::JsonRpcError::new(Some(request_id), error_obj))
     }
 }
 
