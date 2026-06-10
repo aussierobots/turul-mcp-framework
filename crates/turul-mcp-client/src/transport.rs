@@ -118,6 +118,17 @@ pub trait Transport: Send + Sync {
     /// Send a request and wait for response
     async fn send_request(&self, request: Value) -> McpClientResult<Value>;
 
+    /// Send a request with additional per-request HTTP headers (SEP-2243
+    /// `Mcp-Param-*` mirrors). Non-HTTP transports MAY ignore the annotations
+    /// entirely, so the default delegates to [`Self::send_request`].
+    async fn send_request_with_extra_headers(
+        &self,
+        request: Value,
+        _extra_headers: &[(String, String)],
+    ) -> McpClientResult<Value> {
+        self.send_request(request).await
+    }
+
     /// Send a request and return response with headers (for initialization)
     async fn send_request_with_headers(&self, request: Value)
     -> McpClientResult<TransportResponse>;

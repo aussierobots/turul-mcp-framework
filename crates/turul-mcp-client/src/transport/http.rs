@@ -688,6 +688,43 @@ impl Transport for HttpTransport {
         Ok(result)
     }
 
+    async fn send_request_with_extra_headers(
+        &self,
+        request: Value,
+        extra_headers: &[(String, String)],
+    ) -> McpClientResult<Value> {
+        if !self.is_connected() {
+            return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
+        }
+        let mut request = request;
+        if request.get("id").is_none() {
+            request["id"] = Value::String(self.next_request_id());
+        }
+        self.update_stats(|stats| stats.requests_sent += 1);
+
+        let mut req_builder = self
+            .client
+            .post(self.endpoint.clone())
+            .header("Content-Type", "application/json")
+            .header("Accept", MCP_POST_ACCEPT)
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
+        req_builder = self.apply_request_metadata_headers(req_builder, &request);
+        for (name, value) in extra_headers {
+            req_builder = req_builder.header(name, value);
+        }
+        req_builder = self.apply_auth_override(req_builder);
+        if let Some(ref session_id) = *self.session_id.lock() {
+            req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = req_builder
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        self.handle_response(response).await
+    }
+
     async fn send_request_with_headers(
         &self,
         request: Value,

@@ -51,6 +51,8 @@ jobs:
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test error_mapping_2026
       - name: 2026 MRTR (input_required round trip, -32003 capability gate)
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mrtr_2026
+      - name: 2026 Mcp-Param-* mirroring (x-mcp-header validation)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_param_2026
       - name: protocol-2026 compliance + upstream wire fixtures
         run: cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
       - name: Bilingual client (not in default-members)

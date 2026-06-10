@@ -1815,6 +1815,21 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             );
         }
 
+        // SEP-2243: the transport mirrors the request headers into the rpc
+        // session metadata; capture the Mcp-Param-* subset before the context
+        // is consumed below.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let mcp_param_headers: std::collections::HashMap<String, String> = session_context
+            .as_ref()
+            .map(|ctx| {
+                ctx.metadata
+                    .iter()
+                    .filter(|(k, _)| k.starts_with("mcp-param-"))
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let params =
             params.ok_or_else(|| McpError::MissingParameter("CallToolRequest".to_string()))?;
 
@@ -1895,6 +1910,88 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                     .unwrap_or(serde_json::Value::Object(serde_json::Map::new()))
             })
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
+
+        // SEP-2243 Mcp-Param-* validation: with the tool schema in hand, verify
+        // every annotated parameter's mirrored header against the body argument
+        // (Base64 sentinel decoded; integers compared numerically). A value in
+        // the body without its header, a header without its value, or a
+        // decoded mismatch → -32001 HeaderMismatch at HTTP 400.
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            let header_mismatch = |detail: String| McpError::JsonRpcError {
+                code: turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
+                message: format!("Header mismatch: {detail}"),
+                data: None,
+            };
+            let input_schema_value = serde_json::to_value(tool.input_schema()).unwrap_or_default();
+            match turul_mcp_protocol::headers::scan_x_mcp_headers(&input_schema_value) {
+                Err(reason) => {
+                    // The server's own tool definition is malformed; a conforming
+                    // client will have excluded this tool from tools/list already.
+                    tracing::warn!(
+                        "tool '{}' has invalid x-mcp-header annotations ({reason});                          skipping Mcp-Param validation",
+                        call_params.name
+                    );
+                }
+                Ok(bindings) => {
+                    for binding in bindings {
+                        let header_key =
+                            format!("mcp-param-{}", binding.header_name.to_ascii_lowercase());
+                        let header_value = mcp_param_headers.get(&header_key);
+                        let body_value = args
+                            .pointer(&binding.argument_pointer)
+                            .filter(|v| !v.is_null());
+                        match (header_value, body_value) {
+                            (None, None) => {}
+                            (None, Some(_)) => {
+                                return Err(header_mismatch(format!(
+                                    "Mcp-Param-{} header omitted but the parameter is present                                      in the request body",
+                                    binding.header_name
+                                )));
+                            }
+                            (Some(_), None) => {
+                                return Err(header_mismatch(format!(
+                                    "Mcp-Param-{} header present but the parameter is absent                                      from the request body",
+                                    binding.header_name
+                                )));
+                            }
+                            (Some(raw), Some(body)) => {
+                                let decoded = turul_mcp_protocol::headers::decode_param_value(raw)
+                                    .map_err(|e| {
+                                        header_mismatch(format!(
+                                            "Mcp-Param-{}: {e}",
+                                            binding.header_name
+                                        ))
+                                    })?;
+                                let matches = if binding.schema_type == "integer" {
+                                    // Compare numerically (42.0 == 42 per spec note).
+                                    decoded
+                                        .trim()
+                                        .parse::<f64>()
+                                        .ok()
+                                        .zip(body.as_f64())
+                                        .map(|(h, b)| h == b)
+                                        .unwrap_or(false)
+                                } else {
+                                    let body_str = match body {
+                                        serde_json::Value::String(s) => s.clone(),
+                                        serde_json::Value::Bool(b) => b.to_string(),
+                                        other => other.to_string(),
+                                    };
+                                    decoded == body_str
+                                };
+                                if !matches {
+                                    return Err(header_mismatch(format!(
+                                        "Mcp-Param-{} header value '{decoded}' does not match                                          the request body value",
+                                        binding.header_name
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         // Task-augmented request detection (MCP 2025-11-25):
         // If params.task is present AND task_runtime is configured, create a task

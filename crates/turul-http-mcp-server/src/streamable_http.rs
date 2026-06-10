@@ -2093,9 +2093,21 @@ impl StreamableHttpHandler {
         );
         let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
 
+        // 2026: surface the request headers to handlers — Mcp-Param-* validation
+        // happens at the tools/call handler, the only layer that knows the
+        // tool's inputSchema annotations.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let handler_metadata: std::collections::HashMap<String, serde_json::Value> = context
+            .headers
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+            .collect();
+        #[cfg(feature = "protocol-2025-11-25")]
+        let handler_metadata = std::collections::HashMap::new();
+
         let session_context = SessionContext {
             session_id: session_id.clone(),
-            metadata: std::collections::HashMap::new(),
+            metadata: handler_metadata,
             broadcaster: Some(broadcaster_any),
             timestamp: chrono::Utc::now().timestamp_millis() as u64,
             extensions: std::collections::HashMap::new(),
@@ -2122,8 +2134,10 @@ impl StreamableHttpHandler {
                 )
                 .await;
             let status = match &response {
+                // -32003 MissingRequiredClientCapability and -32001
+                // HeaderMismatch both mandate HTTP 400.
                 turul_mcp_json_rpc_server::JsonRpcResponse::Error(err)
-                    if err.error.code == -32003 =>
+                    if matches!(err.error.code, -32001 | -32003) =>
                 {
                     StatusCode::BAD_REQUEST
                 }

@@ -22,6 +22,7 @@ client = []  # Client-side features
 compliance = []
 
 [dependencies]
+base64.workspace = true
 # Wire-level JSON-RPC types come from turul-rpc directly (not via the
 # turul-mcp-json-rpc-server shim), on the workspace `turul-rpc` 0.2 pin.
 turul-rpc = { workspace = true, features = ["async"] }

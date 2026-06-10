@@ -31,6 +31,10 @@ use turul_mcp_protocol_2025_11_25::{
 pub type NotificationCallback = Arc<dyn Fn(&str, Option<&Value>) + Send + Sync>;
 
 /// Main MCP client
+/// Per-tool SEP-2243 bindings: tool name → `(header name, argument JSON
+/// pointer, declared type)` per `x-mcp-header` annotation.
+type ParamBindingMap = std::collections::HashMap<String, Vec<(String, String, String)>>;
+
 pub struct McpClient {
     /// Transport layer — `Arc<BoxedTransport>` (no Mutex) so concurrent
     /// `call_tool`/`list_tools`/etc. go through the transport in parallel.
@@ -48,6 +52,11 @@ pub struct McpClient {
     response_consumer_handle: Arc<parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// Cached tool list (invalidated by `notifications/tools/list_changed`)
     cached_tools: Arc<RwLock<Option<Vec<Tool>>>>,
+    /// SEP-2243 `Mcp-Param-*` bindings per tool, from the raw 2026 `tools/list`
+    /// result. The public `Tool` vocabulary (2025 types) cannot carry the
+    /// `x-mcp-header` annotation, so the bindings are captured before the
+    /// type remap.
+    cached_param_bindings: Arc<RwLock<ParamBindingMap>>,
     /// Cached resource list (invalidated by `notifications/resources/list_changed`)
     cached_resources: Arc<RwLock<Option<Vec<Resource>>>>,
     /// Cached prompt list (invalidated by `notifications/prompts/list_changed`)
@@ -128,6 +137,7 @@ impl McpClient {
             request_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             response_consumer_handle: Arc::new(parking_lot::Mutex::new(None)),
             cached_tools: Arc::new(RwLock::new(None)),
+            cached_param_bindings: Arc::new(RwLock::new(std::collections::HashMap::new())),
             cached_resources: Arc::new(RwLock::new(None)),
             cached_prompts: Arc::new(RwLock::new(None)),
             notification_callback,
@@ -815,9 +825,15 @@ impl McpClient {
         );
 
         let response = self.send_request_internal(request).await?;
-        let tools = crate::protocol::v2026_07_28::parse_list_tools(
-            &response.get("result").cloned().unwrap_or(Value::Null),
-        )?;
+        let raw_result = response.get("result").cloned().unwrap_or(Value::Null);
+        let tools = crate::protocol::v2026_07_28::parse_list_tools(&raw_result)?;
+
+        // Capture the SEP-2243 Mcp-Param bindings before the vocabulary remap
+        // drops the x-mcp-header annotations.
+        {
+            let bindings = crate::protocol::v2026_07_28::collect_param_bindings(&raw_result);
+            *self.cached_param_bindings.write().await = bindings;
+        }
 
         debug!(count = tools.len(), "Retrieved tools");
         Ok(tools)
@@ -887,6 +903,64 @@ impl McpClient {
         parse(&response.get("result").cloned().unwrap_or(Value::Null))
     }
 
+    /// SEP-2243: the `Mcp-Param-*` headers for a `tools/call`, from the cached
+    /// bindings. Empty when the tool schema has not been fetched yet — per the
+    /// spec the call then goes out without custom headers, and a rejecting
+    /// server prompts the application to `list_tools()` and retry.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn mcp_param_headers_for(
+        &self,
+        tool_name: &str,
+        arguments: &Value,
+    ) -> Vec<(String, String)> {
+        let cache = self.cached_param_bindings.read().await;
+        match cache.get(tool_name) {
+            Some(bindings) => {
+                crate::protocol::v2026_07_28::encode_param_headers(bindings, arguments)
+            }
+            None => Vec::new(),
+        }
+    }
+
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn send_2026_07_28_with_extra_headers<T>(
+        &self,
+        method: &str,
+        extra: Value,
+        extra_headers: &[(String, String)],
+        parse: impl Fn(&Value) -> McpClientResult<T>,
+    ) -> McpClientResult<T> {
+        let meta = crate::protocol::v2026_07_28::request_meta(
+            &self.config.client_info.name,
+            &self.config.client_info.version,
+            &self.config.declared_capabilities,
+        );
+        let request = self.build_request(
+            method,
+            crate::protocol::v2026_07_28::params_with_meta(&meta, extra),
+        );
+        if !self.session.is_ready().await {
+            return Err(crate::error::SessionError::NotInitialized.into());
+        }
+        let response = tokio::time::timeout(
+            self.config.timeouts.request,
+            self.transport
+                .send_request_with_extra_headers(request, extra_headers),
+        )
+        .await
+        .map_err(|_| McpClientError::Timeout)??;
+        if let Some(error) = response.get("error") {
+            let code = error.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
+            let message = error
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown error");
+            let data = error.get("data").cloned();
+            return Err(McpClientError::server_error(code, message, data));
+        }
+        parse(&response.get("result").cloned().unwrap_or(Value::Null))
+    }
+
     /// Reject an operation whose method was removed from the 2026-07-28 core when the
     /// connection negotiated 2026. The method remains available on a 2025-11-25 connection.
     async fn reject_if_2026_07_28(&self, _method: &str) -> McpClientResult<()> {
@@ -906,10 +980,12 @@ impl McpClient {
 
         #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
         if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra_headers = self.mcp_param_headers_for(name, &arguments).await;
             return self
-                .send_2026_07_28(
+                .send_2026_07_28_with_extra_headers(
                     "tools/call",
                     json!({ "name": name, "arguments": arguments.clone() }),
+                    &extra_headers,
                     crate::protocol::v2026_07_28::parse_call_tool,
                 )
                 .await;

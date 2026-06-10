@@ -212,3 +212,122 @@ async fn mrtr_round_trip_through_the_bilingual_client() {
         "the retry must complete the original call: {text}"
     );
 }
+
+/// Manual tool with an `x-mcp-header`-annotated `region` parameter (SEP-2243).
+struct ExecuteSqlTool {
+    input_schema: turul_mcp_protocol::ToolSchema,
+}
+
+impl ExecuteSqlTool {
+    fn new() -> Self {
+        let mut properties = std::collections::HashMap::new();
+        properties.insert(
+            "region".to_string(),
+            json!({ "type": "string", "x-mcp-header": "Region" }),
+        );
+        properties.insert("query".to_string(), json!({ "type": "string" }));
+        Self {
+            input_schema: turul_mcp_protocol::ToolSchema::object()
+                .with_properties(properties)
+                .with_required(vec!["region".to_string(), "query".to_string()]),
+        }
+    }
+}
+
+impl turul_mcp_server::prelude::HasBaseMetadata for ExecuteSqlTool {
+    fn name(&self) -> &str {
+        "execute_sql"
+    }
+}
+impl turul_mcp_server::prelude::HasDescription for ExecuteSqlTool {
+    fn description(&self) -> Option<&str> {
+        Some("Execute SQL in a region")
+    }
+}
+impl turul_mcp_server::prelude::HasInputSchema for ExecuteSqlTool {
+    fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
+        &self.input_schema
+    }
+}
+impl turul_mcp_server::prelude::HasOutputSchema for ExecuteSqlTool {}
+impl turul_mcp_server::prelude::HasAnnotations for ExecuteSqlTool {}
+impl turul_mcp_server::prelude::HasToolMeta for ExecuteSqlTool {}
+impl turul_mcp_server::prelude::HasIcons for ExecuteSqlTool {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpTool for ExecuteSqlTool {
+    async fn call(
+        &self,
+        args: serde_json::Value,
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> McpResult<turul_mcp_protocol::CallToolResult> {
+        use turul_mcp_protocol::tools::ToolResult;
+        let region = args
+            .get("region")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+        Ok(turul_mcp_protocol::CallToolResult::success(vec![
+            ToolResult::text(format!("ran in {region}")),
+        ]))
+    }
+}
+
+#[tokio::test]
+async fn client_mirrors_mcp_param_headers_from_x_mcp_header_annotations() {
+    // The server VALIDATES Mcp-Param-* (an annotated argument without its
+    // header is rejected -32001), so a green call below proves the client
+    // actually emitted the mirror header.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("e2e-2026-param")
+        .version("0.4.0")
+        .tool(ExecuteSqlTool::new())
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    let transport = Box::new(HttpTransport::new(&url).unwrap());
+    let client = McpClient::new(transport, ClientConfig::default());
+    client.connect().await.expect("connect");
+
+    // tools/list populates the client's x-mcp-header binding cache.
+    let tools = client.list_tools().await.expect("list_tools");
+    assert!(tools.iter().any(|t| t.name == "execute_sql"));
+
+    // Plain ASCII value.
+    let result = client
+        .call_tool(
+            "execute_sql",
+            json!({ "region": "us-west1", "query": "SELECT 1" }),
+        )
+        .await
+        .expect("annotated tools/call must succeed — requires the Mcp-Param-Region mirror");
+    let text = serde_json::to_string(&result).unwrap_or_default();
+    assert!(text.contains("ran in us-west1"), "{text}");
+
+    // Value requiring the Base64 sentinel (leading/trailing whitespace).
+    let result = client
+        .call_tool(
+            "execute_sql",
+            json!({ "region": " padded ", "query": "SELECT 1" }),
+        )
+        .await
+        .expect("Base64-sentinel values must round-trip");
+    let text = serde_json::to_string(&result).unwrap_or_default();
+    assert!(text.contains("ran in  padded "), "{text}");
+}

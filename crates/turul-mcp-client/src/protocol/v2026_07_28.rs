@@ -79,7 +79,80 @@ pub(crate) fn parse_list_tools(
     result: &Value,
 ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Tool>> {
     let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
-    r.tools.iter().map(remap).collect()
+    // SEP-2243: clients on Streamable HTTP MUST reject tool definitions whose
+    // x-mcp-header annotations violate the constraints — exclude the tool and
+    // log a warning, so one malformed definition doesn't block the rest.
+    r.tools
+        .iter()
+        .filter(|tool| {
+            let schema = serde_json::to_value(&tool.input_schema).unwrap_or_default();
+            match p::headers::scan_x_mcp_headers(&schema) {
+                Ok(_) => true,
+                Err(reason) => {
+                    tracing::warn!(
+                        tool = %tool.name,
+                        %reason,
+                        "excluding tool from tools/list: invalid x-mcp-header annotation"
+                    );
+                    false
+                }
+            }
+        })
+        .map(remap)
+        .collect()
+}
+
+/// SEP-2243: per-tool `Mcp-Param-*` bindings from a raw `tools/list` result —
+/// `(header name, argument JSON pointer, declared type)` per annotation.
+/// Tools with invalid annotations yield no entry (they are excluded from the
+/// list result anyway).
+pub(crate) fn collect_param_bindings(
+    result: &Value,
+) -> std::collections::HashMap<String, Vec<(String, String, String)>> {
+    let mut map = std::collections::HashMap::new();
+    let Some(tools) = result.get("tools").and_then(|t| t.as_array()) else {
+        return map;
+    };
+    for tool in tools {
+        let (Some(name), Some(schema)) = (
+            tool.get("name").and_then(|n| n.as_str()),
+            tool.get("inputSchema"),
+        ) else {
+            continue;
+        };
+        if let Ok(bindings) = p::headers::scan_x_mcp_headers(schema)
+            && !bindings.is_empty()
+        {
+            map.insert(
+                name.to_string(),
+                bindings
+                    .into_iter()
+                    .map(|b| (b.header_name, b.argument_pointer, b.schema_type))
+                    .collect(),
+            );
+        }
+    }
+    map
+}
+
+/// Encode the `Mcp-Param-*` headers for a `tools/call`, per the cached
+/// bindings: absent/null arguments omit their header (per the SEP-2243
+/// client-behavior table); unencodable values also omit (the server rejects
+/// the call, which is the correct surfacing of a schema-violating argument).
+pub(crate) fn encode_param_headers(
+    bindings: &[(String, String, String)],
+    arguments: &Value,
+) -> Vec<(String, String)> {
+    let mut headers = Vec::new();
+    for (header_name, pointer, _schema_type) in bindings {
+        let Some(value) = arguments.pointer(pointer).filter(|v| !v.is_null()) else {
+            continue;
+        };
+        if let Some(encoded) = p::headers::encode_param_value(value) {
+            headers.push((format!("Mcp-Param-{header_name}"), encoded));
+        }
+    }
+    headers
 }
 
 pub(crate) fn parse_call_tool(
