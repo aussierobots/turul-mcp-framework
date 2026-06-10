@@ -9,6 +9,9 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 
+// ModelPreferences (and LogLevel below) are SEP-2577-deprecated; the trait
+// surface retains them through the migration window.
+#[allow(deprecated)]
 use crate::{
     completion::CompleteArgument,
     logging::LogLevel,
@@ -356,6 +359,11 @@ pub trait CallToolResult: RpcResult {
 // is scoped to this section.
 
 #[allow(deprecated)]
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 pub trait HasCreateMessageRequestParams: Params {
     fn messages(&self) -> &Vec<SamplingMessage>;
     fn model_preferences(&self) -> Option<&ModelPreferences>;
@@ -368,6 +376,11 @@ pub trait HasCreateMessageRequestParams: Params {
 }
 
 #[allow(deprecated)]
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestParams {
     fn method(&self) -> &str {
         "sampling/createMessage"
@@ -378,6 +391,11 @@ pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestPar
 /// Bound to [`HasMeta`] only (not [`RpcResult`]) because it has no
 /// `resultType` discriminator.
 #[allow(deprecated)]
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 pub trait CreateMessageResult: HasMeta {
     fn role(&self) -> &Role;
     fn content(&self) -> &SamplingMessageContent;
@@ -459,7 +477,13 @@ pub trait ListRootsResult {
 
 // Field-getter traits implemented by `LoggingMessageParams` (the params for
 // `notifications/message`).
+#[allow(deprecated)]
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface."
+)]
 pub trait HasLevelParam: Params {
+    #[allow(deprecated)]
     fn level(&self) -> &LogLevel;
 }
 pub trait HasLoggerParam: Params {

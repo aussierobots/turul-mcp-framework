@@ -1208,7 +1208,7 @@ mod prompts_alignment {
     #[test]
     fn list_prompts_result_with_cache() {
         let r = ListPromptsResult::new(vec![])
-            .with_cache(CacheableResult::new(120_000, CacheScope::Public));
+            .with_cache(CacheableResult::new(120_000.0, CacheScope::Public));
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["ttlMs"], 120_000);
         assert_eq!(v["cacheScope"], "public");
@@ -1306,7 +1306,7 @@ mod resources_alignment {
     #[test]
     fn list_resources_result_with_cache_produces_compliant_wire_shape() {
         let r = ListResourcesResult::new(vec![])
-            .with_cache(CacheableResult::new(30_000, CacheScope::Public));
+            .with_cache(CacheableResult::new(30_000.0, CacheScope::Public));
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["resultType"], "complete");
         assert_eq!(v["ttlMs"], 30_000);
@@ -1492,7 +1492,7 @@ mod tools_alignment {
     fn list_tools_result_with_cache_produces_compliant_wire_shape() {
         // `ListToolsResult extends PaginatedResult, CacheableResult`.
         let r = ListToolsResult::new(vec![])
-            .with_cache(CacheableResult::new(60_000, CacheScope::Private));
+            .with_cache(CacheableResult::new(60_000.0, CacheScope::Private));
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["resultType"], "complete");
         assert_eq!(v["ttlMs"], 60_000);
@@ -1506,7 +1506,7 @@ mod tools_alignment {
         let s = serde_json::to_string(&r).unwrap();
         let parsed: ListToolsResult = serde_json::from_str(&s).unwrap();
         assert_eq!(parsed.result_type, ResultType::Complete);
-        assert_eq!(parsed.ttl_ms, 0);
+        assert_eq!(parsed.ttl_ms, 0.0);
         assert_eq!(parsed.cache_scope, CacheScope::Public);
     }
 
@@ -2932,6 +2932,30 @@ mod p1_fidelity_2026_06_10 {
     //! Wire-shape contracts for the 2026-06-10 fidelity sweep: bindings match
     //! the pinned schema exactly (no invented fields, schema optionality).
     use serde_json::json;
+
+    #[test]
+    fn ttl_ms_is_a_schema_number() {
+        use turul_mcp_protocol_2026_07_28::caching::{CacheScope, CacheableResult};
+        // Schema: `ttlMs: number` (`@minimum 0`) — fractional values are legal.
+        let parsed: CacheableResult =
+            serde_json::from_value(json!({"ttlMs": 1500.5, "cacheScope": "public"})).unwrap();
+        assert_eq!(parsed.ttl_ms, 1500.5);
+        // Fractional values survive the round trip.
+        let v = serde_json::to_value(&parsed).unwrap();
+        assert_eq!(v["ttlMs"], 1500.5);
+
+        // Whole values keep the compact integer wire form.
+        let v = serde_json::to_value(CacheableResult::new(60_000.0, CacheScope::Public)).unwrap();
+        assert_eq!(v["ttlMs"], json!(60_000));
+
+        // @minimum 0: negative values reject.
+        for bad in [json!(-1), json!(-0.5)] {
+            let r: Result<CacheableResult, _> =
+                serde_json::from_value(json!({"ttlMs": bad, "cacheScope": "public"}));
+            assert!(r.is_err(), "ttlMs {bad} must reject");
+        }
+    }
+
     use turul_mcp_protocol_2026_07_28::completion::{CompletionReference, PromptReference};
     use turul_mcp_protocol_2026_07_28::initialize::{CompletionsCapabilities, LoggingCapabilities};
     use turul_mcp_protocol_2026_07_28::meta::Annotations;

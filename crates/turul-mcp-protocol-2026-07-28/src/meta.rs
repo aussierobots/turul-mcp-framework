@@ -219,6 +219,12 @@ pub const META_KEY_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscription
 /// Declared as the named field `io.modelcontextprotocol/logLevel` on
 /// `RequestMetaObject`. The constant is provided for use when callers index
 /// into a generic `MetaObject` and want the spelling pinned.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface. \
+            Replacement: stderr (stdio) or OpenTelemetry. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 pub const META_KEY_LOG_LEVEL: &str = "io.modelcontextprotocol/logLevel";
 
 /// Schema-declared `_meta` key for the request protocol version.
@@ -268,6 +274,7 @@ pub type MetaObject = HashMap<String, Value>;
 /// [`Implementation`](crate::initialize::Implementation) and
 /// [`ClientCapabilities`](crate::initialize::ClientCapabilities) are imported
 /// from [`crate::initialize`].
+#[allow(deprecated)] // carries the SEP-2577-deprecated log_level through the migration window
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestMetaObject {
     /// Caller-supplied progress token. Optional.
@@ -297,11 +304,19 @@ pub struct RequestMetaObject {
     /// Per-request log level opt-in. Optional.
     ///
     /// Replaces the former `logging/setLevel` RPC. If absent, the server MUST
-    /// NOT send `notifications/message` for this request.
+    /// NOT send `notifications/message` for this request. Deprecated per
+    /// SEP-2577 along with the whole Logging surface; functional through the
+    /// migration window.
+    #[deprecated(
+        since = "0.4.0",
+        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface. \
+                Earliest removal: first release on/after 2027-07-28."
+    )]
     #[serde(
         rename = "io.modelcontextprotocol/logLevel",
         skip_serializing_if = "Option::is_none"
     )]
+    #[allow(deprecated)]
     pub log_level: Option<crate::logging::LoggingLevel>,
 
     /// Additional caller-supplied meta keys per the `MetaObject` extension rules.
@@ -322,6 +337,7 @@ impl RequestMetaObject {
             protocol_version: protocol_version.into(),
             client_info,
             client_capabilities,
+            #[allow(deprecated)]
             log_level: None,
             extra: HashMap::new(),
         }
@@ -334,6 +350,12 @@ impl RequestMetaObject {
     }
 
     /// Opt in to log notifications at this level for this request.
+    /// Deprecated per SEP-2577 along with the whole Logging surface.
+    #[allow(deprecated)]
+    #[deprecated(
+        since = "0.4.0",
+        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface."
+    )]
     pub fn with_log_level(mut self, level: crate::logging::LoggingLevel) -> Self {
         self.log_level = Some(level);
         self

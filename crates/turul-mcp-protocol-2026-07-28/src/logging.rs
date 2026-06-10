@@ -18,18 +18,22 @@
 //! The wire-payload types ([`crate::notifications::LoggingMessageNotification`]
 //! and [`crate::notifications::LoggingMessageNotificationParams`]) live in
 //! [`crate::notifications`] alongside the other notification payloads. This
-//! module carries only the wire-value enum [`LoggingLevel`] (still used by
-//! the non-deprecated [`crate::meta::RequestMetaObject::log_level`] field).
+//! module carries only the wire-value enum [`LoggingLevel`], used by the
+//! per-request [`crate::meta::RequestMetaObject::log_level`] opt-in — the
+//! whole Logging surface, including that opt-in and this enum, is deprecated
+//! per SEP-2577 and remains functional through the migration window.
 
 use serde::{Deserialize, Serialize};
 
 /// Logging levels (per MCP spec)
 /// Maps to syslog message severities as specified in RFC-5424.
-///
-/// NOT deprecated: this enum is the wire-value type for both the deprecated
-/// `notifications/message` surface AND the non-deprecated per-request
-/// `_meta.io.modelcontextprotocol/logLevel` opt-in. Deprecating it would
-/// cascade a warning into the replacement mechanism.
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface, \
+            including the per-request _meta logLevel opt-in this enum values. \
+            Replacement: stderr (stdio) or OpenTelemetry. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LoggingLevel {
@@ -44,9 +48,15 @@ pub enum LoggingLevel {
 }
 
 /// Type alias for compatibility (per MCP spec)
+#[allow(deprecated)]
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) — see LoggingLevel."
+)]
 pub type LogLevel = LoggingLevel;
 
 /// Convenience constructors for LoggingLevel
+#[allow(deprecated)]
 impl LoggingLevel {
     /// Get logging level priority (0 = debug, 7 = emergency)
     pub fn priority(&self) -> u8 {
@@ -69,6 +79,7 @@ impl LoggingLevel {
 }
 
 #[cfg(test)]
+#[allow(deprecated)] // exercises SEP-2577-deprecated surfaces
 mod tests {
     use super::*;
 

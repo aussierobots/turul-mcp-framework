@@ -427,6 +427,7 @@ impl SessionContext {
     // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
     // remains a valid feature the framework supports.
     #[allow(deprecated)]
+    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn notify_log(
         &self,
         level: turul_mcp_protocol::logging::LoggingLevel,
@@ -558,6 +559,7 @@ impl SessionContext {
     // ============================================================================
 
     /// Get the current logging level for this session (async)
+    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn get_logging_level(&self) -> turul_mcp_protocol::logging::LoggingLevel {
         use turul_mcp_protocol::logging::LoggingLevel;
 
@@ -584,6 +586,7 @@ impl SessionContext {
     }
 
     /// Set the logging level for this session (async)
+    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn set_logging_level(&self, level: turul_mcp_protocol::logging::LoggingLevel) {
         use turul_mcp_protocol::logging::LoggingLevel;
 
@@ -606,6 +609,7 @@ impl SessionContext {
     }
 
     /// Check if a log message at the given level should be sent to this session (async)
+    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn should_log(
         &self,
         message_level: turul_mcp_protocol::logging::LoggingLevel,
@@ -615,6 +619,7 @@ impl SessionContext {
     }
 
     /// Synchronous version of should_log for trait compatibility
+    #[allow(deprecated)] // SEP-2577 migration window
     pub fn should_log_sync(
         &self,
         message_level: turul_mcp_protocol::logging::LoggingLevel,
@@ -1865,6 +1870,7 @@ pub trait SessionAware {
 }
 
 #[cfg(test)]
+#[allow(deprecated)] // exercises the SEP-2577-deprecated logging surface
 mod tests {
     use super::*;
     use serde_json::json;

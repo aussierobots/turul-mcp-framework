@@ -1148,7 +1148,10 @@ impl McpServerBuilder {
     /// Add logging support
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_logging(mut self) -> Self {
-        self.capabilities.logging = Some(LoggingCapabilities::default());
+        #[allow(deprecated)] // SEP-2577 migration window
+        {
+            self.capabilities.logging = Some(LoggingCapabilities::default());
+        }
         self.handler(LoggingHandler)
     }
 
@@ -1629,7 +1632,10 @@ impl McpServerBuilder {
 
         // Logging capability: presence of the (opaque) object means the server
         // can send notifications/message.
-        self.capabilities.logging = Some(LoggingCapabilities::default());
+        #[allow(deprecated)] // SEP-2577 migration window
+        {
+            self.capabilities.logging = Some(LoggingCapabilities::default());
+        }
 
         // Tasks capabilities — auto-configure when task runtime is set
         #[cfg(feature = "protocol-2025-11-25")]

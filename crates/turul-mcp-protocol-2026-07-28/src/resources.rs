@@ -225,7 +225,8 @@ pub struct ListResourcesResult {
     pub next_cursor: Option<Cursor>,
 
     /// `CacheableResult.ttlMs` — required by schema.
-    pub ttl_ms: u64,
+    #[serde(with = "crate::caching::ttl_ms_serde")]
+    pub ttl_ms: f64,
     /// `CacheableResult.cacheScope` — required by schema.
     pub cache_scope: crate::caching::CacheScope,
 
@@ -246,7 +247,7 @@ impl ListResourcesResult {
             result_type: crate::result_type::ResultType::Complete,
             resources,
             next_cursor: None,
-            ttl_ms: 0,
+            ttl_ms: 0.0,
             cache_scope: crate::caching::CacheScope::Public,
             meta: None,
         }
@@ -486,7 +487,8 @@ pub struct ListResourceTemplatesResult {
     pub next_cursor: Option<Cursor>,
 
     /// `CacheableResult.ttlMs` — required by schema.
-    pub ttl_ms: u64,
+    #[serde(with = "crate::caching::ttl_ms_serde")]
+    pub ttl_ms: f64,
     /// `CacheableResult.cacheScope` — required by schema.
     pub cache_scope: crate::caching::CacheScope,
 
@@ -502,7 +504,7 @@ impl ListResourceTemplatesResult {
             result_type: crate::result_type::ResultType::Complete,
             resource_templates,
             next_cursor: None,
-            ttl_ms: 0,
+            ttl_ms: 0.0,
             cache_scope: crate::caching::CacheScope::Public,
             meta: None,
         }
@@ -543,7 +545,8 @@ pub struct ReadResourceResult {
     pub contents: Vec<ResourceContent>,
 
     /// `CacheableResult.ttlMs` — required by schema.
-    pub ttl_ms: u64,
+    #[serde(with = "crate::caching::ttl_ms_serde")]
+    pub ttl_ms: f64,
     /// `CacheableResult.cacheScope` — required by schema.
     pub cache_scope: crate::caching::CacheScope,
 
@@ -565,7 +568,7 @@ impl ReadResourceResult {
         Self {
             result_type: crate::result_type::ResultType::Complete,
             contents,
-            ttl_ms: 0,
+            ttl_ms: 0.0,
             cache_scope: crate::caching::CacheScope::Private,
             meta: None,
         }

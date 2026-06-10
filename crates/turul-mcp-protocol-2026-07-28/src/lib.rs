@@ -160,6 +160,7 @@ pub use input_required::{
 };
 pub use json_rpc::{JSONRPC_VERSION, PaginatedRequestParams, RequestParams};
 pub use meta::{Cursor as MetaCursor, ProgressToken};
+#[allow(deprecated)] // META_KEY_LOG_LEVEL re-exported through the SEP-2577 migration window
 pub use meta::{
     META_KEY_BAGGAGE, META_KEY_CLIENT_CAPABILITIES, META_KEY_CLIENT_INFO, META_KEY_LOG_LEVEL,
     META_KEY_PROTOCOL_VERSION, META_KEY_SUBSCRIPTION_ID, META_KEY_TRACEPARENT, META_KEY_TRACESTATE,

@@ -8,6 +8,7 @@
 //! - Concurrent access and thread safety
 //! - Error handling and edge cases
 
+#![allow(deprecated)] // exercises SEP-2577-deprecated surfaces through the migration window
 use std::sync::Arc;
 use std::time::Duration;
 

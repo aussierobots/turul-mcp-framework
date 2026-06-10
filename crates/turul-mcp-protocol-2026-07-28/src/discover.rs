@@ -70,7 +70,8 @@ pub struct DiscoverResult {
     pub result_type: ResultType,
 
     /// `CacheableResult.ttlMs` — required by schema (DiscoverResult extends CacheableResult).
-    pub ttl_ms: u64,
+    #[serde(with = "crate::caching::ttl_ms_serde")]
+    pub ttl_ms: f64,
     /// `CacheableResult.cacheScope` — required by schema.
     pub cache_scope: crate::caching::CacheScope,
 
@@ -105,7 +106,7 @@ impl DiscoverResult {
     ) -> Self {
         Self {
             result_type: ResultType::Complete,
-            ttl_ms: 0,
+            ttl_ms: 0.0,
             cache_scope: crate::caching::CacheScope::Public,
             supported_versions,
             capabilities,
@@ -116,7 +117,7 @@ impl DiscoverResult {
     }
 
     /// Set the cache-control hint (`ttlMs` + `cacheScope`).
-    pub fn with_cache(mut self, ttl_ms: u64, cache_scope: crate::caching::CacheScope) -> Self {
+    pub fn with_cache(mut self, ttl_ms: f64, cache_scope: crate::caching::CacheScope) -> Self {
         self.ttl_ms = ttl_ms;
         self.cache_scope = cache_scope;
         self

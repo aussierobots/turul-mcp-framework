@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+#[allow(deprecated)] // SEP-2577 migration window
 use crate::logging::LoggingLevel;
 use turul_rpc::RequestId;
 
@@ -368,11 +369,10 @@ impl CancelledNotification {
 
 /// Method: "notifications/message".
 ///
-/// **Deprecated** per SEP-2577 — the Logging RPC surface is being removed.
-/// Migrate to stderr (stdio) or OpenTelemetry. The `LoggingLevel` enum stays
-/// non-deprecated because it is also the value type for the replacement
-/// per-request `_meta.io.modelcontextprotocol/logLevel` opt-in
-/// ([`crate::meta::RequestMetaObject::log_level`]).
+/// **Deprecated** per SEP-2577 — the whole Logging surface (this
+/// notification, the per-request `_meta` logLevel opt-in, and the
+/// `LoggingLevel` enum) is deprecated. Migrate to stderr (stdio) or
+/// OpenTelemetry. Functional through the migration window.
 #[deprecated(
     since = "0.4.0",
     note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
@@ -401,6 +401,7 @@ pub struct LoggingMessageNotification {
 #[serde(rename_all = "camelCase")]
 pub struct LoggingMessageNotificationParams {
     /// Log level
+    #[allow(deprecated)]
     pub level: LoggingLevel,
     /// Optional logger name
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -785,6 +786,7 @@ mod tests {
 
     #[test]
     fn test_logging_message_notification() {
+        #[allow(deprecated)] // SEP-2577 migration window
         use crate::logging::LoggingLevel;
         let data = json!({"message": "Test log message", "context": "test"});
         let notification = LoggingMessageNotification::new(LoggingLevel::Info, data.clone())

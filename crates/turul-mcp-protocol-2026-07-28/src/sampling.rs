@@ -52,6 +52,12 @@ impl SamplingResult {
 // "system"); this module re-exports the one binding rather than duplicating it.
 pub use crate::prompts::Role;
 
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 /// Model hint — an open-ended struct.
 ///
 /// The `name` field can be any model identifier string. Clients use hints to
@@ -64,6 +70,7 @@ pub struct ModelHint {
     pub name: Option<String>,
 }
 
+#[allow(deprecated)]
 impl ModelHint {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
@@ -72,12 +79,19 @@ impl ModelHint {
     }
 }
 
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 /// Model preferences (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelPreferences {
     /// Optional hints about which models to use
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[allow(deprecated)]
     pub hints: Option<Vec<ModelHint>>,
     /// Optional cost priority (0.0-1.0)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -104,6 +118,12 @@ pub enum ToolChoiceMode {
     Required,
 }
 
+#[deprecated(
+    since = "0.4.0",
+    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+            Replacement: integrate directly with LLM provider APIs. \
+            Earliest removal: first release on/after 2027-07-28."
+)]
 /// Tool choice configuration for sampling requests.
 ///
 /// Wire shape: `{ mode?: "auto" | "required" | "none" }` — `mode` is optional
@@ -116,6 +136,7 @@ pub struct ToolChoice {
     pub mode: Option<ToolChoiceMode>,
 }
 
+#[allow(deprecated)]
 impl ToolChoice {
     pub fn auto() -> Self {
         Self {
@@ -614,6 +635,7 @@ impl crate::traits::CreateMessageResult for CreateMessageResult {
 
 // ================== CONVENIENCE CONSTRUCTORS ==================
 
+#[allow(deprecated)]
 impl ModelPreferences {
     pub fn new() -> Self {
         Self {
@@ -645,6 +667,7 @@ impl ModelPreferences {
     }
 }
 
+#[allow(deprecated)]
 impl Default for ModelPreferences {
     fn default() -> Self {
         Self::new()

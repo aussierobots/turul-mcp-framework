@@ -7,6 +7,7 @@
 //!
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
+#![allow(deprecated)] // exercises the SEP-2577-deprecated logging surface
 
 use std::time::Duration;
 

@@ -152,6 +152,11 @@ pub enum ContentBlock {
         meta: Option<HashMap<String, Value>>,
     },
     /// Tool use content block.
+    #[deprecated(
+        since = "0.4.0",
+        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+                Earliest removal: first release on/after 2027-07-28."
+    )]
     #[serde(rename = "tool_use")]
     ToolUse {
         /// Unique identifier for this tool use
@@ -164,6 +169,11 @@ pub enum ContentBlock {
         meta: Option<HashMap<String, Value>>,
     },
     /// Tool result content block.
+    #[deprecated(
+        since = "0.4.0",
+        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+                Earliest removal: first release on/after 2027-07-28."
+    )]
     #[serde(rename = "tool_result")]
     ToolResult {
         /// ID of the tool use this result corresponds to
@@ -240,6 +250,11 @@ impl ContentBlock {
     }
 
     /// Create tool use content block
+    #[allow(deprecated)]
+    #[deprecated(
+        since = "0.4.0",
+        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface."
+    )]
     pub fn tool_use(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -254,6 +269,11 @@ impl ContentBlock {
     }
 
     /// Create tool result content block
+    #[allow(deprecated)]
+    #[deprecated(
+        since = "0.4.0",
+        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface."
+    )]
     pub fn tool_result(tool_use_id: impl Into<String>, content: Vec<ContentBlock>) -> Self {
         Self::ToolResult {
             tool_use_id: tool_use_id.into(),
@@ -265,6 +285,11 @@ impl ContentBlock {
     }
 
     /// Create tool result error content block
+    #[allow(deprecated)]
+    #[deprecated(
+        since = "0.4.0",
+        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface."
+    )]
     pub fn tool_result_error(tool_use_id: impl Into<String>, content: Vec<ContentBlock>) -> Self {
         Self::ToolResult {
             tool_use_id: tool_use_id.into(),
@@ -277,6 +302,7 @@ impl ContentBlock {
 
     /// Add annotations to any content block that supports them.
     /// ToolUse and ToolResult do not have annotations per spec — this is a no-op for those variants.
+    #[allow(deprecated)] // matches the SEP-2577-deprecated variants
     pub fn with_annotations(mut self, annotations: Annotations) -> Self {
         match &mut self {
             ContentBlock::Text { annotations: a, .. }
@@ -293,6 +319,7 @@ impl ContentBlock {
     }
 
     /// Add meta to any content block
+    #[allow(deprecated)] // matches the SEP-2577-deprecated variants
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         match &mut self {
             ContentBlock::Text { meta: m, .. }
@@ -455,6 +482,7 @@ impl BlobResourceContents {
 }
 
 #[cfg(test)]
+#[allow(deprecated)] // exercises SEP-2577-deprecated surfaces
 mod tests {
     use super::*;
     use serde_json::json;

@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 // Import protocol types
 use turul_mcp_json_rpc_server::types::RequestId;
+#[allow(deprecated)] // SEP-2577 migration window
 use turul_mcp_protocol::logging::LoggingLevel;
 // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
 // remains a valid feature the framework supports.

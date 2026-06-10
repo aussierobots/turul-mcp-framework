@@ -251,6 +251,11 @@ pub struct CompletionsCapabilities {
 pub struct ServerCapabilities {
     /// Logging capabilities.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[deprecated(
+        since = "0.4.0",
+        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) — the Logging capability is being \
+                phased out. Earliest removal: first release on/after 2027-07-28."
+    )]
     pub logging: Option<LoggingCapabilities>,
     /// Completion capabilities.
     #[serde(skip_serializing_if = "Option::is_none")]

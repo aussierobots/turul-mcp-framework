@@ -7,6 +7,7 @@
 //! - Real-time notification delivery and SSE integration
 //! - Error handling and edge cases for notification systems
 
+#![allow(deprecated)] // exercises SEP-2577-deprecated surfaces through the migration window
 use std::sync::Arc;
 
 use serde_json::json;

@@ -311,7 +311,8 @@ pub struct ListToolsResult {
     pub next_cursor: Option<Cursor>,
 
     /// `CacheableResult.ttlMs` — required by schema.
-    pub ttl_ms: u64,
+    #[serde(with = "crate::caching::ttl_ms_serde")]
+    pub ttl_ms: f64,
     /// `CacheableResult.cacheScope` — required by schema.
     pub cache_scope: crate::caching::CacheScope,
 
@@ -328,7 +329,7 @@ impl ListToolsResult {
             result_type: crate::result_type::ResultType::Complete,
             tools,
             next_cursor: None,
-            ttl_ms: 0,
+            ttl_ms: 0.0,
             cache_scope: crate::caching::CacheScope::Public,
             meta: None,
         }

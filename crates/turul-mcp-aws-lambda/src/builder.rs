@@ -647,7 +647,10 @@ impl LambdaMcpServerBuilder {
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_logging(mut self) -> Self {
         use turul_mcp_protocol::initialize::LoggingCapabilities;
-        self.capabilities.logging = Some(LoggingCapabilities::default());
+        #[allow(deprecated)] // SEP-2577 migration window
+        {
+            self.capabilities.logging = Some(LoggingCapabilities::default());
+        }
         self.handler(LoggingHandler)
     }
 
@@ -1069,7 +1072,11 @@ impl LambdaMcpServerBuilder {
 
         // Logging capability: presence of the (opaque) object means the server
         // can send notifications/message (same as McpServer).
-        capabilities.logging = Some(turul_mcp_protocol::initialize::LoggingCapabilities::default());
+        #[allow(deprecated)] // SEP-2577 migration window
+        {
+            capabilities.logging =
+                Some(turul_mcp_protocol::initialize::LoggingCapabilities::default());
+        }
 
         // Tasks capabilities — auto-configure when task runtime is set
         #[cfg(feature = "protocol-2025-11-25")]

@@ -2,6 +2,10 @@
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
+// The Logging surface is SEP-2577-deprecated; these traits carry it
+// through the migration window.
+#![allow(deprecated)]
+
 use serde_json::Value;
 use turul_mcp_protocol::logging::LoggingLevel;
 
