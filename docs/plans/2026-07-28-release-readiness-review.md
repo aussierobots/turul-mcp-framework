@@ -89,55 +89,63 @@ picking one.
 
 ## 2. Release checklist
 
+> **Status update (2026-06-10, commits `922691fd`…`28524e6a`):** every P0 below
+> is CLOSED — each landed with real-HTTP positive+negative tests in the
+> default-2026 CI lane and a recorded revert-and-fail. The schema pin was
+> re-vendored (`1bf94a60`). ADR-029/-025/-030 and the coverage matrix were
+> reconciled. Remaining open work is the P1 fidelity/oauth list and the P2
+> low sweep, plus the limitations noted per item below. Release disposition
+> remains the maintainer's call per the Branch Lock.
+
 Status key: ☐ open ☑ done. P0 = spec MUST not met or HIGH defect (release blockers).
 P1 = mediums (spec SHOULDs, fidelity drift, ADR/doc contract drift). P2 = lows.
 
 ### P0 — Base protocol (transport: `turul-http-mcp-server`)
 
-- ☐ **Implement `subscriptions/listen`** (long-lived POST SSE): server MUST ack first
+- ☑ **Implement `subscriptions/listen`** (long-lived POST SSE): server MUST ack first
   with `notifications/subscriptions/acknowledged`, MUST NOT send unrequested
   notification types, every delivered notification MUST carry
   `io.modelcontextprotocol/subscriptionId` in `_meta`. Protocol types exist
   (`src/subscriptions.rs`); **no dispatch handler exists**.
-- ☐ **Gate the legacy GET/DELETE surface out of the 2026 path**: GET/DELETE on a
+- ☑ **Gate the legacy GET/DELETE surface out of the 2026 path**: GET/DELETE on a
   modern-only server SHOULD return **405**; `Mcp-Session-Id` and `Last-Event-ID` MUST
   be ignored ("Resumable SSE streams via Last-Event-ID are not supported"). Today
   `streamable_http.rs:521-538` routes GET→SSE and DELETE→session-delete with no
   `protocol-2026-07-28` gating.
-- ☐ **MRTR server production**: servers MUST use the `InputRequiredResult` pattern
+- ☑ **MRTR server production**: servers MUST use the `InputRequiredResult` pattern
   (only on `tools/call`, `resources/read`, `prompts/get`; ≥1 of
   `inputRequests`/`requestState`; MUST NOT request undeclared client capabilities;
   `requestState` treated as attacker-controlled — HMAC/AEAD if it affects authz).
   Types exist; no production path in `turul-mcp-server`.
-- ☐ **Enforce `Mcp-Method` (all POSTs) + `Mcp-Name` (tools/call, resources/read,
+- ☑ **Enforce `Mcp-Method` (all POSTs) + `Mcp-Name` (tools/call, resources/read,
   prompts/get)**: missing/mismatch → HTTP 400 + `-32001 HeaderMismatch`. Constants
   exist (`protocol-2026-07-28/src/headers.rs:21,26`) but zero transport enforcement;
   the headers.rs comment claiming enforcement lives in `turul-http-mcp-server` is
   currently false.
-- ☐ **Header/body protocolVersion mismatch must return `-32001 HeaderMismatch`**, not
+- ☑ **Header/body protocolVersion mismatch must return `-32001 HeaderMismatch`**, not
   `-32602` (`streamable_http.rs:1459-1475`). Note the same code space already uses
   `-32001` for the 2025 missing-session error — disambiguate per lane.
-- ☐ **Emit `-32004 UnsupportedProtocolVersionError`** (HTTP 400, `data.supported` /
+- ☑ **Emit `-32004 UnsupportedProtocolVersionError`** (HTTP 400, `data.supported` /
   `data.requested`) for unsupported requested versions. Constant exists; zero
   emission sites.
-- ☐ **Unknown method → HTTP 404 + `-32601`** (today JSON-RPC errors ride HTTP 200).
+- ☑ **Unknown method → HTTP 404 + `-32601`** (today JSON-RPC errors ride HTTP 200).
   Keep the deliberate 200/`-32601` for `server/discover` probes on the 2025 lane —
   that one is the negotiation contract.
-- ☐ **Gate `notifications/message` on per-request `_meta`
+- ☑ **Gate `notifications/message` on per-request `_meta`
   `io.modelcontextprotocol/logLevel`**: server MUST NOT emit it for requests lacking
   the key. Only reference today is the `_meta`-echo exclusion list
   (`handlers/mod.rs:56`).
 
 ### P0 — Server features / framework
 
-- ☐ **HIGH: `ToolDefinition::to_tool()` hardcodes `output_schema: None` on the 2026
+- ☑ **HIGH: `ToolDefinition::to_tool()` hardcodes `output_schema: None` on the 2026
   path** (`turul-mcp-builders/src/traits/tool_traits.rs:145`) — `tools/list` can never
   advertise `outputSchema`, which also breaks the structuredContent contract.
-- ☐ **Fix `x-mcp-header` wire-shape drift** (`protocol-2026-07-28/src/headers.rs:34`):
+- ☑ **Fix `x-mcp-header` wire-shape drift** (`protocol-2026-07-28/src/headers.rs:34`):
   live spec (SEP-2243) says `x-mcp-header` is a JSON-Schema **annotation inside
   `inputSchema`**, and the wire header is **`Mcp-Param-{name}`** with `=?base64?…?=`
   encoding. Our constant/doc says clients send `x-mcp-header-<name>` headers — wrong.
-- ☐ **Review `cacheScope` defaults**: every result defaults `(ttlMs=0, Public)`;
+- ☑ **Review `cacheScope` defaults**: every result defaults `(ttlMs=0, Public)`;
   spec-valid, but `"public"` on `resources/read` results that depend on the
   authenticated user is the exact data-sharing risk the caching page warns about. No
   handler-level override path is exercised anywhere. Default `resources/read` to
@@ -145,28 +153,28 @@ P1 = mediums (spec SHOULDs, fidelity drift, ADR/doc contract drift). P2 = lows.
 
 ### P0 — Protocol crate (HIGH bindings, spec-compliance scope so purity-allowed)
 
-- ☐ **`PrimitiveSchemaDefinition` untagged union silently destroys enum constraints
+- ☑ **`PrimitiveSchemaDefinition` untagged union silently destroys enum constraints
   on deserialize** (`elicitation.rs:265-272`).
-- ☐ **Same union omits the four DRAFT-2026 single/multi-select enum schema variants**
+- ☑ **Same union omits the four DRAFT-2026 single/multi-select enum schema variants**
   (`elicitation.rs:265-272`).
-- ☐ Re-vendor the schema pin (§1) — picks up `ElicitationCompleteNotificationParams
+- ☑ Re-vendor the schema pin (§1) — picks up `ElicitationCompleteNotificationParams
   extends NotificationParams`.
 
 ### P0 — Client (`turul-mcp-client`, ADR-030 scope)
 
-- ☐ **Emit `Mcp-Method` / `Mcp-Name` headers** on 2026 connections (MUST).
-- ☐ **Handle `resultType: "input_required"`** (MRTR client arm): construct inputs,
+- ☑ **Emit `Mcp-Method` / `Mcp-Name` headers** on 2026 connections (MUST).
+- ☑ **Handle `resultType: "input_required"`** (MRTR client arm): construct inputs,
   echo `requestState` opaquely, retry with a NEW JSON-RPC id. Flagged pending in
   ADR-030's revision log.
-- ☐ **`x-mcp-header` → `Mcp-Param-{name}` mirroring** incl. rejecting tools with
+- ☑ **`x-mcp-header` → `Mcp-Param-{name}` mirroring** incl. rejecting tools with
   invalid annotation values (excluding them from `tools/list`).
-- ☐ Record in ADR-030 that our `-32601`-only fallback is deliberately **narrower**
+- ☑ Record in ADR-030 that our `-32601`-only fallback is deliberately **narrower**
   than the live draft's "fall back on a 400 whose body is not a recognized modern
   error" — security-motivated, defensible, now a documented divergence.
 
 ### P1 — Protocol-crate fidelity mediums (workflow-verified)
 
-- ☐ Legacy `EnumSchema` missing `default?: string`; upstream `EnumSchema` union has
+- ☑ (2026-06-10 enum-union rework) Legacy `EnumSchema` missing `default?: string`; upstream `EnumSchema` union has
   no Rust binding and its name is reused for `LegacyTitledEnumSchema`
   (`elicitation.rs:62-80`); no test deserializes enum schemas through
   `ElicitationSchema.properties`.
@@ -197,9 +205,9 @@ P1 = mediums (spec SHOULDs, fidelity drift, ADR/doc contract drift). P2 = lows.
   Either cut the dep now or revise ADR-025.
 - ☐ ADR-030/ADR-001/CLAUDE.md claim the bilingual client doesn't import the
   `turul-mcp-protocol` alias — the client manifest pins it with 19 source imports.
-- ☐ ADR-029 prescribes `cargo test --workspace` matrices that cannot compile (feature
+- ☑ ADR-029 prescribes `cargo test --workspace` matrices that cannot compile (§CI surface rewritten 2026-06-10) (feature
   unification trips the alias mutex — empirically verified).
-- ☐ `docs/plans/2026-07-28-schema-coverage-matrix.md` is stale post Slice A'/A'' and
+- ☑ `docs/plans/2026-07-28-schema-coverage-matrix.md` is stale (STALE banner added 2026-06-10) post Slice A'/A'' and
   the 2026-06-07 re-vendor.
 - ☐ `turul-mcp-oauth`: absorb DCR deprecation / CIMD SHOULD (§1).
 
