@@ -35,9 +35,7 @@ fn extract_limit_from_params(params: &Option<Value>) -> Option<usize> {
 }
 
 /// Read the pagination cursor from raw `params.cursor`.
-fn extract_cursor_from_params(
-    params: &Option<Value>,
-) -> Option<turul_mcp_protocol::meta::Cursor> {
+fn extract_cursor_from_params(params: &Option<Value>) -> Option<turul_mcp_protocol::meta::Cursor> {
     params
         .as_ref()
         .and_then(|p| p.get("cursor"))
@@ -85,13 +83,12 @@ fn paginate_list_response<T: serde::Serialize>(
     #[cfg(feature = "protocol-2025-11-25")]
     {
         let _ = &total;
-        let mut response =
-            turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
-                base_response,
-                next_cursor,
-                total,
-                has_more,
-            );
+        let mut response = turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+        );
         if !request_meta_extra.is_empty() {
             use turul_mcp_protocol::meta::WithMeta;
             let mut response_meta = response.meta().cloned().unwrap_or_else(|| {
@@ -307,7 +304,13 @@ impl McpHandler for PromptsListHandler {
 
         let total = Some(all_prompts.len() as u64);
 
-        paginate_list_response(base_response, next_cursor, total, has_more, request_meta_extra)
+        paginate_list_response(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+            request_meta_extra,
+        )
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -547,7 +550,13 @@ impl McpHandler for ResourcesListHandler {
 
         let total = Some(all_resources.len() as u64);
 
-        paginate_list_response(base_response, next_cursor, total, has_more, request_meta_extra)
+        paginate_list_response(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+            request_meta_extra,
+        )
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -1230,7 +1239,13 @@ impl McpHandler for ResourceTemplatesHandler {
             base_response = base_response.with_next_cursor(cursor.clone());
         }
 
-        paginate_list_response(base_response, next_cursor, total, has_more, request_meta_extra)
+        paginate_list_response(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+            request_meta_extra,
+        )
     }
 
     fn supported_methods(&self) -> Vec<String> {

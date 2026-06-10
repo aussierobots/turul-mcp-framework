@@ -243,13 +243,13 @@ impl McpServerBuilder {
             instructions: None,
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
-            session_storage: None,             // Default: InMemory storage
+            session_storage: None, // Default: InMemory storage
             #[cfg(feature = "protocol-2025-11-25")]
-            task_runtime: None,                // Default: tasks not supported
+            task_runtime: None, // Default: tasks not supported
             #[cfg(feature = "protocol-2025-11-25")]
             task_recovery_timeout_ms: 300_000, // Default: 5 minutes
-            strict_lifecycle: true,            // MCP 2025-11-25: require notifications/initialized
-            test_mode: false,                  // Default: production mode with security
+            strict_lifecycle: true, // MCP 2025-11-25: require notifications/initialized
+            test_mode: false,      // Default: production mode with security
             middleware_stack: crate::middleware::MiddlewareStack::new(),
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             #[cfg(feature = "http")]

@@ -388,10 +388,7 @@ impl ToolSchemaExt for ToolSchema {
             .and_then(|v| v.as_object())
             .map(|props| {
                 let _ = &definitions;
-                props
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect()
+                props.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
             });
 
         let required = obj.get("required").and_then(|v| v.as_array()).map(|arr| {

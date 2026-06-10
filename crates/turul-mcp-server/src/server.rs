@@ -10,9 +10,9 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tracing::{debug, error, info};
 #[cfg(any(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
 use tracing::warn;
+use tracing::{debug, error, info};
 
 use crate::handlers::McpHandler;
 use crate::handlers::extract_request_meta_extra;
@@ -1679,12 +1679,13 @@ impl JsonRpcHandler for ListToolsHandler {
         #[cfg(feature = "protocol-2025-11-25")]
         {
             let _ = &total;
-            let mut paginated_response = turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
-                base_response,
-                next_cursor,
-                total,
-                has_more,
-            );
+            let mut paginated_response =
+                turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
+                    base_response,
+                    next_cursor,
+                    total,
+                    has_more,
+                );
             if !request_meta_extra.is_empty() {
                 use turul_mcp_protocol::meta::WithMeta;
                 let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
@@ -1823,8 +1824,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         #[cfg(feature = "protocol-2025-11-25")]
         let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)?;
         #[cfg(not(feature = "protocol-2025-11-25"))]
-        let call_params: turul_mcp_protocol::tools::CallToolRequestParams =
-            extract_params(params)?;
+        let call_params: turul_mcp_protocol::tools::CallToolRequestParams = extract_params(params)?;
 
         // Find the tool — from live registry in Dynamic mode, or static map otherwise.
         // In both cases, we clone the Arc and release any lock before the await boundary.

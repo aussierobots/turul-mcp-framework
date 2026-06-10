@@ -36,7 +36,9 @@ async fn bilingual_client_locks_2026_when_server_answers_discover() {
 
     // server/discover returns a valid DiscoverResult => this is a 2026 server.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -72,7 +74,9 @@ async fn bilingual_client_locks_2025_when_server_lacks_discover() {
 
     // A real 2025-11-25 server has no server/discover => -32601 => fall back.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -87,7 +91,9 @@ async fn bilingual_client_locks_2025_when_server_lacks_discover() {
 
     // initialize: session ID + minimal valid InitializeResult.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "initialize"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "initialize"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -107,7 +113,9 @@ async fn bilingual_client_locks_2025_when_server_lacks_discover() {
 
     // notifications/initialized: 202 Accepted per MCP spec.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "notifications/initialized"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "notifications/initialized"}),
+        ))
         .respond_with(ResponseTemplate::new(202))
         .mount(&server)
         .await;
@@ -128,7 +136,9 @@ async fn bilingual_client_aborts_on_4xx_without_downgrade() {
 
     // HTTP 403 on the probe is an authorization failure, NOT a version signal.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
         .respond_with(ResponseTemplate::new(403))
         .mount(&server)
         .await;
@@ -152,7 +162,9 @@ async fn bilingual_client_round_trips_tools_list_against_2026_server() {
 
     // server/discover => 2026 server; the connection locks to 2026-07-28.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -203,13 +215,20 @@ async fn bilingual_client_round_trips_tools_list_against_2026_server() {
 
     let (client, result) = connect_client(&server).await;
     result.expect("connect against a 2026 server must succeed");
-    assert_eq!(client.negotiated_version().await, Some(McpVersion::V2026_07_28));
+    assert_eq!(
+        client.negotiated_version().await,
+        Some(McpVersion::V2026_07_28)
+    );
 
     // The round-trip: a 2026-shaped tools/list request that parses the 2026 result.
     let tools = client
         .list_tools()
         .await
         .expect("tools/list must round-trip against a 2026 server");
-    assert_eq!(tools.len(), 1, "expected the one tool the 2026 server returned");
+    assert_eq!(
+        tools.len(),
+        1,
+        "expected the one tool the 2026 server returned"
+    );
     assert_eq!(tools[0].name, "echo");
 }

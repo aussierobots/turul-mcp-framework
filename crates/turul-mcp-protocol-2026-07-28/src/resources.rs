@@ -607,7 +607,6 @@ impl crate::traits::HasResultType for ReadResourceResult {
 
 impl crate::traits::RpcResult for ReadResourceResult {}
 
-
 // Trait implementations for resources
 
 use crate::traits::*;

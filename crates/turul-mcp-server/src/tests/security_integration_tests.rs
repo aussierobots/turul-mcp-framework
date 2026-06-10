@@ -254,7 +254,8 @@ async fn test_security_with_valid_uri_template() {
 
     let session = create_test_session();
 
-    let params = json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
+    let params =
+        json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
     let result = read_handler
         .handle_with_session(Some(params), Some(session))
         .await;
@@ -311,7 +312,8 @@ async fn test_security_requires_session() {
         .add_template_resource(template, SecureTestResource::new());
 
     // Test request without session — should fail
-    let params = json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
+    let params =
+        json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
     let result = read_handler.handle_with_session(Some(params), None).await;
 
     assert!(result.is_err());
@@ -348,7 +350,8 @@ async fn test_rate_limiting_integration() {
         .add_template_resource(template, SecureTestResource::new());
 
     let session = create_test_session();
-    let params = json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
+    let params =
+        json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
 
     // First two requests should succeed
     let result1 = read_handler

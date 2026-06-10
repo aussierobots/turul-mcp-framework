@@ -460,7 +460,6 @@ impl CreateMessageRequest {
         self.params = self.params.with_tool_choice(tool_choice);
         self
     }
-
 }
 
 #[allow(deprecated)]
@@ -476,7 +475,11 @@ impl CreateMessageResult {
     }
 
     /// Convenience: single-block result (most common LLM response shape).
-    pub fn single(role: Role, block: SamplingMessageContentBlock, model: impl Into<String>) -> Self {
+    pub fn single(
+        role: Role,
+        block: SamplingMessageContentBlock,
+        model: impl Into<String>,
+    ) -> Self {
         Self::new(role, SamplingMessageContent::Single(block), model)
     }
 

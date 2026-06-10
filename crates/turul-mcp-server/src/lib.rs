@@ -194,8 +194,7 @@ pub use security::{
 pub use server::SessionAwareInitializeHandler;
 /// Core MCP server and session-aware handlers
 pub use server::{
-    ListToolsHandler, McpServer, SessionAwareMcpHandlerBridge,
-    SessionAwareToolHandler,
+    ListToolsHandler, McpServer, SessionAwareMcpHandlerBridge, SessionAwareToolHandler,
 };
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionEventDispatcher, SessionManager};

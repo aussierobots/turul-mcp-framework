@@ -20,11 +20,13 @@ pub use crate::resources::{
 };
 
 // Prompt types (spec-pure structs only)
-pub use crate::prompts::{ContentBlock, GetPromptRequestParams, Prompt, PromptArgument, PromptMessage};
+pub use crate::prompts::{
+    ContentBlock, GetPromptRequestParams, Prompt, PromptArgument, PromptMessage,
+};
 
 // Tool types (spec-pure structs only)
 pub use crate::tools::{
-    CallToolRequestParams, CallToolRequest, CallToolResult, Tool, ToolResult, ToolSchema,
+    CallToolRequest, CallToolRequestParams, CallToolResult, Tool, ToolResult, ToolSchema,
 };
 
 // Notification types (using specific structs that exist).
@@ -57,8 +59,8 @@ pub use crate::icons::Icon;
 pub use crate::initialize::{ClientCapabilities, Implementation};
 
 // Common types — wire envelopes come from `turul-rpc` (re-exported at crate root).
-pub use crate::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
 pub use crate::meta::{Annotations, Cursor};
+pub use crate::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
 pub use crate::{McpError, McpResult};
 
 // Common external types that are frequently used

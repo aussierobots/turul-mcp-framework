@@ -220,7 +220,12 @@ pub fn tool_props(
     p: std::collections::HashMap<String, turul_mcp_protocol::schema::JsonSchema>,
 ) -> std::collections::HashMap<String, serde_json::Value> {
     p.into_iter()
-        .map(|(k, v)| (k, serde_json::to_value(v).unwrap_or(serde_json::Value::Null)))
+        .map(|(k, v)| {
+            (
+                k,
+                serde_json::to_value(v).unwrap_or(serde_json::Value::Null),
+            )
+        })
         .collect()
 }
 
@@ -231,6 +236,10 @@ pub fn tool_props(
 pub fn tool_prop_is_object<T: serde::Serialize>(prop: &T) -> bool {
     serde_json::to_value(prop)
         .ok()
-        .and_then(|v| v.get("type").and_then(|t| t.as_str()).map(|s| s == "object"))
+        .and_then(|v| {
+            v.get("type")
+                .and_then(|t| t.as_str())
+                .map(|s| s == "object")
+        })
         .unwrap_or(false)
 }

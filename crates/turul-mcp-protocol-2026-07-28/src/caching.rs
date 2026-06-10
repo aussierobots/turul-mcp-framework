@@ -76,7 +76,10 @@ pub struct CacheableResult {
 impl CacheableResult {
     /// Construct with both required fields.
     pub fn new(ttl_ms: u64, cache_scope: CacheScope) -> Self {
-        Self { ttl_ms, cache_scope }
+        Self {
+            ttl_ms,
+            cache_scope,
+        }
     }
 
     /// Convenience: immediately-stale public response (`ttlMs=0`, public scope).
@@ -130,7 +133,10 @@ mod tests {
         // Required field — must fail to parse without it.
         let bad = json!({"cacheScope": "public"});
         let r: Result<CacheableResult, _> = serde_json::from_value(bad);
-        assert!(r.is_err(), "missing ttlMs must reject (schema marks REQUIRED)");
+        assert!(
+            r.is_err(),
+            "missing ttlMs must reject (schema marks REQUIRED)"
+        );
     }
 
     #[test]
@@ -179,7 +185,10 @@ mod tests {
         let v = serde_json::to_value(&l).unwrap();
         assert_eq!(v["tools"][0], "echo");
         assert_eq!(v["ttlMs"], 60_000, "flattened ttlMs at parent top level");
-        assert_eq!(v["cacheScope"], "public", "flattened cacheScope at parent top level");
+        assert_eq!(
+            v["cacheScope"], "public",
+            "flattened cacheScope at parent top level"
+        );
 
         let s = serde_json::to_string(&v).unwrap();
         let parsed: ListLike = serde_json::from_str(&s).unwrap();

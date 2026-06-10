@@ -26,7 +26,9 @@ async fn mount_2026_result(server: &MockServer, rpc_method: &str, result: serde_
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
-                .set_body_json(serde_json::json!({ "jsonrpc": "2.0", "id": "x", "result": result })),
+                .set_body_json(
+                    serde_json::json!({ "jsonrpc": "2.0", "id": "x", "result": result }),
+                ),
         )
         .mount(server)
         .await;
@@ -41,7 +43,9 @@ async fn start_2026_server() -> MockServer {
         .await;
     // server/discover => locks the connection to 2026-07-28.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -64,7 +68,10 @@ async fn connect_2026(server: &MockServer) -> McpClient {
     let transport = Box::new(HttpTransport::new(&url).unwrap());
     let client = McpClient::new(transport, ClientConfig::default());
     client.connect().await.expect("connect to 2026 server");
-    assert_eq!(client.negotiated_version().await, Some(McpVersion::V2026_07_28));
+    assert_eq!(
+        client.negotiated_version().await,
+        Some(McpVersion::V2026_07_28)
+    );
     client
 }
 
@@ -99,17 +106,26 @@ async fn all_supported_ops_route_through_2026_path() {
 
     let client = connect_2026(&server).await;
 
-    let call = client.call_tool("echo", serde_json::json!({})).await.expect("call_tool");
+    let call = client
+        .call_tool("echo", serde_json::json!({}))
+        .await
+        .expect("call_tool");
     assert_eq!(call.is_error, Some(false));
 
     let resources = client.list_resources().await.expect("list_resources");
     assert_eq!(resources.len(), 1);
     assert_eq!(resources[0].uri, "file:///a");
 
-    let contents = client.read_resource("file:///a").await.expect("read_resource");
+    let contents = client
+        .read_resource("file:///a")
+        .await
+        .expect("read_resource");
     assert_eq!(contents.len(), 1);
 
-    let templates = client.list_resource_templates().await.expect("list_resource_templates");
+    let templates = client
+        .list_resource_templates()
+        .await
+        .expect("list_resource_templates");
     assert_eq!(templates.len(), 1);
 
     let prompts = client.list_prompts().await.expect("list_prompts");
@@ -175,7 +191,10 @@ async fn paginated_list_routes_through_2026_with_meta_and_cursor() {
         .await
         .expect("paginated resources/list must round-trip through the 2026 path");
     assert_eq!(page.resources.len(), 1);
-    assert_eq!(page.next_cursor.as_ref().map(|c| c.as_str()), Some("page-3"));
+    assert_eq!(
+        page.next_cursor.as_ref().map(|c| c.as_str()),
+        Some("page-3")
+    );
 }
 
 #[tokio::test]

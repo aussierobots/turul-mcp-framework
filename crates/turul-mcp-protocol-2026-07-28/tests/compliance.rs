@@ -26,10 +26,10 @@ fn fixture_meta() -> turul_mcp_protocol_2026_07_28::meta::RequestMetaObject {
 
 #[cfg(test)]
 mod tests {
-    use turul_mcp_protocol_2026_07_28::notifications::*;
-    use turul_mcp_protocol_2026_07_28::tools::*;
     use serde_json::json;
     use std::collections::HashMap;
+    use turul_mcp_protocol_2026_07_28::notifications::*;
+    use turul_mcp_protocol_2026_07_28::tools::*;
 
     #[test]
     fn test_call_tool_request_matches_typescript_spec() {
@@ -46,8 +46,7 @@ mod tests {
         )
         .with_extra("clientId", json!("test-client"));
 
-        let request = CallToolRequest::new("echo", meta)
-            .with_arguments_value(json!(args));
+        let request = CallToolRequest::new("echo", meta).with_arguments_value(json!(args));
 
         // Serialize to JSON to check structure
         let json_value = serde_json::to_value(&request).unwrap();
@@ -73,8 +72,9 @@ mod tests {
         )
         .with_extra("sessionId", json!("session-123"));
 
-        let request = ListToolsRequest::new(meta)
-            .with_cursor(turul_mcp_protocol_2026_07_28::meta::Cursor::new("cursor-456"));
+        let request = ListToolsRequest::new(meta).with_cursor(
+            turul_mcp_protocol_2026_07_28::meta::Cursor::new("cursor-456"),
+        );
 
         let json_value = serde_json::to_value(&request).unwrap();
 
@@ -206,9 +206,9 @@ mod tests {
 /// for the composition and reference keywords introduced by 2020-12.
 #[cfg(test)]
 mod json_schema_2020_12 {
-    use turul_mcp_protocol_2026_07_28::tools::{Tool, ToolSchema};
     use serde_json::json;
     use std::collections::HashMap;
+    use turul_mcp_protocol_2026_07_28::tools::{Tool, ToolSchema};
 
     fn schema_with_extra(extra: serde_json::Map<String, serde_json::Value>) -> ToolSchema {
         let mut additional = HashMap::new();
@@ -244,7 +244,10 @@ mod json_schema_2020_12 {
     #[test]
     fn input_schema_accepts_any_of() {
         let mut extra = serde_json::Map::new();
-        extra.insert("anyOf".to_string(), json!([{"type": "string"}, {"type": "number"}]));
+        extra.insert(
+            "anyOf".to_string(),
+            json!([{"type": "string"}, {"type": "number"}]),
+        );
         let s = schema_with_extra(extra);
         let v = serde_json::to_value(&s).unwrap();
         assert!(v["anyOf"].is_array());
@@ -253,7 +256,10 @@ mod json_schema_2020_12 {
     #[test]
     fn input_schema_accepts_all_of() {
         let mut extra = serde_json::Map::new();
-        extra.insert("allOf".to_string(), json!([{"required": ["a"]}, {"required": ["b"]}]));
+        extra.insert(
+            "allOf".to_string(),
+            json!([{"required": ["a"]}, {"required": ["b"]}]),
+        );
         let s = schema_with_extra(extra);
         let v = serde_json::to_value(&s).unwrap();
         assert!(v["allOf"].is_array());
@@ -287,7 +293,10 @@ mod json_schema_2020_12 {
     fn input_schema_accepts_conditional_keywords() {
         // SEP-2106: if/then/else conditional keywords.
         let mut extra = serde_json::Map::new();
-        extra.insert("if".to_string(), json!({"properties": {"mode": {"const": "x"}}}));
+        extra.insert(
+            "if".to_string(),
+            json!({"properties": {"mode": {"const": "x"}}}),
+        );
         extra.insert("then".to_string(), json!({"required": ["x_data"]}));
         extra.insert("else".to_string(), json!({"required": ["y_data"]}));
         let s = schema_with_extra(extra);
@@ -354,8 +363,7 @@ mod json_schema_2020_12 {
         let parsed: ToolSchema = serde_json::from_value(wire.clone()).unwrap();
         let re_v = serde_json::to_value(&parsed).unwrap();
         assert_eq!(
-            re_v["properties"]["x"]["$ref"],
-            "#/$defs/y",
+            re_v["properties"]["x"]["$ref"], "#/$defs/y",
             "$ref inside properties values must round-trip"
         );
         assert!(
@@ -397,10 +405,9 @@ mod json_schema_2020_12 {
         use turul_mcp_protocol_2026_07_28::tools::ToolOutputSchema;
 
         // Array root.
-        let array_root = ToolOutputSchema::any().with("type", json!("array")).with(
-            "items",
-            json!({"type": "string"}),
-        );
+        let array_root = ToolOutputSchema::any()
+            .with("type", json!("array"))
+            .with("items", json!({"type": "string"}));
         let v = serde_json::to_value(&array_root).unwrap();
         assert_eq!(v["type"], "array", "non-object root permitted");
         assert!(v["items"].is_object());
@@ -426,12 +433,12 @@ mod json_schema_2020_12 {
 /// from 2025-11-25; the tests prove their wire shapes still match DRAFT-2026-v1.
 #[cfg(test)]
 mod remaining_shapes {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::icons::Icon;
     use turul_mcp_protocol_2026_07_28::initialize::Implementation;
     use turul_mcp_protocol_2026_07_28::meta::Annotations;
     use turul_mcp_protocol_2026_07_28::prompts::{Prompt, PromptArgument, PromptMessage, Role};
     use turul_mcp_protocol_2026_07_28::resources::{Resource, ResourceTemplate};
-    use serde_json::json;
 
     #[test]
     fn resource_shape_matches_schema() {
@@ -442,7 +449,15 @@ mod remaining_shapes {
         assert_eq!(v["uri"], "file:///x");
         assert_eq!(v["name"], "x");
         // Optional fields omitted when absent.
-        for missing in ["description", "mimeType", "annotations", "size", "_meta", "icons", "title"] {
+        for missing in [
+            "description",
+            "mimeType",
+            "annotations",
+            "size",
+            "_meta",
+            "icons",
+            "title",
+        ] {
             assert!(
                 !v.as_object().unwrap().contains_key(missing),
                 "{} omitted when None",
@@ -569,12 +584,12 @@ mod remaining_shapes {
 /// completion.rs schema alignment.
 #[cfg(test)]
 mod completion_alignment {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::completion::{
         CompleteArgument, CompleteResult, CompletionResult, PromptReference,
         ResourceTemplateReference,
     };
     use turul_mcp_protocol_2026_07_28::result_type::ResultType;
-    use serde_json::json;
 
     #[test]
     fn complete_result_emits_result_type() {
@@ -652,9 +667,9 @@ mod completion_alignment {
 /// in code with `#[deprecated]`.
 #[cfg(test)]
 mod empty_result_alignment {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::ping::EmptyResult;
     use turul_mcp_protocol_2026_07_28::result_type::ResultType;
-    use serde_json::json;
 
     #[test]
     fn empty_result_serializes_result_type_complete() {
@@ -693,8 +708,8 @@ mod empty_result_alignment {
 /// distinguished by `type` field.
 #[cfg(test)]
 mod content_alignment {
-    use turul_mcp_protocol_2026_07_28::content::ContentBlock;
     use serde_json::json;
+    use turul_mcp_protocol_2026_07_28::content::ContentBlock;
 
     #[test]
     fn text_content_type_field_is_text() {
@@ -743,10 +758,8 @@ mod content_alignment {
     #[test]
     fn text_content_with_annotations_serializes() {
         use turul_mcp_protocol_2026_07_28::meta::Annotations;
-        let c = ContentBlock::text_with_annotations(
-            "annotated",
-            Annotations::new().with_priority(0.8),
-        );
+        let c =
+            ContentBlock::text_with_annotations("annotated", Annotations::new().with_priority(0.8));
         let v = serde_json::to_value(&c).unwrap();
         assert_eq!(v["type"], "text");
         assert_eq!(v["text"], "annotated");
@@ -805,11 +818,11 @@ mod content_alignment {
 /// - `TitledMultiSelectEnumSchema` — `{type:"array", items:{anyOf:[{const,title}]}}`
 #[cfg(test)]
 mod elicitation_modes {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::elicitation::{
         ElicitRequest, ElicitRequestFormParams, ElicitRequestParams, ElicitRequestURLParams,
         ElicitationSchema, FormModeMarker, UrlModeMarker,
     };
-    use serde_json::json;
 
     #[test]
     fn form_mode_round_trips_with_optional_mode() {
@@ -824,7 +837,11 @@ mod elicitation_modes {
     #[test]
     fn url_mode_round_trips_with_required_mode_and_fields() {
         // `ElicitRequestURLParams`: mode:"url" REQUIRED, plus elicitationId + url.
-        let r = ElicitRequest::new_url("Please authorize", "elicit-abc-123", "https://auth.example/login");
+        let r = ElicitRequest::new_url(
+            "Please authorize",
+            "elicit-abc-123",
+            "https://auth.example/login",
+        );
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["method"], "elicitation/create");
         assert_eq!(v["params"]["mode"], "url");
@@ -880,11 +897,11 @@ mod elicitation_modes {
 
 #[cfg(test)]
 mod elicitation_enum_schemas {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::elicitation::{
         TitledEnumOption, TitledMultiSelectEnumSchema, TitledSingleSelectEnumSchema,
         UntitledMultiSelectEnumSchema, UntitledSingleSelectEnumSchema,
     };
-    use serde_json::json;
 
     #[test]
     fn untitled_single_select_wire_shape() {
@@ -950,15 +967,15 @@ mod elicitation_enum_schemas {
         let cases = vec![
             serde_json::to_value(UntitledSingleSelectEnumSchema::new(vec!["x".to_string()]))
                 .unwrap(),
-            serde_json::to_value(TitledSingleSelectEnumSchema::new(vec![TitledEnumOption::new(
-                "x", "X",
-            )]))
+            serde_json::to_value(TitledSingleSelectEnumSchema::new(vec![
+                TitledEnumOption::new("x", "X"),
+            ]))
             .unwrap(),
             serde_json::to_value(UntitledMultiSelectEnumSchema::new(vec!["y".to_string()]))
                 .unwrap(),
-            serde_json::to_value(TitledMultiSelectEnumSchema::new(vec![TitledEnumOption::new(
-                "y", "Y",
-            )]))
+            serde_json::to_value(TitledMultiSelectEnumSchema::new(vec![
+                TitledEnumOption::new("y", "Y"),
+            ]))
             .unwrap(),
         ];
         for v in cases {
@@ -988,7 +1005,10 @@ mod elicitation_enum_schemas {
         // Rust field is `const_value` to avoid the Rust keyword collision.
         let opt = TitledEnumOption::new("k", "Display");
         let v = serde_json::to_value(&opt).unwrap();
-        assert_eq!(v["const"], "k", "must serialize as `const` not `const_value`");
+        assert_eq!(
+            v["const"], "k",
+            "must serialize as `const` not `const_value`"
+        );
         assert_eq!(v["title"], "Display");
     }
 
@@ -1019,11 +1039,11 @@ mod elicitation_enum_schemas {
 /// and `CreateMessageResult extends SamplingMessage`.
 #[cfg(test)]
 mod sampling_message_alignment {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::sampling::{
         CreateMessageResult, Role, SamplingMessage, SamplingMessageContent,
         SamplingMessageContentBlock,
     };
-    use serde_json::json;
 
     #[test]
     fn single_block_content_serializes_as_object_not_array() {
@@ -1031,7 +1051,10 @@ mod sampling_message_alignment {
         let msg = SamplingMessage::single(Role::User, SamplingMessageContentBlock::text("hi"));
         let v = serde_json::to_value(&msg).unwrap();
         assert_eq!(v["role"], "user");
-        assert!(v["content"].is_object(), "single block must be object on wire");
+        assert!(
+            v["content"].is_object(),
+            "single block must be object on wire"
+        );
         assert_eq!(v["content"]["type"], "text");
         assert_eq!(v["content"]["text"], "hi");
     }
@@ -1061,7 +1084,10 @@ mod sampling_message_alignment {
     fn untagged_content_round_trips_array() {
         let wire = json!({"role": "user", "content": [{"type": "text", "text": "x"}]});
         let parsed: SamplingMessage = serde_json::from_value(wire).unwrap();
-        assert!(matches!(parsed.content, SamplingMessageContent::Multiple(_)));
+        assert!(matches!(
+            parsed.content,
+            SamplingMessageContent::Multiple(_)
+        ));
     }
 
     #[test]
@@ -1080,14 +1106,20 @@ mod sampling_message_alignment {
         // A wire payload tagged "resource_link" must NOT round-trip through SamplingMessageContentBlock.
         let wire = json!({"type": "resource_link", "uri": "file:///x", "name": "x"});
         let parsed: Result<SamplingMessageContentBlock, _> = serde_json::from_value(wire);
-        assert!(parsed.is_err(), "resource_link must not deserialize as SamplingMessageContentBlock");
+        assert!(
+            parsed.is_err(),
+            "resource_link must not deserialize as SamplingMessageContentBlock"
+        );
     }
 
     #[test]
     fn sampling_message_content_block_excludes_embedded_resource_variant() {
         let wire = json!({"type": "resource", "resource": {"uri": "file:///x", "text": "x"}});
         let parsed: Result<SamplingMessageContentBlock, _> = serde_json::from_value(wire);
-        assert!(parsed.is_err(), "embedded resource must not deserialize as SamplingMessageContentBlock");
+        assert!(
+            parsed.is_err(),
+            "embedded resource must not deserialize as SamplingMessageContentBlock"
+        );
     }
 
     #[test]
@@ -1122,7 +1154,10 @@ mod sampling_message_alignment {
         assert_eq!(v["content"]["type"], "text");
         assert_eq!(v["model"], "claude-x");
         let obj = v.as_object().unwrap();
-        assert!(!obj.contains_key("stopReason"), "absent stop_reason is omitted");
+        assert!(
+            !obj.contains_key("stopReason"),
+            "absent stop_reason is omitted"
+        );
         assert!(!obj.contains_key("_meta"));
     }
 
@@ -1149,13 +1184,15 @@ mod sampling_message_alignment {
 /// (extends InputResponseRequestParams).
 #[cfg(test)]
 mod prompts_alignment {
-    use turul_mcp_protocol_2026_07_28::caching::{CacheScope, CacheableResult};
-    use turul_mcp_protocol_2026_07_28::input_required::{InputResponse, InputResponses};
-    use turul_mcp_protocol_2026_07_28::prompts::{GetPromptRequestParams, GetPromptResult, ListPromptsResult, PromptMessage};
-    use turul_mcp_protocol_2026_07_28::result_type::ResultType;
-    use turul_mcp_protocol_2026_07_28::roots::ListRootsResult;
     use serde_json::json;
     use std::collections::HashMap;
+    use turul_mcp_protocol_2026_07_28::caching::{CacheScope, CacheableResult};
+    use turul_mcp_protocol_2026_07_28::input_required::{InputResponse, InputResponses};
+    use turul_mcp_protocol_2026_07_28::prompts::{
+        GetPromptRequestParams, GetPromptResult, ListPromptsResult, PromptMessage,
+    };
+    use turul_mcp_protocol_2026_07_28::result_type::ResultType;
+    use turul_mcp_protocol_2026_07_28::roots::ListRootsResult;
 
     #[test]
     fn list_prompts_result_emits_result_type() {
@@ -1201,7 +1238,8 @@ mod prompts_alignment {
         // `GetPromptRequestParams.arguments?: { [key: string]: string }`.
         let mut args = HashMap::new();
         args.insert("lang".to_string(), "rust".to_string());
-        let p = GetPromptRequestParams::new("code_review", super::fixture_meta()).with_arguments(args);
+        let p =
+            GetPromptRequestParams::new("code_review", super::fixture_meta()).with_arguments(args);
         let v = serde_json::to_value(&p).unwrap();
         assert_eq!(v["arguments"]["lang"], "rust");
         assert!(
@@ -1244,16 +1282,16 @@ mod prompts_alignment {
 /// - `ReadResourceRequestParams` (extends ResourceRequestParams, InputResponseRequestParams)
 #[cfg(test)]
 mod resources_alignment {
+    use serde_json::json;
+    use std::collections::HashMap;
     use turul_mcp_protocol_2026_07_28::caching::{CacheScope, CacheableResult};
     use turul_mcp_protocol_2026_07_28::input_required::{InputResponse, InputResponses};
     use turul_mcp_protocol_2026_07_28::resources::{
-        ListResourceTemplatesResult, ListResourcesResult, ReadResourceRequestParams, ReadResourceResult,
-        ResourceContent,
+        ListResourceTemplatesResult, ListResourcesResult, ReadResourceRequestParams,
+        ReadResourceResult, ResourceContent,
     };
     use turul_mcp_protocol_2026_07_28::result_type::ResultType;
     use turul_mcp_protocol_2026_07_28::roots::ListRootsResult;
-    use serde_json::json;
-    use std::collections::HashMap;
 
     #[test]
     fn list_resources_result_emits_result_type() {
@@ -1300,8 +1338,7 @@ mod resources_alignment {
 
     #[test]
     fn list_resource_templates_result_with_cache() {
-        let r = ListResourceTemplatesResult::new(vec![])
-            .with_cache(CacheableResult::private_60s());
+        let r = ListResourceTemplatesResult::new(vec![]).with_cache(CacheableResult::private_60s());
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["ttlMs"], 60_000);
         assert_eq!(v["cacheScope"], "private");
@@ -1368,16 +1405,16 @@ mod resources_alignment {
 /// - `structuredContent` accepts any JSON value (DRAFT-2026-v1 widening from object-only)
 #[cfg(test)]
 mod tools_alignment {
+    use serde_json::json;
+    use std::collections::HashMap;
     use turul_mcp_protocol_2026_07_28::caching::{CacheScope, CacheableResult};
     use turul_mcp_protocol_2026_07_28::content::ContentBlock;
     use turul_mcp_protocol_2026_07_28::input_required::{InputResponse, InputResponses};
     use turul_mcp_protocol_2026_07_28::result_type::ResultType;
     use turul_mcp_protocol_2026_07_28::roots::ListRootsResult;
     use turul_mcp_protocol_2026_07_28::tools::{
-        CallToolRequestParams, CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult,
+        CallToolRequest, CallToolRequestParams, CallToolResult, ListToolsRequest, ListToolsResult,
     };
-    use serde_json::json;
-    use std::collections::HashMap;
 
     #[test]
     fn tools_list_request_emits_correct_method() {
@@ -1467,7 +1504,8 @@ mod tools_alignment {
             "rq-1".to_string(),
             InputResponse::ListRoots(ListRootsResult::new(vec![])),
         );
-        let p = CallToolRequestParams::new("echo", super::fixture_meta()).with_input_responses(responses, "opaque-state");
+        let p = CallToolRequestParams::new("echo", super::fixture_meta())
+            .with_input_responses(responses, "opaque-state");
         let v = serde_json::to_value(&p).unwrap();
         assert_eq!(v["name"], "echo");
         assert!(
@@ -1537,11 +1575,11 @@ mod tools_alignment {
 /// serialize with the correct wire names per `ClientCapabilities`/`ServerCapabilities`.
 #[cfg(test)]
 mod capabilities_shape {
+    use serde_json::json;
+    use std::collections::HashMap;
     use turul_mcp_protocol_2026_07_28::initialize::{
         ClientCapabilities, ElicitationCapabilities, SamplingCapabilities, ServerCapabilities,
     };
-    use serde_json::json;
-    use std::collections::HashMap;
 
     #[test]
     fn client_sampling_subcapabilities_serialize_with_camelcase() {
@@ -1791,14 +1829,16 @@ mod method_strings {
     #[test]
     fn resources_templates_list_binding() {
         use turul_mcp_protocol_2026_07_28::resources::ListResourceTemplatesRequest;
-        let v = serde_json::to_value(ListResourceTemplatesRequest::new(super::fixture_meta())).unwrap();
+        let v =
+            serde_json::to_value(ListResourceTemplatesRequest::new(super::fixture_meta())).unwrap();
         assert_eq!(method_of(&v), "resources/templates/list");
     }
 
     #[test]
     fn resources_read_binding() {
         use turul_mcp_protocol_2026_07_28::resources::ReadResourceRequest;
-        let v = serde_json::to_value(ReadResourceRequest::new("file:///x", super::fixture_meta())).unwrap();
+        let v = serde_json::to_value(ReadResourceRequest::new("file:///x", super::fixture_meta()))
+            .unwrap();
         assert_eq!(method_of(&v), "resources/read");
     }
 
@@ -2003,7 +2043,10 @@ mod removed_methods {
     /// serde rename.
     #[test]
     fn schema_protocol_version_constant_matches_crate() {
-        let expected = format!("LATEST_PROTOCOL_VERSION = \"{}\"", turul_mcp_protocol_2026_07_28::MCP_VERSION);
+        let expected = format!(
+            "LATEST_PROTOCOL_VERSION = \"{}\"",
+            turul_mcp_protocol_2026_07_28::MCP_VERSION
+        );
         assert!(
             SCHEMA_TS.contains(&expected),
             "Schema's LATEST_PROTOCOL_VERSION no longer matches crate `MCP_VERSION` \
@@ -2083,10 +2126,10 @@ mod convention_meta_keys {
 /// capability negotiation: `protocolVersion`, `clientInfo`, `clientCapabilities`.
 #[cfg(test)]
 mod request_meta {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::initialize::{ClientCapabilities, Implementation};
     use turul_mcp_protocol_2026_07_28::logging::LoggingLevel;
     use turul_mcp_protocol_2026_07_28::meta::RequestMetaObject;
-    use serde_json::json;
 
     fn fixture_impl() -> Implementation {
         Implementation::new("test-client", "1.0.0")
@@ -2198,7 +2241,10 @@ mod request_meta {
 
         // Round-trip
         let parsed: RequestMetaObject = serde_json::from_value(v).unwrap();
-        assert_eq!(parsed.extra.get("com.example.app/buildId").unwrap(), "abc123");
+        assert_eq!(
+            parsed.extra.get("com.example.app/buildId").unwrap(),
+            "abc123"
+        );
         assert_eq!(parsed.extra.get("traceparent").unwrap(), "00-trace-id-01");
     }
 
@@ -2224,9 +2270,9 @@ mod request_meta {
 /// pre-2026 results that omit the field.
 #[cfg(test)]
 mod result_discrimination {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::input_required::InputRequiredResult;
     use turul_mcp_protocol_2026_07_28::result_type::ResultType;
-    use serde_json::json;
 
     #[test]
     fn input_required_always_emits_result_type_on_wire() {
@@ -2264,12 +2310,12 @@ mod result_discrimination {
 /// state) are asserted on the wire shapes.
 #[cfg(test)]
 mod multi_round_trip {
+    use std::collections::HashMap;
     use turul_mcp_protocol_2026_07_28::input_required::{
-        InputRequest, InputRequests, InputRequiredResult, InputResponse, InputResponseRequestParams,
-        InputResponses,
+        InputRequest, InputRequests, InputRequiredResult, InputResponse,
+        InputResponseRequestParams, InputResponses,
     };
     use turul_mcp_protocol_2026_07_28::roots::{ListRootsRequest, ListRootsResult, Root};
-    use std::collections::HashMap;
 
     #[test]
     fn server_emits_input_required_result_with_one_request_and_state() {
@@ -2351,7 +2397,10 @@ mod multi_round_trip {
 
         for (name, v) in [("call", &v_call), ("read", &v_read), ("prompt", &v_prompt)] {
             assert_eq!(v["requestState"], "state-x", "{name} requestState");
-            assert!(v["inputResponses"]["rq-x"].is_object(), "{name} inputResponses");
+            assert!(
+                v["inputResponses"]["rq-x"].is_object(),
+                "{name} inputResponses"
+            );
         }
 
         // Standalone InputResponseRequestParams must omit anything beyond the
@@ -2360,7 +2409,11 @@ mod multi_round_trip {
         let mixin = InputResponseRequestParams::with_responses_and_state(responses, "state-x");
         let v_mixin = serde_json::to_value(&mixin).unwrap();
         let obj = v_mixin.as_object().unwrap();
-        assert_eq!(obj.len(), 2, "mixin-only struct has exactly 2 fields on wire");
+        assert_eq!(
+            obj.len(),
+            2,
+            "mixin-only struct has exactly 2 fields on wire"
+        );
         assert!(obj.contains_key("inputResponses"));
         assert!(obj.contains_key("requestState"));
     }
@@ -2396,7 +2449,10 @@ mod multi_round_trip {
         let parsed: Result<InputRequest, _> = serde_json::from_value(bogus);
         assert!(parsed.is_err());
         let err = parsed.unwrap_err().to_string();
-        assert!(err.contains("tools/list"), "error should name the bad method: {err}");
+        assert!(
+            err.contains("tools/list"),
+            "error should name the bad method: {err}"
+        );
     }
 
     #[test]
@@ -2405,7 +2461,10 @@ mod multi_round_trip {
         let parsed: Result<InputRequest, _> = serde_json::from_value(bogus);
         assert!(parsed.is_err());
         let err = parsed.unwrap_err().to_string();
-        assert!(err.contains("method"), "error should mention method discriminator: {err}");
+        assert!(
+            err.contains("method"),
+            "error should mention method discriminator: {err}"
+        );
     }
 
     /// `InputRequiredResult` invariant "At least one of `inputRequests` or
@@ -2415,7 +2474,10 @@ mod multi_round_trip {
     fn input_required_result_deserialize_rejects_both_fields_absent() {
         let wire = serde_json::json!({"resultType": "input_required"});
         let parsed: Result<InputRequiredResult, _> = serde_json::from_value(wire);
-        assert!(parsed.is_err(), "missing both inputRequests AND requestState must fail to deserialize");
+        assert!(
+            parsed.is_err(),
+            "missing both inputRequests AND requestState must fail to deserialize"
+        );
         let err = parsed.unwrap_err().to_string();
         assert!(
             err.contains("at least one"),
@@ -2446,8 +2508,7 @@ mod multi_round_trip {
     fn input_required_well_formed_invariant() {
         // `InputRequiredResult` invariant: "At least one of `inputRequests` or `requestState`
         // MUST be present."
-        let only_requests =
-            InputRequiredResult::with_requests(HashMap::new()); // empty map counts as present
+        let only_requests = InputRequiredResult::with_requests(HashMap::new()); // empty map counts as present
         assert!(only_requests.is_well_formed());
 
         let only_state = InputRequiredResult::with_state("s");
@@ -2466,11 +2527,11 @@ mod multi_round_trip {
 /// `turul-rpc`; these tests are calibrated to the **consumer contract**.
 #[cfg(test)]
 mod envelope {
+    use serde_json::json;
     use turul_mcp_protocol_2026_07_28::{
         JSONRPC_VERSION, JsonRpcError, JsonRpcErrorObject, JsonRpcNotification, JsonRpcRequest,
         JsonRpcResponse, JsonRpcSuccessResponse, JsonRpcVersion, RequestId,
     };
-    use serde_json::json;
 
     #[test]
     fn jsonrpc_version_constant_is_literal_2_0() {
@@ -2483,7 +2544,10 @@ mod envelope {
         // `JSONRPCRequest extends Request { jsonrpc, id, method, params? }`.
         let req = JsonRpcRequest::new_no_params(RequestId::Number(42), "tools/list".to_string());
         let v = serde_json::to_value(&req).unwrap();
-        assert_eq!(v["jsonrpc"], "2.0", "jsonrpc must serialize as literal \"2.0\"");
+        assert_eq!(
+            v["jsonrpc"], "2.0",
+            "jsonrpc must serialize as literal \"2.0\""
+        );
         assert_eq!(v["id"], 42);
         assert_eq!(v["method"], "tools/list");
         assert!(
@@ -2496,11 +2560,13 @@ mod envelope {
     fn jsonrpc_request_id_accepts_string_and_number() {
         // Schema: `RequestId = string | number`.
         let v_num = serde_json::to_value(JsonRpcRequest::new_no_params(
-            RequestId::Number(7), "x".to_string(),
+            RequestId::Number(7),
+            "x".to_string(),
         ))
         .unwrap();
         let v_str = serde_json::to_value(JsonRpcRequest::new_no_params(
-            RequestId::String("req-1".into()), "x".to_string(),
+            RequestId::String("req-1".into()),
+            "x".to_string(),
         ))
         .unwrap();
         assert_eq!(v_num["id"], 7);
@@ -2524,10 +2590,7 @@ mod envelope {
     #[test]
     fn jsonrpc_success_response_has_result_no_error() {
         // `JSONRPCResultResponse { jsonrpc, id, result }` per schema.
-        let success = JsonRpcSuccessResponse::success(
-            RequestId::Number(1),
-            json!({"tools": []}),
-        );
+        let success = JsonRpcSuccessResponse::success(RequestId::Number(1), json!({"tools": []}));
         let resp = JsonRpcResponse::Success(success);
         let v = serde_json::to_value(&resp).unwrap();
         assert_eq!(v["jsonrpc"], "2.0");
@@ -2648,7 +2711,10 @@ mod error_codes {
         // Re-serialize to inspect wire shape since JsonRpcErrorObject's internal
         // representation isn't directly compared — round through JSON.
         let v = serde_json::to_value(&obj).unwrap();
-        assert_eq!(v["code"], -32602, "tool not found must be InvalidParams (-32602)");
+        assert_eq!(
+            v["code"], -32602,
+            "tool not found must be InvalidParams (-32602)"
+        );
         assert!(
             v["message"].as_str().unwrap().contains("get_weather"),
             "message must include tool name"
@@ -2659,15 +2725,26 @@ mod error_codes {
     fn resource_not_found_maps_to_invalid_params() {
         let err = McpError::ResourceNotFound("file:///missing.txt".to_string());
         let v = serde_json::to_value(err.to_error_object()).unwrap();
-        assert_eq!(v["code"], -32602, "resource not found must be InvalidParams (-32602)");
-        assert!(v["message"].as_str().unwrap().contains("file:///missing.txt"));
+        assert_eq!(
+            v["code"], -32602,
+            "resource not found must be InvalidParams (-32602)"
+        );
+        assert!(
+            v["message"]
+                .as_str()
+                .unwrap()
+                .contains("file:///missing.txt")
+        );
     }
 
     #[test]
     fn prompt_not_found_maps_to_invalid_params() {
         let err = McpError::PromptNotFound("code_review".to_string());
         let v = serde_json::to_value(err.to_error_object()).unwrap();
-        assert_eq!(v["code"], -32602, "prompt not found must be InvalidParams (-32602)");
+        assert_eq!(
+            v["code"], -32602,
+            "prompt not found must be InvalidParams (-32602)"
+        );
         assert!(v["message"].as_str().unwrap().contains("code_review"));
     }
 
@@ -2682,7 +2759,10 @@ mod error_codes {
             required: required_caps.clone(),
         };
         let v = serde_json::to_value(err.to_error_object()).unwrap();
-        assert_eq!(v["code"], -32003, "MissingRequiredClientCapability wire code");
+        assert_eq!(
+            v["code"], -32003,
+            "MissingRequiredClientCapability wire code"
+        );
         assert!(
             v["data"]["requiredCapabilities"].is_object(),
             "data.requiredCapabilities must be present per schema"
@@ -2760,8 +2840,7 @@ mod error_codes {
             // Framework-internal server-error codes still in use (not in spec,
             // but in the JSON-RPC-reserved server-error range; replaced area-by-area
             // as bindings adopt typed errors):
-            -32010, -32011, -32012, -32013, -32020, -32021, -32022,
-            -32030, -32031, -32040, -32041,
+            -32010, -32011, -32012, -32013, -32020, -32021, -32022, -32030, -32031, -32040, -32041,
             // Sample passthrough code for the `JsonRpcError` test variant above.
             -32050,
         ]

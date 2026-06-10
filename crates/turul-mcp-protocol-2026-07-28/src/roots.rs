@@ -283,7 +283,6 @@ mod tests {
         assert_eq!(obj.len(), 1);
     }
 
-
     #[test]
     fn test_optional_params_serialization() {
         // Test that requests without _meta don't serialize params when None

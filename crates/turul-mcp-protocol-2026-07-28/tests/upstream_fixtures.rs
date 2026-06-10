@@ -8,7 +8,7 @@
 use std::path::PathBuf;
 use std::sync::OnceLock;
 
-use turul_mcp_protocol_2026_07_28::compliance::fetch::{ensure_fixtures, PIN};
+use turul_mcp_protocol_2026_07_28::compliance::fetch::{PIN, ensure_fixtures};
 use turul_mcp_protocol_2026_07_28::compliance::roundtrip;
 
 /// Per-test cache directory rooted in `target/` so it survives across runs
@@ -66,10 +66,7 @@ fn all_modeled_fixtures_round_trip_cleanly() {
     let report = roundtrip::run_all(&dest).expect("fetch + run_all");
 
     if !report.is_clean() {
-        let mut msg = format!(
-            "{} fixture(s) failed compliance:\n",
-            report.failed.len()
-        );
+        let mut msg = format!("{} fixture(s) failed compliance:\n", report.failed.len());
         for f in &report.failed {
             msg.push_str(&format!(
                 "  - {}/{:?}: {:?}\n",

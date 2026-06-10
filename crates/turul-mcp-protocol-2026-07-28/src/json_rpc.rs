@@ -193,12 +193,7 @@ mod tests {
 
         let parsed: RequestParams = serde_json::from_str(&json_str).unwrap();
         assert_eq!(
-            parsed
-                .meta
-                .progress_token
-                .as_ref()
-                .unwrap()
-                .as_str(),
+            parsed.meta.progress_token.as_ref().unwrap().as_str(),
             Some("test-token")
         );
         assert_eq!(parsed.meta.protocol_version, "DRAFT-2026-v1");
@@ -212,5 +207,4 @@ mod tests {
         let r: Result<RequestParams, _> = serde_json::from_value(wire_without_meta);
         assert!(r.is_err(), "RequestParams without _meta must reject");
     }
-
 }

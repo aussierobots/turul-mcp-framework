@@ -96,9 +96,9 @@ pub mod prompts;
 pub mod resources;
 pub mod result_type;
 pub mod roots;
-pub mod subscriptions;
 pub mod sampling;
 pub mod schema;
+pub mod subscriptions;
 pub mod tools;
 pub mod traits;
 pub mod version;
@@ -140,41 +140,39 @@ pub use version::McpVersion;
 // ResourceTemplate functionality is now part of resources module
 // pub use resources::{ResourceTemplate, ListResourceTemplatesRequest, ListResourceTemplatesResult};
 pub use elicitation::{
-    ElicitAction, ElicitRequestFormParams, ElicitRequest, ElicitResult, ElicitationBuilder,
+    ElicitAction, ElicitRequest, ElicitRequestFormParams, ElicitResult, ElicitationBuilder,
     ElicitationSchema, PrimitiveSchemaDefinition, StringFormat,
 };
 // MCP-specific params/result shapes (what goes inside the wire envelope's
 // `params`/`result` fields). Envelopes themselves come from `turul-rpc` below.
-pub use json_rpc::{
-    PaginatedRequestParams, RequestParams, JSONRPC_VERSION,
-};
 pub use caching::{CacheScope, CacheableResult};
-pub use headers::{
-    HTTP_HEADER_CUSTOM_PREFIX, HTTP_HEADER_METHOD, HTTP_HEADER_NAME, HTTP_HEADER_PROTOCOL_VERSION,
-};
-pub use meta::{
-    META_KEY_BAGGAGE, META_KEY_CLIENT_CAPABILITIES, META_KEY_CLIENT_INFO, META_KEY_LOG_LEVEL,
-    META_KEY_PROTOCOL_VERSION, META_KEY_SUBSCRIPTION_ID, META_KEY_TRACEPARENT, META_KEY_TRACESTATE,
-};
 pub use discover::{
     DiscoverRequest, DiscoverResult, DiscoverResultResponse, SERVER_DISCOVER_METHOD,
+};
+pub use headers::{
+    HTTP_HEADER_CUSTOM_PREFIX, HTTP_HEADER_METHOD, HTTP_HEADER_NAME, HTTP_HEADER_PROTOCOL_VERSION,
 };
 pub use input_required::{
     InputRequest, InputRequests, InputRequiredResult, InputResponse, InputResponseRequestParams,
     InputResponses,
 };
+pub use json_rpc::{JSONRPC_VERSION, PaginatedRequestParams, RequestParams};
 pub use meta::{Cursor as MetaCursor, ProgressToken};
-pub use result_type::ResultType;
-pub use subscriptions::{
-    SubscriptionFilter, SubscriptionsAcknowledgedNotification, SubscriptionsAcknowledgedNotificationParams,
-    SubscriptionsListenRequestParams, SubscriptionsListenRequest, SUBSCRIPTIONS_ACKNOWLEDGED_METHOD,
-    SUBSCRIPTIONS_LISTEN_METHOD,
+pub use meta::{
+    META_KEY_BAGGAGE, META_KEY_CLIENT_CAPABILITIES, META_KEY_CLIENT_INFO, META_KEY_LOG_LEVEL,
+    META_KEY_PROTOCOL_VERSION, META_KEY_SUBSCRIPTION_ID, META_KEY_TRACEPARENT, META_KEY_TRACESTATE,
 };
 pub use notifications::{
     CancelledNotification, ElicitationCompleteNotification, Notification, NotificationParams,
     ProgressNotification, ProgressNotificationParams, ProgressTokenValue,
     PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
     ResourceUpdatedNotificationParams, ToolListChangedNotification,
+};
+pub use result_type::ResultType;
+pub use subscriptions::{
+    SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, SUBSCRIPTIONS_LISTEN_METHOD, SubscriptionFilter,
+    SubscriptionsAcknowledgedNotification, SubscriptionsAcknowledgedNotificationParams,
+    SubscriptionsListenRequest, SubscriptionsListenRequestParams,
 };
 // SEP-2577-deprecated re-exports kept available during the migration window.
 #[allow(deprecated)]
@@ -192,12 +190,12 @@ pub use traits::{
 // `Object | Array`) to `JsonRpcParams` so it doesn't collide with the MCP
 // `RequestParams` interface (which is the named-properties shape that goes
 // inside the `Object` variant).
+pub use turul_rpc::RequestParams as JsonRpcParams;
 pub use turul_rpc::{
     JsonRpcError, JsonRpcErrorCode, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest,
     JsonRpcResponse, JsonRpcSuccessResponse, JsonRpcVersion, JsonRpcWireMessage, RequestId,
     ResponseResult, error::JsonRpcErrorObject, parse_json_rpc_wire_message,
 };
-pub use turul_rpc::RequestParams as JsonRpcParams;
 
 /// The MCP protocol version string this crate currently targets, exactly as it appears
 /// on the wire in `LATEST_PROTOCOL_VERSION` of the upstream `schema.ts`.

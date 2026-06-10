@@ -12,9 +12,7 @@ macro_rules! impl_serde_extractor {
         impl $crate::traits::SerdeParamExtractor<$param_type> for $param_type {
             type Error = $crate::McpError;
 
-            fn extract_serde(
-                params: turul_rpc::RequestParams,
-            ) -> Result<$param_type, Self::Error> {
+            fn extract_serde(params: turul_rpc::RequestParams) -> Result<$param_type, Self::Error> {
                 // Convert RequestParams to Value
                 let value = params.to_value();
 
@@ -52,9 +50,7 @@ mod sampling_extractor_impls {
 impl_serde_extractor!(crate::ping::EmptyParams);
 
 /// Generic parameter extractor function that works with any type implementing SerdeParamExtractor
-pub fn extract_params<T>(
-    params: turul_rpc::RequestParams,
-) -> Result<T, crate::McpError>
+pub fn extract_params<T>(params: turul_rpc::RequestParams) -> Result<T, crate::McpError>
 where
     T: Params + SerdeParamExtractor<T, Error = crate::McpError>,
 {

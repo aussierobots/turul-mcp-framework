@@ -229,7 +229,10 @@ mod tests {
     fn discover_request_has_params_object() {
         let r = DiscoverRequest::new(fixture_meta());
         let v = serde_json::to_value(&r).unwrap();
-        assert!(v["params"].is_object(), "params must be present per DiscoverRequest schema");
+        assert!(
+            v["params"].is_object(),
+            "params must be present per DiscoverRequest schema"
+        );
     }
 
     #[test]

@@ -680,7 +680,6 @@ mod tests {
         assert_eq!(notification.method, "notifications/prompts/list_changed");
     }
 
-
     #[test]
     fn test_progress_notification() {
         let notification = ProgressNotification::new("token123", 50.0)
@@ -702,7 +701,10 @@ mod tests {
 
     #[test]
     fn test_progress_token_number() {
-        let notification = ProgressNotification::new(crate::meta::ProgressToken::Number(serde_json::Number::from(42i64)), 0.5);
+        let notification = ProgressNotification::new(
+            crate::meta::ProgressToken::Number(serde_json::Number::from(42i64)),
+            0.5,
+        );
         let json = serde_json::to_value(&notification).unwrap();
         assert_eq!(json["params"]["progressToken"], 42);
         assert_eq!(json["params"]["progress"], 0.5);
@@ -723,7 +725,12 @@ mod tests {
         let json = serde_json::to_value(&meta).unwrap();
         assert_eq!(json["progressToken"], 7);
         let back: RequestMetaObject = serde_json::from_value(json).unwrap();
-        assert_eq!(back.progress_token, Some(crate::meta::ProgressToken::Number(serde_json::Number::from(7i64))));
+        assert_eq!(
+            back.progress_token,
+            Some(crate::meta::ProgressToken::Number(
+                serde_json::Number::from(7i64)
+            ))
+        );
     }
 
     #[test]
@@ -755,7 +762,12 @@ mod tests {
         let json = serde_json::to_value(&notification).unwrap();
         assert_eq!(json["method"], "notifications/cancelled");
         // requestId must be omitted entirely when None per schema.
-        assert!(!json["params"].as_object().unwrap().contains_key("requestId"));
+        assert!(
+            !json["params"]
+                .as_object()
+                .unwrap()
+                .contains_key("requestId")
+        );
         assert_eq!(json["params"]["reason"], "Request finished before cancel");
     }
 

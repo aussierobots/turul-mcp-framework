@@ -77,11 +77,9 @@ impl<'de> Deserialize<'de> for InputRequest {
                 )
             })?;
         match method {
-            "sampling/createMessage" => {
-                serde_json::from_value::<CreateMessageRequest>(value)
-                    .map(InputRequest::CreateMessage)
-                    .map_err(serde::de::Error::custom)
-            }
+            "sampling/createMessage" => serde_json::from_value::<CreateMessageRequest>(value)
+                .map(InputRequest::CreateMessage)
+                .map_err(serde::de::Error::custom),
             "roots/list" => serde_json::from_value::<ListRootsRequest>(value)
                 .map(InputRequest::ListRoots)
                 .map_err(serde::de::Error::custom),
@@ -347,7 +345,10 @@ mod tests {
             crate::traits::HasResultType::result_type(&r),
             ResultType::InputRequired
         );
-        assert_eq!(HasInputRequiredResult::request_state(&r), Some("opaque-blob"));
+        assert_eq!(
+            HasInputRequiredResult::request_state(&r),
+            Some("opaque-blob")
+        );
         assert!(HasInputRequiredResult::input_requests(&r).is_none());
         assert!(HasInputRequiredResult::meta(&r).is_none());
     }
@@ -356,7 +357,10 @@ mod tests {
     fn input_required_result_serializes_result_type_field() {
         let r = InputRequiredResult::with_state("s");
         let v = serde_json::to_value(&r).unwrap();
-        assert_eq!(v["resultType"], "input_required", "discriminator must be on wire");
+        assert_eq!(
+            v["resultType"], "input_required",
+            "discriminator must be on wire"
+        );
         assert_eq!(v["requestState"], "s");
         assert!(
             !v.as_object().unwrap().contains_key("inputRequests"),

@@ -188,7 +188,6 @@ impl From<&str> for Cursor {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // Convention `_meta` keys (changelog Minor #2: OpenTelemetry trace context;
 // changelog Major #4: subscription tagging; SEP-2575: per-request log level).
@@ -438,7 +437,12 @@ mod tests {
         ];
         for (wire, want) in cases {
             let t: ProgressToken = serde_json::from_value(wire.clone()).unwrap();
-            assert_eq!(t.as_f64(), want, "wire shape {wire} did not parse to {:?}", want);
+            assert_eq!(
+                t.as_f64(),
+                want,
+                "wire shape {wire} did not parse to {:?}",
+                want
+            );
             // Round-trip preserves the numeric body.
             let back = serde_json::to_value(&t).unwrap();
             let again: ProgressToken = serde_json::from_value(back).unwrap();
@@ -450,7 +454,10 @@ mod tests {
     fn test_progress_token_rejects_wire_inf_overflow() {
         // `1e400` overflows IEEE-754 double; serde_json::Number refuses it on the wire.
         let res: Result<ProgressToken, _> = serde_json::from_str("1e400");
-        assert!(res.is_err(), "spec-invalid (overflowing) number must not deserialize");
+        assert!(
+            res.is_err(),
+            "spec-invalid (overflowing) number must not deserialize"
+        );
     }
 
     #[test]

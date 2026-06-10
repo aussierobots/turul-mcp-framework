@@ -91,10 +91,7 @@ pub struct SubscriptionsListenRequestParams {
 
 impl SubscriptionsListenRequestParams {
     /// Construct with the required filter and per-request meta.
-    pub fn new(
-        notifications: SubscriptionFilter,
-        meta: crate::meta::RequestMetaObject,
-    ) -> Self {
+    pub fn new(notifications: SubscriptionFilter, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             notifications,
             meta,
@@ -312,10 +309,8 @@ mod tests {
     #[test]
     fn listen_params_meta_required_on_wire() {
         // _meta is a required typed field on the wire — no longer omittable.
-        let p = SubscriptionsListenRequestParams::new(
-            SubscriptionFilter::new(),
-            test_request_meta(),
-        );
+        let p =
+            SubscriptionsListenRequestParams::new(SubscriptionFilter::new(), test_request_meta());
         let v = serde_json::to_value(&p).unwrap();
         assert!(v.as_object().unwrap().contains_key("_meta"));
         assert_eq!(

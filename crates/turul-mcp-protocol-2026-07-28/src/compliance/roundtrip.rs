@@ -9,8 +9,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use super::coverage::{Case, Kind, CASES};
-use super::fetch::{self, list_example_dirs, list_json_files, Pin, PIN};
+use super::coverage::{CASES, Case, Kind};
+use super::fetch::{self, PIN, Pin, list_example_dirs, list_json_files};
 
 /// Single fixture's result.
 #[derive(Debug)]

@@ -9,12 +9,12 @@
 use async_trait::async_trait;
 use std::path::PathBuf;
 use turul_mcp_builders::prelude::*;
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::roots::RootsListChangedNotification;
 use turul_mcp_protocol::{
     McpResult,
     roots::{ListRootsRequest, ListRootsResult},
 };
-#[cfg(feature = "protocol-2025-11-25")]
-use turul_mcp_protocol::roots::RootsListChangedNotification;
 
 /// File information for root directory listings
 #[derive(Debug, Clone)]

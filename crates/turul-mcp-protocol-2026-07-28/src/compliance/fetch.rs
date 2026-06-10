@@ -57,17 +57,25 @@ pub fn ensure_fixtures(dest: &Path, pin: &Pin) -> Result<PathBuf, FetchError> {
     let pin_marker = dest.join(".pin");
 
     if pin_marker.exists() && examples_dir.exists() {
-        let recorded = fs::read_to_string(&pin_marker)
-            .map_err(|e| FetchError::Io { path: pin_marker.clone(), source: e })?;
+        let recorded = fs::read_to_string(&pin_marker).map_err(|e| FetchError::Io {
+            path: pin_marker.clone(),
+            source: e,
+        })?;
         if recorded.trim() == pin.sha {
             return Ok(examples_dir);
         }
     }
 
     if dest.exists() {
-        fs::remove_dir_all(dest).map_err(|e| FetchError::Io { path: dest.to_path_buf(), source: e })?;
+        fs::remove_dir_all(dest).map_err(|e| FetchError::Io {
+            path: dest.to_path_buf(),
+            source: e,
+        })?;
     }
-    fs::create_dir_all(dest).map_err(|e| FetchError::Io { path: dest.to_path_buf(), source: e })?;
+    fs::create_dir_all(dest).map_err(|e| FetchError::Io {
+        path: dest.to_path_buf(),
+        source: e,
+    })?;
 
     run_git(dest, &["init", "--quiet"])?;
     run_git(dest, &["remote", "add", "origin", pin.repo])?;
@@ -86,8 +94,10 @@ pub fn ensure_fixtures(dest: &Path, pin: &Pin) -> Result<PathBuf, FetchError> {
     )?;
     run_git(dest, &["checkout", "--quiet", pin.sha])?;
 
-    fs::write(&pin_marker, pin.sha)
-        .map_err(|e| FetchError::Io { path: pin_marker.clone(), source: e })?;
+    fs::write(&pin_marker, pin.sha).map_err(|e| FetchError::Io {
+        path: pin_marker.clone(),
+        source: e,
+    })?;
 
     if !examples_dir.exists() {
         return Err(FetchError::CachePoisoned(examples_dir));
@@ -99,7 +109,10 @@ pub fn ensure_fixtures(dest: &Path, pin: &Pin) -> Result<PathBuf, FetchError> {
 /// upstream PascalCase dirs), sorted lexicographically for stable iteration.
 pub fn list_example_dirs(examples_dir: &Path) -> Result<Vec<String>, FetchError> {
     let mut names: Vec<String> = fs::read_dir(examples_dir)
-        .map_err(|e| FetchError::Io { path: examples_dir.to_path_buf(), source: e })?
+        .map_err(|e| FetchError::Io {
+            path: examples_dir.to_path_buf(),
+            source: e,
+        })?
         .filter_map(|entry| {
             let entry = entry.ok()?;
             if entry.file_type().ok()?.is_dir() {
@@ -116,7 +129,10 @@ pub fn list_example_dirs(examples_dir: &Path) -> Result<Vec<String>, FetchError>
 /// Enumerate every `*.json` file directly under one example directory, sorted.
 pub fn list_json_files(dir: &Path) -> Result<Vec<PathBuf>, FetchError> {
     let mut files: Vec<PathBuf> = fs::read_dir(dir)
-        .map_err(|e| FetchError::Io { path: dir.to_path_buf(), source: e })?
+        .map_err(|e| FetchError::Io {
+            path: dir.to_path_buf(),
+            source: e,
+        })?
         .filter_map(|entry| {
             let entry = entry.ok()?;
             let path = entry.path();

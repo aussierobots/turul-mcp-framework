@@ -553,7 +553,8 @@ mod tests {
         props_a.insert("beta".to_string(), JsonSchema::number());
         props_a.insert("gamma".to_string(), JsonSchema::boolean());
         let tool_a = Arc::new(OrderTestTool {
-            input_schema: ToolSchema::object().with_properties(turul_mcp_builders::tool_props(props_a)),
+            input_schema: ToolSchema::object()
+                .with_properties(turul_mcp_builders::tool_props(props_a)),
         }) as Arc<dyn McpTool>;
 
         // Order B: c, a, b (different insertion order)
@@ -562,7 +563,8 @@ mod tests {
         props_b.insert("alpha".to_string(), JsonSchema::string());
         props_b.insert("beta".to_string(), JsonSchema::number());
         let tool_b = Arc::new(OrderTestTool {
-            input_schema: ToolSchema::object().with_properties(turul_mcp_builders::tool_props(props_b)),
+            input_schema: ToolSchema::object()
+                .with_properties(turul_mcp_builders::tool_props(props_b)),
         }) as Arc<dyn McpTool>;
 
         let fp_a = compute_tool_fingerprint(&tool_map(vec![tool_a]));
@@ -634,7 +636,8 @@ mod tests {
             for (k, v) in outer_order {
                 outer_props.insert(k.to_string(), v.clone());
             }
-            let mut schema = ToolSchema::object().with_properties(turul_mcp_builders::tool_props(outer_props));
+            let mut schema =
+                ToolSchema::object().with_properties(turul_mcp_builders::tool_props(outer_props));
             let mut additional = HashMap::new();
             for (k, v) in additional_order {
                 additional.insert(k.to_string(), v.clone());

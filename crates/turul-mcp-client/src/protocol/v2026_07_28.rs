@@ -48,7 +48,9 @@ pub(crate) fn parse_list_tools(result: &Value) -> McpClientResult<Vec<turul_mcp_
     r.tools.iter().map(remap).collect()
 }
 
-pub(crate) fn parse_call_tool(result: &Value) -> McpClientResult<turul_mcp_protocol::CallToolResult> {
+pub(crate) fn parse_call_tool(
+    result: &Value,
+) -> McpClientResult<turul_mcp_protocol::CallToolResult> {
     let r: p::tools::CallToolResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }

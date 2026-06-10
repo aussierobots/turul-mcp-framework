@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
-use turul_mcp_protocol_2026_07_28::compliance::fetch::{Pin, PIN};
+use turul_mcp_protocol_2026_07_28::compliance::fetch::{PIN, Pin};
 use turul_mcp_protocol_2026_07_28::compliance::roundtrip::{self, Outcome};
 
 fn cache_dir() -> PathBuf {
@@ -94,7 +94,10 @@ fn refresh(args: &[String]) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    println!("Upstream HEAD (last commit touching {}): {}", PIN.subpath, new_sha);
+    println!(
+        "Upstream HEAD (last commit touching {}): {}",
+        PIN.subpath, new_sha
+    );
 
     if new_sha == PIN.sha {
         println!("Already at HEAD — nothing to do.");

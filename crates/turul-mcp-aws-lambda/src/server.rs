@@ -469,9 +469,10 @@ impl LambdaMcpServer {
                     &self,
                     session_id: &str,
                 ) -> std::result::Result<(), String> {
-                    let notification = turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
-                        "notifications/tools/list_changed".to_string(),
-                    );
+                    let notification =
+                        turul_mcp_json_rpc_server::JsonRpcNotification::new_no_params(
+                            "notifications/tools/list_changed".to_string(),
+                        );
                     let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
                     self.session_manager
                         .dispatch_custom_event(

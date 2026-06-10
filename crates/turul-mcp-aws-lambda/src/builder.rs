@@ -9,9 +9,7 @@ use std::sync::Arc;
 use turul_http_mcp_server::{ServerConfig, StreamConfig};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
 use turul_mcp_server::handlers::{McpHandler, *};
-use turul_mcp_server::{
-    McpCompletion, McpNotification, McpPrompt, McpResource, McpRoot, McpTool,
-};
+use turul_mcp_server::{McpCompletion, McpNotification, McpPrompt, McpResource, McpRoot, McpTool};
 #[cfg(feature = "protocol-2025-11-25")]
 use turul_mcp_server::{McpElicitation, McpLogger, McpSampling};
 use turul_mcp_session_storage::BoxedSessionStorage;

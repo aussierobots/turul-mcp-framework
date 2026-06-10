@@ -262,7 +262,7 @@ impl McpClient {
     /// and apply the [`classify_probe`](crate::version::classify_probe) rule.
     #[cfg(feature = "client-bilingual")]
     async fn negotiate_protocol(&self) -> McpClientResult<()> {
-        use crate::version::{classify_probe, McpVersion, ProbeDecision};
+        use crate::version::{McpVersion, ProbeDecision, classify_probe};
 
         if let Some(hint) = self.config.mcp_protocol_version {
             match hint {
@@ -289,7 +289,8 @@ impl McpClient {
     #[cfg(feature = "client-2025-11-25-only")]
     async fn negotiate_protocol(&self) -> McpClientResult<()> {
         self.initialize_session().await?;
-        self.lock_version(crate::version::McpVersion::V2025_11_25).await
+        self.lock_version(crate::version::McpVersion::V2025_11_25)
+            .await
     }
 
     #[cfg(feature = "client-2026-07-28-only")]
@@ -858,8 +859,10 @@ impl McpClient {
             &self.config.client_info.name,
             &self.config.client_info.version,
         );
-        let request =
-            self.build_request(method, crate::protocol::v2026_07_28::params_with_meta(&meta, extra));
+        let request = self.build_request(
+            method,
+            crate::protocol::v2026_07_28::params_with_meta(&meta, extra),
+        );
         let response = self.send_request_internal(request).await?;
         parse(&response.get("result").cloned().unwrap_or(Value::Null))
     }
@@ -1389,7 +1392,8 @@ impl McpClient {
     ) -> McpClientResult<ToolCallResponse> {
         debug!(tool = name, "Calling tool with task augmentation");
 
-        self.reject_if_2026_07_28("tasks (task-augmented tools/call)").await?;
+        self.reject_if_2026_07_28("tasks (task-augmented tools/call)")
+            .await?;
 
         let mut params = json!({
             "name": name,
@@ -3485,8 +3489,7 @@ mod tests {
 
     #[test]
     fn test_build_notification_envelope_shape() {
-        let envelope =
-            McpClient::build_notification("notifications/initialized", json!({}));
+        let envelope = McpClient::build_notification("notifications/initialized", json!({}));
 
         assert_eq!(envelope["jsonrpc"], json!("2.0"));
         assert_eq!(envelope["method"], json!("notifications/initialized"));

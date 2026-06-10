@@ -178,11 +178,20 @@ async fn list_request(url: &str, rpc_method: &str) -> serde_json::Value {
 async fn resources_list_dispatches_statelessly_with_cacheable_result() {
     let url = start_server().await;
     let body = list_request(&url, "resources/list").await;
-    assert!(body.get("error").is_none(), "resources/list errored: {body}");
+    assert!(
+        body.get("error").is_none(),
+        "resources/list errored: {body}"
+    );
     // 2026 list results extend CacheableResult.
     assert_eq!(body["result"]["resultType"], "complete");
-    assert!(body["result"]["cacheScope"].is_string(), "missing cacheScope: {body}");
-    assert!(body["result"]["resources"].is_array(), "missing resources array: {body}");
+    assert!(
+        body["result"]["cacheScope"].is_string(),
+        "missing cacheScope: {body}"
+    );
+    assert!(
+        body["result"]["resources"].is_array(),
+        "missing resources array: {body}"
+    );
 }
 
 #[tokio::test]
@@ -191,12 +200,22 @@ async fn prompts_list_dispatches_statelessly_with_cacheable_result() {
     let body = list_request(&url, "prompts/list").await;
     assert!(body.get("error").is_none(), "prompts/list errored: {body}");
     assert_eq!(body["result"]["resultType"], "complete");
-    assert!(body["result"]["cacheScope"].is_string(), "missing cacheScope: {body}");
-    assert!(body["result"]["prompts"].is_array(), "missing prompts array: {body}");
+    assert!(
+        body["result"]["cacheScope"].is_string(),
+        "missing cacheScope: {body}"
+    );
+    assert!(
+        body["result"]["prompts"].is_array(),
+        "missing prompts array: {body}"
+    );
 }
 
 /// POST `body`, asserting the 2026 server rejects it with HTTP 400 + JSON-RPC -32602.
-async fn assert_rejected_invalid_params(url: &str, header_version: Option<&str>, body: serde_json::Value) {
+async fn assert_rejected_invalid_params(
+    url: &str,
+    header_version: Option<&str>,
+    body: serde_json::Value,
+) {
     let client = reqwest::Client::new();
     let mut req = client.post(url).header("Accept", "application/json");
     if let Some(v) = header_version {
@@ -205,7 +224,10 @@ async fn assert_rejected_invalid_params(url: &str, header_version: Option<&str>,
     let resp = req.json(&body).send().await.expect("POST");
     assert_eq!(resp.status(), 400, "must be rejected with HTTP 400: {body}");
     let out: serde_json::Value = resp.json().await.expect("json body");
-    assert_eq!(out["error"]["code"], -32602, "must be JSON-RPC -32602: {out}");
+    assert_eq!(
+        out["error"]["code"], -32602,
+        "must be JSON-RPC -32602: {out}"
+    );
 }
 
 #[tokio::test]

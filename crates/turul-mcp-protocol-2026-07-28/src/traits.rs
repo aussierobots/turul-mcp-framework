@@ -451,7 +451,6 @@ pub trait ListRootsResult {
     fn roots(&self) -> &Vec<Root>;
 }
 
-
 // ---------------------- logging ------------------------
 
 // `logging/setLevel` RPC was removed in DRAFT-2026-v1 — per-request log level
