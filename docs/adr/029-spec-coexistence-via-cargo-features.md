@@ -134,26 +134,24 @@ The atomic cutover slice (the "flip" of ADR-027 Phase 9.4) ships:
 
 A separate plan document (`docs/plans/2026-07-28-feature-gating-rollout.md`, to be authored as part of the cutover slice) enumerates the per-crate `#[cfg(feature = "...")]` gates needed for downstream sources to compile under both feature configurations. Initial estimate: ~400–600 `#[cfg]` gates across `turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-builders`, derive macros, and the example fleet. The plan document is the verification artifact; the CI matrix (two configurations: default and `--no-default-features --features protocol-2025-11-25`) is the gate.
 
-### CI surface
+### CI surface (as built — see `.github/workflows/ci.yml` / `scripts/ci-gates.sh`)
 
-CI will run two matrices for each PR touching the protocol surface:
+Two lanes per push:
 
-1. **Default (`protocol-2026-07-28`):** `cargo test --workspace`, `cargo check --workspace`, `cargo doc --no-deps --workspace`.
-2. **Legacy (`protocol-2025-11-25`):** the legacy feature is declared on every consumer crate (per the §"Cascade rule" above), so the CI command activates each leaf's own forwarding feature, NOT the alias-crate feature directly. The correct invocations are:
+1. **Default (`protocol-2026-07-28`):** `cargo build` / `cargo clippy --all-targets -- -D warnings` / `cargo test` over the workspace **default-members** (NOT `--workspace`), plus explicit real-HTTP acceptance suites (`discover_stateless_2026`, `stateless_2026_http_surface`, `subscriptions_listen_2026`, `mcp_headers_2026`, `error_mapping_2026`, `mrtr_2026`), the protocol-crate compliance + upstream-fixture gate, and the bilingual client suite.
+2. **Legacy (`protocol-2025-11-25`):** a **per-crate build/test matrix**, never a workspace-wide flag sweep:
 
    ```bash
-   # Workspace-wide: every member crate that has a protocol-2025-11-25 feature
-   # forwards through to the alias. Cargo unification activates the chain.
-   cargo test --workspace --no-default-features --features protocol-2025-11-25
-
-   # Or target a specific leaf:
-   cargo test -p turul-mcp-server --no-default-features --features protocol-2025-11-25
-   cargo test -p turul-mcp-aws-lambda --no-default-features --features protocol-2025-11-25
+   cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2025-11-25
+   cargo test -p mcp-tools-tests        # 2025-pinned e2e crates select their own features
+   # ... (full list in scripts/ci-gates.sh gate_opt_in_2025)
    ```
+
+   ❌ **`cargo test --workspace --no-default-features --features protocol-2025-11-25` does not compile** — and neither does the default-lane `--workspace` form. The workspace contains members hard-pinned to each spec (the 2025-pinned e2e crates; the 2026-only examples), so a workspace-wide build unifies BOTH alias protocol features and trips this ADR's own `compile_error!` mutex. The mutex working as designed is exactly why the per-crate matrix is the only valid CI shape. (Earlier revisions of this section prescribed the workspace-wide commands; that was never executable — superseded 2026-06-10.)
 
    ❌ **Do not use** `--features turul-mcp-protocol/protocol-2025-11-25` (the alias-crate feature only). That activates the alias's gate but does NOT activate each consumer crate's own `#[cfg(feature = "protocol-2025-11-25")]` blocks — those gates live in the leaf crate's source and require the leaf crate's feature to be enabled, not just the alias's.
 
-Without the legacy matrix, the legacy feature rots silently (called out in the architecture review at `docs/plans/2026-07-28-architecture-review.md` as a high-severity hidden risk). The matrix doubles CI time on the protocol surface; this is the accepted cost.
+Without the legacy matrix, the legacy feature rots silently (called out in the architecture review at `docs/plans/2026-07-28-architecture-review.md` as a high-severity hidden risk; empirically re-confirmed when the elicitation enum-union slice broke the 2025 lane and only the matrix caught it). The matrix roughly doubles CI time on the protocol surface; this is the accepted cost.
 
 ## Alternatives considered
 
@@ -224,3 +222,5 @@ The user-locked steelman from the decision phase (`docs/plans/2026-07-28-archite
    6. **Consumer fleet migrated.** 43 examples migrated to the 2026 default; 8 redundant duplicate examples removed (builders-showcase, comprehensive-server, sampling-with-tools-showcase, task-types-showcase, client-task-lifecycle, dynamic-tools-test-client, performance-testing, lambda-mcp-server-streaming); a small 2025-11-25 regression suite pinned (tasks-e2e pair + logging/sampling/elicitation/client/lambda examples held at the 2025 opt-in), and the integration-test crates pinned to the 2025-11-25 opt-in.
    Default-members build is green at 0 warnings; the framework `compile_error!` mutex fires correctly under both configurations. Publication to crates.io remains gated per ADR-027 (upstream final-spec publication + maintainer go-ahead).
 - **2026-06-08 (doc reconciliation + 2025 regression coverage)** — Current-state prose in this ADR that still named the 2026 spec `DRAFT-2026-v1` (Context status line, the §"Why coexistence" cleavage points, the §Constraints "Server default" line, the §Decision "0.4.0 defaults to…" line, the §Consequences release-notes wording) was reconciled to the finalized wire literal `2026-07-28`. Remaining `DRAFT-2026-v1` mentions are deliberate history: ADR-027's title/subject references and the dated RC-instability rationale. Separately, `roots-server` was found pinned to the 2026 default (its `Root` type resolved to the deprecated 2026 binding), so the 2025 `mcp-roots-tests` e2e suite could not handshake it — all 14 tests failed at server start. Pinning `roots-server` to the 2025 opt-in (matching `sampling-server`/`elicitation-server`) turns the suite green; the roots/sampling/elicitation suites and a `client-initialise-server` build were added to the opt-in-2025 CI lane (they had been absent). `client-initialise-server` itself, an inherently-stateful `initialize`/`Mcp-Session-Id` demo, was moved out of `default-members` and pinned to the 2025 opt-in.
+
+- **2026-06-10** — §"CI surface" rewritten to the as-built lanes. The prescribed `cargo test --workspace [--no-default-features --features protocol-2025-11-25]` commands never compiled: spec-pinned workspace members (2025-pinned e2e crates, 2026 default examples) make any workspace-wide build unify both alias protocol features and trip this ADR's `compile_error!` mutex. The operative CI shape is default-members for the 2026 lane plus a per-crate matrix for the 2025 lane (`.github/workflows/ci.yml`, `scripts/ci-gates.sh`).

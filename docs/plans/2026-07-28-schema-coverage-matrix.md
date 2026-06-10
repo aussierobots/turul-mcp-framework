@@ -1,3 +1,12 @@
+> **STALE — superseded as a coverage source of truth (2026-06-10).** This walk
+> predates the Slice A'/A'' fidelity corrections, the 2026-06-07 and 2026-06-10
+> re-vendors, and the elicitation enum-union rework; several rows now
+> misdescribe the crate (e.g. CacheableResult optionality, SEP-2577 markers,
+> the EnumSchema shape). Authoritative coverage lives in
+> `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md` plus the compliance
+> harness (`cargo test -p turul-mcp-protocol-2026-07-28 --features compliance`).
+> Kept for the historical walk methodology only; do not cite rows as current.
+
 # Schema Coverage Matrix — `DRAFT-2026-v1` schema.ts ↔ `turul-mcp-protocol-2026-07-28`
 
 **Source**: `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts` (2983 lines, ETag `8bdd4ae5…`)

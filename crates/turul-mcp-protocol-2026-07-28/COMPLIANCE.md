@@ -190,9 +190,10 @@ DRAFT-2026-v1 deprecates **Roots**, **Sampling**, and **Logging** per SEP-2577 (
 
 ## Known follow-ups (not blockers for current state)
 
+- **Elicitation enum schemas (2026-06-10)** — `EnumSchema` now binds the schema's union (`SingleSelectEnumSchema | MultiSelectEnumSchema | LegacyTitledEnumSchema`); the legacy `enumNames` shape is `LegacyTitledEnumSchema` (with its `default` field). `StringSchema`/`NumberSchema`/`BooleanSchema` and the untitled select shapes carry `deny_unknown_fields` so the untagged `PrimitiveSchemaDefinition` lands every payload on its precise variant instead of silently dropping `enum`/numeric constraints. Round-trip fidelity tests cover the union incl. through `ElicitationSchema.properties`.
 - **`ContentBlock` union split** — the schema declares two distinct unions: `ContentBlock = Text | Image | Audio | ResourceLink | EmbeddedResource` (5) and `SamplingMessageContentBlock = Text | Image | Audio | ToolUse | ToolResult` (5). The crate models them as a single 7-variant enum, allowing wire-impossible shapes (a `CallToolResult.content` carrying `ToolUseContent`, etc.). Wire-equivalent for the 3-variant overlap; documented in §Intentional deviations.
 - **`ResourceReference` ↔ `Resource` duplication** — A4 closed the wire-shape gap (size/icons now present on `ResourceReference`), but the two structs remain parallel. Collapsing onto one canonical `Resource` (per schema's `ResourceLink extends Resource`) is the cleaner end-state and queued for a follow-up.
-- **`turul-mcp-ext-tasks-2026-07-28` extension crate** — SEP-2663 moved tasks out of the core protocol; the new extension crate is not yet scaffolded (planned per ADR-028). Tasks types are correctly absent from the protocol crate.
+- **`turul-mcp-ext-tasks` extension crate** (spec-neutral name per ADR-028's 2026-06-07 amendment) — SEP-2663 moved tasks out of the core protocol; the extension crate is not yet scaffolded. Tasks types are correctly absent from the protocol crate.
 
 ## Intentional deviations from strict schema
 
