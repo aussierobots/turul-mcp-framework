@@ -19,7 +19,7 @@ pub const PIN: Pin = Pin {
     // `schema/draft/examples` at the time of the 2026-05-24 capture.
     // The tree SHA for that subpath at this commit is
     // `9f9415b427c4db6f7ad375ca7b86d1a5ee955072` (recorded for audit only).
-    sha: "c3e3f09eb5d271407afac0f0bb6ee2dae5813d1d",
+    sha: "1304c8fe5f079358a0ff22b6afdb675dc96d75d1",
     subpath: "schema/draft/examples",
 };
 

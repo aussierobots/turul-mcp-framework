@@ -5,7 +5,7 @@ maintained alongside the spec at:
 
 - **Repository**: `modelcontextprotocol/modelcontextprotocol`
 - **Subpath**: `schema/draft/examples`
-- **Commit SHA** (pin used by `git checkout`): `c3e3f09eb5d271407afac0f0bb6ee2dae5813d1d`
+- **Commit SHA** (pin used by `git checkout`): `1304c8fe5f079358a0ff22b6afdb675dc96d75d1`
 - **Tree SHA** (audit only — subpath digest at this commit): `9f9415b427c4db6f7ad375ca7b86d1a5ee955072`
 - **Captured**: 2026-05-24
 

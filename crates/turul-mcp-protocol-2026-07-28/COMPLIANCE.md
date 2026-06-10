@@ -8,9 +8,9 @@ upstream path; finalized wire string `"2026-07-28"`).
 - **Schema source**: `modelcontextprotocol/modelcontextprotocol` @ `schema/draft/schema.ts`
 - **Vendored copy**: `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`
 - **Fixture pin (commit SHA)**: `c3e3f09eb5d271407afac0f0bb6ee2dae5813d1d` — see `schema/EXAMPLES_PIN.md`
-- **Captured**: 2026-06-07 (re-vendored; finalized wire string. Prior cut: 2026-05-24)
-- **Schema content sha256**: `20df36f9c597bb4c1ecda5f3d836e7d92ffc7252334e364424046bfd016ee810`
-- **Schema surface**: 123 `export interface` + 27 `export type` + 9 `export const` = 159 declarations (unchanged across the re-vendor)
+- **Captured**: 2026-06-10 (re-vendored; one new interface. Prior cuts: 2026-06-07, 2026-05-24)
+- **Schema content sha256**: `1bf94a601817ab07fc04058a9ff2e031227f9b9384e198ea7f187e75eb4b9ec6`
+- **Schema surface**: 124 `export interface` + 27 `export type` + 9 `export const` = 160 declarations (the 2026-06-10 re-vendor added `ElicitationCompleteNotificationParams`, extracted from the previously inline params and now extending `NotificationParams`)
 - **Upstream MCP version string**: `"2026-07-28"` (finalized; was `"DRAFT-2026-v1"` — accepted on deserialize for back-compat. See `docs/adr/027`)
 
 ## Test gate

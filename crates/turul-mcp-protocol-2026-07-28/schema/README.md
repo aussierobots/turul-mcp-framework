@@ -7,9 +7,9 @@ This directory vendors the upstream MCP specification TypeScript schema **for of
 - **File**: `draft-schema.ts`
 - **Upstream source**: <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/schema/draft/schema.ts>
 - **Raw URL used**: <https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/main/schema/draft/schema.ts>
-- **Vendored on**: 2026-06-07 (re-vendored — finalized wire string; previously 2026-05-24)
-- **Upstream ETag at vendor time**: `0eeaed15c73cc8dd315c0cef519528263d46e1b6a33244f5ee0bdeb10f316473` (was `8bdd4ae5a9b3a8d2e611124cf7240d60cf0fcece9652eae51571ba5f1be0e0ef` at the 2026-05-24 cut)
-- **Content sha256**: `20df36f9c597bb4c1ecda5f3d836e7d92ffc7252334e364424046bfd016ee810`
+- **Vendored on**: 2026-06-10 (re-vendored — `ElicitationCompleteNotificationParams` extraction; previously 2026-06-07, 2026-05-24)
+- **Upstream ETag at vendor time**: `fddd24701cf0e60f1acae2934e0c3f2b77e32389b98807ba45cb65413be97bd5` (was `0eeaed15c73cc8dd315c0cef519528263d46e1b6a33244f5ee0bdeb10f316473` at the 2026-06-07 cut)
+- **Content sha256**: `1bf94a601817ab07fc04058a9ff2e031227f9b9384e198ea7f187e75eb4b9ec6`
 - **Wire protocol version declared in vendored file**: `"2026-07-28"` (line 37, `LATEST_PROTOCOL_VERSION`)
 - **License**: MIT (matches turul-mcp-framework dual MIT-or-Apache-2.0 licensing)
 
