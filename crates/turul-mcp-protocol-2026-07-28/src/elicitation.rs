@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 /// `StringSchema` — primitive string schema for elicitation requests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StringSchema {
     #[serde(rename = "type")]
     pub schema_type: String, // "string"
@@ -29,7 +29,7 @@ pub struct StringSchema {
 
 /// `NumberSchema` — primitive numeric schema; `schema_type` is `"number"` or `"integer"`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NumberSchema {
     #[serde(rename = "type")]
     pub schema_type: String, // "number" or "integer"
@@ -47,7 +47,7 @@ pub struct NumberSchema {
 
 /// BooleanSchema (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BooleanSchema {
     #[serde(rename = "type")]
     pub schema_type: String, // "boolean"
@@ -59,14 +59,12 @@ pub struct BooleanSchema {
     pub default: Option<bool>,
 }
 
-/// EnumSchema (legacy 2025-11-25 shape, kept for backward compat).
-///
-/// New code should use [`SingleSelectEnumSchema`] (untitled or titled) or
-/// [`MultiSelectEnumSchema`] instead — they're spec-pure JSON Schema 2020-12
-/// shapes whereas `enumNames` is explicitly flagged non-standard in the spec.
+/// `LegacyTitledEnumSchema` — the pre-2026 enum shape with the non-standard
+/// `enumNames`. Schema: "Use TitledSingleSelectEnumSchema instead. This
+/// interface will be removed in a future version."
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct EnumSchema {
+pub struct LegacyTitledEnumSchema {
     #[serde(rename = "type")]
     pub schema_type: String, // "string"
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -77,6 +75,22 @@ pub struct EnumSchema {
     pub enum_values: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enum_names: Option<Vec<String>>, // Display names for enum values
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
+}
+
+/// `EnumSchema` — the schema's enum union:
+/// `SingleSelectEnumSchema | MultiSelectEnumSchema | LegacyTitledEnumSchema`.
+///
+/// Untagged: the single-select variants are tried first (the untitled one
+/// rejects unknown fields, so a legacy payload carrying `enumNames` falls
+/// through to [`LegacyTitledEnumSchema`] instead of silently dropping it).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum EnumSchema {
+    SingleSelect(SingleSelectEnumSchema),
+    MultiSelect(MultiSelectEnumSchema),
+    LegacyTitled(LegacyTitledEnumSchema),
 }
 
 // --- DRAFT-2026-v1 enum schema variants -----------------------------------
@@ -85,7 +99,7 @@ pub struct EnumSchema {
 ///
 /// Wire shape: `{type:"string", title?, description?, enum: string[], default?}`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UntitledSingleSelectEnumSchema {
     #[serde(rename = "type")]
     pub schema_type: String, // "string"
@@ -169,7 +183,7 @@ pub enum SingleSelectEnumSchema {
 
 /// Multi-select enum with no per-option titles.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UntitledMultiSelectEnumSchema {
     #[serde(rename = "type")]
     pub schema_type: String, // "array"
@@ -645,7 +659,7 @@ impl BooleanSchema {
     }
 }
 
-impl EnumSchema {
+impl LegacyTitledEnumSchema {
     pub fn new(enum_values: Vec<String>) -> Self {
         Self {
             schema_type: "string".to_string(),
@@ -653,6 +667,7 @@ impl EnumSchema {
             description: None,
             enum_values,
             enum_names: None,
+            default: None,
         }
     }
 
@@ -664,6 +679,88 @@ impl EnumSchema {
     pub fn with_enum_names(mut self, enum_names: Vec<String>) -> Self {
         self.enum_names = Some(enum_names);
         self
+    }
+
+    pub fn with_default(mut self, default: impl Into<String>) -> Self {
+        self.default = Some(default.into());
+        self
+    }
+}
+
+impl EnumSchema {
+    /// Spec-pure untitled single-select: `{type:"string", enum:[...]}`.
+    pub fn new(enum_values: Vec<String>) -> Self {
+        Self::SingleSelect(SingleSelectEnumSchema::Untitled(
+            UntitledSingleSelectEnumSchema::new(enum_values),
+        ))
+    }
+
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        let d = description.into();
+        match &mut self {
+            Self::SingleSelect(SingleSelectEnumSchema::Untitled(v)) => {
+                v.description = Some(d);
+            }
+            Self::SingleSelect(SingleSelectEnumSchema::Titled(v)) => {
+                v.description = Some(d);
+            }
+            Self::MultiSelect(MultiSelectEnumSchema::Untitled(v)) => {
+                v.description = Some(d);
+            }
+            Self::MultiSelect(MultiSelectEnumSchema::Titled(v)) => {
+                v.description = Some(d);
+            }
+            Self::LegacyTitled(v) => v.description = Some(d),
+        }
+        self
+    }
+
+    /// The set of permitted values, across all union shapes (titled variants
+    /// carry them as `oneOf[].const`, multi-selects inside `items`).
+    pub fn allowed_values(&self) -> Vec<String> {
+        match self {
+            Self::SingleSelect(SingleSelectEnumSchema::Untitled(v)) => v.enum_values.clone(),
+            Self::SingleSelect(SingleSelectEnumSchema::Titled(v)) => {
+                v.one_of.iter().map(|o| o.const_value.clone()).collect()
+            }
+            Self::MultiSelect(MultiSelectEnumSchema::Untitled(v)) => v.items.enum_values.clone(),
+            Self::MultiSelect(MultiSelectEnumSchema::Titled(v)) => v
+                .items
+                .any_of
+                .iter()
+                .map(|o| o.const_value.clone())
+                .collect(),
+            Self::LegacyTitled(v) => v.enum_values.clone(),
+        }
+    }
+
+    /// True for the multi-select shapes (the submitted value is an array).
+    pub fn is_multi_select(&self) -> bool {
+        matches!(self, Self::MultiSelect(_))
+    }
+
+    /// Per-value display names use the legacy `enumNames` wire shape; this
+    /// converts the union to [`LegacyTitledEnumSchema`], preserving any
+    /// existing single-select values. (New code wanting titles should build a
+    /// [`TitledSingleSelectEnumSchema`] with `oneOf` const/title pairs.)
+    pub fn with_enum_names(self, enum_names: Vec<String>) -> Self {
+        let legacy = match self {
+            Self::LegacyTitled(v) => v,
+            Self::SingleSelect(SingleSelectEnumSchema::Untitled(v)) => LegacyTitledEnumSchema {
+                schema_type: v.schema_type,
+                title: v.title,
+                description: v.description,
+                enum_values: v.enum_values,
+                enum_names: None,
+                default: v.default,
+            },
+            other => {
+                // Titled/multi-select shapes have no enumNames equivalent;
+                // keep them unchanged rather than destroy their structure.
+                return other;
+            }
+        };
+        Self::LegacyTitled(legacy.with_enum_names(enum_names))
     }
 }
 
@@ -1016,5 +1113,142 @@ mod tests {
         assert_eq!(enum_json["type"], "string");
         assert!(enum_json["enum"].is_array());
         assert_eq!(enum_json["enum"].as_array().unwrap().len(), 3);
+    }
+}
+
+#[cfg(test)]
+mod enum_union_fidelity_tests {
+    //! Round-trip fidelity through the untagged unions: enum constraints must
+    //! survive deserialize → reserialize (they previously collapsed into
+    //! `StringSchema`, silently dropping `enum`).
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn plain_string_enum_round_trips_via_primitive_union() {
+        let wire = json!({"type": "string", "enum": ["red", "green", "blue"]});
+        let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();
+        assert!(
+            matches!(
+                &parsed,
+                PrimitiveSchemaDefinition::Enum(EnumSchema::SingleSelect(
+                    SingleSelectEnumSchema::Untitled(_)
+                ))
+            ),
+            "a {{type, enum}} payload must parse as an untitled single-select, got: {parsed:?}"
+        );
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn legacy_enum_names_payload_round_trips_losslessly() {
+        let wire = json!({
+            "type": "string",
+            "enum": ["s", "m", "l"],
+            "enumNames": ["Small", "Medium", "Large"],
+            "default": "m"
+        });
+        let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();
+        assert!(
+            matches!(
+                &parsed,
+                PrimitiveSchemaDefinition::Enum(EnumSchema::LegacyTitled(_))
+            ),
+            "enumNames must select the legacy shape, got: {parsed:?}"
+        );
+        assert_eq!(
+            serde_json::to_value(&parsed).unwrap(),
+            wire,
+            "enumNames and default must survive the round trip"
+        );
+    }
+
+    #[test]
+    fn titled_single_select_round_trips_via_elicitation_schema_properties() {
+        let wire = json!({
+            "type": "object",
+            "properties": {
+                "color": {
+                    "type": "string",
+                    "oneOf": [
+                        {"const": "r", "title": "Red"},
+                        {"const": "g", "title": "Green"}
+                    ]
+                }
+            },
+            "required": ["color"]
+        });
+        let parsed: ElicitationSchema = serde_json::from_value(wire.clone()).unwrap();
+        assert!(
+            matches!(
+                parsed.properties.get("color"),
+                Some(PrimitiveSchemaDefinition::Enum(EnumSchema::SingleSelect(
+                    SingleSelectEnumSchema::Titled(_)
+                )))
+            ),
+            "oneOf const/title pairs must parse as a titled single-select"
+        );
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn untitled_multi_select_round_trips_via_primitive_union() {
+        let wire = json!({
+            "type": "array",
+            "items": {"type": "string", "enum": ["a", "b"]}
+        });
+        let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();
+        assert!(
+            matches!(
+                &parsed,
+                PrimitiveSchemaDefinition::Enum(EnumSchema::MultiSelect(
+                    MultiSelectEnumSchema::Untitled(_)
+                ))
+            ),
+            "array-of-enum must parse as an untitled multi-select, got: {parsed:?}"
+        );
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn allowed_values_spans_all_union_shapes() {
+        let single = EnumSchema::new(vec!["x".into(), "y".into()]);
+        assert_eq!(single.allowed_values(), vec!["x", "y"]);
+        assert!(!single.is_multi_select());
+
+        let legacy: EnumSchema = serde_json::from_value(json!({
+            "type": "string", "enum": ["a"], "enumNames": ["A"]
+        }))
+        .unwrap();
+        assert_eq!(legacy.allowed_values(), vec!["a"]);
+
+        let multi: EnumSchema = serde_json::from_value(json!({
+            "type": "array", "items": {"type": "string", "enum": ["p", "q"]}
+        }))
+        .unwrap();
+        assert_eq!(multi.allowed_values(), vec!["p", "q"]);
+        assert!(multi.is_multi_select());
+    }
+
+    #[test]
+    fn plain_string_schema_still_parses_as_string() {
+        // Control: no enum field → StringSchema, constraints intact.
+        let wire = json!({"type": "string", "minLength": 2, "maxLength": 5});
+        let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();
+        assert!(matches!(&parsed, PrimitiveSchemaDefinition::String(_)));
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn number_constraints_survive_the_union() {
+        // Pre-fix, {type:"number", minimum} could collapse into StringSchema
+        // (unknown fields silently ignored). deny_unknown_fields forbids it.
+        let wire = json!({"type": "number", "minimum": 1.5, "maximum": 9.0});
+        let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();
+        assert!(
+            matches!(&parsed, PrimitiveSchemaDefinition::Number(_)),
+            "numeric constraints must select NumberSchema, got: {parsed:?}"
+        );
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
     }
 }

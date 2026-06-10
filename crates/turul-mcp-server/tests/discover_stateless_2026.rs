@@ -329,3 +329,36 @@ async fn header_body_protocol_version_mismatch_is_rejected_with_32001() {
     let out: serde_json::Value = resp.json().await.expect("json body");
     assert_eq!(out["error"]["code"], -32001, "must be -32001: {out}");
 }
+
+#[tokio::test]
+async fn tools_list_advertises_output_schema() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/list")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 11, "method": "tools/list",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("tools/list POST");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("json body");
+    let tools = body["result"]["tools"].as_array().expect("tools array");
+    let echo = tools
+        .iter()
+        .find(|t| t["name"] == "echo")
+        .expect("echo tool listed");
+    // The derive macro declares `output = String`, so the tool HAS an output
+    // schema — tools/list MUST advertise it (a tool with outputSchema must
+    // return conforming structuredContent, and clients can only know that
+    // contract if the list result carries the schema).
+    assert!(
+        echo["outputSchema"].is_object(),
+        "tools/list must advertise outputSchema for tools that declare one: {echo}"
+    );
+}

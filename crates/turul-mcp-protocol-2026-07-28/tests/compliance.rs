@@ -1353,6 +1353,17 @@ mod resources_alignment {
     }
 
     #[test]
+    fn read_resource_result_defaults_to_private_scope() {
+        // resources/read contents routinely depend on the authenticated user;
+        // a public default would let shared caches serve one user's resource
+        // to another. public requires an explicit with_cache() opt-in.
+        let r = ReadResourceResult::new(vec![ResourceContent::text("file:///x", "hello")]);
+        let v = serde_json::to_value(&r).unwrap();
+        assert_eq!(v["cacheScope"], "private");
+        assert_eq!(v["ttlMs"], 0);
+    }
+
+    #[test]
     fn read_resource_result_with_cache() {
         let r = ReadResourceResult::new(vec![ResourceContent::text("file:///x", "hi")])
             .with_cache(CacheableResult::stale_public());

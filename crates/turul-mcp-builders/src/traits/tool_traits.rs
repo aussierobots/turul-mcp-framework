@@ -142,7 +142,14 @@ pub trait ToolDefinition:
             title: self.title().map(String::from),
             description: self.description().map(String::from),
             input_schema: self.input_schema().clone(),
-            output_schema: None,
+            // The trait's object-rooted ToolSchema and the 2026 wire type
+            // (free-form ToolOutputSchema, flattened map) carry the same JSON;
+            // a serde round-trip is the lossless bridge between them.
+            output_schema: self.output_schema().and_then(|schema| {
+                serde_json::to_value(schema)
+                    .ok()
+                    .and_then(|v| serde_json::from_value(v).ok())
+            }),
             annotations: self.annotations().cloned(),
             icons: self.icons().cloned(),
             meta: self.tool_meta().cloned(),

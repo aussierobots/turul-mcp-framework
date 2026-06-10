@@ -306,12 +306,32 @@ impl HasElicitationHandling for DynamicElicitation {
                         }
                     }
                     PrimitiveSchemaDefinition::Enum(enum_schema) => {
-                        if let Some(str_value) = value.as_str() {
-                            if !enum_schema.enum_values.contains(&str_value.to_string()) {
+                        let allowed = enum_schema.allowed_values();
+                        if enum_schema.is_multi_select() {
+                            let Some(items) = value.as_array() else {
+                                return Err(format!(
+                                    "Field '{}' must be an array of enum values",
+                                    field_name
+                                ));
+                            };
+                            for item in items {
+                                let ok = item
+                                    .as_str()
+                                    .is_some_and(|s| allowed.iter().any(|a| a == s));
+                                if !ok {
+                                    return Err(format!(
+                                        "Field '{}' items must each be one of: {}",
+                                        field_name,
+                                        allowed.join(", ")
+                                    ));
+                                }
+                            }
+                        } else if let Some(str_value) = value.as_str() {
+                            if !allowed.iter().any(|a| a == str_value) {
                                 return Err(format!(
                                     "Field '{}' must be one of: {}",
                                     field_name,
-                                    enum_schema.enum_values.join(", ")
+                                    allowed.join(", ")
                                 ));
                             }
                         } else {

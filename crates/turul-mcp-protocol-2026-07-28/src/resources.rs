@@ -553,13 +553,20 @@ pub struct ReadResourceResult {
 }
 
 impl ReadResourceResult {
-    /// Construct with required CacheableResult defaults (`ttl_ms=0`, `cache_scope=Public`).
+    /// Construct with required CacheableResult defaults (`ttl_ms=0`,
+    /// `cache_scope=Private`).
+    ///
+    /// Unlike the list results, `resources/read` defaults to `private`: read
+    /// contents routinely depend on the authenticated user, and a `public`
+    /// scope would let shared caches serve one user's resource to another.
+    /// Servers whose resources are genuinely user-independent opt into
+    /// `public` explicitly via [`Self::with_cache`].
     pub fn new(contents: Vec<ResourceContent>) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
             contents,
             ttl_ms: 0,
-            cache_scope: crate::caching::CacheScope::Public,
+            cache_scope: crate::caching::CacheScope::Private,
             meta: None,
         }
     }

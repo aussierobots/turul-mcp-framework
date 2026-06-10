@@ -86,13 +86,10 @@ pub trait HasElicitationHandling {
 /// impl UserPreferencesForm {
 ///     fn new(context: String) -> Self {
 ///         let mut properties = HashMap::new();
-///         properties.insert("theme".to_string(), PrimitiveSchemaDefinition::Enum(EnumSchema {
-///             schema_type: "string".to_string(),
-///             title: None,
-///             description: Some("UI theme preference".to_string()),
-///             enum_values: vec!["dark".to_string(), "light".to_string()],
-///             enum_names: None,
-///         }));
+///         properties.insert("theme".to_string(), PrimitiveSchemaDefinition::Enum(
+///             EnumSchema::new(vec!["dark".to_string(), "light".to_string()])
+///                 .with_description("UI theme preference"),
+///         ));
 ///         properties.insert("notifications".to_string(), PrimitiveSchemaDefinition::Boolean(BooleanSchema {
 ///             schema_type: "boolean".to_string(),
 ///             title: None,
