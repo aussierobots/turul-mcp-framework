@@ -1073,9 +1073,7 @@ impl McpServerBuilder {
 
     /// Add completion support
     pub fn with_completion(mut self) -> Self {
-        self.capabilities.completions = Some(CompletionsCapabilities {
-            enabled: Some(true),
-        });
+        self.capabilities.completions = Some(CompletionsCapabilities::default());
         self.handler(CompletionHandler)
     }
 
@@ -1626,22 +1624,12 @@ impl McpServerBuilder {
 
         // Completion capabilities - enable if completion handlers are registered
         if has_completions {
-            self.capabilities.completions = Some(CompletionsCapabilities {
-                enabled: Some(true),
-            });
+            self.capabilities.completions = Some(CompletionsCapabilities::default());
         }
 
-        // Logging capabilities - always enabled with comprehensive level support
-        // Always enable logging for debugging/monitoring
-        self.capabilities.logging = Some(LoggingCapabilities {
-            enabled: Some(true),
-            levels: Some(vec![
-                "debug".to_string(),
-                "info".to_string(),
-                "warning".to_string(),
-                "error".to_string(),
-            ]),
-        });
+        // Logging capability: presence of the (opaque) object means the server
+        // can send notifications/message.
+        self.capabilities.logging = Some(LoggingCapabilities::default());
 
         // Tasks capabilities — auto-configure when task runtime is set
         #[cfg(feature = "protocol-2025-11-25")]

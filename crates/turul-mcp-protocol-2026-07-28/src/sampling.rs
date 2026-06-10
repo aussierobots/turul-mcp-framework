@@ -48,13 +48,9 @@ impl SamplingResult {
     }
 }
 
-/// Role enum for messages — `"user"` or `"assistant"`. The MCP spec has no `"system"` role.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum Role {
-    User,
-    Assistant,
-}
+// The schema declares a single `Role` type ("user" | "assistant" — no
+// "system"); this module re-exports the one binding rather than duplicating it.
+pub use crate::prompts::Role;
 
 /// Model hint — an open-ended struct.
 ///
@@ -109,36 +105,34 @@ pub enum ToolChoiceMode {
 }
 
 /// Tool choice configuration for sampling requests.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Wire shape: `{ mode?: "auto" | "required" | "none" }` — `mode` is optional
+/// and absent means `"auto"`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolChoice {
-    /// The mode for tool selection
-    pub mode: ToolChoiceMode,
-    /// Optional specific tool name to use (only meaningful with mode "required")
+    /// The mode for tool selection. Absent = `"auto"`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
+    pub mode: Option<ToolChoiceMode>,
 }
 
 impl ToolChoice {
     pub fn auto() -> Self {
         Self {
-            mode: ToolChoiceMode::Auto,
-            name: None,
+            mode: Some(ToolChoiceMode::Auto),
         }
     }
 
     pub fn none() -> Self {
         Self {
-            mode: ToolChoiceMode::None,
-            name: None,
+            mode: Some(ToolChoiceMode::None),
         }
     }
 
     /// Create tool choice requiring at least one tool. Wire value: `"required"`.
     pub fn required() -> Self {
         Self {
-            mode: ToolChoiceMode::Required,
-            name: None,
+            mode: Some(ToolChoiceMode::Required),
         }
     }
 
@@ -148,11 +142,9 @@ impl ToolChoice {
         Self::required()
     }
 
-    pub fn specific(name: impl Into<String>) -> Self {
-        Self {
-            mode: ToolChoiceMode::Required,
-            name: Some(name.into()),
-        }
+    /// The effective mode: absent means `"auto"`.
+    pub fn effective_mode(&self) -> ToolChoiceMode {
+        self.mode.clone().unwrap_or(ToolChoiceMode::Auto)
     }
 }
 
@@ -704,26 +696,27 @@ mod tests {
     fn test_tool_choice_mode_deserializes_legacy_any() {
         let json = serde_json::json!({"mode": "any"});
         let tc: ToolChoice = serde_json::from_value(json).unwrap();
-        assert_eq!(tc.mode, ToolChoiceMode::Required);
+        assert_eq!(tc.mode, Some(ToolChoiceMode::Required));
     }
 
     #[test]
     fn test_tool_choice_mode_deserializes_required() {
         let json = serde_json::json!({"mode": "required"});
         let tc: ToolChoice = serde_json::from_value(json).unwrap();
-        assert_eq!(tc.mode, ToolChoiceMode::Required);
+        assert_eq!(tc.mode, Some(ToolChoiceMode::Required));
     }
 
     #[test]
     fn test_tool_choice_any_alias_returns_required() {
         let tc = ToolChoice::any();
-        assert_eq!(tc.mode, ToolChoiceMode::Required);
+        assert_eq!(tc.mode, Some(ToolChoiceMode::Required));
     }
 
     #[test]
-    fn test_tool_choice_specific_uses_required_mode() {
-        let tc = ToolChoice::specific("my_tool");
-        assert_eq!(tc.mode, ToolChoiceMode::Required);
-        assert_eq!(tc.name, Some("my_tool".to_string()));
+    fn test_tool_choice_absent_mode_is_auto() {
+        // Schema: mode is optional; absent means "auto".
+        let tc: ToolChoice = serde_json::from_value(serde_json::json!({})).unwrap();
+        assert_eq!(tc.mode, None);
+        assert_eq!(tc.effective_mode(), ToolChoiceMode::Auto);
     }
 }

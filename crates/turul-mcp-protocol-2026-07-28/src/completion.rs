@@ -23,11 +23,11 @@ pub struct ResourceTemplateReference {
 pub struct PromptReference {
     #[serde(rename = "type")]
     pub ref_type: String, // "ref/prompt"
-    /// The name of the prompt
+    /// The name of the prompt (BaseMetadata).
     pub name: String,
-    /// Optional description from BaseMetadata
+    /// Display title (BaseMetadata).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
+    pub title: Option<String>,
 }
 
 /// Union type for completion references (per MCP spec)
@@ -226,12 +226,12 @@ impl PromptReference {
         Self {
             ref_type: "ref/prompt".to_string(),
             name: name.into(),
-            description: None,
+            title: None,
         }
     }
 
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
         self
     }
 }
@@ -345,16 +345,16 @@ mod tests {
 
     #[test]
     fn test_prompt_reference() {
-        let ref_obj = PromptReference::new("test_prompt").with_description("A test prompt");
+        let ref_obj = PromptReference::new("test_prompt").with_title("A Test Prompt");
 
         assert_eq!(ref_obj.ref_type, "ref/prompt");
         assert_eq!(ref_obj.name, "test_prompt");
-        assert_eq!(ref_obj.description, Some("A test prompt".to_string()));
+        assert_eq!(ref_obj.title, Some("A Test Prompt".to_string()));
 
         let json_value = serde_json::to_value(&ref_obj).unwrap();
         assert_eq!(json_value["type"], "ref/prompt");
         assert_eq!(json_value["name"], "test_prompt");
-        assert_eq!(json_value["description"], "A test prompt");
+        assert_eq!(json_value["title"], "A Test Prompt");
     }
 
     #[test]

@@ -21,7 +21,7 @@ use std::collections::HashMap;
 pub struct Annotations {
     /// Target audience for this item: "user", "assistant", or both
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub audience: Option<Vec<String>>,
+    pub audience: Option<Vec<crate::prompts::Role>>,
     /// Priority hint (0.0 = lowest, 1.0 = highest)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub priority: Option<f64>,
@@ -39,7 +39,7 @@ impl Annotations {
         }
     }
 
-    pub fn with_audience(mut self, audience: Vec<String>) -> Self {
+    pub fn with_audience(mut self, audience: Vec<crate::prompts::Role>) -> Self {
         self.audience = Some(audience);
         self
     }

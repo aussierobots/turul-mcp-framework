@@ -543,7 +543,10 @@ mod remaining_shapes {
     fn annotations_shape_matches_schema() {
         // `Annotations { audience?: Role[], priority?: number, lastModified?: string }`.
         let a = Annotations::new()
-            .with_audience(vec!["user".to_string(), "assistant".to_string()])
+            .with_audience(vec![
+                turul_mcp_protocol_2026_07_28::prompts::Role::User,
+                turul_mcp_protocol_2026_07_28::prompts::Role::Assistant,
+            ])
             .with_priority(0.7)
             .with_last_modified("2026-05-24T12:00:00Z");
         let v = serde_json::to_value(&a).unwrap();
@@ -2922,5 +2925,91 @@ mod error_codes {
                 code
             );
         }
+    }
+}
+
+mod p1_fidelity_2026_06_10 {
+    //! Wire-shape contracts for the 2026-06-10 fidelity sweep: bindings match
+    //! the pinned schema exactly (no invented fields, schema optionality).
+    use serde_json::json;
+    use turul_mcp_protocol_2026_07_28::completion::{CompletionReference, PromptReference};
+    use turul_mcp_protocol_2026_07_28::initialize::{CompletionsCapabilities, LoggingCapabilities};
+    use turul_mcp_protocol_2026_07_28::meta::Annotations;
+    use turul_mcp_protocol_2026_07_28::prompts::Role;
+    use turul_mcp_protocol_2026_07_28::sampling::{ToolChoice, ToolChoiceMode};
+
+    #[test]
+    fn tool_choice_mode_is_optional_and_nothing_else_serializes() {
+        // Schema: `interface ToolChoice { mode?: "auto"|"required"|"none" }`.
+        let parsed: ToolChoice = serde_json::from_value(json!({})).unwrap();
+        assert!(parsed.mode.is_none(), "empty ToolChoice must parse");
+        assert_eq!(parsed.effective_mode(), ToolChoiceMode::Auto);
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), json!({}));
+
+        let v = serde_json::to_value(ToolChoice::required()).unwrap();
+        assert_eq!(v, json!({"mode": "required"}), "only `mode` may serialize");
+    }
+
+    #[test]
+    fn prompt_reference_is_base_metadata_shaped() {
+        // Schema: `PromptReference extends BaseMetadata { type: "ref/prompt" }`
+        // → fields are type/name/title; no description.
+        let r = PromptReference::new("my_prompt").with_title("My Prompt");
+        let v = serde_json::to_value(&r).unwrap();
+        assert_eq!(
+            v,
+            json!({"type": "ref/prompt", "name": "my_prompt", "title": "My Prompt"})
+        );
+
+        let wire = json!({"type": "ref/prompt", "name": "p"});
+        let parsed: PromptReference = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+
+        // The union still routes prompt refs correctly.
+        let u = CompletionReference::prompt("p2");
+        assert!(matches!(u, CompletionReference::Prompt(_)));
+    }
+
+    #[test]
+    fn annotations_audience_is_the_closed_role_union() {
+        // Schema: `audience?: Role[]` with `Role = "user" | "assistant"`.
+        let a = Annotations::new().with_audience(vec![Role::User, Role::Assistant]);
+        let v = serde_json::to_value(&a).unwrap();
+        assert_eq!(v["audience"], json!(["user", "assistant"]));
+
+        // Wire-invalid audience values are rejected, not silently accepted.
+        let bad = json!({"audience": ["system"]});
+        assert!(
+            serde_json::from_value::<Annotations>(bad).is_err(),
+            "\"system\" is not a Role"
+        );
+    }
+
+    #[test]
+    fn server_capability_objects_are_opaque() {
+        // Schema: `logging?: JSONObject` / `completions?: JSONObject` — no
+        // defined keys; presence is the signal.
+        assert_eq!(
+            serde_json::to_value(LoggingCapabilities::default()).unwrap(),
+            json!({})
+        );
+        assert_eq!(
+            serde_json::to_value(CompletionsCapabilities::default()).unwrap(),
+            json!({})
+        );
+        // Opaque content round-trips.
+        let parsed: LoggingCapabilities =
+            serde_json::from_value(json!({"vendorKey": true})).unwrap();
+        assert_eq!(
+            serde_json::to_value(&parsed).unwrap(),
+            json!({"vendorKey": true})
+        );
+    }
+
+    #[test]
+    fn role_is_a_single_binding() {
+        // One schema type, one Rust type: the sampling module re-exports it.
+        let a: turul_mcp_protocol_2026_07_28::sampling::Role = Role::User;
+        assert_eq!(serde_json::to_value(a).unwrap(), json!("user"));
     }
 }

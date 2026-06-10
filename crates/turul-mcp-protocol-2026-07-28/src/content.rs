@@ -469,7 +469,7 @@ mod tests {
             .with_title("Test Data")
             .with_description("Sample data for testing")
             .with_mime_type("application/json")
-            .with_annotations(Annotations::new().with_audience(vec!["user".to_string()]))
+            .with_annotations(Annotations::new().with_audience(vec![crate::prompts::Role::User]))
             .with_meta(meta);
 
         let resource_link = ContentBlock::resource_link(resource_ref);
@@ -506,7 +506,7 @@ mod tests {
             assert!(annotations.is_some());
             assert_eq!(
                 annotations.unwrap().audience,
-                Some(vec!["user".to_string()])
+                Some(vec![crate::prompts::Role::User])
             );
 
             assert!(meta.is_some());

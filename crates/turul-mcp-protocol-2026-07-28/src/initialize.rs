@@ -215,25 +215,25 @@ pub struct ResourcesCapabilities {
     pub list_changed: Option<bool>,
 }
 
-/// Capabilities for logging provided by the server
+/// Capabilities for logging provided by the server.
+///
+/// Wire shape: an opaque `JSONObject` — PRESENCE means the server can send
+/// `notifications/message`; the object carries no defined keys.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
 pub struct LoggingCapabilities {
-    /// Whether the server supports logging
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enabled: Option<bool>,
-    /// Supported log levels
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub levels: Option<Vec<String>>,
+    /// Opaque content per the schema's `JSONObject` (usually empty).
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 /// Capabilities for completions provided by the server
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionsCapabilities {
-    /// Whether the server supports completions
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enabled: Option<bool>,
+    /// Opaque content per the schema's `JSONObject` (usually empty) —
+    /// PRESENCE means `completion/complete` is supported.
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
 }
 
 /// Capabilities that a server may support.

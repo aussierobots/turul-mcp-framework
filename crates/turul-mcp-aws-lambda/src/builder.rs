@@ -593,9 +593,7 @@ impl LambdaMcpServerBuilder {
     /// Add completion support
     pub fn with_completion(mut self) -> Self {
         use turul_mcp_protocol::initialize::CompletionsCapabilities;
-        self.capabilities.completions = Some(CompletionsCapabilities {
-            enabled: Some(true),
-        });
+        self.capabilities.completions = Some(CompletionsCapabilities::default());
         self.handler(CompletionHandler)
     }
 
@@ -1066,22 +1064,12 @@ impl LambdaMcpServerBuilder {
         // Completion capabilities - truthful reporting (only set if completions are registered)
         if has_completions {
             capabilities.completions =
-                Some(turul_mcp_protocol::initialize::CompletionsCapabilities {
-                    enabled: Some(true),
-                });
+                Some(turul_mcp_protocol::initialize::CompletionsCapabilities::default());
         }
 
-        // Logging capabilities - always enabled for debugging/monitoring (same as McpServer)
-        // Always enable logging for debugging/monitoring
-        capabilities.logging = Some(turul_mcp_protocol::initialize::LoggingCapabilities {
-            enabled: Some(true),
-            levels: Some(vec![
-                "debug".to_string(),
-                "info".to_string(),
-                "warning".to_string(),
-                "error".to_string(),
-            ]),
-        });
+        // Logging capability: presence of the (opaque) object means the server
+        // can send notifications/message (same as McpServer).
+        capabilities.logging = Some(turul_mcp_protocol::initialize::LoggingCapabilities::default());
 
         // Tasks capabilities — auto-configure when task runtime is set
         #[cfg(feature = "protocol-2025-11-25")]
