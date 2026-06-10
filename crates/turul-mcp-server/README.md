@@ -36,8 +36,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.3"
-turul-mcp-derive = "0.3"  # Required for function macros and derive macros
+turul-mcp-server = "0.4"
+turul-mcp-derive = "0.4"  # Required for function macros and derive macros
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ### Level 2: Derive Macros (Struct-Based)
-*Requires: `turul-mcp-derive = "0.3"` dependency*
+*Requires: `turul-mcp-derive = "0.4"` dependency*
 
 ```rust
 use turul_mcp_derive::McpTool;
@@ -390,7 +390,7 @@ let server = McpServer::builder()
 // - resources.subscribe = false (no subscriptions)
 // - resources.listChanged = false (static resource list)
 
-// Optional strict lifecycle: notifications/initialized can be sent after successful setup
+// Optional strict lifecycle (2025-11-25 opt-in lane): notifications/initialized after setup
 ```
 
 ## Examples
@@ -455,7 +455,7 @@ See `turul-mcp-task-storage` for backend options and the task storage trait.
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["sqlite", "postgres"] }
+turul-mcp-server = { version = "0.4", features = ["sqlite", "postgres"] }
 ```
 
 - `default` - All features enabled

@@ -1098,8 +1098,15 @@ impl McpServerBuilder {
         // Enable notifications if we have resources
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
 
+        // 2026: per-URI `resources/updated` subscriptions are served by the
+        // transport's `subscriptions/listen` stream — the capability is real.
+        // 2025: the `resources/subscribe` RPC has no handler here.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let supports_subscribe = true;
+        #[cfg(feature = "protocol-2025-11-25")]
+        let supports_subscribe = false;
         self.capabilities.resources = Some(ResourcesCapabilities {
-            subscribe: Some(false), // TODO: Implement resource subscriptions
+            subscribe: Some(supports_subscribe),
             list_changed: Some(has_resources),
         });
 
@@ -1613,8 +1620,15 @@ impl McpServerBuilder {
         // - Admin APIs for runtime resource registration
         // - File system watchers that update resource availability
         if has_resources {
+            // 2026: per-URI `resources/updated` subscriptions are served by the
+            // transport's `subscriptions/listen` stream — the capability is real.
+            // 2025: the `resources/subscribe` RPC has no handler here.
+            #[cfg(feature = "protocol-2026-07-28")]
+            let supports_subscribe = true;
+            #[cfg(feature = "protocol-2025-11-25")]
+            let supports_subscribe = false;
             self.capabilities.resources = Some(ResourcesCapabilities {
-                subscribe: Some(false), // TODO: Implement resource subscriptions in Phase 5
+                subscribe: Some(supports_subscribe),
                 // Static framework: no dynamic change sources = no list changes
                 list_changed: Some(false),
             });

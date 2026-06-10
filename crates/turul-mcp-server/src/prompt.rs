@@ -25,6 +25,15 @@ pub trait McpPrompt: PromptDefinition + Send + Sync {
     /// the final prompt content.
     ///
     /// Default implementation returns a simple template message. Override for custom logic.
+    ///
+    /// MRTR (SEP-2322, 2026-07-28): a prompt may return
+    /// `Err(McpError::InputRequired { .. })` to request client input; the
+    /// `prompts/get` handler converts it into an `InputRequiredResult`. On the
+    /// client's retry, the responses arrive in `args` under the reserved keys
+    /// `io.modelcontextprotocol/inputResponses` (the typed `InputResponses`
+    /// map as JSON) and `io.modelcontextprotocol/requestState` (the echoed
+    /// opaque string) — reserved-namespace keys cannot collide with wire
+    /// prompt arguments, which are plain strings.
     async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         // Default implementation - simple template message
         let message = format!(

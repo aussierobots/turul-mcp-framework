@@ -27,8 +27,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = "0.3"
-turul-mcp-derive = "0.3"
+turul-mcp-aws-lambda = "0.4"
+turul-mcp-derive = "0.4"
 lambda_http = "0.17"
 tokio = { version = "1.0", features = ["macros"] }
 ```
@@ -95,7 +95,7 @@ For real-time SSE streaming, enable the `streaming` feature and use `run_streami
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3", features = ["streaming"] }
+turul-mcp-aws-lambda = { version = "0.4", features = ["streaming"] }
 ```
 
 ```rust
@@ -499,7 +499,7 @@ let server = LambdaMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3", features = ["cors", "sse", "dynamodb"] }
+turul-mcp-aws-lambda = { version = "0.4", features = ["cors", "sse", "dynamodb"] }
 ```
 
 - `default` - Includes `cors` and `sse`

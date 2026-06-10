@@ -809,7 +809,7 @@ mod tests {
         assert_eq!(json["params"]["elicitationId"], "elicit-xyz-789");
     }
 
-    // ---- Notification trait coverage (A7 rebind) ----
+    // ---- Notification trait coverage ----
 
     #[test]
     fn tool_list_changed_satisfies_rpc_notification_and_trait() {

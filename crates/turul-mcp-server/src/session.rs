@@ -1572,7 +1572,7 @@ impl SessionManager {
         session_id: &str,
         event: SessionEvent,
     ) -> std::result::Result<(), String> {
-        // Phase 1: Fire in-memory listener (session must exist)
+        // Step 1: fire the in-memory listener (session must exist).
         {
             let sessions = self.sessions.read().await;
             match sessions.get(session_id) {
@@ -1585,7 +1585,7 @@ impl SessionManager {
             }
         }
 
-        // Phase 2: Awaited dispatcher for Custom events (mandatory persistence)
+        // Step 2: awaited dispatcher for Custom events (mandatory persistence).
         if let SessionEvent::Custom {
             ref event_type,
             ref data,
@@ -1599,7 +1599,7 @@ impl SessionManager {
             }
         }
 
-        // Phase 3: Global channel (observer-only)
+        // Step 3: global channel (observer-only).
         let _ = self
             .global_event_sender
             .send((session_id.to_string(), event));
@@ -1650,7 +1650,7 @@ impl SessionManager {
     ///
     /// For non-Custom events: uses in-memory cache only, best-effort, always returns `Ok(())`.
     pub async fn broadcast_event(&self, event: SessionEvent) -> std::result::Result<(), String> {
-        // Phase 1: In-memory listeners (cache-local, best-effort)
+        // Step 1: in-memory listeners (cache-local, best-effort).
         let cached_ids: Vec<String> = {
             let sessions = self.sessions.read().await;
             let mut ids = Vec::with_capacity(sessions.len());
@@ -1661,7 +1661,7 @@ impl SessionManager {
             ids
         };
 
-        // Phase 2: Storage-backed targeting for Custom events
+        // Step 2: storage-backed targeting for Custom events.
         let mut dispatch_errors: Vec<String> = Vec::new();
         if let SessionEvent::Custom {
             ref event_type,
@@ -1698,7 +1698,7 @@ impl SessionManager {
             }
         }
 
-        // Phase 3: Global broadcast channel — observer-only (cache-local, tests/debugging)
+        // Step 3: global broadcast channel — observer-only (cache-local, tests/debugging).
         for session_id in &cached_ids {
             if let Err(e) = self
                 .global_event_sender

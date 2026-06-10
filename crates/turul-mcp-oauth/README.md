@@ -22,8 +22,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.3"
-turul-mcp-oauth = "0.3"
+turul-mcp-server = "0.4"
+turul-mcp-oauth = "0.4"
 ```
 
 Use the convenience function for single-AS deployments:

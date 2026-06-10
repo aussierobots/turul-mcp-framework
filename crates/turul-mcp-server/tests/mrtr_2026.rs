@@ -207,3 +207,269 @@ async fn undeclared_capability_is_rejected_with_32003() {
 /// Keep the unused import warnings honest: HashMap is used by the tool body.
 #[allow(dead_code)]
 fn _t(_: HashMap<String, String>) {}
+
+// ---- MRTR on resources/read and prompts/get ----
+
+/// Resource that demands an elicitation before serving content.
+struct GatedResource;
+
+impl turul_mcp_server::prelude::HasResourceMetadata for GatedResource {
+    fn name(&self) -> &str {
+        "gated"
+    }
+}
+impl turul_mcp_server::prelude::HasResourceDescription for GatedResource {
+    fn description(&self) -> Option<&str> {
+        Some("Needs an answer first")
+    }
+}
+impl turul_mcp_server::prelude::HasResourceUri for GatedResource {
+    fn uri(&self) -> &str {
+        "file:///gated.txt"
+    }
+}
+impl turul_mcp_server::prelude::HasResourceMimeType for GatedResource {}
+impl turul_mcp_server::prelude::HasResourceSize for GatedResource {}
+impl turul_mcp_server::prelude::HasResourceAnnotations for GatedResource {}
+impl turul_mcp_server::prelude::HasResourceMeta for GatedResource {}
+impl turul_mcp_server::prelude::HasIcons for GatedResource {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpResource for GatedResource {
+    async fn read(
+        &self,
+        _params: Option<serde_json::Value>,
+        session: Option<&SessionContext>,
+    ) -> McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+        if let Some(responses) = session.and_then(|s| s.input_responses()) {
+            let answer = responses
+                .get("q1")
+                .and_then(|r| match r {
+                    turul_mcp_protocol::input_required::InputResponse::Elicit(e) => e
+                        .content
+                        .as_ref()
+                        .and_then(|c| c.get("answer"))
+                        .and_then(|v| v.as_str())
+                        .map(String::from),
+                    _ => None,
+                })
+                .ok_or_else(|| McpError::tool_execution("q1 response missing"))?;
+            return Ok(vec![turul_mcp_protocol::resources::ResourceContent::text(
+                "file:///gated.txt",
+                format!("content for {answer}"),
+            )]);
+        }
+        let schema = ElicitationSchema::new().with_property(
+            "answer".to_string(),
+            turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string(),
+        );
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "q1".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("Which answer?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("res-state".to_string()),
+        })
+    }
+}
+
+/// Prompt that demands an elicitation; the retry's responses arrive in the
+/// render args under the reserved io.modelcontextprotocol/* keys.
+struct GatedPrompt;
+
+impl turul_mcp_server::prelude::HasPromptMetadata for GatedPrompt {
+    fn name(&self) -> &str {
+        "gated_prompt"
+    }
+}
+impl turul_mcp_server::prelude::HasPromptDescription for GatedPrompt {}
+impl turul_mcp_server::prelude::HasPromptArguments for GatedPrompt {}
+impl turul_mcp_server::prelude::HasPromptAnnotations for GatedPrompt {}
+impl turul_mcp_server::prelude::HasPromptMeta for GatedPrompt {}
+impl turul_mcp_server::prelude::HasIcons for GatedPrompt {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpPrompt for GatedPrompt {
+    async fn render(
+        &self,
+        args: Option<std::collections::HashMap<String, serde_json::Value>>,
+    ) -> McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>> {
+        let responses = args
+            .as_ref()
+            .and_then(|a| a.get("io.modelcontextprotocol/inputResponses"));
+        if let Some(responses) = responses {
+            let answer = responses
+                .pointer("/q1/content/answer")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            return Ok(vec![turul_mcp_protocol::prompts::PromptMessage::user_text(
+                format!("prompt for {answer}"),
+            )]);
+        }
+        let schema = ElicitationSchema::new().with_property(
+            "answer".to_string(),
+            turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string(),
+        );
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "q1".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("Which answer?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("prompt-state".to_string()),
+        })
+    }
+}
+
+async fn start_full_server() -> String {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("mrtr-2026-full")
+        .version("0.4.0")
+        .tool(GatedEchoTool::default())
+        .resource(GatedResource)
+        .prompt(GatedPrompt)
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let client = reqwest::Client::new();
+    for _ in 0..50 {
+        if client.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    url
+}
+
+async fn post_mrtr(
+    url: &str,
+    rpc_method: &str,
+    name_header: &str,
+    params: serde_json::Value,
+) -> (reqwest::StatusCode, serde_json::Value) {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", rpc_method)
+        .header("Mcp-Name", name_header)
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": rpc_method, "params": params
+        }))
+        .send()
+        .await
+        .expect("POST");
+    let status = resp.status();
+    let body: serde_json::Value = resp.json().await.unwrap_or_default();
+    (status, body)
+}
+
+#[tokio::test]
+async fn mrtr_round_trip_on_resources_read() {
+    let url = start_full_server().await;
+    let caps = serde_json::json!({ "elicitation": {} });
+
+    // Leg 1: input_required with the elicit request + state.
+    let (status, body) = post_mrtr(
+        &url,
+        "resources/read",
+        "file:///gated.txt",
+        serde_json::json!({
+            "uri": "file:///gated.txt",
+            "_meta": meta_with_capabilities(caps.clone())
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["result"]["resultType"], "input_required", "{body}");
+    assert_eq!(body["result"]["requestState"], "res-state", "{body}");
+
+    // Leg 2: retry with inputResponses → content.
+    let (status, body) = post_mrtr(
+        &url,
+        "resources/read",
+        "file:///gated.txt",
+        serde_json::json!({
+            "uri": "file:///gated.txt",
+            "inputResponses": { "q1": { "action": "accept", "content": { "answer": "42" } } },
+            "requestState": "res-state",
+            "_meta": meta_with_capabilities(caps)
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let text = body["result"]["contents"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(text.contains("content for 42"), "{body}");
+}
+
+#[tokio::test]
+async fn mrtr_round_trip_on_prompts_get() {
+    let url = start_full_server().await;
+    let caps = serde_json::json!({ "elicitation": {} });
+
+    let (status, body) = post_mrtr(
+        &url,
+        "prompts/get",
+        "gated_prompt",
+        serde_json::json!({
+            "name": "gated_prompt",
+            "_meta": meta_with_capabilities(caps.clone())
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["result"]["resultType"], "input_required", "{body}");
+    assert_eq!(body["result"]["requestState"], "prompt-state", "{body}");
+
+    let (status, body) = post_mrtr(
+        &url,
+        "prompts/get",
+        "gated_prompt",
+        serde_json::json!({
+            "name": "gated_prompt",
+            "inputResponses": { "q1": { "action": "accept", "content": { "answer": "42" } } },
+            "requestState": "prompt-state",
+            "_meta": meta_with_capabilities(caps)
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let text = body["result"]["messages"][0]["content"]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(text.contains("prompt for 42"), "{body}");
+}
+
+#[tokio::test]
+async fn resources_read_capability_gate_applies() {
+    let url = start_full_server().await;
+    // No elicitation capability declared → -32003 at HTTP 400.
+    let (status, body) = post_mrtr(
+        &url,
+        "resources/read",
+        "file:///gated.txt",
+        serde_json::json!({
+            "uri": "file:///gated.txt",
+            "_meta": meta_with_capabilities(serde_json::json!({}))
+        }),
+    )
+    .await;
+    assert_eq!(status, 400, "{body}");
+    assert_eq!(body["error"]["code"], -32003, "{body}");
+}

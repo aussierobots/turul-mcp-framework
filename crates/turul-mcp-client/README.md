@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-client = "0.3"
+turul-mcp-client = "0.4"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -479,7 +479,7 @@ fn compare_transports() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-turul-mcp-client = { version = "0.3", features = ["sse"] }
+turul-mcp-client = { version = "0.4", features = ["sse"] }
 ```
 
 Available features:

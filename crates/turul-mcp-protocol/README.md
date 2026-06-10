@@ -26,7 +26,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-protocol = "0.3"
+turul-mcp-protocol = "0.4"
 ```
 
 ### Import Pattern
@@ -187,9 +187,9 @@ The protocol types integrate seamlessly with `turul-mcp-server` to build a compl
 
 ```toml
 [dependencies]
-turul-mcp-protocol = "0.3"
-turul-mcp-server = "0.3"
-turul-mcp-derive = "0.3"
+turul-mcp-protocol = "0.4"
+turul-mcp-server = "0.4"
+turul-mcp-derive = "0.4"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -343,7 +343,7 @@ mod tests {
 
 ```toml
 [dependencies]
-turul-mcp-protocol = { version = "0.3", features = ["server"] }
+turul-mcp-protocol = { version = "0.4", features = ["server"] }
 ```
 
 Available features:

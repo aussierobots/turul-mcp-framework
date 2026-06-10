@@ -12,8 +12,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-http-mcp-server = "0.3"
-//! turul-mcp-server = "0.3"
+//! turul-http-mcp-server = "0.4"
+//! turul-mcp-server = "0.4"
 //! ```
 //!
 //! ## Supported Transports

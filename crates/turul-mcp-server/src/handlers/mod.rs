@@ -45,6 +45,57 @@ fn extract_cursor_from_params(params: &Option<Value>) -> Option<turul_mcp_protoc
 
 /// Caller-supplied `_meta` keys to echo back onto the result, excluding the
 /// request-scoped routing keys defined by the protocol meta object.
+/// MRTR (SEP-2322): convert a provider's `McpError::InputRequired` outcome
+/// into a successful `InputRequiredResult` value, after enforcing that every
+/// input request targets a capability the client declared in the request's
+/// `_meta` `clientCapabilities` (undeclared → `-32003`, HTTP 400). Shared by
+/// the three methods permitted to return `input_required`: `tools/call`,
+/// `resources/read`, `prompts/get`.
+#[cfg(feature = "protocol-2026-07-28")]
+pub(crate) fn input_required_to_result(
+    input_requests: Option<turul_mcp_protocol::input_required::InputRequests>,
+    request_state: Option<String>,
+    caps: &turul_mcp_protocol::initialize::ClientCapabilities,
+) -> McpResult<Value> {
+    use turul_mcp_protocol::input_required::{InputRequest, InputRequiredResult};
+
+    if let Some(ref requests) = input_requests {
+        for request in requests.values() {
+            #[allow(deprecated)]
+            let missing = match request {
+                InputRequest::Elicit(_) if caps.elicitation.is_none() => {
+                    Some(serde_json::json!({ "elicitation": {} }))
+                }
+                InputRequest::CreateMessage(_) if caps.sampling.is_none() => {
+                    Some(serde_json::json!({ "sampling": {} }))
+                }
+                InputRequest::ListRoots(_) if caps.roots.is_none() => {
+                    Some(serde_json::json!({ "roots": {} }))
+                }
+                _ => None,
+            };
+            if let Some(required) = missing {
+                return Err(McpError::MissingRequiredClientCapability { required });
+            }
+        }
+    }
+
+    let result = match (input_requests, request_state) {
+        (Some(requests), Some(state)) => {
+            InputRequiredResult::with_requests_and_state(requests, state)
+        }
+        (Some(requests), None) => InputRequiredResult::with_requests(requests),
+        (None, Some(state)) => InputRequiredResult::with_state(state),
+        (None, None) => {
+            // Schema invariant: at least one field must be present.
+            return Err(McpError::ToolExecutionError(
+                "InputRequired with neither inputRequests nor requestState".into(),
+            ));
+        }
+    };
+    serde_json::to_value(result).map_err(McpError::from)
+}
+
 pub(crate) fn extract_request_meta_extra(params: &Option<Value>) -> HashMap<String, Value> {
     const RESERVED: &[&str] = &[
         "progressToken",
@@ -403,9 +454,42 @@ impl McpHandler for PromptsGetHandler {
             None => StdHashMap::new(),
         };
 
+        // MRTR retry leg: `McpPrompt::render` has no session parameter, so the
+        // retry's inputResponses / requestState ride the render args under
+        // reserved io.modelcontextprotocol/* keys (documented on McpPrompt).
+        #[cfg(feature = "protocol-2026-07-28")]
+        let arguments = {
+            let mut arguments = arguments;
+            if let Some(ref responses) = get_params.input_responses
+                && let Ok(v) = serde_json::to_value(responses)
+            {
+                arguments.insert("io.modelcontextprotocol/inputResponses".to_string(), v);
+            }
+            if let Some(ref state) = get_params.request_state {
+                arguments.insert(
+                    "io.modelcontextprotocol/requestState".to_string(),
+                    serde_json::Value::String(state.clone()),
+                );
+            }
+            arguments
+        };
+
         // Generate prompt messages using the prompt implementation
         // Note: MCP 2025-11-25 spec enforces only 'user' and 'assistant' roles via Role enum - no 'system' role
-        let messages = prompt.render(Some(arguments)).await?;
+        let messages = match prompt.render(Some(arguments)).await {
+            #[cfg(feature = "protocol-2026-07-28")]
+            Err(McpError::InputRequired {
+                input_requests,
+                request_state,
+            }) => {
+                return input_required_to_result(
+                    input_requests,
+                    request_state,
+                    &get_params.meta.client_capabilities,
+                );
+            }
+            other => other?,
+        };
 
         // Create response with messages
         let mut response = GetPromptResult::new(messages);
@@ -678,6 +762,28 @@ impl McpHandler for ResourcesReadHandler {
 
         debug!("Reading resource with URI: {}", read_params.uri);
 
+        // MRTR retry leg: surface the client's inputResponses / requestState to
+        // the provider via the session extensions (SessionContext::input_responses).
+        #[cfg(feature = "protocol-2026-07-28")]
+        let session = {
+            let mut session = session;
+            if let Some(ref mut ctx) = session {
+                if let Some(ref responses) = read_params.input_responses
+                    && let Ok(v) = serde_json::to_value(responses)
+                {
+                    ctx.extensions
+                        .insert("mcp:mrtr:inputResponses".to_string(), v);
+                }
+                if let Some(ref state) = read_params.request_state {
+                    ctx.extensions.insert(
+                        "mcp:mrtr:requestState".to_string(),
+                        Value::String(state.clone()),
+                    );
+                }
+            }
+            session
+        };
+
         // Additional security validation for the specific URI
         if let Some(security_middleware) = &self.security_middleware {
             // Re-validate the URI after parsing (defense in depth)
@@ -715,9 +821,20 @@ impl McpHandler for ResourcesReadHandler {
                 );
             }
 
-            let contents = resource
-                .read(Some(enhanced_params), session.as_ref())
-                .await?;
+            let contents = match resource.read(Some(enhanced_params), session.as_ref()).await {
+                #[cfg(feature = "protocol-2026-07-28")]
+                Err(McpError::InputRequired {
+                    input_requests,
+                    request_state,
+                }) => {
+                    return input_required_to_result(
+                        input_requests,
+                        request_state,
+                        &read_params.meta.client_capabilities,
+                    );
+                }
+                other => other?,
+            };
 
             // Validate content before returning
             if let Some(security_middleware) = &self.security_middleware {
@@ -764,7 +881,20 @@ impl McpHandler for ResourcesReadHandler {
 
         // Call the resource's read method with original params
         let params = Some(serde_json::to_value(&read_params)?);
-        let contents = resource.read(params, session.as_ref()).await?;
+        let contents = match resource.read(params, session.as_ref()).await {
+            #[cfg(feature = "protocol-2026-07-28")]
+            Err(McpError::InputRequired {
+                input_requests,
+                request_state,
+            }) => {
+                return input_required_to_result(
+                    input_requests,
+                    request_state,
+                    &read_params.meta.client_capabilities,
+                );
+            }
+            other => other?,
+        };
 
         // Validate content before returning
         if let Some(security_middleware) = &self.security_middleware {

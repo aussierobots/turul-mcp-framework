@@ -2,9 +2,9 @@
 //! must reach `tools/list` without downgrades, and `tools/call`'s
 //! `structuredContent` must match the advertised `outputSchema` shape.
 //!
-//! The pre-fix pipeline (typed-JsonSchema conversion) destroyed
-//! `oneOf`/`const` compositions and left `$ref`s dangling after `$defs`
-//! stripping; these tests pin the lossless pipeline at the wire.
+//! Pins the lossless pipeline at the wire: 2020-12 compositions
+//! (`oneOf`/`const`) and `$defs`-referenced subschemas must arrive intact,
+//! with no dangling `$ref`.
 //!
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]

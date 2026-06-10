@@ -70,8 +70,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ## Features
 
 - ✅ **MCP 2026-07-28 Streamable HTTP (default)** - Stateless core (`server/discover`, per-request `_meta`, no `Mcp-Session-Id`) with SSE streaming; 2025-11-25 sessionful handshake is opt-in
-- ✅ **Session Management** - UUID v7 session IDs with automatic cleanup
-- ✅ **SSE Resumability** - Last-Event-ID support with event replay
+- ✅ **Session Management** *(2025-11-25 opt-in lane)* - UUID v7 session IDs with automatic cleanup
+- ✅ **SSE Resumability** *(2025-11-25 opt-in lane)* - `Last-Event-ID` event replay on GET SSE; the 2026 default is POST-only and not resumable
 - ✅ **CORS Support** - Browser client compatibility with configurable origins
 - ✅ **Protocol Version Detection** - Automatic feature flags based on client capabilities
 - ✅ **JSON-RPC Dispatch** - Efficient method routing and error handling
@@ -334,7 +334,10 @@ let progress_notification = ProgressNotification {
 broadcaster.send_progress_notification("session-123", progress_notification).await?;
 ```
 
-### Event Replay and Resumability
+### Event Replay and Resumability (2025-11-25 opt-in lane)
+
+The 2026-07-28 default endpoint is POST-only and streams are not resumable;
+this machinery serves the sessionful 2025-11-25 opt-in lane.
 
 ```rust
 use turul_http_mcp_server::{extract_last_event_id, StreamManager};
@@ -434,12 +437,12 @@ curl -X POST http://localhost:3000/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
   -v  # Note the Mcp-Session-Id header in response
 
-# Test SSE streaming
+# Test GET SSE streaming — 2025-11-25 opt-in lane (the 2026 default answers GET with 405)
 curl -N -H "Accept: text/event-stream" \
   -H "Mcp-Session-Id: <session-id>" \
   http://localhost:3000/mcp
 
-# Test event resumability
+# Test event resumability — 2025-11-25 opt-in lane
 curl -N -H "Accept: text/event-stream" \
   -H "Last-Event-ID: event-123" \
   -H "Mcp-Session-Id: <session-id>" \
@@ -505,7 +508,7 @@ let transport = HttpMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-http-mcp-server = { version = "0.3", features = ["sse"] }
+turul-http-mcp-server = { version = "0.4", features = ["sse"] }
 ```
 
 Available features:

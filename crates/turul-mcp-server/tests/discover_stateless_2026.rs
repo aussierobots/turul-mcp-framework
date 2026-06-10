@@ -362,3 +362,77 @@ async fn tools_list_advertises_output_schema() {
         "tools/list must advertise outputSchema for tools that declare one: {echo}"
     );
 }
+
+#[tokio::test]
+async fn completion_complete_dispatches_statelessly() {
+    // completion/complete is part of the 2026 core; with completion enabled
+    // the request must dispatch sessionless and return the CompleteResult
+    // wire shape ({ completion: { values, ... } }).
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("completion-2026-test")
+        .version("0.4.0")
+        .tool(EchoTool::default())
+        .with_completion()
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let client = reqwest::Client::new();
+    for _ in 0..50 {
+        if client.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    // Capability must be advertised…
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 30, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("discover POST");
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert!(
+        body["result"]["capabilities"]["completions"].is_object(),
+        "with_completion() must advertise the completions capability: {body}"
+    );
+
+    // …and the method must answer with the CompleteResult shape.
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "completion/complete")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 31, "method": "completion/complete",
+            "params": {
+                "ref": { "type": "ref/prompt", "name": "example" },
+                "argument": { "name": "arg", "value": "ex" },
+                "_meta": meta()
+            }
+        }))
+        .send()
+        .await
+        .expect("completion POST");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert!(
+        body["result"]["completion"]["values"].is_array(),
+        "CompleteResult must carry completion.values: {body}"
+    );
+}

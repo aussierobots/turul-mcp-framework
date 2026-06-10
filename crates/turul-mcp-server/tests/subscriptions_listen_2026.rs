@@ -402,3 +402,31 @@ async fn listen_ack_omits_unsupported_types() {
         "unsupported types must be omitted from the acknowledgement"
     );
 }
+
+#[tokio::test]
+async fn resources_subscribe_capability_is_advertised_truthfully() {
+    // The 2026 transport serves per-URI resources/updated via
+    // subscriptions/listen, so a server WITH resources must advertise
+    // resources.subscribe = true in server/discover.
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 21, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("server/discover POST");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("json body");
+    assert_eq!(
+        body["result"]["capabilities"]["resources"]["subscribe"], true,
+        "subscriptions/listen serves per-URI resource updates — the capability \
+         must say so: {body}"
+    );
+}

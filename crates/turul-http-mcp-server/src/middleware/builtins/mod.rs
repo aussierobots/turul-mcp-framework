@@ -18,5 +18,5 @@
 //!     .build()?;
 //! ```
 
-// Built-in middleware will be implemented in Phase 4
+// Placeholder module: no built-in middleware ships yet.
 // For now, this module serves as a placeholder

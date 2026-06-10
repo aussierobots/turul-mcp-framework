@@ -34,7 +34,7 @@ The storage layer is **runtime-agnostic** — the `TaskStorage` trait has zero T
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = "0.3"  # InMemory (default)
+turul-mcp-task-storage = "0.4"  # InMemory (default)
 ```
 
 ### In-Memory (Development)
@@ -50,7 +50,7 @@ let storage = Arc::new(InMemoryTaskStorage::new());
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["sqlite"] }
+turul-mcp-task-storage = { version = "0.4", features = ["sqlite"] }
 ```
 
 ```rust,ignore
@@ -68,7 +68,7 @@ let storage = Arc::new(SqliteTaskStorage::with_config(config).await?);
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["postgres"] }
+turul-mcp-task-storage = { version = "0.4", features = ["postgres"] }
 ```
 
 ```rust,ignore
@@ -86,7 +86,7 @@ let storage = Arc::new(PostgresTaskStorage::with_config(config).await?);
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-task-storage = { version = "0.4", features = ["dynamodb"] }
 ```
 
 ```rust,ignore

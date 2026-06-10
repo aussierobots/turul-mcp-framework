@@ -1,8 +1,10 @@
 //! Unified subscription stream for MCP DRAFT-2026-v1.
 //!
-//! `subscriptions/listen` replaces TWO things from 2025-11-25:
-//! - The `resources/subscribe` RPC (per-resource opt-in for updates).
-//! - The HTTP-GET-as-notification-stream side channel.
+//! `subscriptions/listen` is the single opt-in channel for long-lived
+//! change notifications (the spec's Subscriptions pattern; per the schema it
+//! "replaces the former `resources/subscribe` RPC", and on Streamable HTTP it
+//! is the only long-lived notification stream — the endpoint accepts POST
+//! only).
 //!
 //! The client opens one long-lived channel with a [`SubscriptionFilter`]
 //! declaring which notification types it wants; the server replies with a
@@ -42,7 +44,8 @@ pub struct SubscriptionFilter {
     pub resources_list_changed: Option<bool>,
 
     /// Subscribe to per-resource `notifications/resources/updated` for these
-    /// URIs. Replaces the removed `resources/subscribe` RPC.
+    /// URIs (the former `resources/subscribe` RPC's role; that method has no
+    /// binding in this crate's pinned schema).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resource_subscriptions: Option<Vec<String>>,
 }

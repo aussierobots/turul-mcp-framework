@@ -25,7 +25,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-client = "0.3"
+//! turul-mcp-client = "0.4"
 //! tokio = { version = "1.0", features = ["full"] }
 //! ```
 //!
