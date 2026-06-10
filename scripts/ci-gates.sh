@@ -21,6 +21,8 @@ gate_default() {
   echo "  test-build warnings: $n"; [ "$n" = "0" ] || { echo "  FAIL"; fail=1; }
   run "2026 stateless acceptance (real HTTP)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test discover_stateless_2026
+  run "2026 HTTP surface (GET/DELETE 405, session-id ignored)" \
+    cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test stateless_2026_http_surface
   run "protocol-2026 compliance + upstream wire fixtures" \
     cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
   run "bilingual client (not in default-members)" cargo test -p turul-mcp-client

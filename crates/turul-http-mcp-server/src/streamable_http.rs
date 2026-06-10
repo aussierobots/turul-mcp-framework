@@ -176,10 +176,17 @@ impl StreamableHttpContext {
             .unwrap_or_default();
 
         // Extract session ID from Mcp-Session-Id header (note capitalization)
+        #[cfg(feature = "protocol-2025-11-25")]
         let session_id = headers
             .get("Mcp-Session-Id")
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
+
+        // 2026-07-28 stateless core: an `Mcp-Session-Id` header on a request is
+        // ignored — the server neither honors nor echoes session ids
+        // (streamable-http §Backward Compatibility).
+        #[cfg(feature = "protocol-2026-07-28")]
+        let session_id = None;
 
         // Check Accept header for streaming and JSON support
         let accept_header = headers
@@ -501,6 +508,22 @@ impl StreamableHttpHandler {
         if *req.method() == Method::OPTIONS {
             return Response::builder()
                 .status(StatusCode::OK)
+                .body(Full::new(Bytes::new()))
+                .unwrap()
+                .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+        }
+
+        // 2026-07-28 stateless core: the MCP endpoint accepts POST only. Legacy-era
+        // GET (standalone SSE stream, optionally resumed via Last-Event-ID) and
+        // DELETE (session termination) get 405 Method Not Allowed
+        // (streamable-http §Backward Compatibility). Gated ahead of validate() so
+        // legacy-shaped requests get 405, not an Accept/session 400.
+        #[cfg(feature = "protocol-2026-07-28")]
+        if matches!(*req.method(), Method::GET | Method::DELETE) {
+            return Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .header("Allow", "POST, OPTIONS")
+                .header("MCP-Protocol-Version", context.protocol_version.as_str())
                 .body(Full::new(Bytes::new()))
                 .unwrap()
                 .map(|body| body.map_err(|never| match never {}).boxed_unsync());
@@ -1118,6 +1141,9 @@ impl StreamableHttpHandler {
     async fn handle_post_streamable_http<T>(
         &self,
         req: Request<T>,
+        // Mutated only by the 2025-11-25 session lifecycle (initialize mints a
+        // session into the context); the 2026 stateless path never writes it.
+        #[cfg_attr(feature = "protocol-2026-07-28", allow(unused_mut))]
         mut context: StreamableHttpContext,
     ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
     where
@@ -1451,11 +1477,22 @@ impl StreamableHttpHandler {
                         .get("io.modelcontextprotocol/protocolVersion")
                         .and_then(|x| x.as_str());
                     if pv.is_none() {
-                        Some("missing required _meta.io.modelcontextprotocol/protocolVersion".to_string())
+                        Some(
+                            "missing required _meta.io.modelcontextprotocol/protocolVersion"
+                                .to_string(),
+                        )
                     } else if meta.get("io.modelcontextprotocol/clientInfo").is_none() {
-                        Some("missing required _meta.io.modelcontextprotocol/clientInfo".to_string())
-                    } else if meta.get("io.modelcontextprotocol/clientCapabilities").is_none() {
-                        Some("missing required _meta.io.modelcontextprotocol/clientCapabilities".to_string())
+                        Some(
+                            "missing required _meta.io.modelcontextprotocol/clientInfo".to_string(),
+                        )
+                    } else if meta
+                        .get("io.modelcontextprotocol/clientCapabilities")
+                        .is_none()
+                    {
+                        Some(
+                            "missing required _meta.io.modelcontextprotocol/clientCapabilities"
+                                .to_string(),
+                        )
                     } else if pv != Some(header_version) {
                         Some(format!(
                             "_meta protocolVersion '{}' disagrees with MCP-Protocol-Version header '{}'",
@@ -1489,31 +1526,26 @@ impl StreamableHttpHandler {
         }
 
         // The stateless core has no Mcp-Session-Id handshake, so a request is never
-        // rejected for lacking a session. Use a client-pinned session if one was
-        // supplied, otherwise mint an ephemeral session so the dispatch pipeline (which
-        // carries a SessionContext) proceeds unchanged; the client neither sends nor
-        // needs a session id.
+        // rejected for lacking a session. Mint an ephemeral per-request session so
+        // the dispatch pipeline (which carries a SessionContext) proceeds unchanged.
+        // The id is internal only: it is never read from the request (inbound
+        // Mcp-Session-Id is ignored at parse time) and never written to
+        // `context.session_id`, so no response ever echoes a session header.
         #[cfg(feature = "protocol-2026-07-28")]
-        let session_id = match &context.session_id {
-            Some(existing_id) => existing_id.clone(),
-            None => match self
-                .session_storage
-                .create_session(self.server_capabilities.clone())
-                .await
-            {
-                Ok(session_info) => {
-                    context.session_id = Some(session_info.session_id.clone());
-                    session_info.session_id
+        let session_id = match self
+            .session_storage
+            .create_session(self.server_capabilities.clone())
+            .await
+        {
+            Ok(session_info) => session_info.session_id,
+            Err(err) => {
+                error!("Failed to create stateless session: {}", err);
+                return StreamableResponse::Error {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: "Failed to create session".to_string(),
                 }
-                Err(err) => {
-                    error!("Failed to create stateless session: {}", err);
-                    return StreamableResponse::Error {
-                        status: StatusCode::INTERNAL_SERVER_ERROR,
-                        message: "Failed to create session".to_string(),
-                    }
-                    .into_boxed_response(&context);
-                }
-            },
+                .into_boxed_response(&context);
+            }
         };
 
         debug!("Processing streaming request with session: {}", session_id);
@@ -1594,11 +1626,14 @@ impl StreamableHttpHandler {
                     });
                 }
 
-                // Return 202 Accepted with MCP headers
-                Response::builder()
+                // Return 202 Accepted with MCP headers. The stateless 2026 core
+                // never echoes session ids; the 2025 lane keeps the session header.
+                let builder = Response::builder()
                     .status(StatusCode::ACCEPTED)
-                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
-                    .header("Mcp-Session-Id", &session_id)
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str());
+                #[cfg(feature = "protocol-2025-11-25")]
+                let builder = builder.header("Mcp-Session-Id", &session_id);
+                builder
                     .body(
                         Full::new(Bytes::new())
                             .map_err(|never| match never {})
