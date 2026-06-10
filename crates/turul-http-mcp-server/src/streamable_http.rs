@@ -1224,11 +1224,17 @@ impl StreamableHttpHandler {
         // Clients are permitted to send pings before initialization completes.
         // When allowed by config, dispatch through the shared middleware + dispatch pipeline
         // with session=None, so rate-limiting middleware can still block abuse.
+        // 2026-07-28 has no ping (absent from the schema): the bypass is
+        // 2025-only, so on the 2026 path ping flows through header validation
+        // and the unknown-method 404 like any other non-method.
+        #[cfg(feature = "protocol-2025-11-25")]
         let is_sessionless_ping = match &message {
             JsonRpcMessage::Request(req) => req.method == "ping",
             JsonRpcMessage::Notification(notif) => notif.method == "ping",
         } && context.session_id.is_none()
             && self.config.allow_unauthenticated_ping;
+        #[cfg(feature = "protocol-2026-07-28")]
+        let is_sessionless_ping = false;
 
         if is_sessionless_ping {
             return match message {
@@ -1671,6 +1677,36 @@ impl StreamableHttpHandler {
                     )
                     .unwrap();
             }
+        }
+
+        // 2026-07-28: a request for a method this server does not implement →
+        // HTTP 404 + JSON-RPC -32601 (the error body distinguishes this from a
+        // legacy HTTP+SSE server's 404). Methods absent from the 2026 schema
+        // (ping, initialize, tasks/*, logging/setLevel, resources/subscribe) are
+        // simply never registered on a 2026 build, so they land here too.
+        // subscriptions/listen is transport-handled below, not dispatcher-routed.
+        #[cfg(feature = "protocol-2026-07-28")]
+        if let JsonRpcMessage::Request(req) = &message
+            && req.method != turul_mcp_protocol::subscriptions::SUBSCRIPTIONS_LISTEN_METHOD
+            && !self.dispatcher.handlers.contains_key(&req.method)
+            && self.dispatcher.default_handler.is_none()
+        {
+            debug!("Unknown 2026 method '{}' → 404 + -32601", req.method);
+            let err = turul_mcp_json_rpc_server::JsonRpcError::new(
+                Some(req.id.clone()),
+                turul_mcp_json_rpc_server::error::JsonRpcErrorObject::method_not_found(&req.method),
+            );
+            let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .header(CONTENT_TYPE, "application/json")
+                .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                .body(
+                    Full::new(Bytes::from(body))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap();
         }
 
         // The stateless core has no Mcp-Session-Id handshake, so a request is never

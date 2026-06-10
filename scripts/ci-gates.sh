@@ -27,6 +27,8 @@ gate_default() {
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test subscriptions_listen_2026
   run "2026 request-metadata headers (Mcp-Method/Mcp-Name, -32001/-32004)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_headers_2026
+  run "2026 unknown-method mapping (404 + -32601)" \
+    cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test error_mapping_2026
   run "protocol-2026 compliance + upstream wire fixtures" \
     cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
   run "bilingual client (not in default-members)" cargo test -p turul-mcp-client
