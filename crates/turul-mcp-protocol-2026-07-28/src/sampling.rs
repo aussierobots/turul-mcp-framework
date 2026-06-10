@@ -13,11 +13,14 @@
 //! `CreateMessageRequestParams.include_context` values `"thisServer"` and
 //! `"allServers"`. Omit the field or use `"none"`.
 //!
-//! Types NOT deprecated:
-//! - [`Role`] — used outside sampling (e.g. by `Annotations.audience` in `meta`).
-//! - [`ModelPreferences`], [`ToolChoice`], [`ToolChoiceMode`], [`ModelHint`] —
-//!   referenced by the in-spec `sampling/createMessage` shape and the SEP-2322
-//!   MRTR `InputRequest::CreateMessage` variant during the migration window.
+//! [`ModelPreferences`], [`ToolChoice`], and [`ModelHint`] carry their own
+//! schema `@deprecated` markers and are `#[deprecated]` here accordingly;
+//! they remain referenced by the `sampling/createMessage` shape and the
+//! SEP-2322 MRTR `InputRequest::CreateMessage` variant through the migration
+//! window. [`ToolChoiceMode`] has no schema symbol of its own (it binds the
+//! inline `mode` union of the deprecated [`ToolChoice`]) and is left
+//! unmarked. The only genuinely non-deprecated export is [`Role`], which is
+//! used outside sampling (e.g. by `Annotations.audience` in `meta`).
 
 use crate::content::ContentBlock;
 use serde::{Deserialize, Serialize};

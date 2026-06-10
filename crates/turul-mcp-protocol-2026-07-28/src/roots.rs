@@ -10,9 +10,12 @@
 //! Replacement: pass directories or files via tool parameters, resource URIs,
 //! or server configuration.
 //!
-//! Note: the `notifications/roots/list_changed` notification was REMOVED
-//! entirely in DRAFT-2026-v1 (not just deprecated). Only the request/response
-//! surface remains during the 12-month migration window.
+//! Note: `notifications/roots/list_changed` is **absent from this crate's
+//! pinned `schema.ts`** (no `RootsListChangedNotification` binding exists),
+//! unlike the request/response surface above, which is deprecated-but-present
+//! through the 12-month migration window. The upstream lifecycle registry has
+//! not removed any deprecated feature yet — this describes the pinned schema,
+//! not a lifecycle-policy removal.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

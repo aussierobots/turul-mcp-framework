@@ -12,8 +12,10 @@
 //!   `META_KEY_TRACEPARENT` etc. in [`crate::meta`]).
 //!
 //! The per-request log level mechanism ([`crate::meta::RequestMetaObject::log_level`])
-//! is the replacement opt-in. `logging/setLevel` was REMOVED entirely in
-//! DRAFT-2026-v1 — clients now declare desired level per-request.
+//! is the replacement opt-in (itself SEP-2577-deprecated — see above). The
+//! `logging/setLevel` RPC has no binding in this crate's pinned `schema.ts`
+//! (the stateless redesign replaced it with the per-request opt-in); clients
+//! declare the desired level per request.
 //!
 //! The wire-payload types ([`crate::notifications::LoggingMessageNotification`]
 //! and [`crate::notifications::LoggingMessageNotificationParams`]) live in
