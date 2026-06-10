@@ -30,7 +30,6 @@ A comprehensive Rust framework for building Model Context Protocol (MCP) servers
 - **🌐 Transport Flexibility**: Streamable HTTP via StreamableHttpHandler with SSE streaming (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
 - **🔧 Development Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
-- **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
 
 ## Turul MCP vs Turul RPC
 
@@ -214,8 +213,8 @@ curl -X POST http://127.0.0.1:8641/mcp \
 
 **Core Test Servers:**
 ```bash
-# Comprehensive server (all MCP features)
-cargo run --package comprehensive-server -- --port 8002
+# Tools server (test tools)
+cargo run --package tools-test-server -- --port 8002
 
 # Resource server (17 test resources)  
 cargo run --package resource-test-server -- --port 8080
@@ -429,7 +428,7 @@ impl McpMiddleware for AuthMiddleware {
 - **`turul-mcp-protocol-2025-06-18`** - Legacy MCP specification (frozen historical snapshot)
 - **`turul-mcp-derive`** - Procedural macros for all MCP areas
 - **`turul-mcp-builders`** - Runtime builder patterns for dynamic MCP components
-- **`turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
+- **`turul-mcp-json-rpc-server`** - Frozen 0.3.x compatibility shim re-exporting [`turul-rpc`](https://github.com/aussierobots/turul-rpc); the framework crates depend on `turul-rpc` directly (see ADR-025)
 - **`turul-mcp-session-storage`** - Session storage backends (SQLite, PostgreSQL, DynamoDB)
 - **`turul-mcp-task-storage`** - Task storage for long-running operations (InMemory, with pluggable backends)
 - **`turul-mcp-server-state-storage`** - Server-global state for dynamic tool coordination
@@ -505,6 +504,11 @@ impl McpTool for MyTool {
 - **Elicitation** (`ElicitationDefinition`) - Structured user input collection
 - **Notifications** (`NotificationDefinition`) - Real-time event broadcasting
 
+> **2026-07-28 note:** Roots, Sampling, and Logging are deprecated in the 2026-07-28 spec
+> (SEP-2577, earliest removal 2027-07-28). They remain implemented; on the 2026 default
+> the server-initiated forms ride Multi Round-Trip Requests, and `notifications/message`
+> requires the per-request `logLevel` opt-in.
+
 ### Comprehensive Server Builder
 **All MCP areas supported with consistent builder pattern:**
 
@@ -572,16 +576,15 @@ let server = McpServer::builder()
 ### 🏢 Real-World Business Applications
 Development servers for actual business problems:
 
-1. **comprehensive-server** → Development Team Integration Platform
-2. **dynamic-resource-server** → Enterprise API Data Gateway
-3. **logging-server** → Application Audit & Compliance System
-4. **elicitation-server** → Customer Onboarding Platform
-5. **notification-server** → Development Team Alert System
-6. **completion-server** → IDE Auto-Completion Server
-7. **prompts-server** → AI-Assisted Development Prompts
-8. **derive-macro-server** → Code Generation & Template Engine
-9. **calculator-add-\*-server** → Calculator examples (builder, function, derive, manual patterns)
-10. **resources-server** → Development Team Resource Hub
+1. **dynamic-resource-server** → Enterprise API Data Gateway
+2. **audit-trail-server** → Application Audit & Compliance System (SQLite-backed)
+3. **elicitation-server** → Customer Onboarding Platform
+4. **notification-server** → Development Team Alert System
+5. **completion-server** → IDE Auto-Completion Server
+6. **prompts-server** → AI-Assisted Development Prompts
+7. **derive-macro-server** → Code Generation & Template Engine
+8. **calculator-add-\*-server** → Calculator examples (builder, function, derive, manual patterns)
+9. **resources-server** → Development Team Resource Hub
 
 ### 🔧 Framework Demonstrations
 Educational examples showcasing framework patterns:
@@ -589,7 +592,6 @@ Educational examples showcasing framework patterns:
 - **Advanced Features**: stateful-server, pagination-server, tasks-e2e-inmemory-server
 - **Macro System**: derive-macro-server, function-macro-server, function-resource-server
 - **Serverless**: lambda-mcp-server (AWS Lambda with SQS integration)
-- **Testing**: performance-testing (comprehensive benchmarking suite)
 
 ## ☁️ Serverless Support
 
@@ -926,8 +928,9 @@ let client = McpClientBuilder::new()
     .with_transport(Box::new(transport))
     .build();
 
-// Initialize session
-let init_result = client.initialize().await?;
+// Connect — negotiates the wire spec per connection
+// (2026-07-28 `server/discover` first, falls back to 2025-11-25 `initialize`)
+client.connect().await?;
 
 // List available tools
 let tools = client.list_tools().await?;
@@ -996,20 +999,23 @@ curl -X POST http://127.0.0.1:8080/mcp \
 
 ### MCP Session Management Compliance Testing
 
-The framework includes comprehensive compliance testing for MCP session management specification requirements.
+Sessions (and the `Mcp-Session-Id` header) belong to the stateful **2025-11-25** spec;
+the example packages below are pinned to the `protocol-2025-11-25` opt-in in their own
+manifests, so the commands work unchanged on this branch. The default 2026-07-28 build
+is stateless and has no session management to test.
 
 #### Running the Session Management Compliance Test
 
 ```bash
 # 1. Start a server with session storage (choose backend: sqlite, postgres, dynamodb, or inmemory)
-cargo run --example client-initialise-server -- --port 52950 --storage-backend dynamodb --create-tables
+cargo run -p client-initialise-server -- --port 52950 --storage-backend dynamodb --create-tables
 
 # 2. In another terminal, run the comprehensive compliance test (IMPORTANT: include RUST_LOG=info)
-RUST_LOG=info cargo run --example session-management-compliance-test -- http://127.0.0.1:52950/mcp
+RUST_LOG=info cargo run -p session-management-compliance-test -- http://127.0.0.1:52950/mcp
 
 # 3. Alternative: Use different storage backends
-cargo run --example client-initialise-server -- --port 52951 --storage-backend sqlite --create-tables
-RUST_LOG=info cargo run --example session-management-compliance-test -- http://127.0.0.1:52951/mcp
+cargo run -p client-initialise-server -- --port 52951 --storage-backend sqlite --create-tables
+RUST_LOG=info cargo run -p session-management-compliance-test -- http://127.0.0.1:52951/mcp
 ```
 
 ## 🛠️ Development & Testing
@@ -1153,8 +1159,8 @@ build (`--no-default-features --features protocol-2025-11-25`). The default 2026
 build is stateless and does not hold a session-keyed GET SSE stream.
 
 ```bash
-# 1. Start any MCP server with SSE enabled (build with the 2025-11-25 opt-in)
-cargo run --no-default-features --features protocol-2025-11-25 --example prompts-server
+# 1. Start a 2025-11-25-pinned server (the pin lives in the example's own manifest)
+cargo run -p prompts-test-server -- --port 8080
 
 # 2. Get session ID via initialization
 curl -X POST http://127.0.0.1:8080/mcp \
@@ -1180,8 +1186,7 @@ curl -N -H "Accept: text/event-stream" \
 
 ### Enterprise Integration
 - **dynamic-resource-server**: API orchestration across Customer, Inventory, Financial, and HR systems
-- **logging-server**: SOX, PCI DSS, GDPR, and HIPAA compliance reporting
-- **comprehensive-server**: Team collaboration with project management and workflow automation
+- **audit-trail-server**: SOX, PCI DSS, GDPR, and HIPAA compliance reporting
 
 ### Developer Productivity
 - **completion-server**: Context-aware IDE completions for multiple languages and frameworks
@@ -1227,7 +1232,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 ## 📋 Development Status & Current Limitations
 
 ### 🎯 Current Framework State
-- **Phase 6 Complete**: Session-aware resources implemented with full MCP 2025-11-25 compliance
+- **MCP 2026-07-28 adoption (this branch)**: default build targets the 2026-07-28 stateless core; 2025-11-25 remains fully supported as the opt-in stateful line
 - **Examples Validated**: 43 examples build on the 2026-07-28 default; a small 2025-11-25 regression set is pinned to the opt-in
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
 - **Beta Status**: Active development with API stability considerations before 1.0.0
@@ -1240,7 +1245,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 - **CI Environment Testing**: SSE tests require port binding capabilities (graceful fallbacks implemented)
 
 **Features & Integration:**
-- **Resource Subscriptions**: `resources/subscribe` MCP spec feature planned for future implementation
+- **Resource Subscriptions**: on the 2026-07-28 default, resource-update notifications ride the `subscriptions/listen` stream (`resources.subscribe` is advertised); the 2025-11-25 opt-in path does not implement the legacy `resources/subscribe` RPC
 - **Authentication Middleware**: OAuth 2.1 Resource Server support via `turul-mcp-oauth` (JWT validation, Bearer token middleware, `.well-known` metadata)
 - **Cross-platform Compatibility**: Primarily tested on Linux development environments
 
