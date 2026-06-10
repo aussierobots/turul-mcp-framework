@@ -210,9 +210,10 @@ P1 = mediums (spec SHOULDs, fidelity drift, ADR/doc contract drift). P2 = lows.
 
 ### P1 — ADR / docs contract drift (workflow-verified)
 
-- ☑ (2026-06-10, shim cut landed — see ADR-025 revision log) ADR-025: shim still consumed by four non-frozen crates and bumped to 0.4.0,
-  contradicting the "terminal 0.3.39, framework drops the dep at 0.4.0" decision.
-  Either cut the dep now or revise ADR-025.
+- ☑ (2026-06-10) ADR-025 shim: the dep is CUT — all four non-frozen framework
+  crates depend on `turul-rpc` directly, and the shim's manifest is repinned
+  to the terminal `0.3.47` (in-workspace only for the frozen 2025 snapshots
+  and 2025-pinned test/example crates). See ADR-025 revision log.
 - ☑ (2026-06-10, alias dep removed in a0ada8cf) ADR-030/ADR-001/CLAUDE.md claim the bilingual client doesn't import the
   `turul-mcp-protocol` alias — the client manifest pins it with 19 source imports.
 - ☑ ADR-029 prescribes `cargo test --workspace` matrices that cannot compile (§CI surface rewritten 2026-06-10) (feature
