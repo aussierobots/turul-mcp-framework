@@ -209,7 +209,15 @@ P1 = mediums (spec SHOULDs, fidelity drift, ADR/doc contract drift). P2 = lows.
   unification trips the alias mutex — empirically verified).
 - ☑ `docs/plans/2026-07-28-schema-coverage-matrix.md` is stale (STALE banner added 2026-06-10) post Slice A'/A'' and
   the 2026-06-07 re-vendor.
-- ☐ `turul-mcp-oauth`: absorb DCR deprecation / CIMD SHOULD (§1).
+- ☑ (2026-06-10, dispositioned as docs/tests-only) `turul-mcp-oauth`: absorb DCR
+  deprecation / CIMD SHOULD (§1). **Finding:** the live draft assigns the CIMD
+  SHOULD to *authorization servers and MCP clients*; DCR (deprecated, MAY) is
+  likewise AS/client-side. `turul-mcp-oauth` implements the resource-server
+  role only (RFC 9728 PRM + OAuth 2.1 §5.2 token validation, both unchanged) —
+  no CIMD or DCR surface belongs in it, and none was invented. Posture recorded
+  in the crate docs; a wire-shape test pins that the RFC 9728 document carries
+  no client-registration keys. A future full MCP OAuth *client* flow (in
+  `turul-mcp-client` or an app layer) is where client-side CIMD would land.
 
 ### P2 — Lows (64 upheld; do as one sweep slice)
 

@@ -213,6 +213,46 @@ mod tests {
     }
 
     #[test]
+    fn protected_resource_metadata_carries_no_client_registration_surface() {
+        // Role posture: client registration (CIMD / deprecated DCR) is an
+        // authorization-server + client concern. The RFC 9728 document this
+        // resource server publishes must not grow registration keys — a
+        // client discovering this RS gets ONLY resource metadata and the AS
+        // list, and performs registration against the AS.
+        let metadata = ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .unwrap()
+        .with_jwks_uri("https://auth.example.com/.well-known/jwks.json")
+        .with_scopes(vec!["mcp:read".to_string()]);
+
+        let json = serde_json::to_value(&metadata).unwrap();
+        let keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(|k| k.as_str())
+            .collect();
+        for forbidden in [
+            "registration_endpoint",
+            "client_id_metadata_document_supported",
+            "client_id",
+            "client_secret",
+            "redirect_uris",
+        ] {
+            assert!(
+                !keys.contains(&forbidden),
+                "RFC 9728 resource metadata must not carry the registration \
+                 key '{forbidden}' (AS/client concern), got keys: {keys:?}"
+            );
+        }
+        // The RS-role MUSTs stay present.
+        assert!(keys.contains(&"resource"));
+        assert!(keys.contains(&"authorization_servers"));
+    }
+
+    #[test]
     fn test_metadata_url_extracts_origin() {
         // Resource with path -> origin-based URL
         let m = ProtectedResourceMetadata::new(

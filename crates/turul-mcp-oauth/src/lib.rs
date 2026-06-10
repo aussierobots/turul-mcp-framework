@@ -4,6 +4,28 @@
 //! acting as Resource Servers (RS). It does NOT implement an Authorization
 //! Server — tokens are validated against an external AS via JWKS.
 //!
+//! # Authorization-role posture (MCP draft, 2026-07-28 era)
+//!
+//! The MCP authorization spec assigns requirements per OAuth role. This
+//! crate implements the **resource-server role only**:
+//!
+//! - RFC 9728 Protected Resource Metadata (`/.well-known/oauth-protected-resource`)
+//!   — the RS MUST — via [`ProtectedResourceMetadata`] / [`WellKnownOAuthHandler`].
+//! - OAuth 2.1 §5.2 access-token validation with RFC 8707 audience binding
+//!   — via [`JwtValidator`] / [`OAuthResourceMiddleware`].
+//!
+//! **Client ID Metadata Documents** (CIMD,
+//! draft-ietf-oauth-client-id-metadata-document-00) are a SHOULD for
+//! *authorization servers and MCP clients* — client registration never
+//! involves the resource server, so no CIMD surface belongs in this crate.
+//! Applications embedding an AS or building a full MCP OAuth client implement
+//! CIMD there.
+//!
+//! **Dynamic Client Registration** (RFC 7591) is deprecated upstream (MAY,
+//! retained for AS back-compat; not removed — earliest removal 2027-07-28)
+//! and is likewise an AS/client concern. This crate has never implemented a
+//! DCR surface and does not add one.
+//!
 //! # Architecture
 //!
 //! - **`OAuthResourceMiddleware`** — Pre-session middleware that validates
