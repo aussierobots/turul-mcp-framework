@@ -1898,6 +1898,14 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                         serde_json::Value::String(state.clone()),
                     );
                 }
+                // Per-request log opt-in: notifications/message is emitted only
+                // for requests whose _meta declares a logLevel.
+                #[allow(deprecated)]
+                if let Some(ref level) = call_params.meta.log_level
+                    && let Ok(v) = serde_json::to_value(level)
+                {
+                    session.extensions.insert("mcp:logLevel".to_string(), v);
+                }
             }
             ctx
         };

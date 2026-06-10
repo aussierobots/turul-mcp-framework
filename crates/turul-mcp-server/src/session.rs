@@ -437,7 +437,37 @@ impl SessionContext {
         // Use the provided LoggingLevel directly
         let message_level = level;
 
-        // Check if this message should be sent to this session based on its logging level
+        // 2026-07-28: notifications/message is opt-in PER REQUEST — the server
+        // MUST NOT emit it for a request whose _meta lacks
+        // io.modelcontextprotocol/logLevel. The declared level is the threshold
+        // (replaces the removed logging/setLevel session threshold).
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            let request_threshold = self.extensions.get("mcp:logLevel").and_then(|v| {
+                serde_json::from_value::<turul_mcp_protocol::logging::LoggingLevel>(v.clone()).ok()
+            });
+            match request_threshold {
+                None => {
+                    debug!(
+                        "🔕 notifications/message suppressed for session {}: the request                          declared no logLevel",
+                        self.session_id
+                    );
+                    return;
+                }
+                Some(threshold) => {
+                    if !message_level.should_log(threshold) {
+                        debug!(
+                            "🔕 Filtering {:?} message for session {} (request threshold {:?})",
+                            message_level, self.session_id, threshold
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 2025-11-25: filter against the logging/setLevel session threshold.
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.should_log(message_level).await {
             let threshold = self.get_logging_level().await;
             debug!(
@@ -446,12 +476,6 @@ impl SessionContext {
             );
             return;
         }
-
-        let threshold = self.get_logging_level().await;
-        debug!(
-            "📢 Sending {:?} level message to session {} (threshold: {:?})",
-            message_level, self.session_id, threshold
-        );
 
         // Create proper LoggingMessageNotification struct once
         use turul_mcp_protocol::notifications::LoggingMessageNotification;

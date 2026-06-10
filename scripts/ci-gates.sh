@@ -33,6 +33,8 @@ gate_default() {
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mrtr_2026
   run "2026 Mcp-Param-* mirroring (x-mcp-header validation)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_param_2026
+  run "2026 per-request log gating (logLevel opt-in)" \
+    cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test log_gating_2026
   run "protocol-2026 compliance + upstream wire fixtures" \
     cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
   run "bilingual client (not in default-members)" cargo test -p turul-mcp-client

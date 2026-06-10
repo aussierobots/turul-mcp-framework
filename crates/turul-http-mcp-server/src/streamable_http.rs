@@ -2232,6 +2232,16 @@ impl StreamableHttpHandler {
                             // Handle explicit shutdown signal from main task
                             _ = &mut shutdown_rx => {
                                 debug!("🔍 Progress task: shutdown_rx branch fired! Received explicit shutdown signal for session: {}", session_id_clone);
+                                // Flush events already queued: request-scoped
+                                // notifications were emitted (and awaited)
+                                // before the tool returned, so they must reach
+                                // the wire ahead of the final response frame.
+                                while let Ok(sse_event) = progress_rx.try_recv() {
+                                    let sse_chunk = sse_event.format();
+                                    if sender_clone.send(Ok(Bytes::from(sse_chunk))).is_err() {
+                                        break;
+                                    }
+                                }
                                 break;
                             }
                         }
@@ -2338,12 +2348,10 @@ impl StreamableHttpHandler {
                 let final_chunk =
                     format!("data: {}\n\n", serde_json::to_string(&final_json).unwrap());
 
-                if let Err(err) = sender.send(Ok(Bytes::from(final_chunk))) {
-                    error!("Failed to send SSE final chunk: {}", err);
-                }
-
-                // CRITICAL: Send explicit shutdown signal to progress forwarding task (SSE only)
-                // This breaks it out of the progress_rx.recv().await loop immediately
+                // Shut down (and flush) the progress forwarding task BEFORE the
+                // final frame goes out: request-scoped notifications precede the
+                // final response on the wire, and the final response terminates
+                // the stream.
                 if let Some(shutdown_tx) = shutdown_tx {
                     debug!(
                         "🔍 Main task sending shutdown signal to progress task for request: {:?}",
@@ -2398,6 +2406,10 @@ impl StreamableHttpHandler {
                         "🔍 Main task: no shutdown_tx available (not SSE client) for request: {:?}",
                         request_id
                     );
+                }
+
+                if let Err(err) = sender.send(Ok(Bytes::from(final_chunk))) {
+                    error!("Failed to send SSE final chunk: {}", err);
                 }
             } else {
                 // For JSON-only clients, send as regular JSON-RPC response (no streaming frames)
