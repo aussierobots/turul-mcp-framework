@@ -336,6 +336,27 @@ impl SessionContext {
         }
     }
 
+    /// MRTR (SEP-2322): the `inputResponses` the client attached when retrying
+    /// the original request after an `InputRequiredResult`. Present only on
+    /// the retry leg of a 2026 `tools/call`; the tools/call handler populates
+    /// it from `CallToolRequestParams.input_responses`.
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub fn input_responses(&self) -> Option<turul_mcp_protocol::input_required::InputResponses> {
+        self.extensions
+            .get("mcp:mrtr:inputResponses")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    }
+
+    /// MRTR (SEP-2322): the `requestState` echoed verbatim by the client on
+    /// the retry. Treat as attacker-controlled — verify integrity (e.g. HMAC)
+    /// before letting it influence authorization decisions.
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub fn mrtr_request_state(&self) -> Option<String> {
+        self.extensions
+            .get("mcp:mrtr:requestState")
+            .and_then(|v| v.as_str().map(String::from))
+    }
+
     /// Send a custom notification to this session (async)
     pub async fn notify(&self, event: SessionEvent) {
         debug!(

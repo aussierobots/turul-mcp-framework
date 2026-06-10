@@ -1863,6 +1863,30 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             None
         };
 
+        // MRTR retry leg (SEP-2322): surface the client's inputResponses and
+        // echoed requestState to the tool via the session extensions —
+        // SessionContext::input_responses() / mrtr_request_state().
+        #[cfg(feature = "protocol-2026-07-28")]
+        let mcp_session_context = {
+            let mut ctx = mcp_session_context;
+            if let Some(ref mut session) = ctx {
+                if let Some(ref responses) = call_params.input_responses
+                    && let Ok(v) = serde_json::to_value(responses)
+                {
+                    session
+                        .extensions
+                        .insert("mcp:mrtr:inputResponses".to_string(), v);
+                }
+                if let Some(ref state) = call_params.request_state {
+                    session.extensions.insert(
+                        "mcp:mrtr:requestState".to_string(),
+                        serde_json::Value::String(state.clone()),
+                    );
+                }
+            }
+            ctx
+        };
+
         // Build arguments Value
         let args = call_params
             .arguments
@@ -2016,7 +2040,62 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         }
 
         // Synchronous execution (no task augmentation or no runtime)
-        match tool.call(args, mcp_session_context).await {
+        let call_result = tool.call(args, mcp_session_context).await;
+
+        // MRTR production (SEP-2322): a tool returning McpError::InputRequired
+        // is NOT an error — convert to a successful InputRequiredResult, after
+        // enforcing that every input request targets a capability the client
+        // declared in this request's _meta clientCapabilities (servers MUST
+        // NOT request undeclared capabilities → -32003, HTTP 400).
+        #[cfg(feature = "protocol-2026-07-28")]
+        let call_result = match call_result {
+            Err(McpError::InputRequired {
+                input_requests,
+                request_state,
+            }) => {
+                use turul_mcp_protocol::input_required::{InputRequest, InputRequiredResult};
+
+                if let Some(ref requests) = input_requests {
+                    let caps = &call_params.meta.client_capabilities;
+                    for request in requests.values() {
+                        #[allow(deprecated)]
+                        let missing = match request {
+                            InputRequest::Elicit(_) if caps.elicitation.is_none() => {
+                                Some(serde_json::json!({ "elicitation": {} }))
+                            }
+                            InputRequest::CreateMessage(_) if caps.sampling.is_none() => {
+                                Some(serde_json::json!({ "sampling": {} }))
+                            }
+                            InputRequest::ListRoots(_) if caps.roots.is_none() => {
+                                Some(serde_json::json!({ "roots": {} }))
+                            }
+                            _ => None,
+                        };
+                        if let Some(required) = missing {
+                            return Err(McpError::MissingRequiredClientCapability { required });
+                        }
+                    }
+                }
+
+                let result = match (input_requests, request_state) {
+                    (Some(requests), Some(state)) => {
+                        InputRequiredResult::with_requests_and_state(requests, state)
+                    }
+                    (Some(requests), None) => InputRequiredResult::with_requests(requests),
+                    (None, Some(state)) => InputRequiredResult::with_state(state),
+                    (None, None) => {
+                        // Schema invariant: at least one field must be present.
+                        return Err(McpError::ToolExecutionError(
+                            "InputRequired with neither inputRequests nor requestState".into(),
+                        ));
+                    }
+                };
+                return serde_json::to_value(result).map_err(McpError::SerializationError);
+            }
+            other => other,
+        };
+
+        match call_result {
             Ok(response) => serde_json::to_value(response).map_err(McpError::SerializationError),
             Err(error_msg) => {
                 error!("Tool execution error: {}", error_msg);

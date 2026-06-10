@@ -37,6 +37,17 @@ pub enum McpClientError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// MRTR (SEP-2322): the server returned `resultType: "input_required"`.
+    /// Gather the requested inputs and retry the original call with
+    /// `call_tool_with_input_responses`, echoing `request_state` verbatim.
+    #[error("Input required: the server needs client input before completing")]
+    InputRequired {
+        /// The server's `inputRequests` map (id → elicit/sampling/roots request).
+        input_requests: Option<serde_json::Value>,
+        /// Opaque state to echo verbatim on the retry.
+        request_state: Option<String>,
+    },
+
     /// Timeout errors
     #[error("Operation timed out")]
     Timeout,

@@ -807,6 +807,7 @@ impl McpClient {
         let meta = crate::protocol::v2026_07_28::request_meta(
             &self.config.client_info.name,
             &self.config.client_info.version,
+            &self.config.declared_capabilities,
         );
         let request = self.build_request(
             "tools/list",
@@ -876,6 +877,7 @@ impl McpClient {
         let meta = crate::protocol::v2026_07_28::request_meta(
             &self.config.client_info.name,
             &self.config.client_info.version,
+            &self.config.declared_capabilities,
         );
         let request = self.build_request(
             method,
@@ -931,6 +933,43 @@ impl McpClient {
             "Tool call completed"
         );
         Ok(call_response)
+    }
+
+    /// Retry a `tools/call` after an `InputRequired` outcome (MRTR, SEP-2322):
+    /// re-issues the ORIGINAL request (same name/arguments) with the gathered
+    /// `input_responses` and the server's `request_state` echoed verbatim,
+    /// under a fresh JSON-RPC id. 2026-07-28 connections only.
+    pub async fn call_tool_with_input_responses(
+        &self,
+        name: &str,
+        arguments: Value,
+        input_responses: Value,
+        request_state: Option<String>,
+    ) -> McpClientResult<CallToolResult> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let mut extra = json!({
+                "name": name,
+                "arguments": arguments,
+                "inputResponses": input_responses,
+            });
+            if let (Some(obj), Some(state)) = (extra.as_object_mut(), request_state) {
+                obj.insert("requestState".to_string(), Value::String(state));
+            }
+            return self
+                .send_2026_07_28(
+                    "tools/call",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_call_tool,
+                )
+                .await;
+        }
+
+        let _ = (name, arguments, input_responses, request_state);
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "MRTR input responses require a 2026-07-28 connection".to_string(),
+        )
+        .into())
     }
 
     /// List available resources (returns cached result if available)

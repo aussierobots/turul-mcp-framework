@@ -12,12 +12,44 @@ use serde_json::Value;
 use turul_mcp_protocol_2026_07_28 as p;
 
 /// Build the per-request `_meta` object required by the 2026 stateless core.
-pub(crate) fn request_meta(client_name: &str, client_version: &str) -> p::meta::RequestMetaObject {
+/// Capabilities are declared per request (servers MUST NOT infer them from
+/// prior requests), translated from the config-level declarations.
+pub(crate) fn request_meta(
+    client_name: &str,
+    client_version: &str,
+    declared: &crate::config::DeclaredCapabilities,
+) -> p::meta::RequestMetaObject {
+    #[allow(deprecated)]
+    let capabilities = p::initialize::ClientCapabilities {
+        elicitation: declared
+            .elicitation
+            .then(p::initialize::ElicitationCapabilities::default),
+        sampling: declared
+            .sampling
+            .then(p::initialize::SamplingCapabilities::default),
+        roots: declared.roots.then(Default::default),
+        ..Default::default()
+    };
     p::meta::RequestMetaObject::new(
         p::MCP_VERSION,
         p::initialize::Implementation::new(client_name.to_string(), client_version.to_string()),
-        p::initialize::ClientCapabilities::default(),
+        capabilities,
     )
+}
+
+/// `resultType` discriminator check for MRTR-capable methods.
+pub(crate) fn input_required_outcome(result: &Value) -> Option<crate::error::McpClientError> {
+    if result.get("resultType").and_then(|v| v.as_str()) == Some("input_required") {
+        Some(crate::error::McpClientError::InputRequired {
+            input_requests: result.get("inputRequests").cloned(),
+            request_state: result
+                .get("requestState")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+        })
+    } else {
+        None
+    }
 }
 
 /// Build an operation's params object with the required `_meta` merged in. `extra`
@@ -53,6 +85,12 @@ pub(crate) fn parse_list_tools(
 pub(crate) fn parse_call_tool(
     result: &Value,
 ) -> McpClientResult<turul_mcp_protocol_2025_11_25::CallToolResult> {
+    // MRTR (SEP-2322): an input_required result is not a CallToolResult —
+    // surface it so the caller can gather inputs and retry with
+    // `call_tool_with_input_responses`.
+    if let Some(input_required) = input_required_outcome(result) {
+        return Err(input_required);
+    }
     let r: p::tools::CallToolResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }

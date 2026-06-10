@@ -322,13 +322,15 @@ impl SessionManager {
         self.session.write().await.update_activity();
     }
 
-    /// Get client capabilities for initialization
+    /// Get client capabilities for initialization, from the config-level
+    /// declarations (all absent unless the application opted in).
     pub fn create_client_capabilities(&self) -> ClientCapabilities {
+        let declared = &self.config.declared_capabilities;
         ClientCapabilities {
             experimental: None,
-            sampling: None,
-            elicitation: None,
-            roots: None,
+            sampling: declared.sampling.then(Default::default),
+            elicitation: declared.elicitation.then(Default::default),
+            roots: declared.roots.then(Default::default),
             tasks: None,
         }
     }

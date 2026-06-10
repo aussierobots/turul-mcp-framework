@@ -30,6 +30,23 @@ pub struct ClientConfig {
     /// 404/405 from `server/discover` (for gateways that return those for unknown
     /// methods). Off by default; enabling it weakens protocol-downgrade resistance.
     pub allow_legacy_gateway_fallback: bool,
+
+    /// Capabilities this client declares to servers — in the 2025 `initialize`
+    /// handshake and in every 2026 request's `_meta` `clientCapabilities`.
+    /// All off by default: declare only what the application actually handles,
+    /// since servers may send MRTR input requests for declared capabilities.
+    pub declared_capabilities: DeclaredCapabilities,
+}
+
+/// Client-side capability declarations (see [`ClientConfig::declared_capabilities`]).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DeclaredCapabilities {
+    /// Can answer `elicitation/create` input requests (MRTR, SEP-2322).
+    pub elicitation: bool,
+    /// Can answer `sampling/createMessage` input requests (deprecated per SEP-2577).
+    pub sampling: bool,
+    /// Can answer `roots/list` input requests (deprecated per SEP-2577).
+    pub roots: bool,
 }
 
 /// Client identification information

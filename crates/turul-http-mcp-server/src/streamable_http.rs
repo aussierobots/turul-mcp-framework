@@ -2106,6 +2106,46 @@ impl StreamableHttpHandler {
         let wants_sse = context.should_use_sse(&request.method);
         let connection_id = format!("post-{}", uuid::Uuid::now_v7().as_simple());
 
+        // 2026 + JSON framing: dispatch inline so the HTTP status can reflect
+        // the JSON-RPC outcome. MissingRequiredClientCapabilityError (-32003)
+        // MUST ride HTTP 400 per its schema; the chunked-channel path below
+        // commits 200 before dispatch completes and cannot retro-status.
+        // (SSE-framed responses inherently stay 200 — errors ride the stream.)
+        #[cfg(feature = "protocol-2026-07-28")]
+        if !wants_sse {
+            let (response, _) = self
+                .run_middleware_and_dispatch(
+                    request,
+                    context.headers.clone(),
+                    Some(session_context),
+                    pre_session_extensions,
+                )
+                .await;
+            let status = match &response {
+                turul_mcp_json_rpc_server::JsonRpcResponse::Error(err)
+                    if err.error.code == -32003 =>
+                {
+                    StatusCode::BAD_REQUEST
+                }
+                _ => StatusCode::OK,
+            };
+            let body_json = serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
+            let mut http_response = Response::builder()
+                .status(status)
+                .header(CONTENT_TYPE, "application/json")
+                .body(
+                    Full::new(Bytes::from(body_json))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap();
+            let mcp_headers = context.response_headers();
+            for (key, value) in mcp_headers.iter() {
+                http_response.headers_mut().insert(key, value.clone());
+            }
+            return http_response;
+        }
+
         // Progress forwarding only for SSE clients
         let (shutdown_tx, completion_rx) = if wants_sse {
             // Create shutdown signal for progress task (critical for no-progress-events case)

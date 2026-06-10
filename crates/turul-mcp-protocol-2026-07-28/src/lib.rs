@@ -319,6 +319,24 @@ pub enum McpError {
         /// The protocol version that was requested by the client.
         requested: String,
     },
+
+    /// MRTR (SEP-2322): the handler needs client input before it can complete.
+    ///
+    /// NOT a wire error — this rides the error channel only because
+    /// `McpResult` is the single return path available to tool/handler
+    /// implementations. The `tools/call` handler converts it into a successful
+    /// `InputRequiredResult` (`resultType: "input_required"`). Per schema, at
+    /// least one of `input_requests` / `request_state` must be present.
+    /// `request_state` is echoed verbatim by clients and MUST be treated as
+    /// attacker-controlled on the retry — sign or encrypt it (e.g. HMAC) if it
+    /// influences authorization.
+    #[error("Input required (MRTR): handler needs client input before completing")]
+    InputRequired {
+        /// Requests the client must fulfill before retrying the original call.
+        input_requests: Option<crate::input_required::InputRequests>,
+        /// Opaque state blob the client echoes verbatim in the retry.
+        request_state: Option<String>,
+    },
 }
 
 impl From<String> for McpError {
@@ -471,6 +489,14 @@ impl McpError {
                     "requested": requested,
                 })),
             ),
+
+            // MRTR sentinel — the tools/call handler converts it to an
+            // InputRequiredResult before dispatch ever serializes an error.
+            // Reaching this arm means a handler emitted it on a method with
+            // no MRTR conversion; surface as an internal error.
+            McpError::InputRequired { .. } => JsonRpcErrorObject::internal_error(Some(
+                "InputRequired escaped MRTR conversion (handler bug)".to_string(),
+            )),
 
             // Access and execution errors
             McpError::ToolExecutionError(msg) => JsonRpcErrorObject::server_error(

@@ -306,8 +306,17 @@ impl HasElicitationHandling for DynamicElicitation {
                         }
                     }
                     PrimitiveSchemaDefinition::Enum(enum_schema) => {
+                        // 2026: EnumSchema is a union (single/multi-select +
+                        // legacy); 2025: the flat legacy struct.
+                        #[cfg(feature = "protocol-2026-07-28")]
                         let allowed = enum_schema.allowed_values();
-                        if enum_schema.is_multi_select() {
+                        #[cfg(feature = "protocol-2025-11-25")]
+                        let allowed = enum_schema.enum_values.clone();
+                        #[cfg(feature = "protocol-2026-07-28")]
+                        let multi = enum_schema.is_multi_select();
+                        #[cfg(feature = "protocol-2025-11-25")]
+                        let multi = false;
+                        if multi {
                             let Some(items) = value.as_array() else {
                                 return Err(format!(
                                     "Field '{}' must be an array of enum values",
