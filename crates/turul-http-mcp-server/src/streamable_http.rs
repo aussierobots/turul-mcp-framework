@@ -1334,6 +1334,136 @@ impl StreamableHttpHandler {
             None
         };
 
+        // 2026-07-28 §Server Validation: required request-metadata headers. Runs
+        // AFTER the pre-session auth phase so authentication challenges (401)
+        // take precedence over header-validation failures (400).
+        // Every POST MUST carry MCP-Protocol-Version (this build supports no
+        // pre-2025-06-18 clients, so an absent header is rejected) and Mcp-Method
+        // matching the body method; tools/call, resources/read, and prompts/get
+        // additionally require Mcp-Name matching params.name / params.uri.
+        // Failures → HTTP 400 + JSON-RPC -32001 HeaderMismatch (id-less when the
+        // body is a notification). Header names compare case-insensitively
+        // (hyper lowercases them in `context.headers`); values are case-sensitive.
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            let body_method = match &message {
+                JsonRpcMessage::Request(r) => r.method.as_str(),
+                JsonRpcMessage::Notification(n) => n.method.as_str(),
+            };
+            let header = |name: &str| context.headers.get(name).map(String::as_str);
+            let mut failure: Option<String> = None;
+
+            // Version negotiation: a requested version this build does not
+            // implement (unknown or known-but-unsupported) → 400 +
+            // UnsupportedProtocolVersionError (-32004) listing the supported set.
+            if let Some(requested) = header("mcp-protocol-version")
+                && requested != turul_mcp_protocol::MCP_VERSION
+            {
+                warn!(
+                    "Rejecting 2026 request: unsupported MCP-Protocol-Version '{}'",
+                    requested
+                );
+                let id = match &message {
+                    JsonRpcMessage::Request(r) => Some(r.id.clone()),
+                    JsonRpcMessage::Notification(_) => None,
+                };
+                let err_obj = turul_mcp_protocol::McpError::UnsupportedProtocolVersion {
+                    supported: vec![turul_mcp_protocol::MCP_VERSION.to_string()],
+                    requested: requested.to_string(),
+                }
+                .to_error_object();
+                let err = turul_mcp_json_rpc_server::JsonRpcError::new(id, err_obj);
+                let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", turul_mcp_protocol::MCP_VERSION)
+                    .body(
+                        Full::new(Bytes::from(body))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap();
+            }
+
+            if header("mcp-protocol-version").is_none() {
+                failure = Some("missing required MCP-Protocol-Version header".to_string());
+            } else {
+                match header("mcp-method") {
+                    None => {
+                        failure = Some("missing required Mcp-Method header".to_string());
+                    }
+                    Some(method_header) if method_header != body_method => {
+                        failure = Some(format!(
+                            "Mcp-Method header value '{method_header}' does not match body method '{body_method}'"
+                        ));
+                    }
+                    Some(_) => {
+                        // Mcp-Name mirrors params.name (tools/call, prompts/get)
+                        // or params.uri (resources/read).
+                        let body_name = if let JsonRpcMessage::Request(r) = &message {
+                            let params =
+                                serde_json::to_value(&r.params).unwrap_or(serde_json::Value::Null);
+                            match body_method {
+                                "tools/call" | "prompts/get" => params
+                                    .get("name")
+                                    .and_then(|v| v.as_str())
+                                    .map(String::from),
+                                "resources/read" => {
+                                    params.get("uri").and_then(|v| v.as_str()).map(String::from)
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
+                        if let Some(expected) = body_name {
+                            match header("mcp-name") {
+                                None => {
+                                    failure = Some(format!(
+                                        "missing required Mcp-Name header for {body_method}"
+                                    ));
+                                }
+                                Some(name_header) if name_header != expected => {
+                                    failure = Some(format!(
+                                        "Mcp-Name header value '{name_header}' does not match body value '{expected}'"
+                                    ));
+                                }
+                                Some(_) => {}
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let Some(reason) = failure {
+                warn!("Rejecting 2026 request (header validation): {}", reason);
+                let id = match &message {
+                    JsonRpcMessage::Request(r) => Some(r.id.clone()),
+                    JsonRpcMessage::Notification(_) => None,
+                };
+                let err = turul_mcp_json_rpc_server::JsonRpcError::new(
+                    id,
+                    turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                        turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
+                        &format!("Header mismatch: {reason}"),
+                        None::<serde_json::Value>,
+                    ),
+                );
+                let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(
+                        Full::new(Bytes::from(body))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap();
+            }
+        }
+
         // Validate session requirements based on method (2025-11-25 stateful lifecycle).
         #[cfg(feature = "protocol-2025-11-25")]
         let session_id = match &message {
@@ -1465,52 +1595,70 @@ impl StreamableHttpHandler {
 
         // 2026-07-28: every request MUST carry a per-request `_meta` (RequestMetaObject)
         // with protocolVersion/clientInfo/clientCapabilities (schema: RequestParams._meta
-        // is required), and its protocolVersion MUST match the MCP-Protocol-Version header.
-        // Reject -32602 (HTTP 400) on a missing/incomplete `_meta` or a header/body mismatch.
+        // is required). Missing/incomplete `_meta` → -32602 (HTTP 400); a `_meta`
+        // protocolVersion that disagrees with the (already validated) header is a
+        // header-validation failure → -32001 HeaderMismatch (HTTP 400).
         #[cfg(feature = "protocol-2026-07-28")]
         if let JsonRpcMessage::Request(req) = &message {
             let v = serde_json::to_value(req).unwrap_or(serde_json::Value::Null);
             let header_version = context.protocol_version.as_str();
+            // (reason, is_header_mismatch)
             let reason = match v.get("params").and_then(|p| p.get("_meta")) {
                 Some(meta) if meta.is_object() => {
                     let pv = meta
                         .get("io.modelcontextprotocol/protocolVersion")
                         .and_then(|x| x.as_str());
                     if pv.is_none() {
-                        Some(
+                        Some((
                             "missing required _meta.io.modelcontextprotocol/protocolVersion"
                                 .to_string(),
-                        )
+                            false,
+                        ))
                     } else if meta.get("io.modelcontextprotocol/clientInfo").is_none() {
-                        Some(
+                        Some((
                             "missing required _meta.io.modelcontextprotocol/clientInfo".to_string(),
-                        )
+                            false,
+                        ))
                     } else if meta
                         .get("io.modelcontextprotocol/clientCapabilities")
                         .is_none()
                     {
-                        Some(
+                        Some((
                             "missing required _meta.io.modelcontextprotocol/clientCapabilities"
                                 .to_string(),
-                        )
+                            false,
+                        ))
                     } else if pv != Some(header_version) {
-                        Some(format!(
-                            "_meta protocolVersion '{}' disagrees with MCP-Protocol-Version header '{}'",
-                            pv.unwrap_or(""),
-                            header_version
+                        Some((
+                            format!(
+                                "_meta protocolVersion '{}' does not match MCP-Protocol-Version header '{}'",
+                                pv.unwrap_or(""),
+                                header_version
+                            ),
+                            true,
                         ))
                     } else {
                         None
                     }
                 }
-                _ => Some("missing required params._meta (RequestMetaObject)".to_string()),
+                _ => Some((
+                    "missing required params._meta (RequestMetaObject)".to_string(),
+                    false,
+                )),
             };
-            if let Some(reason) = reason {
+            if let Some((reason, is_header_mismatch)) = reason {
                 warn!("Rejecting 2026 request (method={}): {}", req.method, reason);
-                let err = turul_mcp_json_rpc_server::JsonRpcError::new(
-                    Some(req.id.clone()),
-                    turul_mcp_json_rpc_server::error::JsonRpcErrorObject::invalid_params(&reason),
-                );
+                let err_obj = if is_header_mismatch {
+                    turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                        turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
+                        &format!("Header mismatch: {reason}"),
+                        None::<serde_json::Value>,
+                    )
+                } else {
+                    turul_mcp_json_rpc_server::error::JsonRpcErrorObject::invalid_params(&reason)
+                };
+                let err =
+                    turul_mcp_json_rpc_server::JsonRpcError::new(Some(req.id.clone()), err_obj);
                 let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
                 return Response::builder()
                     .status(StatusCode::BAD_REQUEST)

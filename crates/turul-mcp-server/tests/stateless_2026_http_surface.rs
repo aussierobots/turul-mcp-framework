@@ -166,6 +166,9 @@ async fn inbound_mcp_session_id_is_ignored_and_never_echoed() {
     let resp = client
         .post(&url)
         .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "echo")
         .header("Mcp-Session-Id", "ffffffffffffffffffffffffffffffff")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -204,6 +207,8 @@ async fn responses_never_mint_session_ids() {
     let resp = client
         .post(&url)
         .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/list")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/list",
             "params": { "_meta": meta() }
@@ -221,6 +226,8 @@ async fn responses_never_mint_session_ids() {
     let resp = client
         .post(&url)
         .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "notifications/progress")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "method": "notifications/progress",
             "params": {

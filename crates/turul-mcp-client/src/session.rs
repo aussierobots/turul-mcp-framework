@@ -11,7 +11,7 @@ use tracing::{debug, info, warn};
 
 use crate::config::ClientConfig;
 use crate::error::{McpClientResult, SessionError};
-use turul_mcp_protocol::{
+use turul_mcp_protocol_2025_11_25::{
     ClientCapabilities, Implementation, InitializeRequest, ServerCapabilities,
 };
 

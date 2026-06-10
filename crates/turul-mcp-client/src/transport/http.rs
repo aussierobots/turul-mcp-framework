@@ -212,6 +212,35 @@ impl HttpTransport {
         format!("req_{}", counter)
     }
 
+    /// SEP-2243 request-metadata headers, emitted on 2026-07-28 connections:
+    /// mirror the body's `method` into `Mcp-Method` (all requests and
+    /// notifications) and `params.name` / `params.uri` into `Mcp-Name` for
+    /// `tools/call`, `prompts/get`, and `resources/read`. 2025-11-25
+    /// connections keep their original wire shape (no extra headers).
+    fn apply_request_metadata_headers(
+        &self,
+        mut builder: reqwest::RequestBuilder,
+        message: &Value,
+    ) -> reqwest::RequestBuilder {
+        if *self.protocol_version.read() != "2026-07-28" {
+            return builder;
+        }
+        if let Some(method) = message.get("method").and_then(|m| m.as_str()) {
+            builder = builder.header("Mcp-Method", method);
+            let name = match method {
+                "tools/call" | "prompts/get" => {
+                    message.pointer("/params/name").and_then(|v| v.as_str())
+                }
+                "resources/read" => message.pointer("/params/uri").and_then(|v| v.as_str()),
+                _ => None,
+            };
+            if let Some(name) = name {
+                builder = builder.header("Mcp-Name", name);
+            }
+        }
+        builder
+    }
+
     /// Apply the live `Authorization` override (if any) to a `RequestBuilder`.
     /// Per-request headers override `default_headers` of the same name in
     /// reqwest, so this transparently supersedes any bearer baked in via
@@ -621,6 +650,7 @@ impl Transport for HttpTransport {
             .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
+        req_builder = self.apply_request_metadata_headers(req_builder, &request);
         req_builder = self.apply_auth_override(req_builder);
 
         // Include session ID if we have one
@@ -689,6 +719,7 @@ impl Transport for HttpTransport {
             .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
+        req_builder = self.apply_request_metadata_headers(req_builder, &request);
         req_builder = self.apply_auth_override(req_builder);
 
         // Include session ID if we have one
@@ -746,6 +777,7 @@ impl Transport for HttpTransport {
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
+        req_builder = self.apply_request_metadata_headers(req_builder, &notification);
         req_builder = self.apply_auth_override(req_builder);
 
         // Include session ID if we have one

@@ -59,9 +59,14 @@ pub(crate) enum ProbeDecision {
     Abort(String),
 }
 
-/// JSON-RPC "Method not found" — the only error that signals a pre-2026 server
-/// (one that lacks the `server/discover` method entirely).
+/// JSON-RPC "Method not found" — signals a pre-2026 server (one that lacks the
+/// `server/discover` method entirely).
 const METHOD_NOT_FOUND: i64 = -32601;
+
+/// JSON-RPC `UnsupportedProtocolVersionError` — a modern server's structured
+/// refusal of the probe's requested version (HTTP 400 body). The probe always
+/// requests 2026-07-28, so this code means "this server does not speak 2026".
+const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32004;
 
 /// Decide the negotiation action from a `server/discover` probe outcome.
 ///
@@ -80,6 +85,11 @@ pub(crate) fn classify_probe(
 
         // Method Not Found = the server has no `server/discover` → it is older.
         DiscoverProbe::JsonRpcError(METHOD_NOT_FOUND) => ProbeDecision::FallbackTo2025,
+
+        // UnsupportedProtocolVersionError = the server validated the probe's
+        // requested 2026-07-28 and declined it — the spec's structured
+        // negotiation signal to retry with another version. Fall back to 2025.
+        DiscoverProbe::JsonRpcError(UNSUPPORTED_PROTOCOL_VERSION) => ProbeDecision::FallbackTo2025,
 
         // Any other JSON-RPC error means the server UNDERSTOOD `server/discover`
         // and rejected it for an unrelated reason — not a version signal.
@@ -120,6 +130,16 @@ mod tests {
         assert_eq!(
             classify_probe(DiscoverProbe::Discovered, false),
             ProbeDecision::Use2026
+        );
+    }
+
+    #[test]
+    fn unsupported_protocol_version_falls_back_to_2025() {
+        // -32004 in response to the 2026-07-28 probe = the server's structured
+        // "I don't speak 2026" — the spec's negotiation signal to retry lower.
+        assert_eq!(
+            classify_probe(DiscoverProbe::JsonRpcError(-32004), false),
+            ProbeDecision::FallbackTo2025
         );
     }
 

@@ -82,6 +82,8 @@ async fn server_discover_answers_without_a_session() {
     let resp = client
         .post(&url)
         .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "server/discover",
             "params": { "_meta": meta() }
@@ -122,6 +124,9 @@ async fn tools_call_dispatches_without_session_handshake() {
     let resp = client
         .post(&url)
         .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "echo")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 2, "method": "tools/call",
             "params": {
@@ -159,6 +164,8 @@ async fn list_request(url: &str, rpc_method: &str) -> serde_json::Value {
     let resp = client
         .post(url)
         .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", rpc_method)
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 9, "method": rpc_method,
             "params": { "_meta": meta() }
@@ -210,18 +217,20 @@ async fn prompts_list_dispatches_statelessly_with_cacheable_result() {
     );
 }
 
-/// POST `body`, asserting the 2026 server rejects it with HTTP 400 + JSON-RPC -32602.
-async fn assert_rejected_invalid_params(
-    url: &str,
-    header_version: Option<&str>,
-    body: serde_json::Value,
-) {
+/// POST `body` (with valid standard headers), asserting the 2026 server
+/// rejects it with HTTP 400 + JSON-RPC -32602.
+async fn assert_rejected_invalid_params(url: &str, body: serde_json::Value) {
     let client = reqwest::Client::new();
-    let mut req = client.post(url).header("Accept", "application/json");
-    if let Some(v) = header_version {
-        req = req.header("MCP-Protocol-Version", v);
-    }
-    let resp = req.json(&body).send().await.expect("POST");
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "echo")
+        .json(&body)
+        .send()
+        .await
+        .expect("POST");
     assert_eq!(resp.status(), 400, "must be rejected with HTTP 400: {body}");
     let out: serde_json::Value = resp.json().await.expect("json body");
     assert_eq!(
@@ -236,7 +245,6 @@ async fn missing_meta_is_rejected_with_invalid_params() {
     // 2026 requires params._meta on every request — a tools/call without it is invalid.
     assert_rejected_invalid_params(
         &url,
-        None,
         serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": { "name": "echo", "arguments": { "message": "hi" } }
@@ -250,7 +258,6 @@ async fn incomplete_meta_missing_client_capabilities_is_rejected() {
     let url = start_server().await;
     assert_rejected_invalid_params(
         &url,
-        None,
         serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": {
@@ -267,16 +274,58 @@ async fn incomplete_meta_missing_client_capabilities_is_rejected() {
 }
 
 #[tokio::test]
-async fn header_body_protocol_version_mismatch_is_rejected() {
+async fn unsupported_protocol_version_header_is_rejected_with_32004() {
     let url = start_server().await;
-    // _meta says 2026-07-28 (via meta()); the MCP-Protocol-Version header says 2025-11-25.
-    assert_rejected_invalid_params(
-        &url,
-        Some("2025-11-25"),
-        serde_json::json!({
+    // A 2026-only build does not implement 2025-11-25: requesting it must get
+    // 400 + UnsupportedProtocolVersionError listing the supported set.
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "echo")
+        .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "tools/call",
             "params": { "_meta": meta(), "name": "echo", "arguments": { "message": "hi" } }
-        }),
-    )
-    .await;
+        }))
+        .send()
+        .await
+        .expect("POST");
+    assert_eq!(resp.status(), 400);
+    let out: serde_json::Value = resp.json().await.expect("json body");
+    assert_eq!(out["error"]["code"], -32004, "must be -32004: {out}");
+    assert_eq!(out["error"]["data"]["supported"][0], "2026-07-28");
+    assert_eq!(out["error"]["data"]["requested"], "2025-11-25");
+}
+
+#[tokio::test]
+async fn header_body_protocol_version_mismatch_is_rejected_with_32001() {
+    let url = start_server().await;
+    // Header carries the supported 2026-07-28, but _meta claims 2025-11-25:
+    // a header-validation failure → 400 + -32001 HeaderMismatch.
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "echo")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2025-11-25",
+                    "io.modelcontextprotocol/clientInfo": { "name": "t", "version": "1.0.0" },
+                    "io.modelcontextprotocol/clientCapabilities": {}
+                },
+                "name": "echo", "arguments": { "message": "hi" }
+            }
+        }))
+        .send()
+        .await
+        .expect("POST");
+    assert_eq!(resp.status(), 400);
+    let out: serde_json::Value = resp.json().await.expect("json body");
+    assert_eq!(out["error"]["code"], -32001, "must be -32001: {out}");
 }

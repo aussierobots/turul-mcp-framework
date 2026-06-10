@@ -14,12 +14,12 @@ use crate::streaming::StreamHandler;
 use crate::transport::BoxedTransport;
 
 // Re-export protocol types for convenience
-use turul_mcp_protocol::meta::Cursor;
-use turul_mcp_protocol::resources::{ListResourceTemplatesResult, ResourceTemplate};
-use turul_mcp_protocol::tasks::{
+use turul_mcp_protocol_2025_11_25::meta::Cursor;
+use turul_mcp_protocol_2025_11_25::resources::{ListResourceTemplatesResult, ResourceTemplate};
+use turul_mcp_protocol_2025_11_25::tasks::{
     CancelTaskResult, CreateTaskResult, GetTaskResult, ListTasksResult, Task,
 };
-use turul_mcp_protocol::{
+use turul_mcp_protocol_2025_11_25::{
     CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
     ListToolsResult, Prompt, ReadResourceResult, Resource, Tool,
 };
@@ -277,6 +277,10 @@ impl McpClient {
         match classify_probe(probe, self.config.allow_legacy_gateway_fallback) {
             ProbeDecision::Use2026 => self.lock_version(McpVersion::V2026_07_28).await,
             ProbeDecision::FallbackTo2025 => {
+                // The probe advertised 2026-07-28 on the wire; restore the legacy
+                // version header before the initialize handshake.
+                self.transport
+                    .set_protocol_version(McpVersion::V2025_11_25.as_str());
                 self.initialize_session().await?;
                 self.lock_version(McpVersion::V2025_11_25).await
             }
@@ -330,6 +334,12 @@ impl McpClient {
         })?;
         let envelope = self.build_request("server/discover", params);
 
+        // The probe is a 2026-era request: its `_meta` says 2026-07-28, and the
+        // MCP-Protocol-Version header MUST match the body (a 2026 server rejects
+        // the disagreement with 400). Advertise 2026-07-28 for the probe; the
+        // FallbackTo2025 arm restores the legacy header before `initialize`.
+        self.transport.set_protocol_version(p2026::MCP_VERSION);
+
         match timeout(
             self.config.timeouts.initialization,
             self.send_request_with_headers_internal(envelope),
@@ -350,7 +360,15 @@ impl McpClient {
                     .into())
                 }
             }
-            Ok(Err(McpClientError::Transport(TransportError::HttpStatus { status, .. }))) => {
+            Ok(Err(McpClientError::Transport(TransportError::HttpStatus { status, message }))) => {
+                // A 400 whose body is a recognized modern JSON-RPC error is a
+                // negotiation signal, not a transport failure — surface the code
+                // (e.g. -32004 UnsupportedProtocolVersionError) to the classifier.
+                if let Ok(body) = serde_json::from_str::<serde_json::Value>(&message)
+                    && let Some(code) = body.pointer("/error/code").and_then(|c| c.as_i64())
+                {
+                    return Ok(DiscoverProbe::JsonRpcError(code));
+                }
                 Ok(DiscoverProbe::HttpStatus(status))
             }
             Ok(Err(other)) => Err(other),
@@ -1021,7 +1039,7 @@ impl McpClient {
     pub async fn read_resource(
         &self,
         uri: &str,
-    ) -> McpClientResult<Vec<turul_mcp_protocol::ResourceContent>> {
+    ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::ResourceContent>> {
         debug!(uri = uri, "Reading resource");
 
         #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]

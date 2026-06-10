@@ -10,14 +10,16 @@ description = "Comprehensive MCP client library with multi-transport support"
 
 [dependencies]
 # MCP framework dependencies.
-# The client links each versioned protocol crate directly (gated by the
-# client-bilingual / client-2025-11-25-only / client-2026-07-28-only features) so one client
-# can speak both wire specs. turul-mcp-protocol (the alias) is retained
-# transitionally as the public lingua-franca type surface while existing code
-# paths migrate to version-routed modules; it is pinned to protocol-2025-11-25
-# (independent of the workspace default) so those 2025-typed paths keep compiling.
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
-turul-mcp-protocol-2025-11-25 = { workspace = true, optional = true }
+# The client links the versioned protocol crates directly and does NOT depend
+# on the turul-mcp-protocol alias (the recorded exception to the Protocol
+# Re-export Rule). The frozen 2025-11-25 crate is unconditional: it is the
+# public lingua-franca type vocabulary (Tool, CallToolResult, ...) returned by
+# every client API regardless of the negotiated wire spec. The 2026-07-28
+# crate carries the modern wire path and is feature-gated. Keeping the alias
+# out of this crate is load-bearing: a dependency graph may otherwise unify
+# the alias's protocol features and trip the spec mutex (e.g. linking this
+# client and a 2026-default server into one test binary).
+turul-mcp-protocol-2025-11-25 = { workspace = true }
 turul-mcp-protocol-2026-07-28 = { workspace = true, optional = true }
 turul-rpc = { workspace = true }
 
@@ -59,12 +61,24 @@ all-transports = ["http", "sse", "stdio"]
 # Spec-coexistence (mutually exclusive — enforced by compile_error! in lib.rs).
 # Bilingual (default) links both protocol crates; one McpClient negotiates the
 # wire spec per connection at connect() time.
-client-bilingual = ["dep:turul-mcp-protocol-2025-11-25", "dep:turul-mcp-protocol-2026-07-28"]
-# Narrowing: each links exactly ONE protocol crate. Requires --no-default-features
-# (otherwise client-bilingual is also active and the mutex fires).
-client-2025-11-25-only = ["dep:turul-mcp-protocol-2025-11-25"]
+client-bilingual = ["dep:turul-mcp-protocol-2026-07-28"]
+# Narrowing: each speaks exactly ONE wire spec. Requires --no-default-features
+# (otherwise client-bilingual is also active and the mutex fires). The frozen
+# 2025-11-25 protocol crate is always linked as the shared type vocabulary;
+# narrowing controls which WIRE paths compile.
+client-2025-11-25-only = []
 client-2026-07-28-only = ["dep:turul-mcp-protocol-2026-07-28"]
 
 [dev-dependencies]
 tokio-test.workspace = true
 wiremock = "0.6"
+# Real-server e2e: bilingual client against an in-process 2026 stateless server.
+# Default features (http, sse -> protocol-2026-07-28); no alias-mutex conflict
+# because this crate links the versioned protocol crates directly, not the alias.
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.4.0" }
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4.0" }
+# The derive macros expand to `turul_mcp_protocol::` / `turul_mcp_builders::`
+# paths, so the e2e test target needs both (2026 default, matching the dev
+# server). Dev-only: the published client library links neither.
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0" }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0" }

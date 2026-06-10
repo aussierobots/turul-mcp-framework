@@ -479,8 +479,16 @@ async fn handle_request(
             }
         );
 
-        if protocol_version.supports_streamable_http() {
-            // Use StreamableHttpHandler for MCP 2025-11-25 clients
+        // The 2026 stateless build serves a single spec: every request goes to the
+        // streamable handler, whose Server Validation rejects unsupported
+        // MCP-Protocol-Version values with 400 + -32004. Routing legacy version
+        // headers to the 2025-era session handler would bypass that contract.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let route_streamable = true;
+        #[cfg(feature = "protocol-2025-11-25")]
+        let route_streamable = protocol_version.supports_streamable_http();
+
+        if route_streamable {
             debug!(
                 "Calling streamable handler for protocol {}",
                 protocol_version.as_str()

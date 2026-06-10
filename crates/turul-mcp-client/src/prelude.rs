@@ -17,7 +17,7 @@ pub use crate::session::{SessionInfo, SessionManager, SessionState};
 pub use crate::transport::{Transport, TransportType};
 
 // Re-export protocol types for convenience
-pub use turul_mcp_protocol::prelude::*;
+pub use turul_mcp_protocol_2025_11_25::prelude::*;
 
 // Standard library types commonly used with MCP
 pub use std::time::Duration;

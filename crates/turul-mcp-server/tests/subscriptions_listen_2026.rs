@@ -189,6 +189,8 @@ async fn listen_acks_first_then_delivers_only_requested_types() {
     let resp = client
         .post(&url)
         .header("Accept", "application/json, text/event-stream")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "subscriptions/listen")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 7, "method": "subscriptions/listen",
             "params": {
@@ -248,6 +250,9 @@ async fn listen_acks_first_then_delivers_only_requested_types() {
     let emit = client
         .post(&url)
         .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "emit_changes")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 8, "method": "tools/call",
             "params": { "name": "emit_changes", "arguments": {}, "_meta": meta() }
@@ -316,6 +321,8 @@ async fn listen_requires_sse_accept() {
     let resp = client
         .post(&url)
         .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "subscriptions/listen")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 1, "method": "subscriptions/listen",
             "params": { "notifications": { "toolsListChanged": true }, "_meta": meta() }
@@ -362,6 +369,8 @@ async fn listen_ack_omits_unsupported_types() {
     let resp = client
         .post(&url)
         .header("Accept", "text/event-stream")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "subscriptions/listen")
         .json(&serde_json::json!({
             "jsonrpc": "2.0", "id": 3, "method": "subscriptions/listen",
             "params": {

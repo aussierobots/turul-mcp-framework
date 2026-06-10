@@ -48,7 +48,7 @@
 //!   [`META_KEY_BAGGAGE`] (W3C Trace Context, [SEP-414]),
 //!   [`META_KEY_SUBSCRIPTION_ID`] (subscription tagging).
 //! - Streamable HTTP headers ([SEP-2243]): [`HTTP_HEADER_PROTOCOL_VERSION`],
-//!   [`HTTP_HEADER_METHOD`], [`HTTP_HEADER_NAME`], [`HTTP_HEADER_CUSTOM_PREFIX`].
+//!   [`HTTP_HEADER_METHOD`], [`HTTP_HEADER_NAME`], [`HTTP_HEADER_PARAM_PREFIX`].
 //!
 //! The upstream `schema.ts` has finalized the wire-version literal to
 //! `"2026-07-28"` (was `"DRAFT-2026-v1"` pre-finalization). The vendored
@@ -150,7 +150,9 @@ pub use discover::{
     DiscoverRequest, DiscoverResult, DiscoverResultResponse, SERVER_DISCOVER_METHOD,
 };
 pub use headers::{
-    HTTP_HEADER_CUSTOM_PREFIX, HTTP_HEADER_METHOD, HTTP_HEADER_NAME, HTTP_HEADER_PROTOCOL_VERSION,
+    ERROR_CODE_HEADER_MISMATCH, HTTP_HEADER_METHOD, HTTP_HEADER_NAME, HTTP_HEADER_PARAM_PREFIX,
+    HTTP_HEADER_PROTOCOL_VERSION, MCP_PARAM_BASE64_PREFIX, MCP_PARAM_BASE64_SUFFIX,
+    X_MCP_HEADER_SCHEMA_KEY,
 };
 pub use input_required::{
     InputRequest, InputRequests, InputRequiredResult, InputResponse, InputResponseRequestParams,

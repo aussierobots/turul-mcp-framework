@@ -255,4 +255,4 @@ pub use transport::{Transport, TransportType};
 
 // Re-export protocol types for convenience
 /// Core MCP protocol types and message structures
-pub use turul_mcp_protocol::*;
+pub use turul_mcp_protocol_2025_11_25::*;

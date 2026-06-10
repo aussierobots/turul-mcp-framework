@@ -45,6 +45,8 @@ jobs:
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test stateless_2026_http_surface
       - name: 2026 subscriptions/listen (ack-first, filtered delivery)
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test subscriptions_listen_2026
+      - name: 2026 request-metadata headers (Mcp-Method/Mcp-Name, -32001/-32004)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_headers_2026
       - name: protocol-2026 compliance + upstream wire fixtures
         run: cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
       - name: Bilingual client (not in default-members)

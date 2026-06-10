@@ -43,49 +43,51 @@ where
     Ok(serde_json::from_value(serde_json::to_value(v)?)?)
 }
 
-pub(crate) fn parse_list_tools(result: &Value) -> McpClientResult<Vec<turul_mcp_protocol::Tool>> {
+pub(crate) fn parse_list_tools(
+    result: &Value,
+) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Tool>> {
     let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
     r.tools.iter().map(remap).collect()
 }
 
 pub(crate) fn parse_call_tool(
     result: &Value,
-) -> McpClientResult<turul_mcp_protocol::CallToolResult> {
+) -> McpClientResult<turul_mcp_protocol_2025_11_25::CallToolResult> {
     let r: p::tools::CallToolResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
 
 pub(crate) fn parse_list_resources(
     result: &Value,
-) -> McpClientResult<Vec<turul_mcp_protocol::Resource>> {
+) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Resource>> {
     let r: p::resources::ListResourcesResult = serde_json::from_value(result.clone())?;
     r.resources.iter().map(remap).collect()
 }
 
 pub(crate) fn parse_list_resource_templates(
     result: &Value,
-) -> McpClientResult<Vec<turul_mcp_protocol::resources::ResourceTemplate>> {
+) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::resources::ResourceTemplate>> {
     let r: p::resources::ListResourceTemplatesResult = serde_json::from_value(result.clone())?;
     r.resource_templates.iter().map(remap).collect()
 }
 
 pub(crate) fn parse_read_resource(
     result: &Value,
-) -> McpClientResult<turul_mcp_protocol::ReadResourceResult> {
+) -> McpClientResult<turul_mcp_protocol_2025_11_25::ReadResourceResult> {
     let r: p::resources::ReadResourceResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
 
 pub(crate) fn parse_list_prompts(
     result: &Value,
-) -> McpClientResult<Vec<turul_mcp_protocol::Prompt>> {
+) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Prompt>> {
     let r: p::prompts::ListPromptsResult = serde_json::from_value(result.clone())?;
     r.prompts.iter().map(remap).collect()
 }
 
 pub(crate) fn parse_get_prompt(
     result: &Value,
-) -> McpClientResult<turul_mcp_protocol::GetPromptResult> {
+) -> McpClientResult<turul_mcp_protocol_2025_11_25::GetPromptResult> {
     let r: p::prompts::GetPromptResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
@@ -95,28 +97,28 @@ pub(crate) fn parse_get_prompt(
 // the public (alias) result type.
 pub(crate) fn parse_list_tools_result(
     result: &Value,
-) -> McpClientResult<turul_mcp_protocol::ListToolsResult> {
+) -> McpClientResult<turul_mcp_protocol_2025_11_25::ListToolsResult> {
     let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
 
 pub(crate) fn parse_list_resources_result(
     result: &Value,
-) -> McpClientResult<turul_mcp_protocol::ListResourcesResult> {
+) -> McpClientResult<turul_mcp_protocol_2025_11_25::ListResourcesResult> {
     let r: p::resources::ListResourcesResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
 
 pub(crate) fn parse_list_resource_templates_result(
     result: &Value,
-) -> McpClientResult<turul_mcp_protocol::resources::ListResourceTemplatesResult> {
+) -> McpClientResult<turul_mcp_protocol_2025_11_25::resources::ListResourceTemplatesResult> {
     let r: p::resources::ListResourceTemplatesResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
 
 pub(crate) fn parse_list_prompts_result(
     result: &Value,
-) -> McpClientResult<turul_mcp_protocol::ListPromptsResult> {
+) -> McpClientResult<turul_mcp_protocol_2025_11_25::ListPromptsResult> {
     let r: p::prompts::ListPromptsResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }

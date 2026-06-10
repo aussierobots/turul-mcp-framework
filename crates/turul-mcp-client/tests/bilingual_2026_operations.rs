@@ -10,7 +10,7 @@
 use turul_mcp_client::config::ClientConfig;
 use turul_mcp_client::transport::http::HttpTransport;
 use turul_mcp_client::{McpClient, McpVersion};
-use wiremock::matchers::{body_partial_json, method};
+use wiremock::matchers::{body_partial_json, header, method};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 fn meta_match(rpc_method: &str) -> serde_json::Value {
@@ -21,7 +21,11 @@ fn meta_match(rpc_method: &str) -> serde_json::Value {
 }
 
 async fn mount_2026_result(server: &MockServer, rpc_method: &str, result: serde_json::Value) {
+    // SEP-2243: every 2026 request must mirror its method into Mcp-Method and
+    // advertise the negotiated version — the stub only answers compliant requests.
     Mock::given(method("POST"))
+        .and(header("Mcp-Method", rpc_method))
+        .and(header("MCP-Protocol-Version", "2026-07-28"))
         .and(body_partial_json(meta_match(rpc_method)))
         .respond_with(
             ResponseTemplate::new(200)
@@ -41,8 +45,12 @@ async fn start_2026_server() -> MockServer {
         .respond_with(ResponseTemplate::new(404))
         .mount(&server)
         .await;
-    // server/discover => locks the connection to 2026-07-28.
+    // server/discover => locks the connection to 2026-07-28. The probe itself
+    // must carry the 2026 request-metadata headers (its _meta says 2026-07-28
+    // and the header MUST match the body).
     Mock::given(method("POST"))
+        .and(header("Mcp-Method", "server/discover"))
+        .and(header("MCP-Protocol-Version", "2026-07-28"))
         .and(body_partial_json(
             serde_json::json!({"method": "server/discover"}),
         ))
@@ -187,7 +195,7 @@ async fn paginated_list_routes_through_2026_with_meta_and_cursor() {
 
     let client = connect_2026(&server).await;
     let page = client
-        .list_resources_paginated(Some(turul_mcp_protocol::meta::Cursor::new("page-2")))
+        .list_resources_paginated(Some(turul_mcp_client::MetaCursor::new("page-2")))
         .await
         .expect("paginated resources/list must round-trip through the 2026 path");
     assert_eq!(page.resources.len(), 1);
@@ -201,11 +209,14 @@ async fn paginated_list_routes_through_2026_with_meta_and_cursor() {
 async fn client_advertises_2026_protocol_version_on_the_wire() {
     use wiremock::matchers::header;
     let server = start_2026_server().await;
-    // The mock only responds when the request carries `MCP-Protocol-Version: 2026-07-28`,
-    // so a green call_tool proves the client advertises the negotiated spec on the wire
-    // (not a hardcoded 2025-11-25, which would never match this mock).
+    // The mock only responds when the request carries the full 2026 header set:
+    // `MCP-Protocol-Version: 2026-07-28` plus the SEP-2243 `Mcp-Method` and
+    // (for tools/call) `Mcp-Name` mirrors. A green call_tool proves the client
+    // emits all three on the wire.
     Mock::given(method("POST"))
         .and(header("MCP-Protocol-Version", "2026-07-28"))
+        .and(header("Mcp-Method", "tools/call"))
+        .and(header("Mcp-Name", "echo"))
         .and(body_partial_json(meta_match("tools/call")))
         .respond_with(
             ResponseTemplate::new(200)

@@ -14,24 +14,49 @@
 /// `RequestMetaObject` schema).
 pub const HTTP_HEADER_PROTOCOL_VERSION: &str = "MCP-Protocol-Version";
 
-/// `Mcp-Method` — REQUIRED per SEP-2243. Carries the JSON-RPC `method` string
-/// at the HTTP layer to enable intelligent routing without body inspection.
-/// Servers MUST reject requests where this header and the body's `method`
-/// disagree.
+/// `Mcp-Method` — REQUIRED per SEP-2243 on all requests and notifications.
+/// Carries the JSON-RPC `method` string at the HTTP layer to enable
+/// intelligent routing without body inspection. Servers MUST reject requests
+/// where this header and the body's `method` disagree.
 pub const HTTP_HEADER_METHOD: &str = "Mcp-Method";
 
-/// `Mcp-Name` — REQUIRED per SEP-2243. Carries the target tool/resource/prompt
-/// name when present (e.g. for `tools/call`, the value of `params.name`).
-/// Servers MUST reject requests where this header and the body's name disagree.
+/// `Mcp-Name` — REQUIRED per SEP-2243 for `tools/call` (`params.name`),
+/// `resources/read` (`params.uri`), and `prompts/get` (`params.name`).
+/// Servers MUST reject requests where this header and the body's value
+/// disagree.
 pub const HTTP_HEADER_NAME: &str = "Mcp-Name";
 
-/// `x-mcp-header` — header prefix for custom headers exposed to tool
-/// implementations via tool parameters (SEP-2243). Tools can advertise a list
-/// of custom headers they read from the request and clients can populate them
-/// via `x-mcp-header-<custom-name>: <value>`. The full custom-header name
-/// substituted into the request is `x-mcp-header-` + the lowercased tool-defined
-/// suffix.
-pub const HTTP_HEADER_CUSTOM_PREFIX: &str = "x-mcp-header-";
+/// `Mcp-Param-{name}` — header name prefix for custom headers mirrored from
+/// tool parameters (SEP-2243 §Custom Headers from Tool Parameters).
+///
+/// The `x-mcp-header` extension property inside a tool's `inputSchema`
+/// designates a parameter for mirroring and supplies the `{name}` portion;
+/// the resulting wire header is `Mcp-Param-{name}: {encoded-value}`. Values
+/// that cannot be represented as plain ASCII header values are Base64-encoded
+/// as `=?base64?{value}?=` (see [`MCP_PARAM_BASE64_PREFIX`] /
+/// [`MCP_PARAM_BASE64_SUFFIX`]). Servers that process the body MUST validate
+/// that decoded header values match the corresponding body arguments.
+pub const HTTP_HEADER_PARAM_PREFIX: &str = "Mcp-Param-";
+
+/// `x-mcp-header` — the JSON Schema extension property (inside a tool's
+/// `inputSchema`) that designates a parameter for header mirroring. This is a
+/// schema annotation key, NOT a wire header name — the wire header it
+/// produces is [`HTTP_HEADER_PARAM_PREFIX`]`{name}`.
+pub const X_MCP_HEADER_SCHEMA_KEY: &str = "x-mcp-header";
+
+/// Sentinel prefix marking a Base64-encoded `Mcp-Param-*` value
+/// (`=?base64?{Base64EncodedValue}?=`, case-sensitive, lowercase).
+pub const MCP_PARAM_BASE64_PREFIX: &str = "=?base64?";
+
+/// Sentinel suffix closing a Base64-encoded `Mcp-Param-*` value.
+pub const MCP_PARAM_BASE64_SUFFIX: &str = "?=";
+
+/// JSON-RPC error code for header-validation failures (`HeaderMismatch`,
+/// implementation-defined server error range). Returned with HTTP
+/// `400 Bad Request` when a required standard header is missing/malformed or
+/// a header value does not match the corresponding request-body value.
+/// Prose-only contract — the pinned schema defines no symbol for it.
+pub const ERROR_CODE_HEADER_MISMATCH: i64 = -32001;
 
 #[cfg(test)]
 mod tests {
@@ -43,6 +68,20 @@ mod tests {
         assert_eq!(HTTP_HEADER_PROTOCOL_VERSION, "MCP-Protocol-Version");
         assert_eq!(HTTP_HEADER_METHOD, "Mcp-Method");
         assert_eq!(HTTP_HEADER_NAME, "Mcp-Name");
-        assert_eq!(HTTP_HEADER_CUSTOM_PREFIX, "x-mcp-header-");
+        assert_eq!(HTTP_HEADER_PARAM_PREFIX, "Mcp-Param-");
+        assert_eq!(X_MCP_HEADER_SCHEMA_KEY, "x-mcp-header");
+    }
+
+    #[test]
+    fn base64_sentinel_exact_spelling() {
+        // Markers are case-sensitive and MUST appear exactly as shown.
+        assert_eq!(MCP_PARAM_BASE64_PREFIX, "=?base64?");
+        assert_eq!(MCP_PARAM_BASE64_SUFFIX, "?=");
+    }
+
+    #[test]
+    fn header_mismatch_code_in_server_error_range() {
+        assert_eq!(ERROR_CODE_HEADER_MISMATCH, -32001);
+        assert!((-32099..=-32000).contains(&ERROR_CODE_HEADER_MISMATCH));
     }
 }
