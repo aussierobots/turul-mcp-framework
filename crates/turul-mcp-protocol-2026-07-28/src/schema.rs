@@ -76,6 +76,17 @@ pub enum JsonSchema {
         )]
         additional_properties: Option<bool>,
     },
+
+    /// Verbatim JSON Schema 2020-12 subschema, serialized as-is (untagged).
+    ///
+    /// Escape hatch for schema shapes the structured variants cannot express
+    /// (`oneOf`/`anyOf`/`allOf`, `const`, nested `$defs`-resolved object
+    /// trees, conditionals, …). The 2026 wire bindings accept arbitrary
+    /// 2020-12 values, so this variant round-trips without downgrading.
+    /// On deserialize it is the last-tried fallback, capturing any subschema
+    /// the structured variants reject.
+    #[serde(untagged)]
+    Raw(serde_json::Value),
 }
 
 impl JsonSchema {
@@ -222,8 +233,21 @@ impl JsonSchema {
             JsonSchema::Boolean { description: d, .. } => *d = Some(description.into()),
             JsonSchema::Array { description: d, .. } => *d = Some(description.into()),
             JsonSchema::Object { description: d, .. } => *d = Some(description.into()),
+            JsonSchema::Raw(value) => {
+                if let Some(obj) = value.as_object_mut() {
+                    obj.insert(
+                        "description".to_string(),
+                        serde_json::Value::String(description.into()),
+                    );
+                }
+            }
         }
         self
+    }
+
+    /// Verbatim 2020-12 subschema (see [`JsonSchema::Raw`]).
+    pub fn raw(value: serde_json::Value) -> Self {
+        JsonSchema::Raw(value)
     }
 
     /// Add minimum constraint to number schema

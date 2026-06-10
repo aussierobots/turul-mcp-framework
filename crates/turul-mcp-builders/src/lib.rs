@@ -153,6 +153,7 @@ pub mod tool;
 pub mod schemars_helpers;
 pub use schemars_helpers::{
     ToolSchemaExt, convert_value_to_json_schema, convert_value_to_json_schema_with_defs,
+    resolve_local_refs, schemars_param_schema,
 };
 
 // Schema provider with automatic JsonSchema detection

@@ -441,23 +441,13 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                     // Unknown type — use schemars to generate schema at runtime.
                     // REQUIRES: the type must derive schemars::JsonSchema.
                     // If it doesn't, compilation fails with a clear error pointing here.
+                    // schemars_param_schema is lane-aware: verbatim 2020-12 on
+                    // 2026 (local $refs inlined), typed conversion on 2025.
                     let full_ty = &type_path.path;
                     quote! {
                         {
                             let schemars_schema = turul_mcp_builders::schemars::schema_for!(#full_ty);
-                            let schema_value = serde_json::to_value(&schemars_schema)
-                                .expect("schemars schema should serialize to JSON");
-                            let definitions = schema_value.get("definitions")
-                                .or_else(|| schema_value.get("$defs"))
-                                .and_then(|v| v.as_object())
-                                .map(|obj| obj.iter()
-                                    .map(|(k, v)| (k.clone(), v.clone()))
-                                    .collect::<std::collections::HashMap<String, serde_json::Value>>())
-                                .unwrap_or_default();
-                            turul_mcp_builders::convert_value_to_json_schema_with_defs(
-                                &schema_value,
-                                &definitions,
-                            ) #description
+                            turul_mcp_builders::schemars_param_schema(schemars_schema) #description
                         }
                     }
                 }
@@ -1510,41 +1500,14 @@ pub fn generate_output_schema_auto(
                 std::sync::OnceLock::new();
             Some(OUTPUT_SCHEMA.get_or_init(|| {
                 use std::collections::HashMap;
-                use turul_mcp_protocol::schema::JsonSchema;
 
                 // Generate detailed schema via schemars
                 // IMPORTANT: Output type MUST derive schemars::JsonSchema
                 // If you get a compile error here, add #[derive(schemars::JsonSchema)] to your output type
+                // schemars_param_schema is lane-aware: verbatim 2020-12 on
+                // 2026 (local $refs inlined), typed conversion on 2025.
                 let schemars_schema = turul_mcp_builders::schemars::schema_for!(#ty);
-
-                // Convert schemars RootSchema to JSON Value
-                let mut schema_value = serde_json::to_value(&schemars_schema)
-                    .expect("schemars Schema should always serialize to JSON");
-
-                // Extract definitions for $ref resolution
-                let definitions = if let Some(defs_value) = schema_value.get("definitions")
-                    .or_else(|| schema_value.get("$defs")) {
-                    // Parse definitions into HashMap<String, Value>
-                    defs_value.as_object()
-                        .map(|obj| obj.iter()
-                            .map(|(k, v)| (k.clone(), v.clone()))
-                            .collect::<HashMap<String, serde_json::Value>>())
-                        .unwrap_or_default()
-                } else {
-                    HashMap::new()
-                };
-
-                // Remove definitions from root to get clean schema
-                if let Some(obj) = schema_value.as_object_mut() {
-                    obj.remove("definitions");
-                    obj.remove("$defs");
-                }
-
-                // Use safe converter with definitions for $ref resolution
-                let inner_schema = turul_mcp_builders::convert_value_to_json_schema_with_defs(
-                    &schema_value,
-                    &definitions
-                );
+                let inner_schema = turul_mcp_builders::schemars_param_schema(schemars_schema);
 
                 // Wrap in output field
                 turul_mcp_protocol::tools::ToolSchema::object()

@@ -178,22 +178,22 @@ P1 = mediums (spec SHOULDs, fidelity drift, ADR/doc contract drift). P2 = lows.
   no Rust binding and its name is reused for `LegacyTitledEnumSchema`
   (`elicitation.rs:62-80`); no test deserializes enum schemas through
   `ElicitationSchema.properties`.
-- ☐ `ToolChoice`: non-spec `name` field serializes onto the wire; `mode` required in
+- ☑ (2026-06-10) `ToolChoice`: non-spec `name` field serializes onto the wire; `mode` required in
   Rust but optional in schema (`sampling.rs:114-116`).
-- ☐ `PromptReference`: omits `title`, carries non-spec `description`
+- ☑ (2026-06-10) `PromptReference`: omits `title`, carries non-spec `description`
   (`completion.rs:23-28`).
-- ☐ `Annotations.audience` is `Vec<String>` where schema requires closed `Role[]`
+- ☑ (2026-06-10) `Annotations.audience` is `Vec<String>` where schema requires closed `Role[]`
   (`meta.rs:24`).
-- ☐ `CacheableResult.ttlMs` bound as `u64` where schema declares `number` — floats
+- ☑ (2026-06-10) `CacheableResult.ttlMs` bound as `u64` where schema declares `number` — floats
   rejected on deserialize (`caching.rs:70` + 6 embedding sites).
-- ☐ SEP-2577 deprecation of `LoggingLevel` / per-request `logLevel` `_meta` key not
+- ☑ (2026-06-10) SEP-2577 deprecation of `LoggingLevel` / per-request `logLevel` `_meta` key not
   absorbed from the re-pin; rustdoc asserts the opposite (`logging.rs:29-44`,
   `meta.rs:298`, `notifications.rs:373`). Same for `ServerCapabilities.logging`, and
   `traits.rs:358-452` has `#[allow(deprecated)]` without `#[deprecated]` while
   COMPLIANCE.md claims otherwise.
-- ☐ `LoggingCapabilities`/`CompletionsCapabilities` invent named fields where the
+- ☑ (2026-06-10) `LoggingCapabilities`/`CompletionsCapabilities` invent named fields where the
   schema declares opaque objects (`initialize.rs:221`).
-- ☐ JSON Schema 2020-12 pipeline: `ToolSchema::from_schemars` strips
+- ☑ (2026-06-10) JSON Schema 2020-12 pipeline: `ToolSchema::from_schemars` strips
   `$defs`/`definitions` but passes `$ref` through verbatim → dangling references for
   nested types (`schemars_helpers.rs:384`); derive macros still funnel through the
   lossy ADR-014 converter (`turul-mcp-derive/src/utils.rs:457`).
