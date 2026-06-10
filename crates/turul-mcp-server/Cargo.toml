@@ -53,5 +53,6 @@ tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"
 # must not also pull a default (protocol-2025-11-25), or the alias sees both specs.
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0", default-features = false }
 turul-mcp-derive = { path = "../turul-mcp-derive" }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["stream"] }
+bytes.workspace = true
 serde_json.workspace = true

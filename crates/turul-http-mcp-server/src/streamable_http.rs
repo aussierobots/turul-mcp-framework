@@ -1557,6 +1557,18 @@ impl StreamableHttpHandler {
                     "Processing streaming JSON-RPC request: method={}",
                     request.method
                 );
+
+                // subscriptions/listen is a transport concern: its "response" is a
+                // long-lived SSE stream, not a JSON-RPC result, so it never enters
+                // the dispatcher.
+                #[cfg(feature = "protocol-2026-07-28")]
+                if request.method == turul_mcp_protocol::subscriptions::SUBSCRIPTIONS_LISTEN_METHOD
+                {
+                    return self
+                        .handle_subscriptions_listen(request, session_id, context)
+                        .await;
+                }
+
                 self.create_streaming_response(
                     request,
                     session_id,
@@ -1642,6 +1654,225 @@ impl StreamableHttpHandler {
                     .unwrap()
             }
         }
+    }
+
+    /// Open a long-lived `subscriptions/listen` SSE stream (2026-07-28).
+    ///
+    /// Subscriptions pattern contract:
+    /// - The acknowledgement (`notifications/subscriptions/acknowledged`) is the
+    ///   FIRST message on the stream and echoes the honored filter subset —
+    ///   requested types the server does not support are omitted.
+    /// - Only opted-in notification types are delivered; `resources/updated` is
+    ///   additionally filtered to the subscribed URIs.
+    /// - Every delivered notification carries
+    ///   `io.modelcontextprotocol/subscriptionId` in `_meta`, set to the JSON-RPC
+    ///   id of the listen request.
+    /// - The client cancels by closing the stream; there is no JSON-RPC result.
+    #[cfg(feature = "protocol-2026-07-28")]
+    async fn handle_subscriptions_listen(
+        &self,
+        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        session_id: String,
+        context: StreamableHttpContext,
+    ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
+        use http_body_util::StreamBody;
+        use tokio_stream::StreamExt;
+        use tokio_stream::wrappers::ReceiverStream;
+        use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
+        use turul_mcp_protocol::meta::META_KEY_SUBSCRIPTION_ID;
+        use turul_mcp_protocol::subscriptions::{
+            SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, SubscriptionFilter, SubscriptionsListenRequestParams,
+        };
+
+        let reject_400 = |id: turul_mcp_json_rpc_server::RequestId,
+                          err_obj: JsonRpcErrorObject,
+                          version: &str| {
+            let err = turul_mcp_json_rpc_server::JsonRpcError::new(Some(id), err_obj);
+            let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+            Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header(CONTENT_TYPE, "application/json")
+                .header("MCP-Protocol-Version", version)
+                .body(
+                    Full::new(Bytes::from(body))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap()
+        };
+
+        // The response IS an SSE stream — the client must be able to consume one.
+        if !context.wants_sse_stream {
+            return reject_400(
+                request.id.clone(),
+                JsonRpcErrorObject::invalid_request(Some(serde_json::json!(
+                    "subscriptions/listen requires Accept: text/event-stream"
+                ))),
+                context.protocol_version.as_str(),
+            );
+        }
+
+        // Typed params parse (the generic 2026 `_meta` gate already ran upstream).
+        let params_value = request
+            .params
+            .as_ref()
+            .map(|p| serde_json::to_value(p).unwrap_or(serde_json::Value::Null))
+            .unwrap_or(serde_json::Value::Null);
+        let parsed: SubscriptionsListenRequestParams = match serde_json::from_value(params_value) {
+            Ok(p) => p,
+            Err(e) => {
+                return reject_400(
+                    request.id.clone(),
+                    JsonRpcErrorObject::invalid_params(&format!(
+                        "invalid subscriptions/listen params: {e}"
+                    )),
+                    context.protocol_version.as_str(),
+                );
+            }
+        };
+
+        // Honored subset: keep a requested type only when the server actually has
+        // the corresponding feature surface (capability section present).
+        let caps = &self.server_capabilities;
+        let requested = parsed.notifications;
+        let honored = SubscriptionFilter {
+            tools_list_changed: requested
+                .tools_list_changed
+                .filter(|&v| v && caps.tools.is_some()),
+            prompts_list_changed: requested
+                .prompts_list_changed
+                .filter(|&v| v && caps.prompts.is_some()),
+            resources_list_changed: requested
+                .resources_list_changed
+                .filter(|&v| v && caps.resources.is_some()),
+            resource_subscriptions: requested
+                .resource_subscriptions
+                .filter(|uris| !uris.is_empty() && caps.resources.is_some()),
+        };
+
+        // Gate delivery at the broadcast layer: the subscription registry entry is
+        // created even when empty, so an empty filter delivers nothing (the
+        // registry's no-entry default is allow-all).
+        let mut allowed_types = Vec::new();
+        if honored.tools_list_changed == Some(true) {
+            allowed_types.push("notifications/tools/list_changed".to_string());
+        }
+        if honored.prompts_list_changed == Some(true) {
+            allowed_types.push("notifications/prompts/list_changed".to_string());
+        }
+        if honored.resources_list_changed == Some(true) {
+            allowed_types.push("notifications/resources/list_changed".to_string());
+        }
+        if honored.resource_subscriptions.is_some() {
+            allowed_types.push("notifications/resources/updated".to_string());
+        }
+        self.stream_manager
+            .subscribe_to_notifications(&session_id, allowed_types)
+            .await;
+
+        let connection_id = format!("listen-{}", uuid::Uuid::now_v7().as_simple());
+        let (tx, rx) = tokio::sync::mpsc::channel::<turul_mcp_session_storage::SseEvent>(64);
+        if let Err(e) = self
+            .stream_manager
+            .register_streaming_connection(&session_id, connection_id, tx)
+            .await
+        {
+            error!("Failed to register subscriptions/listen connection: {}", e);
+            return StreamableResponse::Error {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                message: "Failed to register subscription stream".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // The subscription id is the JSON-RPC id of the listen request.
+        let subscription_id = request.id.to_string();
+
+        // Acknowledgement — wire-complete JSON-RPC notification, first frame.
+        let mut ack_params = std::collections::HashMap::new();
+        ack_params.insert(
+            "notifications".to_string(),
+            serde_json::to_value(&honored).unwrap_or_default(),
+        );
+        ack_params.insert(
+            "_meta".to_string(),
+            serde_json::json!({ META_KEY_SUBSCRIPTION_ID: subscription_id }),
+        );
+        let ack = turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+            SUBSCRIPTIONS_ACKNOWLEDGED_METHOD.to_string(),
+            ack_params,
+        );
+        let ack_frame = format!(
+            "event: message\ndata: {}\n\n",
+            serde_json::to_string(&ack).unwrap_or_else(|_| "{}".to_string())
+        );
+
+        // Live tail: filter to the honored types (the broadcast-layer gate already
+        // drops the rest — this is the per-URI filter plus defense in depth) and
+        // stamp the subscription id into every delivered notification.
+        let filter = honored;
+        let sub_id = subscription_id;
+        let live = ReceiverStream::new(rx).filter_map(move |ev| {
+            let mut data = ev.data;
+            let method = data
+                .get("method")
+                .and_then(|m| m.as_str())
+                .unwrap_or_default();
+            let allowed = match method {
+                "notifications/tools/list_changed" => filter.tools_list_changed == Some(true),
+                "notifications/prompts/list_changed" => filter.prompts_list_changed == Some(true),
+                "notifications/resources/list_changed" => {
+                    filter.resources_list_changed == Some(true)
+                }
+                "notifications/resources/updated" => {
+                    let uri = data
+                        .get("params")
+                        .and_then(|p| p.get("uri"))
+                        .and_then(|u| u.as_str());
+                    match (uri, &filter.resource_subscriptions) {
+                        (Some(u), Some(uris)) => uris.iter().any(|x| x == u),
+                        _ => false,
+                    }
+                }
+                _ => false,
+            };
+            if !allowed {
+                return None;
+            }
+            if let Some(obj) = data.as_object_mut() {
+                let params = obj
+                    .entry("params")
+                    .or_insert_with(|| serde_json::Value::Object(Default::default()));
+                if let Some(pobj) = params.as_object_mut() {
+                    let meta = pobj
+                        .entry("_meta")
+                        .or_insert_with(|| serde_json::Value::Object(Default::default()));
+                    if let Some(mobj) = meta.as_object_mut() {
+                        mobj.insert(
+                            META_KEY_SUBSCRIPTION_ID.to_string(),
+                            serde_json::Value::String(sub_id.clone()),
+                        );
+                    }
+                }
+            }
+            Some(Ok::<_, hyper::Error>(http_body::Frame::data(Bytes::from(
+                format!("id: {}\nevent: message\ndata: {}\n\n", ev.id, data),
+            ))))
+        });
+
+        let ack_stream = tokio_stream::once(Ok::<_, hyper::Error>(http_body::Frame::data(
+            Bytes::from(ack_frame),
+        )));
+        let body = StreamBody::new(ack_stream.chain(live));
+
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .header("X-Accel-Buffering", "no")
+            .header("MCP-Protocol-Version", context.protocol_version.as_str())
+            .body(http_body_util::BodyExt::boxed_unsync(body))
+            .unwrap()
     }
 
     /// Create a streaming response using hyper::Body::channel()
