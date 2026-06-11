@@ -191,6 +191,39 @@ Each proposal names **why it should exist**, the **learning value** for a human
 reader, the **spec match** (the driver-doc table it demonstrates), and its
 **practical usefulness**. None exist today in any form.
 
+> **EXECUTED 2026-06-12** (slice 4) — per-proposal disposition:
+>
+> 1. **subscriptions pair** — satisfied without a new package: the
+>    notification-server rewrite (slice 2) is the server side;
+>    `streamable-http-client` gained the client leg (`subscriptions_listen`
+>    ack + filter + `subscriptionId`, drives `trigger_changes` when pointed
+>    at notification-server). Live-verified: deliveries land, the
+>    un-requested `prompts/list_changed` is correctly filtered out.
+> 2. **mrtr-elicitation-server** — BUILT (port 8642, server + client bins).
+>    Live-verified full round trip: `input_required` →
+>    `call_tool_with_input_responses` → "deployed billing-api ✅".
+> 3. **request-scoped-observability** — satisfied without a new package:
+>    notification-server's `long_job` (progress + log under the per-request
+>    opt-ins) plus `streamable-http-client`'s `call_tool_with_progress`.
+> 4. **origin-policy-server** — BUILT (port 8643, was "browser-facing-server").
+>    Live-verified matrix: no-Origin 200 / evil 403 / allowlisted 200 /
+>    loopback 200.
+> 5. **oauth-scoped-server** — folded into `oauth-resource-server` as the
+>    audit suggested (`--required-scope` via manual middleware construction,
+>    slice 3); no new package.
+> 6. **bilingual-fleet-client** — BUILT. Live-verified sweep: 2026 peer
+>    negotiates stateless (discover retained), 2025 peer falls back to the
+>    initialize handshake; same `list_tools` works on both.
+> 7. **header-bound-tools-server** — BUILT (port 8644). Live-verified
+>    SEP-2243 contract: matching header 200; omitted/mismatched header →
+>    400 + `-32001` with the exact mismatch messages.
+> 8. **completion-provider-server** — satisfied by the completion-server
+>    rewrite (slice 2); no new package.
+>
+> Client-using packages (`mrtr-elicitation-server`, `bilingual-fleet-client`)
+> stay out of default-members and are built by an explicit gate step
+> (ci-gates.sh + ci.yml), like `streamable-http-client`.
+
 ### 1. `subscriptions-listen-server` + `subscriptions-listen-client` (pair)
 
 - **Why**: `subscriptions/listen` is THE replacement for the entire 2025

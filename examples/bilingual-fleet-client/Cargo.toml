@@ -1,0 +1,20 @@
+# Uses the bilingual turul-mcp-client (out of default-members, like
+# streamable-http-client); built by an explicit gate step.
+[package]
+name = "bilingual-fleet-client"
+version = "0.4.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+turul-mcp-client.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "bilingual-fleet-client"
+path = "src/main.rs"
+test = false

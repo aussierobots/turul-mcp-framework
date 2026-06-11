@@ -70,6 +70,8 @@ jobs:
         run: cargo test -p turul-mcp-client
       - name: 2026 client example (pairs with minimal-server)
         run: cargo build -p streamable-http-client
+      - name: Client-using examples (not in default-members)
+        run: cargo build -p mrtr-elicitation-server --bins -p bilingual-fleet-client
 
   opt-in-2025:
     name: Opt-in lane (2025-11-25)

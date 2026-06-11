@@ -1,6 +1,6 @@
 # MCP Framework Examples
 
-This document provides a comprehensive overview of all **50 active examples** in the MCP Framework (plus `examples/archived/` — grown by 5 in the 2026-06-12 archive slice, see `docs/plans/2026-07-28-examples-review.md`), organized by learning progression from basic concepts to advanced implementations.
+This document provides a comprehensive overview of all **53 active examples** in the MCP Framework (plus `examples/archived/` — grown by 5 in the 2026-06-12 archive slice, see `docs/plans/2026-07-28-examples-review.md`), organized by learning progression from basic concepts to advanced implementations.
 
 **✅ All active examples compile under their lane's CI gates** (2026-07-28 default lane
 + per-manifest 2025-11-25 pins). Per-example functional re-verification against the
@@ -15,7 +15,9 @@ lane** — run the server first, then point the client at it.
 
 | Client example | Lane | Corresponding server | Notes |
 |---|---|---|---|
-| `streamable-http-client` | **2026-07-28** | `minimal-server` (port 8641) | The canonical 2026 stateless pair: `connect()` negotiation, discover retention, `call_tool`, and the request-scoped progress API (shape demo — `echo` emits no progress events) |
+| `streamable-http-client` | **2026-07-28** | `minimal-server` (port 8641); point at `notification-server` (port 8005) for live subscription deliveries | The canonical 2026 stateless pair: `connect()` negotiation, discover retention, `call_tool`, request-scoped progress, and the ack-first `subscriptions_listen` stream |
+| `mrtr-elicitation-client` (in `mrtr-elicitation-server`) | **2026-07-28** | `mrtr-elicitation-server` (port 8642) | The MRTR round trip: `input_required` → answer → `call_tool_with_input_responses` |
+| `bilingual-fleet-client` | **both** | any mix (demo: `minimal-server` + `client-initialise-server`) | One binary sweeping a mixed 2025/2026 fleet — per-connection negotiation |
 | `streamable-http-client-2025-11-25` | 2025-11-25 | `client-initialise-server` (alternatives: any 2025-pinned server) | Hand-parsed 2025 POST SSE framing |
 | `client-initialise-report` | 2025-11-25 (wire-pinned) | `client-initialise-server` | Raw-wire lifecycle compliance probe |
 | `session-management-compliance-test` | 2025-11-25 (wire-pinned) | `client-initialise-server` | Session-contract regression client |
@@ -45,7 +47,7 @@ lane** — run the server first, then point the client at it.
 **Quick Start Command**:
 ```bash
 # Start with the minimal server
-cargo run --example minimal-server
+cargo run -p minimal-server
 # Server: http://127.0.0.1:8641/mcp
 ```
 
@@ -71,7 +73,7 @@ cargo run --example minimal-server
 | **function-resource-server** | 8008 | ✅ VALIDATED | Function-based resources | Resource function patterns |
 | **session-aware-resource-server** | 8008 | ✅ VALIDATED | Session-aware resources (2025-11-25 pinned) | Session context integration on the stateful lane |
 
-## 🟢 **FEATURE-SPECIFIC SERVERS** (8 examples) - Specialized MCP Features
+## 🟢 **FEATURE-SPECIFIC SERVERS** (11 examples) - Specialized MCP Features
 
 | Example | Port | Status | Description | Key Features |
 |---------|------|--------|-------------|--------------|
@@ -83,6 +85,9 @@ cargo run --example minimal-server
 | **pagination-server** | 8044 | ✅ VALIDATED | Result pagination | Large dataset pagination support |
 | **notification-server** | 8005 | ✅ VALIDATED | Notifications (2026: subscriptions/listen stream) | Real-time notification patterns |
 | **roots-server** | 8050 | ✅ VALIDATED | Root directories | MCP roots/list endpoint demonstration |
+| **mrtr-elicitation-server** | 8642 | ✅ VALIDATED | MRTR elicitation round trip (2026) | `InputRequired` → retry with `inputResponses`; paired client bin |
+| **origin-policy-server** | 8643 | ✅ VALIDATED | Origin validation / DNS-rebinding (2026) | `OriginPolicy` default/AllowList/Disabled; 403 matrix verified live |
+| **header-bound-tools-server** | 8644 | ✅ VALIDATED | SEP-2243 header-bound tool params (2026) | `x-mcp-header` → `Mcp-Param-*` mirroring; -32001 contract verified live |
 
 ## 🔵 **ADVANCED/COMPOSITE SERVERS** (5 examples) - Complex Functionality
 
@@ -99,7 +104,7 @@ cargo run --example minimal-server
 | **session-logging-proof-test** | 8001 | ✅ VALIDATED | Session logging validation | Session-based logging verification |
 | **logging-test-server** | 8052 | ✅ VALIDATED | Logging test suite | Comprehensive logging test suite |
 
-## 🟠 **CLIENT EXAMPLES** (5 examples) - Client Implementation
+## 🟠 **CLIENT EXAMPLES** (6 examples) - Client Implementation
 
 | Example | Type | Status | Description | Purpose |
 |---------|------|--------|-------------|---------|
@@ -107,16 +112,17 @@ cargo run --example minimal-server
 | **client-initialise-report** | Client | ✅ VALIDATED | MCP client implementation | Tests server initialization |
 | **streamable-http-client** | Client | ✅ VALIDATED | 2026-07-28 stateless client (pairs with minimal-server) | connect() negotiation, discover retention, request-scoped progress API |
 | **streamable-http-client-2025-11-25** | Client | ✅ VALIDATED | Hand-parsed 2025 Streamable HTTP client | MCP 2025-11-25 streaming demo |
+| **bilingual-fleet-client** | Client | ✅ VALIDATED | Mixed 2025/2026 fleet sweep | Per-connection negotiation (server/discover → initialize fallback) |
 | **logging-test-client** | Client | ✅ VALIDATED | Logging client | Tests logging functionality |
 | **session-management-compliance-test** | Combined | ✅ VALIDATED | Session compliance testing | MCP session spec compliance |
 
 **Client Testing**:
 ```bash
 # Start the test server
-cargo run --example client-initialise-server
+cargo run -p client-initialise-server
 
 # Test with client (in another terminal)
-cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
+cargo run -p client-initialise-report -- --url http://127.0.0.1:8641/mcp
 ```
 
 ## ☁️ **AWS LAMBDA** (4 examples) - Serverless Deployment
@@ -156,10 +162,10 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 **Task E2E Testing**:
 ```bash
 # Start the task-enabled server
-cargo run --example tasks-e2e-inmemory-server
+cargo run -p tasks-e2e-inmemory-server
 
 # Run the client test suite (in another terminal)
-cargo run --example tasks-e2e-inmemory-client -- --url http://127.0.0.1:8080/mcp
+cargo run -p tasks-e2e-inmemory-client -- --url http://127.0.0.1:8080/mcp
 ```
 
 ## 📖 **TYPE SHOWCASES** (4 examples) - Print-Only Demonstrations
@@ -207,9 +213,9 @@ re-verified its six examples live on the wire.
 - **Zero Breaking Changes**: All existing examples continue to work
 
 ### 📊 **Statistics**
-- **Total Examples**: 58 (25 archived in `examples/archived/`)
+- **Total Examples**: 53 active (30 archived in `examples/archived/`)
 - **Session-Aware Resources**: 6 examples demonstrating session context integration
-- **Client-Server Pairs**: 5 examples validating communication patterns
+- **Client-Server Pairs**: 9 pairing-table rows validating communication patterns
 - **Task Support**: 3 examples demonstrating MCP 2025-11-25 task lifecycle (InMemory storage)
 - **Middleware**: 4 examples (HTTP auth, logging, rate-limiting, Lambda auth)
 - **Storage Backends**: All 4 session backends (InMemory, SQLite, PostgreSQL, DynamoDB) working
@@ -219,11 +225,11 @@ re-verified its six examples live on the wire.
 
 **Basic Pattern**:
 ```bash
-# Run any example
-cargo run --example <example-name>
+# Run any example (examples are packages with [[bin]] targets — use -p)
+cargo run -p <example-name>
 
 # Examples with custom ports
-cargo run --example client-initialise-server -- --port 8641
+cargo run -p client-initialise-server -- --port 8641
 ```
 
 **With Features** (for PostgreSQL/DynamoDB examples):

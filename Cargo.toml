@@ -22,6 +22,7 @@ members = [
 
   # Active examples (33 total)
   "examples/audit-trail-server",
+  "examples/bilingual-fleet-client",
   "examples/calculator-add-builder-server",
   "examples/calculator-add-function-server",
   "examples/calculator-add-manual-server",
@@ -35,7 +36,9 @@ members = [
   "examples/lambda-mcp-client",
   "examples/lambda-mcp-server",
   "examples/minimal-server",
+  "examples/mrtr-elicitation-server",
   "examples/notification-server",
+  "examples/origin-policy-server",
   "examples/pagination-server",
   "examples/prompts-server",
   "examples/prompts-test-server",
@@ -55,6 +58,7 @@ members = [
   "examples/zero-config-getting-started",
 
   # MCP 2025-11-25 feature showcases
+  "examples/header-bound-tools-server",
   "examples/icon-showcase",
 
   # Tasks E2E test examples
@@ -124,6 +128,7 @@ default-members = [
   "examples/derive-macro-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
+  "examples/header-bound-tools-server",
   "examples/icon-showcase",
   "examples/lambda-authorizer",
   "examples/middleware-auth-lambda",
@@ -132,6 +137,7 @@ default-members = [
   "examples/middleware-rate-limit-server",
   "examples/minimal-server",
   "examples/notification-server",
+  "examples/origin-policy-server",
   "examples/oauth-resource-server",
   "examples/pagination-server",
   "examples/prompts-server",

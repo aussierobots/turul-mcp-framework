@@ -1,0 +1,24 @@
+[package]
+name = "origin-policy-server"
+version = "0.4.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
+turul-http-mcp-server.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+clap = { workspace = true, features = ["derive"] }
+
+[[bin]]
+name = "origin-policy-server"
+path = "src/main.rs"
+test = false

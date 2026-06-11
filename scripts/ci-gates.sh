@@ -41,6 +41,7 @@ gate_default() {
     cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
   run "bilingual client (not in default-members)" cargo test -p turul-mcp-client
   run "2026 client example (pairs with minimal-server)" cargo build -p streamable-http-client
+  run "client-using examples (not in default-members)" cargo build -p mrtr-elicitation-server --bins -p bilingual-fleet-client
 }
 
 gate_opt_in_2025() {
