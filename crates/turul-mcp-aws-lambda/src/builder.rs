@@ -99,7 +99,7 @@ pub struct LambdaMcpServerBuilder {
     sampling: HashMap<String, Arc<dyn McpSampling>>,
 
     /// Completion providers registered with the server
-    completions: HashMap<String, Arc<dyn McpCompletion>>,
+    completions: Vec<Arc<dyn McpCompletion>>,
 
     /// Loggers registered with the server
     #[cfg(feature = "protocol-2025-11-25")]
@@ -176,7 +176,7 @@ impl LambdaMcpServerBuilder {
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
         handlers.insert(
             "completion/complete".to_string(),
-            Arc::new(CompletionHandler),
+            Arc::new(CompletionHandler::new()),
         );
         handlers.insert(
             "resources/list".to_string(),
@@ -273,7 +273,7 @@ impl LambdaMcpServerBuilder {
             elicitations: HashMap::new(),
             #[cfg(feature = "protocol-2025-11-25")]
             sampling: HashMap::new(),
-            completions: HashMap::new(),
+            completions: Vec::new(),
             #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
             root_providers: HashMap::new(),
@@ -468,8 +468,7 @@ impl LambdaMcpServerBuilder {
 
     /// Register a completion provider with the server
     pub fn completion_provider<C: McpCompletion + 'static>(mut self, completion: C) -> Self {
-        let key = format!("completion_{}", self.completions.len());
-        self.completions.insert(key, Arc::new(completion));
+        self.completions.push(Arc::new(completion));
         self
     }
 
@@ -596,7 +595,7 @@ impl LambdaMcpServerBuilder {
     pub fn with_completion(mut self) -> Self {
         use turul_mcp_protocol::initialize::CompletionsCapabilities;
         self.capabilities.completions = Some(CompletionsCapabilities::default());
-        self.handler(CompletionHandler)
+        self.handler(CompletionHandler::new())
     }
 
     /// Add prompts support
@@ -1124,6 +1123,14 @@ impl LambdaMcpServerBuilder {
 
         // Add RootsHandler if roots were configured (same pattern as MCP server)
         let mut handlers = self.handlers;
+
+        // Route completion/complete through the registered providers.
+        if !self.completions.is_empty() {
+            handlers.insert(
+                "completion/complete".to_string(),
+                Arc::new(CompletionHandler::new().with_providers(self.completions.clone())),
+            );
+        }
         if !self.roots.is_empty() {
             let mut roots_handler = RootsHandler::new();
             for root in &self.roots {

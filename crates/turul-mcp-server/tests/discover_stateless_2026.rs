@@ -436,3 +436,202 @@ async fn completion_complete_dispatches_statelessly() {
         "CompleteResult must carry completion.values: {body}"
     );
 }
+
+// ---- completion/complete provider routing (COMP-1) ----
+
+/// Provider serving the `name` argument of the `greet` prompt.
+struct GreetNameCompleter;
+
+impl turul_mcp_server::prelude::HasCompletionMetadata for GreetNameCompleter {
+    fn method(&self) -> &str {
+        "completion/complete"
+    }
+    fn reference(&self) -> &turul_mcp_protocol::completion::CompletionReference {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::completion::{CompletionReference, PromptReference};
+        static REF: OnceLock<CompletionReference> = OnceLock::new();
+        REF.get_or_init(|| CompletionReference::Prompt(PromptReference::new("greet")))
+    }
+}
+impl turul_mcp_server::prelude::HasCompletionContext for GreetNameCompleter {
+    fn argument(&self) -> &turul_mcp_protocol::completion::CompleteArgument {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::completion::CompleteArgument;
+        static ARG: OnceLock<CompleteArgument> = OnceLock::new();
+        ARG.get_or_init(|| CompleteArgument::new("name", ""))
+    }
+}
+impl turul_mcp_server::prelude::HasCompletionHandling for GreetNameCompleter {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpCompletion for GreetNameCompleter {
+    async fn complete(
+        &self,
+        request: turul_mcp_protocol::completion::CompleteRequest,
+    ) -> McpResult<turul_mcp_protocol::completion::CompleteResult> {
+        use turul_mcp_protocol::completion::{CompleteResult, CompletionResult};
+        let prefix = request.params.argument.value.to_lowercase();
+        let values: Vec<String> = ["alpha", "beta", "gamma"]
+            .iter()
+            .filter(|v| v.starts_with(&prefix))
+            .map(|v| v.to_string())
+            .collect();
+        Ok(CompleteResult::new(CompletionResult::new(values)))
+    }
+}
+
+/// Provider returning more values than the spec's 100-item response cap.
+struct FloodCompleter;
+
+impl turul_mcp_server::prelude::HasCompletionMetadata for FloodCompleter {
+    fn method(&self) -> &str {
+        "completion/complete"
+    }
+    fn reference(&self) -> &turul_mcp_protocol::completion::CompletionReference {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::completion::{CompletionReference, PromptReference};
+        static REF: OnceLock<CompletionReference> = OnceLock::new();
+        REF.get_or_init(|| CompletionReference::Prompt(PromptReference::new("flood")))
+    }
+}
+impl turul_mcp_server::prelude::HasCompletionContext for FloodCompleter {
+    fn argument(&self) -> &turul_mcp_protocol::completion::CompleteArgument {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::completion::CompleteArgument;
+        static ARG: OnceLock<CompleteArgument> = OnceLock::new();
+        ARG.get_or_init(|| CompleteArgument::new("item", ""))
+    }
+}
+impl turul_mcp_server::prelude::HasCompletionHandling for FloodCompleter {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpCompletion for FloodCompleter {
+    async fn complete(
+        &self,
+        _request: turul_mcp_protocol::completion::CompleteRequest,
+    ) -> McpResult<turul_mcp_protocol::completion::CompleteResult> {
+        use turul_mcp_protocol::completion::{CompleteResult, CompletionResult};
+        let values: Vec<String> = (0..150).map(|i| format!("v{i:03}")).collect();
+        Ok(CompleteResult::new(CompletionResult::new(values)))
+    }
+}
+
+async fn start_completion_server() -> String {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("completion-provider-2026-test")
+        .version("0.4.0")
+        .tool(EchoTool::default())
+        .completion_provider(GreetNameCompleter)
+        .completion_provider(FloodCompleter)
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let client = reqwest::Client::new();
+    for _ in 0..50 {
+        if client.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    url
+}
+
+async fn post_completion(url: &str, prompt: &str, arg: &str, value: &str) -> serde_json::Value {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "completion/complete")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 40, "method": "completion/complete",
+            "params": {
+                "ref": { "type": "ref/prompt", "name": prompt },
+                "argument": { "name": arg, "value": value },
+                "_meta": meta()
+            }
+        }))
+        .send()
+        .await
+        .expect("completion POST");
+    assert_eq!(resp.status(), 200);
+    resp.json().await.expect("json")
+}
+
+/// Registered McpCompletion providers must answer completion/complete —
+/// not a hardcoded placeholder.
+#[tokio::test]
+async fn completion_complete_routes_to_registered_provider() {
+    let url = start_completion_server().await;
+    let body = post_completion(&url, "greet", "name", "a").await;
+    let values = body["result"]["completion"]["values"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    assert_eq!(
+        values,
+        vec![serde_json::json!("alpha")],
+        "the provider's filtered values must reach the wire: {body}"
+    );
+}
+
+/// Completion §Response: values carry "Maximum 100 items" — oversized
+/// provider output is truncated with total/hasMore reflecting the cut.
+#[tokio::test]
+async fn completion_values_are_capped_at_100() {
+    let url = start_completion_server().await;
+    let body = post_completion(&url, "flood", "item", "").await;
+    let completion = &body["result"]["completion"];
+    assert_eq!(
+        completion["values"].as_array().map(|a| a.len()),
+        Some(100),
+        "values must be capped at 100: {body}"
+    );
+    assert_eq!(completion["hasMore"], true, "{body}");
+    assert_eq!(completion["total"], 150, "{body}");
+}
+
+/// Completion §Security: "Implementations MUST validate all completion
+/// inputs" — malformed params are -32602, not 200-with-placeholder.
+#[tokio::test]
+async fn malformed_completion_params_are_rejected_with_32602() {
+    let url = start_completion_server().await;
+    let client = reqwest::Client::new();
+    for bad_params in [
+        // missing argument entirely
+        serde_json::json!({ "ref": { "type": "ref/prompt", "name": "greet" }, "_meta": meta() }),
+        // unknown ref type
+        serde_json::json!({
+            "ref": { "type": "ref/banana", "name": "greet" },
+            "argument": { "name": "name", "value": "a" },
+            "_meta": meta()
+        }),
+    ] {
+        let resp = client
+            .post(&url)
+            .header("Accept", "application/json")
+            .header("MCP-Protocol-Version", "2026-07-28")
+            .header("Mcp-Method", "completion/complete")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "id": 41, "method": "completion/complete",
+                "params": bad_params
+            }))
+            .send()
+            .await
+            .expect("completion POST");
+        let body: serde_json::Value = resp.json().await.expect("json");
+        assert_eq!(
+            body["error"]["code"], -32602,
+            "malformed completion params must be invalid-params: {body}"
+        );
+    }
+}

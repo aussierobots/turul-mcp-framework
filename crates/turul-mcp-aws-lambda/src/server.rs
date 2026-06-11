@@ -47,7 +47,7 @@ pub struct LambdaMcpServer {
     #[cfg(feature = "protocol-2025-11-25")]
     sampling: HashMap<String, Arc<dyn McpSampling>>,
     /// Registered completion providers
-    completions: HashMap<String, Arc<dyn McpCompletion>>,
+    completions: Vec<Arc<dyn McpCompletion>>,
     /// Registered loggers
     #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
@@ -111,7 +111,7 @@ impl LambdaMcpServer {
             Arc<dyn McpElicitation>,
         >,
         #[cfg(feature = "protocol-2025-11-25")] sampling: HashMap<String, Arc<dyn McpSampling>>,
-        completions: HashMap<String, Arc<dyn McpCompletion>>,
+        completions: Vec<Arc<dyn McpCompletion>>,
         #[cfg(feature = "protocol-2025-11-25")] loggers: HashMap<String, Arc<dyn McpLogger>>,
         root_providers: HashMap<String, Arc<dyn McpRoot>>,
         notifications: HashMap<String, Arc<dyn McpNotification>>,

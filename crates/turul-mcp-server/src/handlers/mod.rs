@@ -234,20 +234,112 @@ impl McpHandler for PingHandler {
     }
 }
 
-/// Completion handler for completion/complete endpoint
-pub struct CompletionHandler;
+/// Completion handler for the completion/complete endpoint.
+///
+/// Routes to registered [`McpCompletion`](crate::McpCompletion) providers:
+/// highest `priority()` first, first `can_handle()` wins. Responses honor the
+/// spec's 100-item cap on `completion.values` (oversized provider output is
+/// truncated with `total`/`hasMore` reflecting the cut). With no matching
+/// provider the result carries empty values.
+#[derive(Default)]
+pub struct CompletionHandler {
+    providers: Vec<Arc<dyn crate::McpCompletion>>,
+}
+
+impl CompletionHandler {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_providers(mut self, providers: Vec<Arc<dyn crate::McpCompletion>>) -> Self {
+        self.providers = providers;
+        // Stable sort: priority desc, insertion order as the tiebreak.
+        self.providers
+            .sort_by_key(|p| std::cmp::Reverse(p.priority()));
+        self
+    }
+}
+
+/// Does a provider's declared reference target the request's reference?
+fn completion_reference_matches(
+    declared: &turul_mcp_protocol::completion::CompletionReference,
+    requested: &turul_mcp_protocol::completion::CompletionReference,
+) -> bool {
+    use turul_mcp_protocol::completion::CompletionReference as Ref;
+    match (declared, requested) {
+        (Ref::Prompt(a), Ref::Prompt(b)) => a.name == b.name,
+        (Ref::ResourceTemplate(a), Ref::ResourceTemplate(b)) => a.uri == b.uri,
+        _ => false,
+    }
+}
+
+/// `completion.values` carries "Maximum 100 items" per the Completion spec.
+const COMPLETION_VALUES_CAP: usize = 100;
 
 #[async_trait]
 impl McpHandler for CompletionHandler {
-    async fn handle(&self, _params: Option<Value>) -> McpResult<Value> {
-        use turul_mcp_protocol::completion::{CompleteResult, CompletionResult};
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        use turul_mcp_protocol::completion::{CompleteRequest, CompleteResult, CompletionResult};
+        // The params struct is `CompleteRequestParams` on 2026-07-28 (required
+        // `_meta`) and `CompleteParams` on the frozen 2025-11-25 snapshot.
+        #[cfg(feature = "protocol-2025-11-25")]
+        use turul_mcp_protocol::completion::CompleteParams as TypedCompleteParams;
+        #[cfg(feature = "protocol-2026-07-28")]
+        use turul_mcp_protocol::completion::CompleteRequestParams as TypedCompleteParams;
 
-        // Default implementation - can be overridden by users
-        let values = vec!["example1".to_string(), "example2".to_string()];
+        let params = params.ok_or_else(|| {
+            McpError::InvalidParameters("completion/complete requires params".to_string())
+        })?;
+        let typed: TypedCompleteParams = serde_json::from_value(params)
+            .map_err(|e| McpError::InvalidParameters(format!("invalid completion params: {e}")))?;
+        // The untagged reference union accepts any `type` string — enforce
+        // the schema's literals ("ref/prompt" / "ref/resource") here.
+        let ref_type = match &typed.reference {
+            turul_mcp_protocol::completion::CompletionReference::Prompt(p) => {
+                (&p.ref_type, "ref/prompt")
+            }
+            turul_mcp_protocol::completion::CompletionReference::ResourceTemplate(r) => {
+                (&r.ref_type, "ref/resource")
+            }
+        };
+        if ref_type.0 != ref_type.1 {
+            return Err(McpError::InvalidParameters(format!(
+                "unknown completion reference type {:?} (expected \"ref/prompt\" or \"ref/resource\")",
+                ref_type.0
+            )));
+        }
+        let request = CompleteRequest {
+            method: "completion/complete".to_string(),
+            params: typed,
+        };
 
-        let completion_result = CompletionResult::new(values);
-        let response = CompleteResult::new(completion_result);
-        serde_json::to_value(response).map_err(McpError::from)
+        // Providers declaring the request's exact reference win; a provider
+        // whose can_handle accepts the request is the fallback. Both passes
+        // run in (priority desc, insertion) order, so routing is
+        // deterministic.
+        let provider = self
+            .providers
+            .iter()
+            .find(|p| {
+                completion_reference_matches(p.reference(), &request.params.reference)
+                    && p.can_handle(&request)
+            })
+            .or_else(|| self.providers.iter().find(|p| p.can_handle(&request)));
+        let result = match provider {
+            Some(provider) => {
+                crate::McpCompletion::validate_request(provider.as_ref(), &request).await?;
+                let mut result = provider.complete(request).await?;
+                let len = result.completion.values.len();
+                if len > COMPLETION_VALUES_CAP {
+                    result.completion.values.truncate(COMPLETION_VALUES_CAP);
+                    result.completion.has_more = Some(true);
+                    result.completion.total.get_or_insert(len as u32);
+                }
+                result
+            }
+            None => CompleteResult::new(CompletionResult::new(Vec::new())),
+        };
+        serde_json::to_value(result).map_err(McpError::from)
     }
 
     fn supported_methods(&self) -> Vec<String> {
