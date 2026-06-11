@@ -37,6 +37,7 @@ pub struct RequestContext<'a> {
 
     /// Bearer token extracted from Authorization header (D5: isolated from metadata)
     bearer_token: Option<String>,
+    authorization_malformed: bool,
 
     /// Request-scoped extensions for passing data between middleware and tools (D3)
     ///
@@ -58,6 +59,7 @@ impl<'a> RequestContext<'a> {
             params,
             metadata: Map::new(),
             bearer_token: None,
+            authorization_malformed: false,
             extensions: HashMap::new(),
         }
     }
@@ -105,6 +107,20 @@ impl<'a> RequestContext<'a> {
     /// Set the Bearer token (called by transport during extraction)
     pub fn set_bearer_token(&mut self, token: String) {
         self.bearer_token = Some(token);
+    }
+
+    /// Was an `Authorization` header present but NOT a parseable Bearer
+    /// credential? Auth middleware uses this to answer 400 invalid_request
+    /// (RFC 6750 §3.1, "Malformed authorization request") instead of the
+    /// missing-credentials 401.
+    pub fn authorization_malformed(&self) -> bool {
+        self.authorization_malformed
+    }
+
+    /// Mark the request's `Authorization` header as present-but-malformed
+    /// (called by transport during extraction).
+    pub fn set_authorization_malformed(&mut self, malformed: bool) {
+        self.authorization_malformed = malformed;
     }
 
     /// Get request-scoped extensions (read-only)

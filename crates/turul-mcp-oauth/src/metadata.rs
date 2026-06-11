@@ -109,7 +109,28 @@ impl ProtectedResourceMetadata {
     }
 
     /// Set supported scopes
+    /// Set the advertised scopes (`scopes_supported`, echoed into the
+    /// `WWW-Authenticate` challenge's `scope` parameter).
+    ///
+    /// `offline_access` is filtered out with a warning — Authorization
+    /// §Refresh Tokens: "MCP Servers (Protected Resources) SHOULD NOT include
+    /// offline_access in WWW-Authenticate scope or Protected Resource
+    /// Metadata scopes_supported."
     pub fn with_scopes(mut self, scopes: Vec<String>) -> Self {
+        let scopes: Vec<String> = scopes
+            .into_iter()
+            .filter(|s| {
+                if s == "offline_access" {
+                    tracing::warn!(
+                        "dropping offline_access from advertised scopes — resource servers \
+                         SHOULD NOT advertise it (Authorization §Refresh Tokens)"
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
         self.scopes_supported = Some(scopes);
         self
     }
@@ -492,6 +513,31 @@ mod tests {
                 ],
             )
             .is_ok()
+        );
+    }
+}
+
+#[cfg(test)]
+mod offline_access_tests {
+    use super::*;
+
+    /// Authorization §Refresh Tokens: resource servers SHOULD NOT advertise
+    /// offline_access — with_scopes filters it with a warning.
+    #[test]
+    fn offline_access_is_filtered_from_scopes() {
+        let metadata = ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .unwrap()
+        .with_scopes(vec![
+            "mcp:read".to_string(),
+            "offline_access".to_string(),
+            "mcp:write".to_string(),
+        ]);
+        assert_eq!(
+            metadata.scopes_supported,
+            Some(vec!["mcp:read".to_string(), "mcp:write".to_string()])
         );
     }
 }

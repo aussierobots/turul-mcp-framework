@@ -25,6 +25,7 @@ use crate::metadata::ProtectedResourceMetadata;
 pub struct OAuthResourceMiddleware {
     jwt_validator: Arc<JwtValidator>,
     metadata: ProtectedResourceMetadata,
+    required_scopes: Vec<String>,
 }
 
 impl OAuthResourceMiddleware {
@@ -33,7 +34,16 @@ impl OAuthResourceMiddleware {
         Self {
             jwt_validator,
             metadata,
+            required_scopes: Vec::new(),
         }
+    }
+
+    /// Require these scopes on every validated token (space-delimited `scope`
+    /// claim). A token missing any of them is rejected with HTTP 403 and a
+    /// `WWW-Authenticate` challenge carrying `error="insufficient_scope"`.
+    pub fn with_required_scopes(mut self, scopes: Vec<String>) -> Self {
+        self.required_scopes = scopes;
+        self
     }
 
     /// Build a WWW-Authenticate challenge header value
@@ -65,9 +75,27 @@ impl McpMiddleware for OAuthResourceMiddleware {
         _session: Option<&dyn SessionView>,
         _injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        let token = ctx
-            .bearer_token()
-            .ok_or_else(|| MiddlewareError::http_challenge(401, self.build_challenge("")))?;
+        let token = match ctx.bearer_token() {
+            Some(token) => token,
+            // RFC 6750 §3.1 / Authorization §Error Handling: a PRESENT but
+            // malformed Authorization header is 400 invalid_request, NOT the
+            // missing-credentials 401.
+            None if ctx.authorization_malformed() => {
+                return Err(MiddlewareError::http_challenge(
+                    400,
+                    self.build_challenge(
+                        ", error=\"invalid_request\", \
+                         error_description=\"malformed Authorization header\"",
+                    ),
+                ));
+            }
+            None => {
+                return Err(MiddlewareError::http_challenge(
+                    401,
+                    self.build_challenge(""),
+                ));
+            }
+        };
 
         debug!("Validating Bearer token for method: {}", ctx.method());
 
@@ -81,6 +109,28 @@ impl McpMiddleware for OAuthResourceMiddleware {
                 )),
             )
         })?;
+
+        // Runtime scope enforcement (Authorization §Insufficient Scope):
+        // "the server SHOULD respond with HTTP 403 Forbidden ... error=\"insufficient_scope\"".
+        if !self.required_scopes.is_empty() {
+            let granted: std::collections::HashSet<&str> = claims
+                .scope
+                .as_deref()
+                .unwrap_or("")
+                .split_ascii_whitespace()
+                .collect();
+            if let Some(missing) = self
+                .required_scopes
+                .iter()
+                .find(|s| !granted.contains(s.as_str()))
+            {
+                debug!("Token lacks required scope {missing}");
+                return Err(MiddlewareError::http_challenge(
+                    403,
+                    self.build_challenge(", error=\"insufficient_scope\""),
+                ));
+            }
+        }
 
         // Write claims into extensions for downstream tools
         ctx.set_extension(
@@ -241,6 +291,126 @@ mod tests {
                 );
             }
             other => panic!("Expected HttpChallenge, got {:?}", other),
+        }
+    }
+
+    // ---- scope enforcement (Authorization §Insufficient Scope) ----
+
+    fn test_metadata() -> ProtectedResourceMetadata {
+        ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .unwrap()
+        .with_scopes(vec!["mcp:read".to_string(), "mcp:write".to_string()])
+    }
+
+    async fn hs256_validator() -> JwtValidator {
+        use jsonwebtoken::{Algorithm, DecodingKey};
+        JwtValidator::test_with_key_async(
+            DecodingKey::from_secret(b"test-secret"),
+            "kid-1",
+            Algorithm::HS256,
+        )
+        .await
+        .with_algorithms(vec![Algorithm::HS256])
+    }
+
+    fn mint_token(scope: Option<&str>) -> String {
+        use jsonwebtoken::{Algorithm, EncodingKey, Header};
+        let claims = crate::jwt::TokenClaims {
+            sub: "user-1".to_string(),
+            iss: "https://auth.example.com".to_string(),
+            aud: serde_json::json!("https://example.com/mcp"),
+            exp: (std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs())
+                + 3600,
+            iat: 0,
+            scope: scope.map(String::from),
+            extra: Default::default(),
+        };
+        let mut header = Header::new(Algorithm::HS256);
+        header.kid = Some("kid-1".to_string());
+        jsonwebtoken::encode(&header, &claims, &EncodingKey::from_secret(b"test-secret")).unwrap()
+    }
+
+    #[tokio::test]
+    async fn insufficient_scope_returns_403_challenge() {
+        let middleware =
+            OAuthResourceMiddleware::new(Arc::new(hs256_validator().await), test_metadata())
+                .with_required_scopes(vec!["mcp:write".to_string()]);
+
+        let mut ctx = RequestContext::new("tools/call", None);
+        ctx.set_bearer_token(mint_token(Some("mcp:read")));
+        let mut injection = SessionInjection::default();
+        let err = middleware
+            .before_dispatch(&mut ctx, None, &mut injection)
+            .await
+            .expect_err("token without mcp:write must be rejected");
+        match err {
+            MiddlewareError::HttpChallenge {
+                status,
+                www_authenticate,
+                ..
+            } => {
+                assert_eq!(status, 403, "insufficient scope is 403 Forbidden");
+                assert!(
+                    www_authenticate.contains("insufficient_scope"),
+                    "{www_authenticate}"
+                );
+                assert!(
+                    www_authenticate.contains("scope="),
+                    "challenge must list the scopes: {www_authenticate}"
+                );
+            }
+            other => panic!("expected HttpChallenge, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn sufficient_scope_passes_and_injects_claims() {
+        let middleware =
+            OAuthResourceMiddleware::new(Arc::new(hs256_validator().await), test_metadata())
+                .with_required_scopes(vec!["mcp:write".to_string()]);
+
+        let mut ctx = RequestContext::new("tools/call", None);
+        ctx.set_bearer_token(mint_token(Some("mcp:read mcp:write")));
+        let mut injection = SessionInjection::default();
+        middleware
+            .before_dispatch(&mut ctx, None, &mut injection)
+            .await
+            .expect("token with all required scopes must pass");
+        assert!(ctx.get_extension("__turul_internal.auth_claims").is_some());
+    }
+
+    /// RFC 6750 §3.1: present-but-malformed Authorization → 400 invalid_request.
+    #[tokio::test]
+    async fn malformed_authorization_returns_400_invalid_request() {
+        let middleware =
+            OAuthResourceMiddleware::new(Arc::new(hs256_validator().await), test_metadata());
+
+        let mut ctx = RequestContext::new("tools/call", None);
+        ctx.set_authorization_malformed(true);
+        let mut injection = SessionInjection::default();
+        let err = middleware
+            .before_dispatch(&mut ctx, None, &mut injection)
+            .await
+            .expect_err("malformed header must be rejected");
+        match err {
+            MiddlewareError::HttpChallenge {
+                status,
+                www_authenticate,
+                ..
+            } => {
+                assert_eq!(status, 400);
+                assert!(
+                    www_authenticate.contains("invalid_request"),
+                    "{www_authenticate}"
+                );
+            }
+            other => panic!("expected HttpChallenge, got: {other:?}"),
         }
     }
 }

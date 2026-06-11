@@ -62,6 +62,10 @@ path = "consolidated/e2e_tests.rs"
 name = "feature_tests"
 path = "consolidated/feature_tests.rs"
 
+[[test]]
+name = "ping_auth_2025"
+path = "ping_auth_2025.rs"
+
 # Standalone: uses mod test_helpers which requires crate-root relative path
 [[test]]
 name = "session_context_macro_tests"

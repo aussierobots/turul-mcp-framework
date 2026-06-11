@@ -417,13 +417,13 @@ impl SessionMcpHandler {
                 JsonRpcMessage::Request(req) => req.method.as_str(),
                 JsonRpcMessage::Notification(notif) => notif.method.as_str(),
             };
-            let bearer_token = headers
-                .get("authorization")
-                .and_then(|v| extract_bearer_token(v));
+            let auth_header = headers.get("authorization");
+            let bearer_token = auth_header.and_then(|v| extract_bearer_token(v));
             let mut pre_ctx = crate::middleware::RequestContext::new(method_name, None);
             if let Some(ref token) = bearer_token {
                 pre_ctx.set_bearer_token(token.clone());
             }
+            pre_ctx.set_authorization_malformed(auth_header.is_some() && bearer_token.is_none());
             for (k, v) in &headers {
                 if k.eq_ignore_ascii_case("authorization") && is_bearer_scheme(v) {
                     continue;

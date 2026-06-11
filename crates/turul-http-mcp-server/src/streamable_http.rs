@@ -1234,64 +1234,13 @@ impl StreamableHttpHandler {
             }
         };
 
-        // Handle sessionless ping (pre-init ping support per MCP 2025-11-25)
-        // Clients are permitted to send pings before initialization completes.
-        // When allowed by config, dispatch through the shared middleware + dispatch pipeline
-        // with session=None, so rate-limiting middleware can still block abuse.
-        // 2026-07-28 has no ping (absent from the schema): the bypass is
-        // 2025-only, so on the 2026 path ping flows through header validation
-        // and the unknown-method 404 like any other non-method.
-        #[cfg(feature = "protocol-2025-11-25")]
-        let is_sessionless_ping = match &message {
-            JsonRpcMessage::Request(req) => req.method == "ping",
-            JsonRpcMessage::Notification(notif) => notif.method == "ping",
-        } && context.session_id.is_none()
-            && self.config.allow_unauthenticated_ping;
-        #[cfg(feature = "protocol-2026-07-28")]
-        let is_sessionless_ping = false;
-
-        if is_sessionless_ping {
-            return match message {
-                JsonRpcMessage::Request(request) => {
-                    // Sessionless ping request: shared dispatch path
-                    let (response, _) = self
-                        .run_middleware_and_dispatch(request, context.headers.clone(), None, None)
-                        .await;
-                    let response_value =
-                        serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
-                    StreamableResponse::Json(response_value).into_boxed_response(&context)
-                }
-                JsonRpcMessage::Notification(notification) => {
-                    // Sessionless ping notification: dispatch and return 202 Accepted
-                    let dispatcher = Arc::clone(&self.dispatcher);
-                    tokio::spawn(async move {
-                        if let Err(e) = dispatcher
-                            .handle_notification_with_context(notification, None)
-                            .await
-                        {
-                            error!("Failed to process sessionless ping notification: {}", e);
-                        }
-                    });
-
-                    Response::builder()
-                        .status(StatusCode::ACCEPTED)
-                        .header("MCP-Protocol-Version", context.protocol_version.as_str())
-                        .body(
-                            Full::new(Bytes::new())
-                                .map_err(|never| match never {})
-                                .boxed_unsync(),
-                        )
-                        .unwrap()
-                }
-            };
-        }
-
         // --- Pre-session auth phase (D4) ---
-        // Extract Bearer token using hardened parser (D6)
-        let bearer_token = context
-            .headers
-            .get("authorization")
-            .and_then(|v| extract_bearer_token(v));
+        // Extract Bearer token using hardened parser (D6). A present-but-
+        // unparseable Authorization header is flagged so auth middleware can
+        // answer 400 invalid_request (RFC 6750 §3.1) instead of 401.
+        let auth_header = context.headers.get("authorization");
+        let bearer_token = auth_header.and_then(|v| extract_bearer_token(v));
+        let authorization_malformed = auth_header.is_some() && bearer_token.is_none();
 
         // Run pre-session middleware if any are registered
         let pre_session_extensions = if self.middleware_stack.has_pre_session_middleware() {
@@ -1303,6 +1252,7 @@ impl StreamableHttpHandler {
             if let Some(ref token) = bearer_token {
                 pre_ctx.set_bearer_token(token.clone());
             }
+            pre_ctx.set_authorization_malformed(authorization_malformed);
             // Copy headers to metadata, excluding Bearer authorization (D5)
             for (k, v) in &context.headers {
                 if k.eq_ignore_ascii_case("authorization") && is_bearer_scheme(v) {
@@ -1353,6 +1303,63 @@ impl StreamableHttpHandler {
         } else {
             None
         };
+
+        // Handle sessionless ping (pre-init ping support per MCP 2025-11-25).
+        // Clients are permitted to send pings before initialization completes.
+        // The bypass waives the SESSION requirement only — it runs AFTER the
+        // pre-session auth phase above, so servers that implement
+        // authorization still verify pings ("MUST verify all inbound
+        // requests", security best practices). 2026-07-28 has no ping
+        // (absent from the schema): the bypass is 2025-only.
+        #[cfg(feature = "protocol-2025-11-25")]
+        let is_sessionless_ping = match &message {
+            JsonRpcMessage::Request(req) => req.method == "ping",
+            JsonRpcMessage::Notification(notif) => notif.method == "ping",
+        } && context.session_id.is_none()
+            && self.config.allow_unauthenticated_ping;
+        #[cfg(feature = "protocol-2026-07-28")]
+        let is_sessionless_ping = false;
+
+        if is_sessionless_ping {
+            return match message {
+                JsonRpcMessage::Request(request) => {
+                    // Sessionless ping request: shared dispatch path
+                    let (response, _) = self
+                        .run_middleware_and_dispatch(
+                            request,
+                            context.headers.clone(),
+                            None,
+                            pre_session_extensions.clone(),
+                        )
+                        .await;
+                    let response_value =
+                        serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
+                    StreamableResponse::Json(response_value).into_boxed_response(&context)
+                }
+                JsonRpcMessage::Notification(notification) => {
+                    // Sessionless ping notification: dispatch and return 202 Accepted
+                    let dispatcher = Arc::clone(&self.dispatcher);
+                    tokio::spawn(async move {
+                        if let Err(e) = dispatcher
+                            .handle_notification_with_context(notification, None)
+                            .await
+                        {
+                            error!("Failed to process sessionless ping notification: {}", e);
+                        }
+                    });
+
+                    Response::builder()
+                        .status(StatusCode::ACCEPTED)
+                        .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                        .body(
+                            Full::new(Bytes::new())
+                                .map_err(|never| match never {})
+                                .boxed_unsync(),
+                        )
+                        .unwrap()
+                }
+            };
+        }
 
         // 2026-07-28 §Server Validation: required request-metadata headers. Runs
         // AFTER the pre-session auth phase so authentication challenges (401)

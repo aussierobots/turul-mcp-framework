@@ -180,3 +180,41 @@ async fn protected_resource_metadata_is_served_on_well_known_routes() {
         assert!(body["resource"].as_str().unwrap_or("").ends_with("/mcp"));
     }
 }
+
+/// Authorization §Error Handling: "400 Bad Request: Malformed authorization
+/// request" (RFC 6750 §3.1 invalid_request) — a PRESENT but malformed
+/// Authorization header is 400, distinguishable from the missing-header 401.
+#[tokio::test]
+async fn malformed_authorization_header_gets_400_invalid_request() {
+    let url = start_oauth_server().await;
+    let client = reqwest::Client::new();
+    for bad in ["Basic Zm9vOmJhcg==", "Bearer", "Bearer two tokens"] {
+        let resp = client
+            .post(&url)
+            .header("Accept", "application/json")
+            .header("MCP-Protocol-Version", "2026-07-28")
+            .header("Mcp-Method", "server/discover")
+            .header("Authorization", bad)
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "id": 3, "method": "server/discover",
+                "params": { "_meta": meta() }
+            }))
+            .send()
+            .await
+            .expect("POST");
+        assert_eq!(
+            resp.status(),
+            400,
+            "malformed Authorization {bad:?} must be 400, not 401-as-missing"
+        );
+        let challenge = resp
+            .headers()
+            .get("www-authenticate")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+        assert!(
+            challenge.contains("invalid_request"),
+            "challenge must carry error=\"invalid_request\": {challenge}"
+        );
+    }
+}

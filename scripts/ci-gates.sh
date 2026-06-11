@@ -59,6 +59,7 @@ gate_opt_in_2025() {
   run "sampling E2E"    cargo test -p mcp-sampling-tests
   run "elicitation E2E" cargo test -p mcp-elicitation-tests
   run "tasks E2E"       cargo test -p turul-mcp-framework-integration-tests --test tasks_e2e_inmemory
+  run "ping auth E2E"   cargo test -p turul-mcp-framework-integration-tests --test ping_auth_2025
 }
 
 gate_mutex() {
