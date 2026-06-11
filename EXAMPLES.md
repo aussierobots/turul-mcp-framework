@@ -73,7 +73,7 @@ cargo run -p minimal-server
 | **function-resource-server** | 8008 | ✅ VALIDATED | Function-based resources | Resource function patterns |
 | **session-aware-resource-server** | 8008 | ✅ VALIDATED | Session-aware resources (2025-11-25 pinned) | Session context integration on the stateful lane |
 
-## 🟢 **FEATURE-SPECIFIC SERVERS** (11 examples) - Specialized MCP Features
+## 🟢 **FEATURE-SPECIFIC SERVERS** (13 examples) - Specialized MCP Features
 
 | Example | Port | Status | Description | Key Features |
 |---------|------|--------|-------------|--------------|
@@ -88,15 +88,17 @@ cargo run -p minimal-server
 | **mrtr-elicitation-server** | 8642 | ✅ VALIDATED | MRTR elicitation round trip (2026) | `InputRequired` → retry with `inputResponses`; paired client bin |
 | **origin-policy-server** | 8643 | ✅ VALIDATED | Origin validation / DNS-rebinding (2026) | `OriginPolicy` default/AllowList/Disabled; 403 matrix verified live |
 | **header-bound-tools-server** | 8644 | ✅ VALIDATED | SEP-2243 header-bound tool params (2026) | `x-mcp-header` → `Mcp-Param-*` mirroring; -32001 contract verified live |
+| **oauth-resource-server** | 8080 | ✅ VALIDATED | OAuth 2.1 Resource Server (RFC 9728) | JWKS Bearer validation, PRM well-known routes, `--required-scope` → 403 insufficient_scope |
+| **dynamic-tools-server** | 8484 | ✅ VALIDATED | Dynamic tool registration (2025-pinned) | `ToolRegistry` + `notifications/tools/list_changed` on the stateful lane |
 
-## 🔵 **ADVANCED/COMPOSITE SERVERS** (5 examples) - Complex Functionality
+## 🔵 **ADVANCED/COMPOSITE SERVERS** (2 examples) - Complex Functionality
 
 | Example | Port | Status | Description | Advanced Features |
 |---------|------|--------|-------------|-------------------|
 | **audit-trail-server** | 8009 | ✅ VALIDATED | Audit logging | Comprehensive audit logging system |
 | **zero-config-getting-started** | 8641 | ✅ VALIDATED | Zero-configuration setup | Getting started tutorial server |
 
-## 🔴 **SESSION & STATE** (4 examples) - Advanced State Handling
+## 🔴 **SESSION & STATE** (3 examples) - Advanced State Handling (2025-pinned lane)
 
 | Example | Port | Status | Description | Session Features |
 |---------|------|--------|-------------|------------------|
@@ -104,7 +106,7 @@ cargo run -p minimal-server
 | **session-logging-proof-test** | 8001 | ✅ VALIDATED | Session logging validation | Session-based logging verification |
 | **logging-test-server** | 8052 | ✅ VALIDATED | Logging test suite | Comprehensive logging test suite |
 
-## 🟠 **CLIENT EXAMPLES** (6 examples) - Client Implementation
+## 🟠 **CLIENT EXAMPLES** (7 entries) - Client Implementation
 
 | Example | Type | Status | Description | Purpose |
 |---------|------|--------|-------------|---------|
@@ -125,7 +127,7 @@ cargo run -p client-initialise-server
 cargo run -p client-initialise-report -- --url http://127.0.0.1:8641/mcp
 ```
 
-## ☁️ **AWS LAMBDA** (4 examples) - Serverless Deployment
+## ☁️ **AWS LAMBDA** (3 examples) - Serverless Deployment (middleware-auth-lambda is listed under Middleware)
 
 | Example | Type | Status | Description | AWS Features |
 |---------|------|--------|-------------|--------------|
@@ -133,7 +135,7 @@ cargo run -p client-initialise-report -- --url http://127.0.0.1:8641/mcp
 | **lambda-mcp-client** | Lambda Client | ✅ VALIDATED | Lambda MCP client | AWS Lambda client integration |
 | **lambda-authorizer** | Lambda | ✅ VALIDATED | API Gateway authorizer | REQUEST authorizer with wildcard methodArn for MCP |
 
-## 🟣 **TOOL CREATION & OUTPUT SCHEMAS** (6 examples) - Tool Patterns
+## 🟣 **TOOL CREATION & OUTPUT SCHEMAS** (5 examples) - Tool Patterns
 
 | Example | Port | Status | Description | Key Features |
 |---------|------|--------|-------------|--------------|
@@ -152,7 +154,7 @@ cargo run -p client-initialise-report -- --url http://127.0.0.1:8641/mcp
 | **middleware-rate-limit-server** | 8671 | ✅ VALIDATED | Rate limiting | Per-session request counting |
 | **middleware-auth-lambda** | Lambda | ✅ VALIDATED | Lambda auth middleware | API Gateway authorizer context (V1 nested, V1 flat, V2) with Streamable HTTP (REST API V1) |
 
-## 🔄 **TASKS (MCP 2025-11-25)** (3 examples) - Long-Running Operations
+## 🔄 **TASKS (MCP 2025-11-25)** (2 examples) - Long-Running Operations
 
 | Example | Type | Status | Description | Task Features |
 |---------|------|--------|-------------|---------------|
@@ -187,15 +189,15 @@ re-verified its six examples live on the wire.
 - **Getting Started** - 5 examples (all tool creation levels)
 - **Session Storage** - 3 examples (SQLite, PostgreSQL, DynamoDB)
 - **Resource Servers** - 6 examples (session-aware resources)
-- **Feature-Specific** - 11 examples (prompts, sampling, elicitation, MRTR, origin policy, header binding, etc.)
+- **Feature-Specific** - 13 examples (prompts, sampling, elicitation, MRTR, origin policy, header binding, OAuth RS, etc.)
 - **Advanced/Composite** - audit-trail, pagination, icon showcase
 - **Session & State** - stateful-server + session-aware-resource-server (2025-pinned) and the storage-backend trio
 - **Client Examples** - see the pairs table above (9 pairing rows)
-- **AWS Lambda** - 4 examples (server, streaming, client, authorizer)
-- **Tool Creation & Schemas** - 6 examples (macro patterns + output schemas)
+- **AWS Lambda** - 3 examples (server, client, authorizer) + middleware-auth-lambda under Middleware
+- **Tool Creation & Schemas** - 5 examples (macro patterns + output schemas)
 - **Middleware** - 4 examples (auth, logging, rate-limiting, Lambda auth)
-- **Tasks** - 3 examples (MCP 2025-11-25 task lifecycle)
-- **Type Showcases** - 4 examples (print-only type demonstrations)
+- **Tasks** - 2 examples (MCP 2025-11-25 task lifecycle)
+- **Type Showcases** - 1 example (print-only type demonstrations)
 
 > Lane-by-lane compilation is enforced by CI (`scripts/ci-gates.sh all`); the
 > 2026-06-12 disposition slices live-verified every migrated and new example.
@@ -209,12 +211,12 @@ re-verified its six examples live on the wire.
 
 ### 📊 **Statistics**
 - **Total Examples**: 53 active (29 archived in `examples/archived/`)
-- **Session-Aware Resources**: 6 examples demonstrating session context integration
+- **Session state (2025-pinned lane)**: stateful-server, session-aware-resource-server, and the logging/session test fixtures demonstrate cross-request session state on the opt-in lane; 2026-default examples use request-scoped context or app-owned storage instead
 - **Client-Server Pairs**: 9 pairing-table rows validating communication patterns
 - **Task Support**: 3 examples demonstrating MCP 2025-11-25 task lifecycle (InMemory storage)
 - **Middleware**: 4 examples (HTTP auth, logging, rate-limiting, Lambda auth)
 - **Storage Backends**: All 4 session backends (InMemory, SQLite, PostgreSQL, DynamoDB) working
-- **AWS Lambda Integration**: 4 examples (server, streaming, client, API Gateway authorizer)
+- **AWS Lambda Integration**: 3 examples (server, client, API Gateway authorizer) + middleware-auth-lambda
 
 ### 🔧 **Running Examples**
 
