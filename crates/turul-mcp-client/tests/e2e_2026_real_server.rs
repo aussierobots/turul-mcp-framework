@@ -426,3 +426,234 @@ impl EmitOnceTool {
         Ok("emitted".to_string())
     }
 }
+
+// ---- MRTR on resources/read and prompts/get through the client ----
+
+/// Resource that demands an elicitation before serving content.
+struct GatedResource;
+
+impl turul_mcp_server::prelude::HasResourceMetadata for GatedResource {
+    fn name(&self) -> &str {
+        "gated"
+    }
+}
+impl turul_mcp_server::prelude::HasResourceDescription for GatedResource {
+    fn description(&self) -> Option<&str> {
+        Some("Needs an answer first")
+    }
+}
+impl turul_mcp_server::prelude::HasResourceUri for GatedResource {
+    fn uri(&self) -> &str {
+        "file:///gated.txt"
+    }
+}
+impl turul_mcp_server::prelude::HasResourceMimeType for GatedResource {}
+impl turul_mcp_server::prelude::HasResourceSize for GatedResource {}
+impl turul_mcp_server::prelude::HasResourceAnnotations for GatedResource {}
+impl turul_mcp_server::prelude::HasResourceMeta for GatedResource {}
+impl turul_mcp_server::prelude::HasIcons for GatedResource {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpResource for GatedResource {
+    async fn read(
+        &self,
+        _params: Option<serde_json::Value>,
+        session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+        if let Some(responses) = session.and_then(|s| s.input_responses()) {
+            let answer = responses
+                .get("q1")
+                .and_then(|r| match r {
+                    turul_mcp_protocol::input_required::InputResponse::Elicit(e) => e
+                        .content
+                        .as_ref()
+                        .and_then(|c| c.get("answer"))
+                        .and_then(|v| v.as_str())
+                        .map(String::from),
+                    _ => None,
+                })
+                .ok_or_else(|| McpError::tool_execution("q1 response missing"))?;
+            return Ok(vec![turul_mcp_protocol::resources::ResourceContent::text(
+                "file:///gated.txt",
+                format!("content for {answer}"),
+            )]);
+        }
+        let schema = turul_mcp_protocol::elicitation::ElicitationSchema::new().with_property(
+            "answer".to_string(),
+            turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string(),
+        );
+        let mut requests = turul_mcp_protocol::input_required::InputRequests::new();
+        requests.insert(
+            "q1".to_string(),
+            turul_mcp_protocol::input_required::InputRequest::Elicit(
+                turul_mcp_protocol::elicitation::ElicitRequest::new_form("Which answer?", schema),
+            ),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("res-state".to_string()),
+        })
+    }
+}
+
+/// Prompt that demands an elicitation; the retry's responses arrive in the
+/// render args under the reserved io.modelcontextprotocol/* keys.
+struct GatedPrompt;
+
+impl turul_mcp_server::prelude::HasPromptMetadata for GatedPrompt {
+    fn name(&self) -> &str {
+        "gated_prompt"
+    }
+}
+impl turul_mcp_server::prelude::HasPromptDescription for GatedPrompt {}
+impl turul_mcp_server::prelude::HasPromptArguments for GatedPrompt {}
+impl turul_mcp_server::prelude::HasPromptAnnotations for GatedPrompt {}
+impl turul_mcp_server::prelude::HasPromptMeta for GatedPrompt {}
+impl turul_mcp_server::prelude::HasIcons for GatedPrompt {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpPrompt for GatedPrompt {
+    async fn render(
+        &self,
+        args: Option<std::collections::HashMap<String, serde_json::Value>>,
+    ) -> McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>> {
+        let responses = args
+            .as_ref()
+            .and_then(|a| a.get("io.modelcontextprotocol/inputResponses"));
+        if let Some(responses) = responses {
+            let answer = responses
+                .pointer("/q1/content/answer")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string();
+            return Ok(vec![turul_mcp_protocol::prompts::PromptMessage::user_text(
+                format!("prompt for {answer}"),
+            )]);
+        }
+        let schema = turul_mcp_protocol::elicitation::ElicitationSchema::new().with_property(
+            "answer".to_string(),
+            turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string(),
+        );
+        let mut requests = turul_mcp_protocol::input_required::InputRequests::new();
+        requests.insert(
+            "q1".to_string(),
+            turul_mcp_protocol::input_required::InputRequest::Elicit(
+                turul_mcp_protocol::elicitation::ElicitRequest::new_form("Which answer?", schema),
+            ),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("prompt-state".to_string()),
+        })
+    }
+}
+
+async fn start_gated_server() -> String {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("e2e-2026-mrtr-full")
+        .version("0.4.0")
+        .resource(GatedResource)
+        .prompt(GatedPrompt)
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    url
+}
+
+async fn connect_elicit_client(url: &str) -> McpClient {
+    let mut config = ClientConfig::default();
+    config.declared_capabilities.elicitation = true;
+    let transport = Box::new(HttpTransport::new(url).unwrap());
+    let client = McpClient::new(transport, config);
+    client.connect().await.expect("connect");
+    client
+}
+
+#[tokio::test]
+async fn mrtr_round_trip_on_resources_read_through_the_client() {
+    let url = start_gated_server().await;
+    let client = connect_elicit_client(&url).await;
+
+    // Leg 1: read_resource surfaces InputRequired (not a serde error).
+    let outcome = client.read_resource("file:///gated.txt").await;
+    let (input_requests, request_state) = match outcome {
+        Err(turul_mcp_client::McpClientError::InputRequired {
+            input_requests,
+            request_state,
+        }) => (input_requests, request_state),
+        other => panic!("expected InputRequired, got: {other:?}"),
+    };
+    assert_eq!(
+        input_requests.expect("inputRequests present")["q1"]["method"],
+        "elicitation/create"
+    );
+    assert_eq!(request_state.as_deref(), Some("res-state"));
+
+    // Leg 2: retry the original read with the gathered response + echoed state.
+    let contents = client
+        .read_resource_with_input_responses(
+            "file:///gated.txt",
+            json!({ "q1": { "action": "accept", "content": { "answer": "42" } } }),
+            request_state,
+        )
+        .await
+        .expect("MRTR retry must complete");
+    let text = serde_json::to_string(&contents).unwrap_or_default();
+    assert!(
+        text.contains("content for 42"),
+        "the retry must complete the original read: {text}"
+    );
+}
+
+#[tokio::test]
+async fn mrtr_round_trip_on_prompts_get_through_the_client() {
+    let url = start_gated_server().await;
+    let client = connect_elicit_client(&url).await;
+
+    // Leg 1: get_prompt surfaces InputRequired (not a serde error).
+    let outcome = client.get_prompt("gated_prompt", None).await;
+    let (input_requests, request_state) = match outcome {
+        Err(turul_mcp_client::McpClientError::InputRequired {
+            input_requests,
+            request_state,
+        }) => (input_requests, request_state),
+        other => panic!("expected InputRequired, got: {other:?}"),
+    };
+    assert_eq!(
+        input_requests.expect("inputRequests present")["q1"]["method"],
+        "elicitation/create"
+    );
+    assert_eq!(request_state.as_deref(), Some("prompt-state"));
+
+    // Leg 2: retry with the gathered response + echoed state.
+    let result = client
+        .get_prompt_with_input_responses(
+            "gated_prompt",
+            None,
+            json!({ "q1": { "action": "accept", "content": { "answer": "42" } } }),
+            request_state,
+        )
+        .await
+        .expect("MRTR retry must complete");
+    let text = serde_json::to_string(&result).unwrap_or_default();
+    assert!(
+        text.contains("prompt for 42"),
+        "the retry must complete the original get: {text}"
+    );
+}

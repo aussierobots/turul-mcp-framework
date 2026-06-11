@@ -1118,6 +1118,81 @@ impl McpClient {
         .into())
     }
 
+    /// Retry a `resources/read` after an `InputRequired` outcome (MRTR,
+    /// SEP-2322): re-issues the ORIGINAL request (same uri) with the gathered
+    /// `input_responses` and the server's `request_state` echoed verbatim,
+    /// under a fresh JSON-RPC id. 2026-07-28 connections only.
+    pub async fn read_resource_with_input_responses(
+        &self,
+        uri: &str,
+        input_responses: Value,
+        request_state: Option<String>,
+    ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::ResourceContent>> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let mut extra = json!({
+                "uri": uri,
+                "inputResponses": input_responses,
+            });
+            if let (Some(obj), Some(state)) = (extra.as_object_mut(), request_state) {
+                obj.insert("requestState".to_string(), Value::String(state));
+            }
+            let r = self
+                .send_2026_07_28(
+                    "resources/read",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_read_resource,
+                )
+                .await?;
+            return Ok(r.contents);
+        }
+
+        let _ = (uri, input_responses, request_state);
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "MRTR input responses require a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
+    /// Retry a `prompts/get` after an `InputRequired` outcome (MRTR,
+    /// SEP-2322): re-issues the ORIGINAL request (same name/arguments) with
+    /// the gathered `input_responses` and the server's `request_state` echoed
+    /// verbatim, under a fresh JSON-RPC id. 2026-07-28 connections only.
+    pub async fn get_prompt_with_input_responses(
+        &self,
+        name: &str,
+        arguments: Option<Value>,
+        input_responses: Value,
+        request_state: Option<String>,
+    ) -> McpClientResult<GetPromptResult> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let mut extra = json!({
+                "name": name,
+                "inputResponses": input_responses,
+            });
+            if let (Some(obj), Some(args)) = (extra.as_object_mut(), arguments.clone()) {
+                obj.insert("arguments".to_string(), args);
+            }
+            if let (Some(obj), Some(state)) = (extra.as_object_mut(), request_state) {
+                obj.insert("requestState".to_string(), Value::String(state));
+            }
+            return self
+                .send_2026_07_28(
+                    "prompts/get",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_get_prompt,
+                )
+                .await;
+        }
+
+        let _ = (name, arguments, input_responses, request_state);
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "MRTR input responses require a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
     /// List available resources (returns cached result if available)
     ///
     /// The cache is automatically invalidated when the server sends a

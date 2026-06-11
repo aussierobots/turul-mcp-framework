@@ -37,18 +37,26 @@ pub(crate) fn request_meta(
     )
 }
 
-/// `resultType` discriminator check for MRTR-capable methods.
-pub(crate) fn input_required_outcome(result: &Value) -> Option<crate::error::McpClientError> {
-    if result.get("resultType").and_then(|v| v.as_str()) == Some("input_required") {
-        Some(crate::error::McpClientError::InputRequired {
+/// `resultType` discriminator check (SEP-2322 / basic §Responses).
+///
+/// `Ok(())` means a complete result (absent or `"complete"`). `"input_required"`
+/// surfaces as [`McpClientError::InputRequired`] so the caller can gather inputs
+/// and retry. Any other discriminator is invalid: "A resultType of any value
+/// unrecognized by the client MUST be considered invalid."
+pub(crate) fn check_result_type(result: &Value) -> Result<(), crate::error::McpClientError> {
+    match result.get("resultType").and_then(|v| v.as_str()) {
+        None | Some("complete") => Ok(()),
+        Some("input_required") => Err(crate::error::McpClientError::InputRequired {
             input_requests: result.get("inputRequests").cloned(),
             request_state: result
                 .get("requestState")
                 .and_then(|v| v.as_str())
                 .map(String::from),
-        })
-    } else {
-        None
+        }),
+        Some(other) => Err(crate::error::ProtocolError::InvalidResponse(format!(
+            "unrecognized resultType {other:?}"
+        ))
+        .into()),
     }
 }
 
@@ -78,6 +86,7 @@ where
 pub(crate) fn parse_list_tools(
     result: &Value,
 ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Tool>> {
+    check_result_type(result)?;
     let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
     // SEP-2243: clients on Streamable HTTP MUST reject tool definitions whose
     // x-mcp-header annotations violate the constraints — exclude the tool and
@@ -161,9 +170,7 @@ pub(crate) fn parse_call_tool(
     // MRTR (SEP-2322): an input_required result is not a CallToolResult —
     // surface it so the caller can gather inputs and retry with
     // `call_tool_with_input_responses`.
-    if let Some(input_required) = input_required_outcome(result) {
-        return Err(input_required);
-    }
+    check_result_type(result)?;
     let r: p::tools::CallToolResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
@@ -171,6 +178,7 @@ pub(crate) fn parse_call_tool(
 pub(crate) fn parse_list_resources(
     result: &Value,
 ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Resource>> {
+    check_result_type(result)?;
     let r: p::resources::ListResourcesResult = serde_json::from_value(result.clone())?;
     r.resources.iter().map(remap).collect()
 }
@@ -178,6 +186,7 @@ pub(crate) fn parse_list_resources(
 pub(crate) fn parse_list_resource_templates(
     result: &Value,
 ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::resources::ResourceTemplate>> {
+    check_result_type(result)?;
     let r: p::resources::ListResourceTemplatesResult = serde_json::from_value(result.clone())?;
     r.resource_templates.iter().map(remap).collect()
 }
@@ -185,6 +194,9 @@ pub(crate) fn parse_list_resource_templates(
 pub(crate) fn parse_read_resource(
     result: &Value,
 ) -> McpClientResult<turul_mcp_protocol_2025_11_25::ReadResourceResult> {
+    // Servers MAY answer resources/read with InputRequiredResult (MRTR) —
+    // surface it; retry with `read_resource_with_input_responses`.
+    check_result_type(result)?;
     let r: p::resources::ReadResourceResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
@@ -192,6 +204,7 @@ pub(crate) fn parse_read_resource(
 pub(crate) fn parse_list_prompts(
     result: &Value,
 ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Prompt>> {
+    check_result_type(result)?;
     let r: p::prompts::ListPromptsResult = serde_json::from_value(result.clone())?;
     r.prompts.iter().map(remap).collect()
 }
@@ -199,6 +212,9 @@ pub(crate) fn parse_list_prompts(
 pub(crate) fn parse_get_prompt(
     result: &Value,
 ) -> McpClientResult<turul_mcp_protocol_2025_11_25::GetPromptResult> {
+    // Servers MAY answer prompts/get with InputRequiredResult (MRTR) —
+    // surface it; retry with `get_prompt_with_input_responses`.
+    check_result_type(result)?;
     let r: p::prompts::GetPromptResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
@@ -209,6 +225,7 @@ pub(crate) fn parse_get_prompt(
 pub(crate) fn parse_list_tools_result(
     result: &Value,
 ) -> McpClientResult<turul_mcp_protocol_2025_11_25::ListToolsResult> {
+    check_result_type(result)?;
     let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
@@ -216,6 +233,7 @@ pub(crate) fn parse_list_tools_result(
 pub(crate) fn parse_list_resources_result(
     result: &Value,
 ) -> McpClientResult<turul_mcp_protocol_2025_11_25::ListResourcesResult> {
+    check_result_type(result)?;
     let r: p::resources::ListResourcesResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
@@ -223,6 +241,7 @@ pub(crate) fn parse_list_resources_result(
 pub(crate) fn parse_list_resource_templates_result(
     result: &Value,
 ) -> McpClientResult<turul_mcp_protocol_2025_11_25::resources::ListResourceTemplatesResult> {
+    check_result_type(result)?;
     let r: p::resources::ListResourceTemplatesResult = serde_json::from_value(result.clone())?;
     remap(&r)
 }
@@ -230,6 +249,43 @@ pub(crate) fn parse_list_resource_templates_result(
 pub(crate) fn parse_list_prompts_result(
     result: &Value,
 ) -> McpClientResult<turul_mcp_protocol_2025_11_25::ListPromptsResult> {
+    check_result_type(result)?;
     let r: p::prompts::ListPromptsResult = serde_json::from_value(result.clone())?;
     remap(&r)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// basic §Responses: "A resultType of any value unrecognized by the
+    /// client MUST be considered invalid."
+    #[test]
+    fn unrecognized_result_type_is_invalid() {
+        assert!(check_result_type(&json!({"resultType": "complete"})).is_ok());
+        assert!(check_result_type(&json!({"content": []})).is_ok());
+        match check_result_type(&json!({"resultType": "partial"})) {
+            Err(crate::error::McpClientError::Protocol(_)) => {}
+            other => panic!("unrecognized resultType must be invalid, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn input_required_surfaces_requests_and_state() {
+        match check_result_type(&json!({
+            "resultType": "input_required",
+            "inputRequests": {"q1": {"method": "elicitation/create"}},
+            "requestState": "st-1"
+        })) {
+            Err(crate::error::McpClientError::InputRequired {
+                input_requests,
+                request_state,
+            }) => {
+                assert!(input_requests.is_some());
+                assert_eq!(request_state.as_deref(), Some("st-1"));
+            }
+            other => panic!("expected InputRequired, got: {other:?}"),
+        }
+    }
 }
