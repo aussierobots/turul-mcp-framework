@@ -6,8 +6,10 @@
 > verified) on 2026-06-11, then maintained by hand: when a gap is fixed, flip its row and
 > tick the gap register. Workflow run `wf_aae6cd1e-b6d`; spec fetched live; protocol crate
 > pinned at vendored `schema/draft-schema.ts` sha256 `1bf94a60…` (ADR-027 revision log).
-> **Reconciled 2026-06-11 against head `05643975`** — every fixed gap's table rows carry
-> the fixing commit; all remaining ❌/🧪 rows correspond to open P2 register entries.
+> **Reconciled 2026-06-12 against head `43755890`** — every fixed gap's table rows carry
+> the fixing commit. **All registered audit gaps are closed or dispositioned**; remaining
+> non-green table rows (❌/🧪/🟡) are tracked caveats and limitations the audit graded
+> without raising a register gap — they are not release-blocking registered gaps.
 >
 > **Legend** — ✅ compliant (implemented + named test) · 🟡 partial · ❌ gap · 🧪 implemented
 > but untested · ➖ not applicable (justified). Evidence cites `file:line` / test names as of
@@ -19,8 +21,18 @@
 |---|---|---|---|---|---|
 | 489 | 266 | 89 | 14 | 20 | 100 |
 
-**Confirmed gaps:** 73 confirmed by the 2026-06-11 audit — **ALL 73 CLOSED** (1/1 P0, 14/14 P1, 58/58 P2: 52 fixed, 6 dispositioned with rationale — see the dated entries). Remaining ❌/🧪 table rows are non-register observations (rows the audit graded without raising a register gap); see the
-[gap register](#gap-register). 17 additional claims were refuted in verification and are NOT carried here.
+**Registered gaps:** 73 confirmed by the 2026-06-11 audit — **all 73 closed or
+dispositioned** (1/1 P0, 14/14 P1, 58/58 P2: 52 fixed, 6 dispositioned with recorded
+rationale — see the dated entries in the [gap register](#gap-register)). 17 additional
+claims were refuted in verification and are NOT carried here.
+
+**This is NOT "spec compliance complete":** 14 ❌, 20 🧪, and 89 🟡 table rows remain
+non-green. These are tracked caveats/limitations the audit graded without raising a
+register gap (e.g. no JSON Schema dialect validation — dispositioned as a documented
+limitation under BP-3; sampling message-sequencing constraints unenforced — deprecated
+surface, dispositioned under CF/GAP-CF-9; host-side SHOULDs a library can only
+partially satisfy). New work starts by promoting a row to the register, not by
+editing the row in place.
 
 ## Table of contents
 
