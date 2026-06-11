@@ -78,14 +78,18 @@
 //! # }
 //! ```
 //!
-//! ### SSE Transport (HTTP+SSE, legacy)
+//! ### SSE Transport (HTTP+SSE, deprecated — SEP-2596)
 //!
-//! For servers using the pre-2025-03-26 SSE-based protocol. Like the HTTP
-//! transport, `connect()` is a no-op marker — the SSE subscription is
-//! established lazily during message exchange.
+//! For servers using the pre-2025-03-26 SSE-based protocol. The HTTP+SSE
+//! transport is deprecated upstream ("new implementations SHOULD NOT adopt
+//! it") — use [`HttpTransport`](transport::HttpTransport) unless you must
+//! talk to an unmigrated ≤ 2024-11-05 server. Like the HTTP transport,
+//! `connect()` is a no-op marker — the SSE subscription is established
+//! lazily during message exchange.
 //!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! #![allow(deprecated)]
 //! use turul_mcp_client::transport::SseTransport;
 //!
 //! let transport = SseTransport::new("http://localhost:8080/mcp")?;

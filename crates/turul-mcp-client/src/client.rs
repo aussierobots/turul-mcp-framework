@@ -1893,6 +1893,7 @@ impl McpClientBuilder {
                 crate::transport::TransportType::Sse => {
                     // SSE is a legacy transport — ConnectionConfig not wired (no with_config)
                     Box::new(
+                        #[allow(deprecated)] // ≤2024-11-05 fallback (SEP-2596)
                         crate::transport::sse::SseTransport::new(url)
                             .expect("URL was validated in with_url() but SSE construction failed"),
                     )

@@ -17,6 +17,7 @@ pub mod sse;
 
 // Re-export transport implementations
 pub use http::HttpTransport;
+#[allow(deprecated)] // re-exported for unmigrated ≤2024-11-05 servers (SEP-2596)
 pub use sse::SseTransport;
 
 // Re-exports for future transport implementations
@@ -327,6 +328,7 @@ impl TransportFactory {
 
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(url)?)),
+            #[allow(deprecated)] // factory keeps serving ≤2024-11-05 servers (SEP-2596)
             TransportType::Sse => Ok(Box::new(SseTransport::new(url)?)),
         }
     }
@@ -338,6 +340,7 @@ impl TransportFactory {
     ) -> McpClientResult<BoxedTransport> {
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(endpoint)?)),
+            #[allow(deprecated)] // factory keeps serving ≤2024-11-05 servers (SEP-2596)
             TransportType::Sse => Ok(Box::new(SseTransport::new(endpoint)?)),
         }
     }

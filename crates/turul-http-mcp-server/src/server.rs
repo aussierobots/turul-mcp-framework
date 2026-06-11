@@ -32,7 +32,19 @@ pub struct ServerConfig {
     pub enable_cors: bool,
     /// Maximum request body size
     pub max_body_size: usize,
-    /// Enable GET SSE support (persistent event streams)
+    /// Enable GET SSE support (persistent event streams).
+    ///
+    /// 2025-11-25 stateful lane only. On the 2026-07-28 stateless lane this
+    /// flag has no effect: the MCP endpoint is POST-only (GET returns 405
+    /// Method Not Allowed) and the long-lived notification stream is the
+    /// `subscriptions/listen` POST stream instead.
+    #[cfg_attr(
+        feature = "protocol-2026-07-28",
+        deprecated(
+            since = "0.4.0",
+            note = "no effect on the 2026-07-28 stateless lane (POST-only endpoint; GET = 405) — use subscriptions/listen for the long-lived stream; stateful GET SSE remains on the protocol-2025-11-25 opt-in"
+        )
+    )]
     pub enable_get_sse: bool,
     /// Enable POST SSE support (streaming tool call responses) - disabled by default for compatibility
     pub enable_post_sse: bool,
@@ -54,6 +66,7 @@ pub struct ServerConfig {
 }
 
 impl Default for ServerConfig {
+    #[allow(deprecated)] // enable_get_sse is 2026-lane-deprecated but must default
     fn default() -> Self {
         Self {
             bind_address: "127.0.0.1:8000".parse().unwrap(),
@@ -172,7 +185,17 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Enable or disable GET SSE for persistent event streams
+    /// Enable or disable GET SSE for persistent event streams.
+    ///
+    /// 2025-11-25 stateful lane only — see [`ServerConfig::enable_get_sse`].
+    #[cfg_attr(
+        feature = "protocol-2026-07-28",
+        deprecated(
+            since = "0.4.0",
+            note = "no effect on the 2026-07-28 stateless lane (POST-only endpoint; GET = 405)"
+        )
+    )]
+    #[allow(deprecated)]
     pub fn get_sse(mut self, enable: bool) -> Self {
         self.config.enable_get_sse = enable;
         self
@@ -184,7 +207,10 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Enable or disable both GET and POST SSE (convenience method)
+    /// Enable or disable both GET and POST SSE (convenience method).
+    ///
+    /// The GET half is 2025-11-25-lane-only — see [`ServerConfig::enable_get_sse`].
+    #[allow(deprecated)]
     pub fn sse(mut self, enable: bool) -> Self {
         self.config.enable_get_sse = enable;
         self.config.enable_post_sse = enable;

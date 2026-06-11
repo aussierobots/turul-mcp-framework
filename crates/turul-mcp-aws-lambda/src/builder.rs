@@ -795,6 +795,9 @@ impl LambdaMcpServerBuilder {
         self.enable_sse = enable;
 
         // Update SSE endpoints in ServerConfig based on enable flag
+        // (enable_get_sse is 2026-lane-deprecated; the setter remains the
+        // 2025-lane control and a harmless no-op on 2026)
+        #[allow(deprecated)]
         if enable {
             self.server_config.enable_get_sse = true;
             self.server_config.enable_post_sse = true;
@@ -1661,6 +1664,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)] // asserts the 2025-lane enable_get_sse plumbing
     async fn test_sse_toggle_functionality() {
         // Test that SSE can be toggled on/off/on correctly
         let mut builder =

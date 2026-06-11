@@ -79,11 +79,15 @@ let client = McpClientBuilder::new()
     .build();
 ```
 
-### SSE Transport (HTTP+SSE)
+### SSE Transport (HTTP+SSE, deprecated — SEP-2596)
 
-For servers supporting server-sent events:
+> **Deprecated upstream** (SEP-2596, 2025-03-26): "new implementations
+> SHOULD NOT adopt it; existing implementations SHOULD migrate to
+> Streamable HTTP." Use `HttpTransport` unless you must talk to an
+> unmigrated ≤ 2024-11-05 server.
 
 ```rust
+#![allow(deprecated)]
 use turul_mcp_client::transport::SseTransport;
 
 let transport = SseTransport::new("http://localhost:8080/mcp")?;
@@ -456,6 +460,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Transport Comparison
 
 ```rust
+#![allow(deprecated)] // SseTransport: HTTP+SSE is deprecated upstream (SEP-2596)
 use turul_mcp_client::transport::{HttpTransport, SseTransport, TransportCapabilities};
 
 // Compare transport capabilities

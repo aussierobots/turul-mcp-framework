@@ -1,5 +1,11 @@
 //! JSON-RPC 2.0 over HTTP handler for MCP requests with SessionStorage integration
 //!
+//! **Deprecated transport (SEP-2596).** This is the legacy HTTP+SSE path
+//! (protocol ≤ 2024-11-05), deprecated upstream on 2025-03-26: "new
+//! implementations SHOULD NOT adopt it; existing implementations SHOULD
+//! migrate to Streamable HTTP." It remains wired for backward compatibility
+//! on the 2025-11-25 lane only; the 2026-07-28 lane never routes here.
+//!
 //! This handler implements proper JSON-RPC 2.0 server over HTTP transport with
 //! MCP 2025-11-25 compliance, including:
 //! - SessionStorage trait integration (defaults to InMemory)
@@ -850,6 +856,7 @@ impl SessionMcpHandler {
         }
 
         // Check if GET SSE is enabled on the server
+        #[allow(deprecated)] // 2026-lane deprecation; this is the legacy GET SSE path itself
         if !self.config.enable_get_sse {
             warn!("GET SSE request received but GET SSE is disabled on server");
             let error = JsonRpcError::new(

@@ -17,7 +17,17 @@ use crate::transport::{
     TransportStatistics, TransportType,
 };
 
-/// SSE transport for MCP client (HTTP+SSE 2024-11-05)
+/// SSE transport for MCP client (HTTP+SSE, protocol 2024-11-05).
+///
+/// The HTTP+SSE transport is deprecated upstream (SEP-2596, deprecated
+/// 2025-03-26): "new implementations SHOULD NOT adopt it; existing
+/// implementations SHOULD migrate to Streamable HTTP." Use
+/// [`HttpTransport`](crate::transport::HttpTransport) instead; this type
+/// remains for talking to unmigrated ≤ 2024-11-05 servers.
+#[deprecated(
+    since = "0.4.0",
+    note = "HTTP+SSE transport is deprecated upstream (SEP-2596) — use HttpTransport (Streamable HTTP)"
+)]
 #[derive(Debug)]
 pub struct SseTransport {
     /// HTTP client
@@ -40,6 +50,7 @@ pub struct SseTransport {
     session_id: parking_lot::Mutex<Option<String>>,
 }
 
+#[allow(deprecated)]
 impl SseTransport {
     /// Create a new SSE transport
     pub fn new(endpoint: &str) -> McpClientResult<Self> {
@@ -298,6 +309,7 @@ impl SseTransport {
 }
 
 #[async_trait]
+#[allow(deprecated)]
 impl Transport for SseTransport {
     fn transport_type(&self) -> TransportType {
         TransportType::Sse
@@ -609,6 +621,7 @@ impl Transport for SseTransport {
     }
 }
 
+#[allow(deprecated)]
 impl Drop for SseTransport {
     fn drop(&mut self) {
         debug!("🔥 DROP: SseTransport (CLIENT) - SSE transport being cleaned up");

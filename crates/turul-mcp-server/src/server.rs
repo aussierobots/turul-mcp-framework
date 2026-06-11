@@ -471,6 +471,7 @@ impl McpServer {
         // Build HTTP server with shared session storage from SessionManager
         let session_storage = self.session_manager.get_storage();
         debug!("Configuring HTTP MCP server with session storage backend");
+        #[allow(deprecated)] // get_sse: 2026-lane-deprecated; pass-through stays for the 2025 lane
         let mut builder =
             turul_http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
                 .bind_address(self.bind_address)
@@ -748,6 +749,7 @@ impl McpServer {
         // Build HTTP server with shared session storage from SessionManager
         let session_storage = self.session_manager.get_storage();
         debug!("Configuring HTTP MCP server with session storage backend");
+        #[allow(deprecated)] // get_sse: 2026-lane-deprecated; pass-through stays for the 2025 lane
         let mut builder =
             turul_http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
                 .bind_address(self.bind_address)
