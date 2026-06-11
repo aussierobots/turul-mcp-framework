@@ -92,56 +92,11 @@ test_performance_testing() {
     return 0
 }
 
-# Test 3: session-aware-logging-demo
-test_session_aware_logging() {
-    echo "----------------------------------------"
-    echo "Testing: session-aware-logging-demo"
-    echo "Description: Session-aware logging patterns demonstration"
-    echo "----------------------------------------"
-
-    echo "Starting server..."
-    RUST_LOG=error timeout 10s cargo run --bin session-aware-logging-demo -- --port 8051 &
-    SERVER_PID=$!
-    sleep 5
-
-    # Check if server is running
-    if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo -e "${YELLOW}SKIPPED${NC}: Server failed to start (may need implementation)"
-        PASSED=$((PASSED + 1))  # Count as passed for now
-        return 0
-    fi
-
-    # Initialize session
-    SESSION_ID=$(curl -i -s -X POST "http://127.0.0.1:8051/mcp" \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/json" \
-        -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
-        | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
-
-    kill $SERVER_PID 2>/dev/null || true
-    sleep 1
-
-    if [ -n "$SESSION_ID" ]; then
-        echo -e "${GREEN}PASSED${NC}: Session-aware logging demo works"
-    else
-        echo -e "${YELLOW}SKIPPED${NC}: Session-aware logging demo (may need implementation)"
-        PASSED=$((PASSED + 1))  # Count as passed for now
-        return 0
-    fi
-
-    PASSED=$((PASSED + 1))
-    echo -e "${GREEN}SUCCESS${NC}: session-aware-logging-demo verification complete"
-    echo ""
-    return 0
-}
-
 # Run all meta example tests
 test_builders_showcase
 test_performance_testing
-test_session_aware_logging
 
 # Cleanup
-pkill -f "session-aware-logging-demo" 2>/dev/null || true
 
 # Final summary
 echo "======================================================================"

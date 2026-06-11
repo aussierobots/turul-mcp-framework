@@ -26,7 +26,6 @@ async fn test_working_examples_compilation() {
         "completion-server",
         "pagination-server",
         "elicitation-server",
-        "dynamic-resource-server",
     ];
 
     let example_count = working_examples.len();

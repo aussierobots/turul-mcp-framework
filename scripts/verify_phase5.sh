@@ -37,13 +37,10 @@ cleanup() {
     echo ""
     echo "Cleaning up background processes..."
     pkill -f "comprehensive-server" 2>/dev/null || true
-    pkill -f "alert-system-server" 2>/dev/null || true
     pkill -f "audit-trail-server" 2>/dev/null || true
-    pkill -f "simple-logging-server" 2>/dev/null || true
     pkill -f "zero-config-getting-started" 2>/dev/null || true
     pkill -f "function-macro-server" 2>/dev/null || true
     pkill -f "derive-macro-server" 2>/dev/null || true
-    pkill -f "manual-tools-server" 2>/dev/null || true
     pkill -f "tools-test-server" 2>/dev/null || true
     sleep 1
 }
@@ -221,15 +218,11 @@ test_advanced_server() {
 # Test showcase/demonstration servers (advanced tool patterns)
 test_advanced_server "function-macro-server" 8003 "Function macro showcase with multiple parameter types" "tools"
 test_advanced_server "derive-macro-server" "127.0.0.1:8765" "Real-world code generation and template engine" "tools"
-test_advanced_server "manual-tools-server" 8007 "Advanced manual implementation with session state" "tools"
 test_advanced_server "tools-test-server" 8050 "Comprehensive E2E tool testing server" "tools"
 
 # Test composite servers
 test_advanced_server "comprehensive-server" "127.0.0.1:8002" "Development Team Integration Platform (all MCP features)" "tools,resources,prompts"
-test_advanced_server "alert-system-server" 8010 "Enterprise alert management system" "tools"
 test_advanced_server "audit-trail-server" 8009 "Comprehensive audit logging system" "tools"
-test_advanced_server "simple-logging-server" 8008 "Simplified logging patterns" "tools"
-test_advanced_server "dynamic-resource-server" 8048 "Enterprise API Data Gateway (tools server, not resources)" "tools"
 
 # Test tutorial server
 test_advanced_server "zero-config-getting-started" 8641 "Absolute beginner tutorial (zero-configuration quickstart)" "tools"

@@ -1,6 +1,6 @@
 # MCP Framework Examples
 
-This document provides a comprehensive overview of all **55 active examples** in the MCP Framework (plus `examples/archived/`), organized by learning progression from basic concepts to advanced implementations.
+This document provides a comprehensive overview of all **50 active examples** in the MCP Framework (plus `examples/archived/` — grown by 5 in the 2026-06-12 archive slice, see `docs/plans/2026-07-28-examples-review.md`), organized by learning progression from basic concepts to advanced implementations.
 
 **✅ All active examples compile under their lane's CI gates** (2026-07-28 default lane
 + per-manifest 2025-11-25 pins). Per-example functional re-verification against the
@@ -69,7 +69,6 @@ cargo run --example minimal-server
 | **resources-server** | 8041 | ✅ VALIDATED | Multiple resource types | Resource handling patterns |
 | **resource-test-server** | 8043 | ✅ VALIDATED | Resource testing | Resource validation framework |
 | **function-resource-server** | 8008 | ✅ VALIDATED | Function-based resources | Resource function patterns |
-| **dynamic-resource-server** | 8048 | ✅ VALIDATED | Runtime resources | Dynamic resource creation |
 | **session-aware-resource-server** | 8008 | ✅ VALIDATED | Session-aware resources (2025-11-25 pinned) | Session context integration on the stateful lane |
 
 ## 🟢 **FEATURE-SPECIFIC SERVERS** (8 examples) - Specialized MCP Features
@@ -90,9 +89,7 @@ cargo run --example minimal-server
 | Example | Port | Status | Description | Advanced Features |
 |---------|------|--------|-------------|-------------------|
 | **comprehensive-server** | 8002 | ✅ VALIDATED | All MCP features in one server | Complete framework showcase |
-| **alert-system-server** | 8010 | ✅ VALIDATED | Alert management | Enterprise alert management system |
 | **audit-trail-server** | 8009 | ✅ VALIDATED | Audit logging | Comprehensive audit logging system |
-| **simple-logging-server** | 8008 | ✅ VALIDATED | Simplified logging | Simplified logging patterns |
 | **zero-config-getting-started** | 8641 | ✅ VALIDATED | Zero-configuration setup | Getting started tutorial server |
 
 ## 🔴 **SESSION & STATE** (4 examples) - Advanced State Handling
@@ -101,7 +98,6 @@ cargo run --example minimal-server
 |---------|------|--------|-------------|------------------|
 | **stateful-server** | 8006 | ✅ VALIDATED | Advanced stateful operations (2025-11-25 pinned) | Session state management on the stateful lane |
 | **session-logging-proof-test** | 8001 | ✅ VALIDATED | Session logging validation | Session-based logging verification |
-| **session-aware-logging-demo** | 8000 | ✅ VALIDATED | Session-scoped logging | Session-aware logging patterns |
 | **logging-test-server** | 8052 | ✅ VALIDATED | Logging test suite | Comprehensive logging test suite |
 
 ## 🟠 **CLIENT EXAMPLES** (5 examples) - Client Implementation
@@ -139,7 +135,6 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 |---------|------|--------|-------------|--------------|
 | **derive-macro-server** | 8765 | ✅ VALIDATED | Derive macro tools | `#[derive(McpTool)]` with code generation tools |
 | **function-macro-server** | 8003 | ✅ VALIDATED | Function macro tools | `#[mcp_tool]` attribute macro patterns |
-| **manual-tools-server** | 8007 | ✅ VALIDATED | Manual tool impl | Session state, progress notifications, complex schemas |
 | **tools-test-server** | random | ✅ VALIDATED | Comprehensive tool testing | All MCP tool patterns and edge cases |
 | **tool-output-introspection** | 8641 | ✅ VALIDATED | Output schema via introspection | Automatic field-level output schema generation |
 | **tool-output-schemas** | 8641 | ✅ VALIDATED | Output schema via schemars | `schemars::JsonSchema` derive for JSON Schema output |

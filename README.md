@@ -581,19 +581,18 @@ let server = McpServer::builder()
 ### 🏢 Real-World Business Applications
 Development servers for actual business problems:
 
-1. **dynamic-resource-server** → Enterprise API Data Gateway
-2. **audit-trail-server** → Application Audit & Compliance System (SQLite-backed)
-3. **elicitation-server** → Customer Onboarding Platform
-4. **notification-server** → Development Team Alert System
-5. **completion-server** → IDE Auto-Completion Server
-6. **prompts-server** → AI-Assisted Development Prompts
-7. **derive-macro-server** → Code Generation & Template Engine
-8. **calculator-add-\*-server** → Calculator examples (builder, function, derive, manual patterns)
-9. **resources-server** → Development Team Resource Hub
+1. **audit-trail-server** → Application Audit & Compliance System (SQLite-backed)
+2. **elicitation-server** → Customer Onboarding Platform
+3. **notification-server** → Development Team Alert System
+4. **completion-server** → IDE Auto-Completion Server
+5. **prompts-server** → AI-Assisted Development Prompts
+6. **derive-macro-server** → Code Generation & Template Engine
+7. **calculator-add-\*-server** → Calculator examples (builder, function, derive, manual patterns)
+8. **resources-server** → Development Team Resource Hub
 
 ### 🔧 Framework Demonstrations
 Educational examples showcasing framework patterns:
-- **Basic Patterns**: minimal-server, manual-tools-server, zero-config-getting-started
+- **Basic Patterns**: minimal-server, calculator-add-manual-server, zero-config-getting-started
 - **Advanced Features**: stateful-server (2025-pinned), pagination-server, tasks-e2e-inmemory-server (2025-pinned)
 - **Macro System**: derive-macro-server, function-macro-server, function-resource-server
 - **Serverless**: lambda-mcp-server (AWS Lambda with SQS integration)
@@ -1192,7 +1191,6 @@ curl -N -H "Accept: text/event-stream" \
 ## 📊 Business Value Examples
 
 ### Enterprise Integration
-- **dynamic-resource-server**: API orchestration across Customer, Inventory, Financial, and HR systems
 - **audit-trail-server**: SOX, PCI DSS, GDPR, and HIPAA compliance reporting
 
 ### Developer Productivity

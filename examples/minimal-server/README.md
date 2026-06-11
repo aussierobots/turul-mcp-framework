@@ -98,6 +98,5 @@ curl -X POST http://127.0.0.1:8641/mcp \
 
 ## Next Steps
 
-- See [manual-tools-server](../manual-tools-server) for more complex manual implementations
-- See [macro-calculator](../macro-calculator) for derive macro examples  
+- See [calculator-add-manual-server](../calculator-add-manual-server) for the manual trait-implementation reference
 - See [comprehensive-server](../comprehensive-server) for all MCP features

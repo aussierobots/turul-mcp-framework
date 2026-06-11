@@ -40,7 +40,6 @@ cleanup() {
     pkill -f "resources-server" 2>/dev/null || true
     pkill -f "resource-test-server" 2>/dev/null || true
     pkill -f "function-resource-server" 2>/dev/null || true
-    pkill -f "dynamic-resource-server" 2>/dev/null || true
     pkill -f "session-aware-resource-server" 2>/dev/null || true
     sleep 1
 }
@@ -192,7 +191,6 @@ test_resource_server() {
 }
 
 # Test all 5 resource servers (using their hardcoded ports from main.rs)
-# Note: dynamic-resource-server moved to Phase 5 - it's a tools server
 # Note: Both function-resource-server and session-aware-resource-server use port 8008,
 #       but this works because test_resource_server kills each server after testing
 test_resource_server "resource-server" 8007 "Basic resource server with McpResource derive"

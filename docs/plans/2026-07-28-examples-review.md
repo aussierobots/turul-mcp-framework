@@ -26,6 +26,13 @@ own binary. The worst offenders print broken curl commands from their own stdout
 
 ## 🗄️ Archive (4) — no remaining teaching value or actively misleading
 
+> **EXECUTED 2026-06-12** (maintainer-approved slice 1): all four moved to
+> `examples/archived/` with dated banners; `session-aware-logging-demo`
+> merged (archived as a superseded duplicate of `session-logging-proof-test`)
+> in the same slice. Workspace members, EXAMPLES.md, root README,
+> `verify_phase{2,5,8}.sh`, and the compilation-validation test list cleaned
+> in the same commit.
+
 | Example | Lane | Teaches | Why / required fixes | Gate-ref |
 |---|---|---|---|---|
 | `alert-system-server` | 2026-default | A rule-based alerting domain app (cooldowns, severities, regex log matching) built from derive-macro tools persisting rules/history in framework SessionContext state. | Its two teachable ideas are both better taught elsewhere on the 2026 lane: session-state-on-stateless-transport is owned by examples/stateful-server (which has the correct 2026 'application-level SessionContext is not the removed transport session' framing), and derive-macro tool patterns are owned by derive-macro-server. What remains is ~600 lines of un-README'd domain logic that, unframed, actively suggests transport sessions exist on the 2026 default. The repo already has an examples/archived/ mechanism. Only reference is the legacy manual scripts/verify_phase5.sh:229 — not ci-gates.sh, not .github/workflows, not e2e_utils.rs — so archiving is safe. If the maintainer wants a 'realistic app' demo to survive, the alternative is a merge of its cooldown/severity flavor into stateful-server, with stateful-server surviving. — **Staleness:** No README at all (only Cargo.toml + src); main.rs:117,275,513 hard-fail with 'Session required' and store everything in SessionContext with zero framing that on 2026 this is the framework's application-level state layer, NOT the removed transport session (contrast examples/stateful-server/README.md:63-68, which was given exactly that framing in a12f14c — this example was skipped by that rewrite); main.rs:661 `.sse(true)` is a no-op on the 2026 POST-only lane; main.rs:1-6 doc-comment says 'manage alert history using session state' with no 2026 caveat. | no |
@@ -34,6 +41,8 @@ own binary. The worst offenders print broken curl commands from their own stdout
 | `simple-logging-server` | 2026-default | Derive-macro tools that store an app-level log buffer and log-level config in per-session typed state (get_typed_state/set_typed_state) with progress notifications. | PROMINENT MISLEAD: it compiles green on the 2026 default lane (verified via cargo check) but its entire premise — persistent per-session log storage keyed by session_id — is the removed 2025 session model; a reader copying it gets a server whose tools demand a session on a sessionless protocol. It never exercises the MCP logging capability (no with_logging(), no notify_log, no logging/setLevel), so it is 'logging' in name only. A 2026 rewrite has no content (no session state to store logs in; Logging itself is SEP-2577-deprecated), and the session-aware logging teaching is already covered by the pinned session-aware-logging-demo/session-logging-proof-test and the logging-test-server/client pair. Superseded by logging-test-server (real MCP logging, 2025-pinned). Not referenced by ci-gates.sh, ci.yml, or e2e_utils.rs (only legacy verify_phase5.sh:231, which CI never invokes), so archiving is safe. — **Staleness:** src/main.rs:3-9 doc header claims 'session-based log storage' and 'SessionContext for persistent state across tool calls' while Cargo.toml:7 (turul-mcp-server.workspace = true) builds the 2026 stateless default where sessions do not exist; src/main.rs:62,149,216 every tool errors 'Session required'; src/main.rs:106,253 exposes session_id; src/main.rs:268 .version("1.0.0") | no |
 
 ## 🔀 Merge (1) — duplicate of a sibling
+
+> **EXECUTED 2026-06-12** — see the archive note above.
 
 | Example | Lane | Teaches | Why / required fixes | Gate-ref |
 |---|---|---|---|---|

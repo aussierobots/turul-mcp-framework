@@ -1,3 +1,7 @@
+> **ARCHIVED 2026-06-12** — its name/README promised dynamic-resource teaching the code never contained (zero resources registered); URI-template resources are owned by `function-resource-server`.
+> Disposition record: `docs/plans/2026-07-28-examples-review.md`. Not a
+> workspace member; kept for reference only.
+
 # Dynamic Resource Server Example
 
 A comprehensive demonstration of **dynamic MCP resources** with parameterized URIs for accessing specific entities. This example shows how real-world resource systems should work with identifiers instead of static paths.

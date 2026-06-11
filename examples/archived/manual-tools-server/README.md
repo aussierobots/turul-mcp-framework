@@ -1,3 +1,7 @@
+> **ARCHIVED 2026-06-12** — manual trait implementation is owned by `calculator-add-manual-server` (the CLAUDE.md-designated reference); its session-persistence teaching is false on the 2026 stateless lane.
+> Disposition record: `docs/plans/2026-07-28-examples-review.md`. Not a
+> workspace member; kept for reference only.
+
 # Manual Tools Server Example
 
 This example demonstrates **advanced manual implementation** of MCP tools without using derive macros or declarative macros. It showcases complex schemas, session state management, progress notifications, and sophisticated tool implementations.
