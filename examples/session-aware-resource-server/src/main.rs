@@ -1,6 +1,6 @@
 //! # Session-Aware Resource Server Example
 //!
-//! This example demonstrates the new session-aware resource capabilities in Phase 6.
+//! This example demonstrates session-aware resources on the 2025-11-25 stateful lane.
 //! Resources can now access session context to provide personalized content.
 
 use async_trait::async_trait;
@@ -142,20 +142,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    println!("Starting Session-Aware MCP Resource Server (Phase 6 Implementation)");
+    println!("Starting Session-Aware MCP Resource Server (2025-11-25 stateful lane)");
 
     let server = McpServer::builder()
         .name("session-aware-resource-server")
-        .version("0.3.47")
+        .version("0.4.0")
         .title("Session-Aware Resource Server")
-        .instructions("This server demonstrates Phase 6 session-aware resources. Resources can access session context to provide personalized content based on user state and preferences.")
+        .instructions("This server demonstrates session-aware resources. Resources can access session context to provide personalized content based on user state and preferences.")
         .resource(SessionAwareProfileResource)
         .resource(SessionActivityResource)
         .bind_address("127.0.0.1:8008".parse()?)
         .build()?;
 
     println!("Session-aware resource server running at: http://127.0.0.1:8008/mcp");
-    println!("\nPhase 6 Features Demonstrated:");
+    println!("\nFeatures Demonstrated:");
     println!("  1. SessionAwareProfileResource - Adapts content based on session state");
     println!("  2. SessionActivityResource - Maintains session-specific activity logs");
     println!("  3. Session state persistence across requests");

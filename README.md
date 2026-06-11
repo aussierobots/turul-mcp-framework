@@ -206,6 +206,7 @@ cargo run -p minimal-server
 curl -X POST http://127.0.0.1:8641/mcp \
   -H 'Content-Type: application/json' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: server/discover' \
   -d '{"jsonrpc":"2.0","method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}},"id":1}'
 ```
 
@@ -234,7 +235,7 @@ cargo run -p prompts-server -- --port 8040
 # Real-time notifications
 cargo run -p notification-server
 
-# Session management demo
+# Session management demo (2025-11-25 stateful lane — manifest-pinned)
 cargo run -p stateful-server
 ```
 
@@ -250,6 +251,7 @@ PORT=8080  # Replace with your server's port
 curl -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: server/discover' \
   -d '{
     "jsonrpc": "2.0",
     "method": "server/discover",
@@ -270,12 +272,14 @@ curl -X POST http://127.0.0.1:$PORT/mcp \
 curl -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/list' \
   -d '{"jsonrpc":"2.0","method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}},"id":2}' | jq
 
 # Resources:
 curl -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: resources/list' \
   -d '{"jsonrpc":"2.0","method":"resources/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}},"id":3}' | jq
 ```
 
@@ -313,6 +317,7 @@ echo "🧪 Testing MCP server on port $PORT"
 DISCOVER_RESPONSE=$(curl -s -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: server/discover' \
   -d '{"jsonrpc":"2.0","method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}},"id":1}')
 
 if [[ $(echo $DISCOVER_RESPONSE | jq -r '.result.serverInfo.name // empty') != "" ]]; then
@@ -589,7 +594,7 @@ Development servers for actual business problems:
 ### 🔧 Framework Demonstrations
 Educational examples showcasing framework patterns:
 - **Basic Patterns**: minimal-server, manual-tools-server, zero-config-getting-started
-- **Advanced Features**: stateful-server, pagination-server, tasks-e2e-inmemory-server
+- **Advanced Features**: stateful-server (2025-pinned), pagination-server, tasks-e2e-inmemory-server (2025-pinned)
 - **Macro System**: derive-macro-server, function-macro-server, function-resource-server
 - **Serverless**: lambda-mcp-server (AWS Lambda with SQS integration)
 
@@ -978,6 +983,8 @@ let content = client.read_resource("config://app.json").await?;
 curl -X POST http://127.0.0.1:8080/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: add" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,

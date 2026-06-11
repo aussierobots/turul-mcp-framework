@@ -52,7 +52,7 @@ cargo run --example minimal-server
 | **resource-test-server** | 8043 | ✅ VALIDATED | Resource testing | Resource validation framework |
 | **function-resource-server** | 8008 | ✅ VALIDATED | Function-based resources | Resource function patterns |
 | **dynamic-resource-server** | 8048 | ✅ VALIDATED | Runtime resources | Dynamic resource creation |
-| **session-aware-resource-server** | 8008 | ✅ VALIDATED | Session-aware resources | Phase 6 session context integration |
+| **session-aware-resource-server** | 8008 | ✅ VALIDATED | Session-aware resources (2025-11-25 pinned) | Session context integration on the stateful lane |
 
 ## 🟢 **FEATURE-SPECIFIC SERVERS** (8 examples) - Specialized MCP Features
 
@@ -64,7 +64,7 @@ cargo run --example minimal-server
 | **sampling-server** | 8044 | ✅ VALIDATED | Data sampling | LLM sampling feature support |
 | **elicitation-server** | 8047 | ✅ VALIDATED | Information gathering | User input elicitation patterns |
 | **pagination-server** | 8044 | ✅ VALIDATED | Result pagination | Large dataset pagination support |
-| **notification-server** | 8005 | ✅ VALIDATED | SSE notifications | Real-time notification patterns |
+| **notification-server** | 8005 | ✅ VALIDATED | Notifications (2026: subscriptions/listen stream) | Real-time notification patterns |
 | **roots-server** | 8050 | ✅ VALIDATED | Root directories | MCP roots/list endpoint demonstration |
 
 ## 🔵 **ADVANCED/COMPOSITE SERVERS** (5 examples) - Complex Functionality
@@ -81,7 +81,7 @@ cargo run --example minimal-server
 
 | Example | Port | Status | Description | Session Features |
 |---------|------|--------|-------------|------------------|
-| **stateful-server** | 8006 | ✅ VALIDATED | Advanced stateful operations | Session state management |
+| **stateful-server** | 8006 | ✅ VALIDATED | Advanced stateful operations (2025-11-25 pinned) | Session state management on the stateful lane |
 | **session-logging-proof-test** | 8001 | ✅ VALIDATED | Session logging validation | Session-based logging verification |
 | **session-aware-logging-demo** | 8000 | ✅ VALIDATED | Session-scoped logging | Session-aware logging patterns |
 | **logging-test-server** | 8052 | ✅ VALIDATED | Logging test suite | Comprehensive logging test suite |

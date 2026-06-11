@@ -57,11 +57,24 @@ The server starts on `http://127.0.0.1:8005/mcp` with SSE enabled.
 
 ## 🧪 Testing Real-time Notifications
 
-### 1. Connect to SSE Stream
-In one terminal, connect to receive real-time updates:
+### 1. Open a subscriptions/listen stream
+On 2026-07-28 the endpoint is POST-only (a GET returns 405) and the
+long-lived notification stream is the `subscriptions/listen` request:
 ```bash
-curl -H "Accept: text/event-stream" http://127.0.0.1:8005/mcp
+curl -N -X POST http://127.0.0.1:8005/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: text/event-stream" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: subscriptions/listen" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true,"resourcesListChanged":true,"promptsListChanged":true},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
 ```
+The first frame is `notifications/subscriptions/acknowledged`; request-scoped
+notifications (progress, log messages) ride each originating POST's own SSE
+response instead.
+
+> **Note**: this example's custom notification types predate the 2026
+> subscriptions model — a rewrite around `subscriptions/listen` is tracked in
+> `docs/plans/2026-07-28-examples-review.md`.
 
 ### 2. Discover the Server
 The 2026-07-28 core is stateless: there is no `initialize`/`notifications/initialized`
@@ -72,6 +85,7 @@ handshake and no `Mcp-Session-Id`. Every request carries its own per-request `_m
 curl -X POST http://127.0.0.1:8005/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: server/discover" \
   -d '{
     "jsonrpc": "2.0",
     "method": "server/discover",
@@ -92,6 +106,8 @@ Send a progress simulation request:
 curl -X POST http://127.0.0.1:8005/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: test-client" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",

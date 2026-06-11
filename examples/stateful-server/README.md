@@ -60,30 +60,24 @@ The server starts on `http://127.0.0.1:8006/mcp` with SSE (Server-Sent Events) e
 
 ## 🧪 Testing Session State
 
-The 2026-07-28 core is stateless at the transport layer: there is no
-`initialize`/`notifications/initialized` handshake and no `Mcp-Session-Id`. Every
-request carries its own per-request `_meta` (`io.modelcontextprotocol/protocolVersion`,
-`clientInfo`, `clientCapabilities`) and the `MCP-Protocol-Version: 2026-07-28` header.
-The application-level `SessionContext` state this example uses (the cart, preferences)
-is a framework feature layered on top — it is not the removed transport session.
+**This example is deliberately pinned to the 2025-11-25 stateful lane** (see
+Cargo.toml): cross-request session state is its entire teaching, and the
+2026-07-28 stateless core has no sessions — on that lane each request gets a
+fresh ephemeral context and a cart added in request 1 would be empty in
+request 2. The flow below is the 2025 stateful contract: `initialize` →
+`notifications/initialized` → `Mcp-Session-Id` header on every subsequent
+request.
 
-### 1. Discover the Server
+### 1. Initialize and capture the session id
 ```bash
-curl -X POST http://127.0.0.1:8006/mcp \
+SESSION_ID=$(curl -si -X POST http://127.0.0.1:8006/mcp \
   -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "server/discover",
-    "params": {
-      "_meta": {
-        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
-        "io.modelcontextprotocol/clientCapabilities": {}
-      }
-    },
-    "id": "1"
-  }'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
+  | grep -i '^mcp-session-id:' | tr -d '\r' | cut -d' ' -f2)
+
+curl -s -X POST http://127.0.0.1:8006/mcp \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 ```
 
 ### 2. Shopping Cart Operations
@@ -91,7 +85,7 @@ curl -X POST http://127.0.0.1:8006/mcp \
 #### Add Items to Cart
 ```bash
 curl -X POST http://127.0.0.1:8006/mcp \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -111,7 +105,7 @@ curl -X POST http://127.0.0.1:8006/mcp \
 #### Add More Items
 ```bash
 curl -X POST http://127.0.0.1:8006/mcp \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -131,7 +125,7 @@ curl -X POST http://127.0.0.1:8006/mcp \
 #### List Cart Contents
 ```bash
 curl -X POST http://127.0.0.1:8006/mcp \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -148,7 +142,7 @@ curl -X POST http://127.0.0.1:8006/mcp \
 #### Remove Items
 ```bash
 curl -X POST http://127.0.0.1:8006/mcp \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -169,7 +163,7 @@ curl -X POST http://127.0.0.1:8006/mcp \
 #### Set Preferences
 ```bash
 curl -X POST http://127.0.0.1:8006/mcp \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -188,7 +182,7 @@ curl -X POST http://127.0.0.1:8006/mcp \
 #### Get Specific Preference
 ```bash
 curl -X POST http://127.0.0.1:8006/mcp \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -206,7 +200,7 @@ curl -X POST http://127.0.0.1:8006/mcp \
 #### List All Preferences
 ```bash
 curl -X POST http://127.0.0.1:8006/mcp \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -223,7 +217,7 @@ curl -X POST http://127.0.0.1:8006/mcp \
 ### 4. Session Information
 ```bash
 curl -X POST http://127.0.0.1:8006/mcp \
-  -H "Content-Type: application/json" \
+  -H "Content-Type: application/json" -H "Mcp-Session-Id: $SESSION_ID" \
   -d '{
     "jsonrpc": "2.0",
     "method": "tools/call",
@@ -326,9 +320,10 @@ The server sends SSE notifications for:
 - **Preference Changes**: Setting new preferences
 - **Progress Updates**: Real-time operation feedback
 
-### Listening to SSE Events
+### Listening to SSE Events (2025 stateful lane)
 ```bash
-curl -N http://127.0.0.1:8006/sse
+curl -N -H "Accept: text/event-stream" -H "Mcp-Session-Id: $SESSION_ID" \
+  http://127.0.0.1:8006/mcp
 ```
 
 ## 📊 Example State Evolution

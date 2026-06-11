@@ -1,4 +1,10 @@
-//! # MCP Session Management Compliance Test
+//! # MCP Session Management Compliance Test (2025-11-25 ONLY)
+//!
+//! **This client targets the 2025-11-25 stateful lane exclusively** — every
+//! request hardcodes `protocolVersion: "2025-11-25"` and exercises the
+//! session contract (initialize handshake, `Mcp-Session-Id`, DELETE
+//! termination) that the 2026-07-28 stateless core removed. Run it against
+//! a `protocol-2025-11-25`-pinned server (e.g. `client-initialise-server`).
 //!
 //! Comprehensive test for MCP Session Management specification compliance.
 //! Tests all requirements from the MCP specification including:

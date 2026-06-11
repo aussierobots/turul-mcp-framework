@@ -31,6 +31,7 @@ handshake and no `Mcp-Session-Id`. Every request carries its own per-request `_m
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: server/discover" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
@@ -50,6 +51,7 @@ curl -X POST http://127.0.0.1:8641/mcp \
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/list" \
   -d '{
     "jsonrpc": "2.0",
     "id": 2,
@@ -69,6 +71,8 @@ curl -X POST http://127.0.0.1:8641/mcp \
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: test-client" \
   -d '{
     "jsonrpc": "2.0",
     "id": 3,

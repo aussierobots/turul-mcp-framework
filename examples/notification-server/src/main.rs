@@ -453,7 +453,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     info!("🚀 Real MCP notification server running at: http://127.0.0.1:8005/mcp");
-    info!("📡 SSE endpoint: GET http://127.0.0.1:8005/mcp (Accept: text/event-stream)");
+    info!(
+        "📡 2026-07-28 is POST-only: request-scoped notifications ride each POST's SSE \
+         response (Accept: application/json, text/event-stream); list-change streams \
+         use the subscriptions/listen POST. GET returns 405."
+    );
     info!("🔔 This server implements ACTUAL MCP notifications:");
     info!("   • notifications/dev_alert - Development team alerts with acknowledgment");
     info!("   • notifications/cicd - CI/CD pipeline status notifications");
