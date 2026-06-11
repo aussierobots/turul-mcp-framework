@@ -2314,16 +2314,34 @@ impl StreamableHttpHandler {
                 request_id, wants_sse
             );
 
-            // Process actual request through middleware pipeline
-            // Injection is applied immediately inside run_middleware_and_dispatch
-            let (response, _) = self_clone
-                .run_middleware_and_dispatch(
-                    request,
-                    headers,
-                    Some(session_context),
-                    pre_session_extensions,
-                )
-                .await;
+            // Process the request through the middleware pipeline, racing the
+            // client connection. Streamable HTTP §Cancellation: "Closing the
+            // SSE response stream MUST be treated by the server as
+            // cancellation of that request. The server SHOULD stop work …
+            // and MUST NOT send any further messages for it." Dropping the
+            // dispatch future stops the handler at its next await point;
+            // returning here guarantees nothing further is sent.
+            let mut shutdown_tx = shutdown_tx;
+            let dispatch = self_clone.run_middleware_and_dispatch(
+                request,
+                headers,
+                Some(session_context),
+                pre_session_extensions,
+            );
+            tokio::pin!(dispatch);
+            let (response, _) = tokio::select! {
+                result = &mut dispatch => result,
+                _ = sender.closed() => {
+                    debug!(
+                        "Client closed the response stream — cancelling request {:?}",
+                        request_id
+                    );
+                    if let Some(shutdown_tx) = shutdown_tx.take() {
+                        let _ = shutdown_tx.send(());
+                    }
+                    return;
+                }
+            };
 
             // Send final result - format depends on client type
             if wants_sse {
@@ -2359,7 +2377,7 @@ impl StreamableHttpHandler {
                 // final frame goes out: request-scoped notifications precede the
                 // final response on the wire, and the final response terminates
                 // the stream.
-                if let Some(shutdown_tx) = shutdown_tx {
+                if let Some(shutdown_tx) = shutdown_tx.take() {
                     debug!(
                         "🔍 Main task sending shutdown signal to progress task for request: {:?}",
                         request_id
