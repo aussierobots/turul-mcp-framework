@@ -1,5 +1,10 @@
 # 2026-07-28 Release Readiness Review
 
+> **SUPERSEDED for open work (2026-06-11):** the active driver/checklist is now
+> [`2026-07-28-spec-compliance.md`](2026-07-28-spec-compliance.md) (per-ToC-section
+> requirement tables + verified gap register). This review remains the historical
+> record of the P0/P1 closure work.
+
 Branch: `feat/turul-mcp-protocol-2026-07-28`. Reviewed 2026-06-10 against the **live**
 MCP draft specification (https://modelcontextprotocol.io/specification/draft), the
 vendored pin (`crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`, sha256
