@@ -164,6 +164,22 @@ impl McpClientError {
         }
     }
 
+    /// Is this a resource-not-found error from `resources/read`?
+    ///
+    /// Resources §Error Handling: servers answer a nonexistent resource with
+    /// `-32602`; "For backwards compatibility, clients SHOULD also accept
+    /// -32002 as a resource not found error, as earlier protocol versions
+    /// used this code."
+    pub fn is_resource_not_found(&self) -> bool {
+        matches!(
+            self,
+            Self::ServerError {
+                code: -32602 | -32002,
+                ..
+            }
+        )
+    }
+
     /// Check if the error is retryable
     pub fn is_retryable(&self) -> bool {
         match self {
@@ -293,5 +309,26 @@ mod tests {
             message: "Internal".to_string(),
         });
         assert!(!err.is_session_not_initialized());
+    }
+}
+
+#[cfg(test)]
+mod resource_not_found_tests {
+    use super::*;
+
+    /// Resources §Error Handling backwards-compat: both -32602 and the
+    /// pre-2026 -32002 classify as resource-not-found.
+    #[test]
+    fn resource_not_found_accepts_both_codes() {
+        assert!(
+            McpClientError::server_error(-32602, "no such resource", None).is_resource_not_found()
+        );
+        assert!(
+            McpClientError::server_error(-32002, "no such resource", None).is_resource_not_found()
+        );
+        assert!(
+            !McpClientError::server_error(-32601, "no such method", None).is_resource_not_found()
+        );
+        assert!(!McpClientError::Timeout.is_resource_not_found());
     }
 }

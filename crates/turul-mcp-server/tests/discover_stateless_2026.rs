@@ -635,3 +635,35 @@ async fn malformed_completion_params_are_rejected_with_32602() {
         );
     }
 }
+
+/// Architecture §Capability Negotiation: "Implemented server features must
+/// be advertised in the server's capabilities" — registered tools and
+/// prompts surface as capabilities.tools / capabilities.prompts in
+/// server/discover.
+#[tokio::test]
+async fn discover_advertises_registered_feature_capabilities() {
+    let url = start_completion_server().await; // has tools + completion
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 50, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("discover POST");
+    let body: serde_json::Value = resp.json().await.expect("json");
+    let caps = &body["result"]["capabilities"];
+    assert!(
+        caps["tools"].is_object(),
+        "registered tools must be advertised: {body}"
+    );
+    assert!(
+        caps["completions"].is_object(),
+        "registered completion providers must be advertised: {body}"
+    );
+}

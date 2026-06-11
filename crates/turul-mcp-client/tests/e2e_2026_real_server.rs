@@ -657,3 +657,100 @@ async fn mrtr_round_trip_on_prompts_get_through_the_client() {
         "the retry must complete the original get: {text}"
     );
 }
+
+/// Emits one request-scoped progress notification, then completes.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "progress_worker", description = "Works with progress", output = String)]
+struct ProgressWorkerTool {}
+
+impl ProgressWorkerTool {
+    async fn execute(
+        &self,
+        session: Option<turul_mcp_server::SessionContext>,
+    ) -> McpResult<String> {
+        if let Some(session) = session {
+            session.notify_request_progress(0.5, Some(1.0)).await;
+        }
+        Ok("worked".to_string())
+    }
+}
+
+/// The client's per-request progress feed: `_meta.progressToken` goes out,
+/// the progress notification comes back on the request stream before the
+/// final result; the discover accessors expose the server's declared
+/// capabilities and instructions.
+#[tokio::test]
+async fn progress_feed_and_discovered_server_accessors() {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("e2e-2026-progress")
+        .version("0.4.0")
+        .instructions("Use progress_worker for long jobs.")
+        .tool(ProgressWorkerTool::default())
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    let transport = Box::new(HttpTransport::new(&url).unwrap());
+    let client = McpClient::new(transport, ClientConfig::default());
+    client.connect().await.expect("connect");
+
+    // GAP-ARCH-1/DISC-1: the discover body is retained and exposed.
+    let discovered = client
+        .discovered_server()
+        .await
+        .expect("discover body retained on a 2026 connection");
+    assert!(
+        discovered
+            .supported_versions
+            .iter()
+            .any(|v| v == "2026-07-28"),
+        "{discovered:?}"
+    );
+    assert_eq!(
+        client.server_instructions().await.as_deref(),
+        Some("Use progress_worker for long jobs.")
+    );
+    let caps = client
+        .server_capabilities()
+        .await
+        .expect("capabilities retained");
+    assert!(
+        caps.get("tools").is_some(),
+        "a server with tools must declare the tools capability: {caps}"
+    );
+
+    // PAT/G4: progress events reach the application before the result.
+    let progress_events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = progress_events.clone();
+    let result = client
+        .call_tool_with_progress(
+            "progress_worker",
+            json!({}),
+            json!("tok-e2e"),
+            move |params| sink.lock().unwrap().push(params),
+        )
+        .await
+        .expect("tool call with progress");
+    let text = serde_json::to_string(&result).unwrap_or_default();
+    assert!(text.contains("worked"), "{text}");
+    let events = progress_events.lock().unwrap();
+    assert_eq!(events.len(), 1, "exactly one progress event: {events:?}");
+    assert_eq!(events[0]["progressToken"], json!("tok-e2e"), "{events:?}");
+    assert_eq!(events[0]["progress"], json!(0.5));
+}

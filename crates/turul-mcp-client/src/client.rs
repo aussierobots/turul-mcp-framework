@@ -61,10 +61,63 @@ pub struct McpClient {
     cached_resources: Arc<RwLock<Option<Vec<Resource>>>>,
     /// Cached prompt list (invalidated by `notifications/prompts/list_changed`)
     cached_prompts: Arc<RwLock<Option<Vec<Prompt>>>>,
+    /// The `server/discover` result captured during 2026 negotiation —
+    /// capabilities, instructions, serverInfo, supportedVersions.
+    discovered: Arc<RwLock<Option<DiscoveredServer>>>,
     /// User-supplied notification callback
     notification_callback: Option<NotificationCallback>,
     /// Wire spec negotiated at `connect()`, locked for this client's lifetime.
     protocol_version: Arc<RwLock<Option<crate::version::McpVersion>>>,
+}
+
+/// The body of a successful `server/discover` response, retained for the
+/// lifetime of the connection. Field shapes are kept as raw JSON — the
+/// public client vocabulary is version-neutral.
+#[derive(Debug, Clone)]
+pub struct DiscoveredServer {
+    /// `serverInfo` (name/version/title…).
+    pub server_info: Option<Value>,
+    /// The server's declared capabilities object.
+    pub capabilities: Option<Value>,
+    /// Optional usage instructions ("can be used by clients to improve an
+    /// LLM's understanding of available tools").
+    pub instructions: Option<String>,
+    /// Protocol versions the server supports.
+    pub supported_versions: Vec<String>,
+}
+
+impl DiscoveredServer {
+    fn from_result(result: &Value) -> Self {
+        Self {
+            server_info: result.get("serverInfo").cloned(),
+            capabilities: result.get("capabilities").cloned(),
+            instructions: result
+                .get("instructions")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            supported_versions: result
+                .get("supportedVersions")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// `error.data.supported` from an UnsupportedProtocolVersionError object.
+fn extract_supported_versions(error: &Value) -> Option<Vec<String>> {
+    error
+        .pointer("/data/supported")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
 }
 
 impl Drop for McpClient {
@@ -140,6 +193,7 @@ impl McpClient {
             cached_param_bindings: Arc::new(RwLock::new(std::collections::HashMap::new())),
             cached_resources: Arc::new(RwLock::new(None)),
             cached_prompts: Arc::new(RwLock::new(None)),
+            discovered: Arc::new(RwLock::new(None)),
             notification_callback,
             protocol_version: Arc::new(RwLock::new(None)),
         }
@@ -360,8 +414,16 @@ impl McpClient {
             Ok(Ok(resp)) => {
                 if let Some(err) = resp.body.get("error") {
                     let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
-                    Ok(DiscoverProbe::JsonRpcError(code))
-                } else if resp.body.get("result").is_some() {
+                    Ok(DiscoverProbe::JsonRpcError(
+                        code,
+                        extract_supported_versions(err),
+                    ))
+                } else if let Some(result) = resp.body.get("result") {
+                    // Retain the DiscoverResult body — capabilities,
+                    // instructions, serverInfo, supportedVersions — for the
+                    // accessors ("Both parties must respect declared
+                    // capabilities throughout the interaction").
+                    *self.discovered.write().await = Some(DiscoveredServer::from_result(result));
                     Ok(DiscoverProbe::Discovered)
                 } else {
                     Err(crate::error::ProtocolError::InvalidResponse(
@@ -377,7 +439,8 @@ impl McpClient {
                 if let Ok(body) = serde_json::from_str::<serde_json::Value>(&message)
                     && let Some(code) = body.pointer("/error/code").and_then(|c| c.as_i64())
                 {
-                    return Ok(DiscoverProbe::JsonRpcError(code));
+                    let supported = body.get("error").and_then(extract_supported_versions);
+                    return Ok(DiscoverProbe::JsonRpcError(code, supported));
                 }
                 Ok(DiscoverProbe::HttpStatus(status))
             }
@@ -747,6 +810,10 @@ impl McpClient {
 
     /// List available tools (returns cached result if available)
     ///
+    /// Returns the FIRST page only — pagination spec: "Treat a missing
+    /// nextCursor as the end of results". Use
+    /// [`list_tools_paginated`](Self::list_tools_paginated) to walk all pages.
+    ///
     /// The cache is automatically invalidated when the server sends a
     /// `notifications/tools/list_changed` notification. Use [`refresh_tools`](Self::refresh_tools)
     /// to force a fresh fetch.
@@ -981,7 +1048,7 @@ impl McpClient {
         #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
         if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
             let extra_headers = self.mcp_param_headers_for(name, &arguments).await;
-            return self
+            let first = self
                 .send_2026_07_28_with_extra_headers(
                     "tools/call",
                     json!({ "name": name, "arguments": arguments.clone() }),
@@ -989,6 +1056,27 @@ impl McpClient {
                     crate::protocol::v2026_07_28::parse_call_tool,
                 )
                 .await;
+            // SEP-2243 §Client Behavior: on a header-mismatch rejection "the
+            // client SHOULD call tools/list to obtain the current inputSchema,
+            // then retry the original request with the appropriate headers."
+            // One refresh + one retry; a second -32001 surfaces to the caller.
+            if let Err(McpClientError::ServerError { code: -32001, .. }) = &first {
+                debug!(
+                    tool = name,
+                    "Mcp-Param mismatch — refreshing tools/list and retrying once"
+                );
+                let _ = self.refresh_tools().await?;
+                let extra_headers = self.mcp_param_headers_for(name, &arguments).await;
+                return self
+                    .send_2026_07_28_with_extra_headers(
+                        "tools/call",
+                        json!({ "name": name, "arguments": arguments.clone() }),
+                        &extra_headers,
+                        crate::protocol::v2026_07_28::parse_call_tool,
+                    )
+                    .await;
+            }
+            return first;
         }
 
         let request = self.build_request(
@@ -1077,6 +1165,104 @@ impl McpClient {
         let _ = filter;
         Err(crate::error::ProtocolError::MethodNotFound(
             "subscriptions/listen requires a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
+    /// The `server/discover` result captured at connect time (2026
+    /// connections): server capabilities, instructions, supported versions.
+    /// `None` before connect or on a 2025-11-25 connection.
+    pub async fn discovered_server(&self) -> Option<DiscoveredServer> {
+        self.discovered.read().await.clone()
+    }
+
+    /// The server's declared capabilities from `server/discover` —
+    /// "Both parties must respect declared capabilities throughout the
+    /// interaction".
+    pub async fn server_capabilities(&self) -> Option<Value> {
+        self.discovered
+            .read()
+            .await
+            .as_ref()
+            .and_then(|d| d.capabilities.clone())
+    }
+
+    /// The server's `instructions` from `server/discover`, for priming an
+    /// LLM with usage guidance.
+    pub async fn server_instructions(&self) -> Option<String> {
+        self.discovered
+            .read()
+            .await
+            .as_ref()
+            .and_then(|d| d.instructions.clone())
+    }
+
+    /// Call a tool with a request-scoped progress feed (2026-07-28
+    /// connections only). The `progress_token` (string or number) rides
+    /// `_meta.progressToken`; each `notifications/progress` arriving on the
+    /// request's SSE stream is handed to `on_progress` before the final
+    /// result is returned.
+    pub async fn call_tool_with_progress(
+        &self,
+        name: &str,
+        arguments: Value,
+        progress_token: Value,
+        mut on_progress: impl FnMut(Value) + Send,
+    ) -> McpClientResult<CallToolResult> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let meta = crate::protocol::v2026_07_28::request_meta(
+                &self.config.client_info.name,
+                &self.config.client_info.version,
+                &self.config.declared_capabilities,
+            );
+            let mut params = crate::protocol::v2026_07_28::params_with_meta(
+                &meta,
+                json!({ "name": name, "arguments": arguments }),
+            );
+            if let Some(m) = params.get_mut("_meta").and_then(|m| m.as_object_mut()) {
+                m.insert("progressToken".to_string(), progress_token);
+            }
+            let request = self.build_request("tools/call", params);
+            let mut receiver = self.transport.send_request_streaming(request).await?;
+
+            let deadline = tokio::time::Instant::now() + self.config.timeouts.request;
+            loop {
+                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                let frame = tokio::time::timeout(remaining, receiver.recv())
+                    .await
+                    .map_err(|_| McpClientError::Timeout)?
+                    .ok_or_else(|| {
+                        crate::error::ProtocolError::InvalidResponse(
+                            "request stream closed before the final response".to_string(),
+                        )
+                    })?;
+                if frame.get("method").and_then(|m| m.as_str()) == Some("notifications/progress") {
+                    on_progress(frame.get("params").cloned().unwrap_or(Value::Null));
+                    continue;
+                }
+                if let Some(err) = frame.get("error") {
+                    return Err(McpClientError::server_error(
+                        err.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32,
+                        err.get("message")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("server error"),
+                        err.get("data").cloned(),
+                    ));
+                }
+                if frame.get("result").is_some() {
+                    return crate::protocol::v2026_07_28::parse_call_tool(
+                        frame.get("result").unwrap_or(&Value::Null),
+                    );
+                }
+                // Other request-scoped notifications (e.g. notifications/message)
+                // are not progress — skip.
+            }
+        }
+
+        let _ = (name, arguments, progress_token, &mut on_progress);
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "per-request progress requires a 2026-07-28 connection".to_string(),
         )
         .into())
     }
@@ -1194,6 +1380,9 @@ impl McpClient {
     }
 
     /// List available resources (returns cached result if available)
+    ///
+    /// Returns the FIRST page only — use
+    /// [`list_resources_paginated`](Self::list_resources_paginated) to walk all pages.
     ///
     /// The cache is automatically invalidated when the server sends a
     /// `notifications/resources/list_changed` notification. Use
@@ -1399,6 +1588,9 @@ impl McpClient {
     }
 
     /// List available prompts (returns cached result if available)
+    ///
+    /// Returns the FIRST page only — use
+    /// [`list_prompts_paginated`](Self::list_prompts_paginated) to walk all pages.
     ///
     /// The cache is automatically invalidated when the server sends a
     /// `notifications/prompts/list_changed` notification. Use

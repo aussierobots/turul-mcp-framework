@@ -42,7 +42,9 @@ pub(crate) enum DiscoverProbe {
     /// Server returned a valid `DiscoverResult` — it speaks 2026-07-28.
     Discovered,
     /// Server returned a JSON-RPC error response carrying this `error.code`.
-    JsonRpcError(i64),
+    /// For `-32004` the structured `error.data.supported` list rides along
+    /// (None when the server sent no data).
+    JsonRpcError(i64, Option<Vec<String>>),
     /// The HTTP request itself failed with this non-2xx status.
     HttpStatus(u16),
 }
@@ -67,6 +69,7 @@ const METHOD_NOT_FOUND: i64 = -32601;
 /// refusal of the probe's requested version (HTTP 400 body). The probe always
 /// requests 2026-07-28, so this code means "this server does not speak 2026".
 const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32004;
+const INVALID_PARAMS: i64 = -32602;
 
 /// Decide the negotiation action from a `server/discover` probe outcome.
 ///
@@ -83,17 +86,31 @@ pub(crate) fn classify_probe(
         // A valid DiscoverResult is the positive signal for 2026.
         DiscoverProbe::Discovered => ProbeDecision::Use2026,
 
-        // Method Not Found = the server has no `server/discover` → it is older.
-        DiscoverProbe::JsonRpcError(METHOD_NOT_FOUND) => ProbeDecision::FallbackTo2025,
+        // Method Not Found / Invalid Params = legacy-server signals. The era
+        // detection contract: "The fallback MUST NOT be keyed to one specific
+        // error code: legacy servers respond to unknown pre-initialize
+        // requests with implementation-defined errors (commonly -32601 or
+        // -32602)".
+        DiscoverProbe::JsonRpcError(METHOD_NOT_FOUND, _) => ProbeDecision::FallbackTo2025,
+        DiscoverProbe::JsonRpcError(INVALID_PARAMS, _) => ProbeDecision::FallbackTo2025,
 
         // UnsupportedProtocolVersionError = the server validated the probe's
         // requested 2026-07-28 and declined it — the spec's structured
-        // negotiation signal to retry with another version. Fall back to 2025.
-        DiscoverProbe::JsonRpcError(UNSUPPORTED_PROTOCOL_VERSION) => ProbeDecision::FallbackTo2025,
+        // negotiation signal. "The client SHOULD select a mutually supported
+        // version from the supported list": fall back to 2025-11-25 when the
+        // server's data.supported includes it (or sent no list); surface the
+        // list when no mutual version exists.
+        DiscoverProbe::JsonRpcError(UNSUPPORTED_PROTOCOL_VERSION, supported) => match supported {
+            Some(list) if !list.iter().any(|v| v == "2025-11-25") => ProbeDecision::Abort(format!(
+                "server declined 2026-07-28 and its supported versions {list:?} \
+                         include no version this client speaks (2026-07-28, 2025-11-25)"
+            )),
+            _ => ProbeDecision::FallbackTo2025,
+        },
 
         // Any other JSON-RPC error means the server UNDERSTOOD `server/discover`
         // and rejected it for an unrelated reason — not a version signal.
-        DiscoverProbe::JsonRpcError(code) => ProbeDecision::Abort(format!(
+        DiscoverProbe::JsonRpcError(code, _) => ProbeDecision::Abort(format!(
             "server/discover rejected with JSON-RPC error {code}; the server \
              understood the method and refused it — not a version signal, not a downgrade trigger"
         )),
@@ -138,27 +155,54 @@ mod tests {
         // -32004 in response to the 2026-07-28 probe = the server's structured
         // "I don't speak 2026" — the spec's negotiation signal to retry lower.
         assert_eq!(
-            classify_probe(DiscoverProbe::JsonRpcError(-32004), false),
+            classify_probe(DiscoverProbe::JsonRpcError(-32004, None), false),
             ProbeDecision::FallbackTo2025
         );
+        // "The client SHOULD select a mutually supported version from the
+        // supported list": 2025-11-25 in data.supported → fall back to it.
+        assert_eq!(
+            classify_probe(
+                DiscoverProbe::JsonRpcError(
+                    -32004,
+                    Some(vec!["2025-11-25".to_string(), "2025-06-18".to_string()])
+                ),
+                false
+            ),
+            ProbeDecision::FallbackTo2025
+        );
+        // No mutually supported version → surface the list, do not guess.
+        assert!(matches!(
+            classify_probe(
+                DiscoverProbe::JsonRpcError(-32004, Some(vec!["2099-01-01".to_string()])),
+                false
+            ),
+            ProbeDecision::Abort(msg) if msg.contains("2099-01-01")
+        ));
     }
 
     #[test]
-    fn method_not_found_falls_back_to_2025() {
-        assert_eq!(
-            classify_probe(DiscoverProbe::JsonRpcError(-32601), false),
-            ProbeDecision::FallbackTo2025
-        );
+    fn legacy_error_codes_fall_back_to_2025() {
+        // Era detection: "The fallback MUST NOT be keyed to one specific
+        // error code: legacy servers respond to unknown pre-initialize
+        // requests with implementation-defined errors (commonly -32601 or
+        // -32602)".
+        for code in [-32601, -32602] {
+            assert_eq!(
+                classify_probe(DiscoverProbe::JsonRpcError(code, None), false),
+                ProbeDecision::FallbackTo2025,
+                "JSON-RPC error {code} is a recognized legacy-server signal"
+            );
+        }
     }
 
     #[test]
     fn other_jsonrpc_errors_abort_without_downgrade() {
-        // Parse error, Invalid Request, Invalid Params, Internal Error, and the
-        // legacy -32002: the server understood discover — never downgrade.
-        for code in [-32700, -32600, -32602, -32603, -32002, 100] {
+        // Parse error, Invalid Request, Internal Error, and the legacy
+        // -32002: the server understood discover — never downgrade.
+        for code in [-32700, -32600, -32603, -32002, 100] {
             assert!(
                 matches!(
-                    classify_probe(DiscoverProbe::JsonRpcError(code), false),
+                    classify_probe(DiscoverProbe::JsonRpcError(code, None), false),
                     ProbeDecision::Abort(_)
                 ),
                 "JSON-RPC error {code} must abort, not downgrade"

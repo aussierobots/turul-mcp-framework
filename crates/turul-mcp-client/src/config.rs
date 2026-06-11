@@ -42,9 +42,22 @@ pub struct ClientConfig {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DeclaredCapabilities {
     /// Can answer `elicitation/create` input requests (MRTR, SEP-2322).
+    /// Declares form-mode support ("an empty capabilities object is
+    /// equivalent to declaring support for form mode only").
     pub elicitation: bool,
+    /// Also supports URL-mode elicitation (`elicitation.url`). Servers MUST
+    /// NOT send URL-mode requests unless this is declared. Implies
+    /// `elicitation` when set.
+    pub elicitation_url: bool,
     /// Can answer `sampling/createMessage` input requests (deprecated per SEP-2577).
     pub sampling: bool,
+    /// Also supports tool-enabled sampling (`sampling.tools`). Servers MUST
+    /// NOT send `tools`/`toolChoice` unless this is declared. Implies
+    /// `sampling` when set.
+    pub sampling_tools: bool,
+    /// Also supports `includeContext: "thisServer"/"allServers"` in sampling
+    /// (`sampling.context`). Implies `sampling` when set.
+    pub sampling_context: bool,
     /// Can answer `roots/list` input requests (deprecated per SEP-2577).
     pub roots: bool,
 }

@@ -21,12 +21,23 @@ pub(crate) fn request_meta(
 ) -> p::meta::RequestMetaObject {
     #[allow(deprecated)]
     let capabilities = p::initialize::ClientCapabilities {
-        elicitation: declared
-            .elicitation
-            .then(p::initialize::ElicitationCapabilities::default),
-        sampling: declared
-            .sampling
-            .then(p::initialize::SamplingCapabilities::default),
+        elicitation: (declared.elicitation || declared.elicitation_url).then(|| {
+            p::initialize::ElicitationCapabilities {
+                // Explicit form marker keeps form support declared even when
+                // url is also present (an explicit url-only object would NOT
+                // imply form-mode support).
+                form: Some(Default::default()),
+                url: declared.elicitation_url.then(Default::default),
+                ..Default::default()
+            }
+        }),
+        sampling: (declared.sampling || declared.sampling_tools || declared.sampling_context).then(
+            || p::initialize::SamplingCapabilities {
+                tools: declared.sampling_tools.then(Default::default),
+                context: declared.sampling_context.then(Default::default),
+                ..Default::default()
+            },
+        ),
         roots: declared.roots.then(Default::default),
         ..Default::default()
     };
@@ -269,6 +280,35 @@ mod tests {
             Err(crate::error::McpClientError::Protocol(_)) => {}
             other => panic!("unrecognized resultType must be invalid, got: {other:?}"),
         }
+    }
+
+    /// Sub-capability declarations reach the wire shapes the gating servers
+    /// check: elicitation.url and sampling.tools/.context.
+    #[test]
+    fn sub_capabilities_map_into_request_meta() {
+        let declared = crate::config::DeclaredCapabilities {
+            elicitation: true,
+            elicitation_url: true,
+            sampling: true,
+            sampling_tools: true,
+            sampling_context: false,
+            roots: false,
+        };
+        let meta = request_meta("t", "1", &declared);
+        let v = serde_json::to_value(&meta).unwrap();
+        let caps = &v["io.modelcontextprotocol/clientCapabilities"];
+        assert!(caps["elicitation"]["form"].is_object(), "{caps}");
+        assert!(caps["elicitation"]["url"].is_object(), "{caps}");
+        assert!(caps["sampling"]["tools"].is_object(), "{caps}");
+        assert!(caps["sampling"].get("context").is_none(), "{caps}");
+
+        // url-only still implies the elicitation object with form marker.
+        let url_only = crate::config::DeclaredCapabilities {
+            elicitation_url: true,
+            ..Default::default()
+        };
+        let v = serde_json::to_value(&request_meta("t", "1", &url_only)).unwrap();
+        assert!(v["io.modelcontextprotocol/clientCapabilities"]["elicitation"]["url"].is_object());
     }
 
     #[test]
