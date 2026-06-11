@@ -157,6 +157,9 @@ impl McpServerBuilder {
         );
         #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
+        // roots/list is a server→client request on 2026 (carried inside MRTR
+        // input requests) — only the 2025 stateful lane hosts it inbound.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
         #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
@@ -197,6 +200,7 @@ impl McpServerBuilder {
             "notifications/prompts/list_changed".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/roots/list_changed".to_string(),
             notifications_handler.clone(),
@@ -214,10 +218,12 @@ impl McpServerBuilder {
             "notifications/prompts/listChanged".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/roots/listChanged".to_string(),
-            notifications_handler,
+            notifications_handler.clone(),
         );
+        let _ = notifications_handler;
 
         // Note: notifications/initialized is handled by InitializedNotificationHandler in server.rs
 
@@ -1709,8 +1715,12 @@ impl McpServerBuilder {
             implementation = implementation.with_icons(icons);
         }
 
-        // Add RootsHandler if roots were configured
+        // Add RootsHandler if roots were configured. 2025 lane only: on 2026
+        // the server REQUESTS roots from the client via MRTR; it never hosts
+        // an inbound roots/list.
+        #[allow(unused_mut)]
         let mut handlers = self.handlers;
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.roots.is_empty() {
             let mut roots_handler = RootsHandler::new();
             for root in self.roots {
@@ -1928,9 +1938,17 @@ mod tests {
         }
         #[cfg(feature = "protocol-2026-07-28")]
         {
-            // The stateless core drops ping/initialize and the task methods.
-            assert_eq!(builder.handlers.len(), 17);
+            // The stateless core drops ping/initialize, the task methods,
+            // and the inbound roots surface (roots/list + its notifications
+            // — roots is requested via MRTR on 2026, never hosted).
+            assert_eq!(builder.handlers.len(), 14);
             assert!(!builder.handlers.contains_key("ping"));
+            assert!(!builder.handlers.contains_key("roots/list"));
+            assert!(
+                !builder
+                    .handlers
+                    .contains_key("notifications/roots/list_changed")
+            );
         }
     }
 

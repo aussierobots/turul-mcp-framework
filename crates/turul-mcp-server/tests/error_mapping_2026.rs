@@ -104,6 +104,9 @@ async fn methods_absent_from_the_2026_schema_get_404() {
     // ping/initialize/tasks/logging-setLevel/resources-subscribe have no
     // bindings in the pinned 2026-07-28 schema — a 2026-only server does not
     // implement them.
+    // roots/list is server→client only on 2026 (it rides MRTR input
+    // requests); a stateless server hosting it inbound is non-spec, and
+    // notifications/roots/list_changed has no binding in the pinned schema.
     for method in [
         "ping",
         "initialize",
@@ -111,6 +114,9 @@ async fn methods_absent_from_the_2026_schema_get_404() {
         "tasks/list",
         "logging/setLevel",
         "resources/subscribe",
+        "roots/list",
+        "notifications/roots/list_changed",
+        "notifications/roots/listChanged",
     ] {
         let (status, body) = post_method(&url, method).await;
         assert_eq!(
