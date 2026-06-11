@@ -6,9 +6,25 @@ license.workspace = true
 repository.workspace = true
 description = "OAuth 2.1 Resource Server support for Turul MCP framework"
 
+[features]
+# Spec selection forwards to the transport/storage deps (one per build —
+# the protocol alias enforces the mutex). Standalone builds default to the
+# workspace default spec; when used as a dependency with
+# default-features = false, the spec arrives via feature unification with
+# the dependent's own choice.
+default = ["protocol-2026-07-28"]
+protocol-2025-11-25 = [
+  "turul-http-mcp-server/protocol-2025-11-25",
+  "turul-mcp-session-storage/protocol-2025-11-25",
+]
+protocol-2026-07-28 = [
+  "turul-http-mcp-server/protocol-2026-07-28",
+  "turul-mcp-session-storage/protocol-2026-07-28",
+]
+
 [dependencies]
-turul-http-mcp-server.workspace = true
-turul-mcp-session-storage.workspace = true
+turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.0", default-features = false, features = ["sse"] }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.0", default-features = false, features = ["in-memory"] }
 
 async-trait.workspace = true
 bytes.workspace = true
