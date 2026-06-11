@@ -236,3 +236,47 @@ async fn client_advertises_2026_protocol_version_on_the_wire() {
         .expect("tools/call must reach the MCP-Protocol-Version: 2026-07-28-gated mock");
     assert_eq!(call.is_error, Some(false));
 }
+
+/// Tools §x-mcp-header: "Clients using the Streamable HTTP transport MUST
+/// reject tool definitions where any x-mcp-header value violates these
+/// constraints. Rejection means the client MUST exclude the invalid tool
+/// from the result of tools/list" — and valid tools must survive.
+#[tokio::test]
+async fn invalid_x_mcp_header_tools_are_excluded_from_tools_list() {
+    let server = start_2026_server().await;
+    mount_2026_result(
+        &server,
+        "tools/list",
+        serde_json::json!({
+            "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+            "tools": [
+                {
+                    "name": "good_tool",
+                    "inputSchema": { "type": "object", "properties": {
+                        "region": { "type": "string", "x-mcp-header": "Region" }
+                    }}
+                },
+                {
+                    "name": "bad_tool",
+                    "inputSchema": { "type": "object", "properties": {
+                        // space + '!' violate the tchar constraint on header names
+                        "region": { "type": "string", "x-mcp-header": "Bad Header!" }
+                    }}
+                }
+            ]
+        }),
+    )
+    .await;
+
+    let client = connect_2026(&server).await;
+    let tools = client.list_tools().await.expect("tools/list");
+    let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        names.contains(&"good_tool"),
+        "valid tools must survive: {names:?}"
+    );
+    assert!(
+        !names.contains(&"bad_tool"),
+        "a tool with an invalid x-mcp-header value MUST be excluded: {names:?}"
+    );
+}

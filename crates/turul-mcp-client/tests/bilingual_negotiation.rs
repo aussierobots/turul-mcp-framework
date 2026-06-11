@@ -129,6 +129,75 @@ async fn bilingual_client_locks_2025_when_server_lacks_discover() {
     );
 }
 
+/// Versioning §Backward Compatibility: "a recognized modern JSON-RPC error
+/// (such as UnsupportedProtocolVersionError) identifies a modern server: the
+/// client retries with a supported version rather than falling back" — an
+/// HTTP 400 whose body carries -32004 with data.supported must fall back to
+/// 2025-11-25 through the real probe path (not abort like a bare 4xx).
+#[tokio::test]
+async fn bilingual_client_falls_back_on_400_with_32004_body() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    // A validating modern-but-2025-only server: 400 + structured -32004.
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(400)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "error": {
+                        "code": -32004,
+                        "message": "Unsupported protocol version",
+                        "data": { "supported": ["2025-11-25"], "requested": "2026-07-28" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "initialize"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .insert_header("Mcp-Session-Id", "sess-32004")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "protocolVersion": "2025-11-25",
+                        "capabilities": { "tools": { "listChanged": false } },
+                        "serverInfo": { "name": "mock-2025", "version": "1.0.0" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "notifications/initialized"}),
+        ))
+        .respond_with(ResponseTemplate::new(202))
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("-32004 in a 400 body must trigger 2025 fallback, not abort");
+    assert_eq!(
+        client.negotiated_version().await,
+        Some(McpVersion::V2025_11_25),
+        "a structured -32004 must fall back to and lock 2025-11-25"
+    );
+}
+
 #[tokio::test]
 async fn bilingual_client_aborts_on_4xx_without_downgrade() {
     let server = MockServer::start().await;
