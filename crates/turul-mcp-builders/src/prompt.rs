@@ -250,7 +250,7 @@ impl HasPromptArguments for DynamicPrompt {
 }
 
 impl HasPromptAnnotations for DynamicPrompt {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::prompts::PromptAnnotations> {
+    fn annotations(&self) -> Option<&crate::traits::prompt_traits::PromptAnnotations> {
         None // Annotations not currently implemented
     }
 }

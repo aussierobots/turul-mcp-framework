@@ -7,7 +7,7 @@ maintained alongside the spec at:
 - **Subpath**: `schema/draft/examples`
 - **Commit SHA** (pin used by `git checkout`): `1304c8fe5f079358a0ff22b6afdb675dc96d75d1`
 - **Tree SHA** (audit only — subpath digest at this commit): `9f9415b427c4db6f7ad375ca7b86d1a5ee955072`
-- **Captured**: 2026-05-24
+- **Captured**: 2026-06-10 (pin advanced with the 1bf94a60… schema re-pin; see ADR-027 revision log)
 
 The compliance harness (`src/compliance/`) fetches the pinned tree via
 shallow sparse `git clone`, caches under `target/upstream-fixtures/` for

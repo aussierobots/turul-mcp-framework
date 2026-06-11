@@ -7,32 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Prompt annotations structure (matches TypeScript PromptAnnotations)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PromptAnnotations {
-    /// Display name (precedence: Prompt.title > Prompt.name)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    // Additional annotation fields can be added here as needed
-}
-
-impl Default for PromptAnnotations {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PromptAnnotations {
-    pub fn new() -> Self {
-        Self { title: None }
-    }
-
-    pub fn with_title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
-        self
-    }
-}
-
 /// A prompt descriptor (matches TypeScript Prompt interface exactly)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

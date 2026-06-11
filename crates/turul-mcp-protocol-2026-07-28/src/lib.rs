@@ -600,3 +600,36 @@ impl turul_rpc::r#async::ToJsonRpcError for McpError {
         McpError::to_error_object(self)
     }
 }
+
+#[cfg(test)]
+mod sep_2577_marker_tripwire {
+    /// SEP-2577 absorbed `#[deprecated]` markers onto the Roots, Sampling,
+    /// and Logging surfaces. This tripwire fails if a refactor drops them:
+    /// each named item's declaration must be preceded by a deprecation
+    /// attribute within the few lines above it.
+    #[test]
+    fn deprecation_markers_are_present() {
+        for (source, items) in [
+            (
+                include_str!("roots.rs"),
+                &["pub struct Root ", "pub struct ListRootsRequest"][..],
+            ),
+            (
+                include_str!("sampling.rs"),
+                &["pub struct CreateMessageRequest ", "pub struct ModelHint"][..],
+            ),
+            (include_str!("logging.rs"), &["pub enum LoggingLevel"][..]),
+        ] {
+            for item in items {
+                let pos = source
+                    .find(item)
+                    .unwrap_or_else(|| panic!("{item} not found"));
+                let preceding = &source[pos.saturating_sub(2000)..pos];
+                assert!(
+                    preceding.contains("#[deprecated"),
+                    "{item} must carry a #[deprecated] marker (SEP-2577)"
+                );
+            }
+        }
+    }
+}

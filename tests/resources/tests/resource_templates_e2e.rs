@@ -145,39 +145,21 @@ async fn test_resource_templates_list_with_pagination() {
             11,
         )
         .await
-        .expect("Failed to list resource templates with cursor");
+        .expect("request transport should succeed");
 
     debug!("Paginated templates result: {:?}", paginated_result);
 
-    assert!(
-        paginated_result.contains_key("result"),
-        "Response should contain 'result'"
+    // Pagination §Error Handling: a fabricated cursor the server never
+    // issued is invalid and SHOULD produce -32602 — not a silent page.
+    let error = paginated_result
+        .get("error")
+        .and_then(|e| e.as_object())
+        .expect("fabricated cursor must be rejected with a JSON-RPC error");
+    assert_eq!(
+        error.get("code").and_then(|c| c.as_i64()),
+        Some(-32602),
+        "invalid cursor must be -32602: {error:?}"
     );
-    let result = paginated_result.get("result").unwrap().as_object().unwrap();
-
-    assert!(
-        result.contains_key("resourceTemplates"),
-        "Result should contain 'resourceTemplates'"
-    );
-
-    // Check for pagination metadata if present
-    if result.contains_key("nextCursor") {
-        let next_cursor = result.get("nextCursor").unwrap();
-        assert!(
-            next_cursor.is_string() || next_cursor.is_null(),
-            "nextCursor should be string or null"
-        );
-        info!(
-            "✅ Pagination metadata present: nextCursor={:?}",
-            next_cursor
-        );
-    }
-
-    // Check for _meta field if present (MCP supports _meta)
-    if result.contains_key("_meta") {
-        let meta = result.get("_meta").unwrap().as_object().unwrap();
-        info!("✅ Meta information present: {:?}", meta);
-    }
 }
 
 #[tokio::test]
@@ -558,19 +540,18 @@ async fn test_mcp_client_list_resource_templates_paginated() {
         result_no_cursor.next_cursor
     );
 
-    // Test cursor wiring: use server-returned cursor if available, otherwise a synthetic one.
-    // Only assert the call succeeds and returns a valid result shape — cursor semantics
-    // (empty terminal page, repeated results, etc.) are server-defined.
-    use turul_mcp_protocol::meta::Cursor;
-
-    let cursor = result_no_cursor
-        .next_cursor
-        .unwrap_or_else(|| Cursor::new("test_cursor"));
+    // Cursor wiring: only a server-issued cursor is valid (a fabricated one
+    // is rejected with -32602 per pagination §Error Handling). With a small
+    // template set the first page may be terminal — nothing to follow.
+    let Some(cursor) = result_no_cursor.next_cursor else {
+        info!("single-page template set — no cursor to follow");
+        return;
+    };
 
     let result_with_cursor = client
         .list_resource_templates_paginated(Some(cursor))
         .await
-        .expect("Paginated call with cursor should succeed");
+        .expect("Paginated call with a server-issued cursor should succeed");
 
     info!(
         "list_resource_templates_paginated(Some(cursor)) returned {} templates, next_cursor={:?}",

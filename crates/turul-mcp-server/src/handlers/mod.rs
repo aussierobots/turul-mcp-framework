@@ -414,12 +414,21 @@ impl McpHandler for PromptsListHandler {
             .values()
             .map(|p| {
                 let mut prompt = Prompt::new(p.name());
+                if let Some(title) = p.title() {
+                    prompt = prompt.with_title(title);
+                }
                 if let Some(desc) = p.description() {
                     prompt = prompt.with_description(desc);
                 }
                 // Include arguments from the prompt object
                 if let Some(args) = p.arguments() {
                     prompt = prompt.with_arguments(args.clone());
+                }
+                if let Some(icons) = p.icons() {
+                    prompt = prompt.with_icons(icons.to_vec());
+                }
+                if let Some(meta) = p.prompt_meta() {
+                    prompt = prompt.with_meta(meta.clone());
                 }
                 prompt
             })
@@ -432,6 +441,15 @@ impl McpHandler for PromptsListHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last name from previous page
             let cursor_name = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last prompt name of a previously served page).
+            if !all_prompts.iter().any(|p| p.name.as_str() == cursor_name) {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_name
+                )));
+            }
 
             // Find the position after the cursor name
             all_prompts
@@ -711,6 +729,15 @@ impl McpHandler for ResourcesListHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last URI from previous page
             let cursor_uri = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last resource uri of a previously served page).
+            if !all_resources.iter().any(|r| r.uri.as_str() == cursor_uri) {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_uri
+                )));
+            }
 
             // Find the position after the cursor URI
             all_resources
@@ -992,6 +1019,22 @@ impl McpHandler for ResourcesReadHandler {
                 }
             }
 
+            // "Binary data MUST be properly encoded" — reject invalid base64
+            // before it ships as a wire payload (provider bug, not client's).
+            for content in &contents {
+                if let turul_mcp_protocol::resources::ResourceContent::Blob(blob) = content
+                    && base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        blob.blob.as_bytes(),
+                    )
+                    .is_err()
+                {
+                    return Err(McpError::ToolExecutionError(format!(
+                        "resource {} returned blob contents that are not valid base64",
+                        blob.uri
+                    )));
+                }
+            }
             let response = ReadResourceResult::new(contents);
             return serde_json::to_value(response).map_err(McpError::from);
         }
@@ -1052,6 +1095,22 @@ impl McpHandler for ResourcesReadHandler {
             }
         }
 
+        // "Binary data MUST be properly encoded" — reject invalid base64
+        // before it ships as a wire payload (provider bug, not client's).
+        for content in &contents {
+            if let turul_mcp_protocol::resources::ResourceContent::Blob(blob) = content
+                && base64::Engine::decode(
+                    &base64::engine::general_purpose::STANDARD,
+                    blob.blob.as_bytes(),
+                )
+                .is_err()
+            {
+                return Err(McpError::ToolExecutionError(format!(
+                    "resource {} returned blob contents that are not valid base64",
+                    blob.uri
+                )));
+            }
+        }
         let response = ReadResourceResult::new(contents);
         serde_json::to_value(response).map_err(McpError::from)
     }
@@ -1201,6 +1260,15 @@ impl McpHandler for RootsHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last URI from previous page
             let cursor_uri = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last root uri of a previously served page).
+            if !all_roots.iter().any(|r| r.uri.as_str() == cursor_uri) {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_uri
+                )));
+            }
 
             // Find the position after the cursor URI
             all_roots
@@ -1456,6 +1524,18 @@ impl McpHandler for ResourceTemplatesHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last uri_template from previous page
             let cursor_template = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last template uri of a previously served page).
+            if !all_templates
+                .iter()
+                .any(|t| t.uri_template.as_str() == cursor_template)
+            {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_template
+                )));
+            }
 
             // Find the position after the cursor template
             all_templates

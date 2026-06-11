@@ -1643,6 +1643,15 @@ impl JsonRpcHandler for ListToolsHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last tool name from previous page
             let cursor_name = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last tool name of a previously served page).
+            if !tools.iter().any(|t| t.name.as_str() == cursor_name) {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_name
+                )));
+            }
             // Find the position after the cursor name (first tool > cursor)
             tools
                 .iter()
@@ -1958,7 +1967,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                     // The server's own tool definition is malformed; a conforming
                     // client will have excluded this tool from tools/list already.
                     tracing::warn!(
-                        "tool '{}' has invalid x-mcp-header annotations ({reason});                          skipping Mcp-Param validation",
+                        "tool '{}' has invalid x-mcp-header annotations ({reason}); skipping Mcp-Param validation",
                         call_params.name
                     );
                 }
@@ -1974,13 +1983,13 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                             (None, None) => {}
                             (None, Some(_)) => {
                                 return Err(header_mismatch(format!(
-                                    "Mcp-Param-{} header omitted but the parameter is present                                      in the request body",
+                                    "Mcp-Param-{} header omitted but the parameter is present in the request body",
                                     binding.header_name
                                 )));
                             }
                             (Some(_), None) => {
                                 return Err(header_mismatch(format!(
-                                    "Mcp-Param-{} header present but the parameter is absent                                      from the request body",
+                                    "Mcp-Param-{} header present but the parameter is absent from the request body",
                                     binding.header_name
                                 )));
                             }
@@ -2011,7 +2020,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                                 };
                                 if !matches {
                                     return Err(header_mismatch(format!(
-                                        "Mcp-Param-{} header value '{decoded}' does not match                                          the request body value",
+                                        "Mcp-Param-{} header value '{decoded}' does not match the request body value",
                                         binding.header_name
                                     )));
                                 }

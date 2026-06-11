@@ -135,10 +135,10 @@ impl McpServerBuilder {
         // schema) was removed from the 2026-07-28 core, so it is 2025-only.
         #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
-        handlers.insert(
-            "completion/complete".to_string(),
-            Arc::new(CompletionHandler::new()),
-        );
+        // completion/complete is NOT a default handler: "Servers SHOULD
+        // return -32601 when completion is unsupported" — it is registered
+        // by with_completion() or at build() when providers exist, so an
+        // unconfigured server answers 404 + -32601 like any unknown method.
         handlers.insert(
             "resources/list".to_string(),
             Arc::new(ResourcesListHandler::new()),
@@ -359,7 +359,27 @@ impl McpServerBuilder {
     }
 
     /// Registers a tool that clients can execute
+    /// Tool-name format check (Tools §Tool Names, all SHOULD-level):
+    /// 1–128 chars; only `A-Z a-z 0-9 _ - .`; no spaces or commas.
+    pub(crate) fn tool_name_violation(name: &str) -> Option<String> {
+        if name.is_empty() || name.len() > 128 {
+            return Some(format!(
+                "tool name {name:?} length {} is outside 1..=128",
+                name.len()
+            ));
+        }
+        name.chars()
+            .find(|c| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')))
+            .map(|c| format!("tool name {name:?} contains disallowed character {c:?}"))
+    }
+
     pub fn tool<T: McpTool + 'static>(mut self, tool: T) -> Self {
+        if let Some(violation) = Self::tool_name_violation(tool.name()) {
+            tracing::warn!(
+                "{violation} — Tools §Tool Names says names SHOULD use only \
+                 A-Z a-z 0-9 _ - . and be 1..=128 chars"
+            );
+        }
         let name = tool.name().to_string();
         self.tools.insert(name, Arc::new(tool));
         self
@@ -1115,7 +1135,6 @@ impl McpServerBuilder {
     /// You only need to call this explicitly if you want to enable resource capabilities
     /// without registering any resources.
     pub fn with_resources(mut self) -> Self {
-        // Enable notifications if we have resources
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
 
         // 2026: per-URI `resources/updated` subscriptions are served by the
@@ -1127,7 +1146,9 @@ impl McpServerBuilder {
         let supports_subscribe = false;
         self.capabilities.resources = Some(ResourcesCapabilities {
             subscribe: Some(supports_subscribe),
-            list_changed: Some(has_resources),
+            // build() owns the final listChanged value (true only when the
+            // live registry is wired) — any value set here is overwritten.
+            list_changed: None,
         });
 
         // Create ResourcesListHandler and add all registered resources
@@ -1941,6 +1962,16 @@ mod tests {
         }
     }
 
+    /// Tools §Tool Names SHOULDs: 1–128 chars, A-Z a-z 0-9 _ - . only.
+    #[test]
+    fn tool_name_violations_are_detected() {
+        assert!(McpServerBuilder::tool_name_violation("calc_v2.add-1").is_none());
+        assert!(McpServerBuilder::tool_name_violation("my tool").is_some());
+        assert!(McpServerBuilder::tool_name_violation("a,b").is_some());
+        assert!(McpServerBuilder::tool_name_violation("").is_some());
+        assert!(McpServerBuilder::tool_name_violation(&"x".repeat(129)).is_some());
+    }
+
     #[test]
     fn test_builder_defaults() {
         let builder = McpServerBuilder::new();
@@ -1951,7 +1982,7 @@ mod tests {
         assert!(builder.tools.is_empty());
         #[cfg(feature = "protocol-2025-11-25")]
         {
-            assert_eq!(builder.handlers.len(), 22); // spec + legacy compat
+            assert_eq!(builder.handlers.len(), 21); // spec + legacy compat
             assert!(builder.handlers.contains_key("ping"));
         }
         #[cfg(feature = "protocol-2026-07-28")]
@@ -1959,7 +1990,7 @@ mod tests {
             // The stateless core drops ping/initialize, the task methods,
             // and the inbound roots surface (roots/list + its notifications
             // — roots is requested via MRTR on 2026, never hosted).
-            assert_eq!(builder.handlers.len(), 15);
+            assert_eq!(builder.handlers.len(), 14);
             assert!(!builder.handlers.contains_key("ping"));
             assert!(!builder.handlers.contains_key("roots/list"));
             assert!(

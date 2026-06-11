@@ -835,3 +835,99 @@ async fn input_required_escaping_a_non_mrtr_method_is_an_error() {
         "completion/complete may NEVER return input_required: {body}"
     );
 }
+
+/// Demands a roots listing via MRTR — needs the roots capability.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "roots_gated", description = "Needs roots", output = String)]
+struct RootsGatedTool {}
+
+impl RootsGatedTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && session.input_responses().is_some()
+        {
+            return Ok("done".to_string());
+        }
+        #[allow(deprecated)]
+        let request = turul_mcp_protocol::roots::ListRootsRequest::new();
+        let mut requests = InputRequests::new();
+        requests.insert("r1".to_string(), InputRequest::ListRoots(request));
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: None,
+        })
+    }
+}
+
+/// Plain (tool-free) sampling request — needs only the sampling capability.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "plain_sampler", description = "Plain sampling", output = String)]
+struct PlainSamplerTool {}
+
+impl PlainSamplerTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && session.input_responses().is_some()
+        {
+            return Ok("done".to_string());
+        }
+        #[allow(deprecated)]
+        let request = {
+            use turul_mcp_protocol::sampling::{CreateMessageRequest, SamplingMessage};
+            CreateMessageRequest::new(vec![SamplingMessage::user_text("hi")], 32)
+        };
+        let mut requests = InputRequests::new();
+        requests.insert("s1".to_string(), InputRequest::CreateMessage(request));
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: None,
+        })
+    }
+}
+
+async fn start_caparm_server() -> String {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("mrtr-2026-caparms")
+        .version("0.4.0")
+        .tool(RootsGatedTool::default())
+        .tool(PlainSamplerTool::default())
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    url
+}
+
+/// The roots and sampling arms of the -32003 capability gate, both
+/// directions: undeclared → 400 -32003; declared → input_required.
+#[tokio::test]
+async fn roots_and_sampling_capability_arms_are_gated() {
+    let url = start_caparm_server().await;
+
+    for (tool, cap) in [("roots_gated", "roots"), ("plain_sampler", "sampling")] {
+        // Undeclared capability → -32003 + HTTP 400.
+        let (status, body) = call_tool_with_caps(&url, tool, serde_json::json!({})).await;
+        assert_eq!(status, 400, "{tool} vs no caps: {body}");
+        assert_eq!(body["error"]["code"], -32003, "{tool}: {body}");
+
+        // Declared → the input request rides input_required.
+        let (status, body) = call_tool_with_caps(&url, tool, serde_json::json!({ cap: {} })).await;
+        assert_eq!(status, 200, "{tool} with {cap}: {body}");
+        assert_eq!(body["result"]["resultType"], "input_required", "{body}");
+    }
+}

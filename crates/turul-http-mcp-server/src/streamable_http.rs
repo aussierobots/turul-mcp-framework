@@ -1234,6 +1234,32 @@ impl StreamableHttpHandler {
             }
         };
 
+        // MCP forbids null request ids ("Unlike base JSON-RPC, the ID MUST
+        // NOT be null") — reject before any dispatch. turul-rpc's RequestId
+        // retains a Null variant for base-JSON-RPC compatibility, so the MCP
+        // transport enforces the stricter contract here.
+        if let JsonRpcMessage::Request(req) = &message
+            && matches!(req.id, turul_rpc::RequestId::Null)
+        {
+            let err = turul_rpc::JsonRpcError::new(
+                Some(req.id.clone()),
+                turul_rpc::error::JsonRpcErrorObject::invalid_request(Some(serde_json::json!(
+                    "request id MUST NOT be null (MCP basic §Requests)"
+                ))),
+            );
+            let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header(CONTENT_TYPE, "application/json")
+                .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                .body(
+                    Full::new(Bytes::from(body))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap();
+        }
+
         // --- Pre-session auth phase (D4) ---
         // Extract Bearer token using hardened parser (D6). A present-but-
         // unparseable Authorization header is flagged so auth middleware can
@@ -1712,10 +1738,19 @@ impl StreamableHttpHandler {
             && self.dispatcher.default_handler.is_none()
         {
             debug!("Unknown 2026 method '{}' → 404 + -32601", req.method);
-            let err = turul_rpc::JsonRpcError::new(
-                Some(req.id.clone()),
-                turul_rpc::error::JsonRpcErrorObject::method_not_found(&req.method),
-            );
+            // Versioning §Backward Compatibility: "A server that supports only
+            // modern versions SHOULD name the protocol versions it supports in
+            // any error it returns to an initialize request" — legacy clients
+            // have no fall-forward mechanism; this may be their only
+            // diagnostic.
+            let mut error_object =
+                turul_rpc::error::JsonRpcErrorObject::method_not_found(&req.method);
+            if req.method == "initialize" {
+                error_object.data = Some(serde_json::json!({
+                    "supported": [turul_mcp_protocol::MCP_VERSION]
+                }));
+            }
+            let err = turul_rpc::JsonRpcError::new(Some(req.id.clone()), error_object);
             let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
             return Response::builder()
                 .status(StatusCode::NOT_FOUND)
@@ -2477,6 +2512,10 @@ impl StreamableHttpHandler {
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, content_type)
             .header("Transfer-Encoding", "chunked") // Key: Enable chunked encoding!
+            // nginx-family proxies buffer streaming responses by default,
+            // which holds SSE frames back from the client until the stream
+            // closes — defeating request-scoped notifications.
+            .header("X-Accel-Buffering", "no")
             .header("Cache-Control", "no-cache")
             .body(http_body_util::BodyExt::boxed_unsync(body))
             .unwrap();

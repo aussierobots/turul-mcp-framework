@@ -59,7 +59,7 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
 
         #[automatically_derived]
         impl turul_mcp_builders::traits::HasPromptAnnotations for #struct_name {
-            fn annotations(&self) -> Option<&turul_mcp_protocol::prompts::PromptAnnotations> {
+            fn annotations(&self) -> Option<&turul_mcp_builders::traits::PromptAnnotations> {
                 None
             }
         }

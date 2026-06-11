@@ -117,7 +117,7 @@ impl HasPromptArguments for Prompt {
 }
 
 impl HasPromptAnnotations for Prompt {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::prompts::PromptAnnotations> {
+    fn annotations(&self) -> Option<&crate::traits::prompt_traits::PromptAnnotations> {
         // Prompt struct doesn't have annotations field in current protocol
         None
     }

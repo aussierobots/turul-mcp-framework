@@ -12,7 +12,7 @@ use tracing::info;
 use turul_mcp_builders::prelude::*; // HasPromptMetadata, HasPromptDescription, etc.
 use turul_mcp_protocol::{
     McpError,
-    prompts::{PromptAnnotations, PromptArgument, PromptMessage},
+    prompts::{PromptArgument, PromptMessage},
 };
 use turul_mcp_server::prompt::McpPrompt;
 use turul_mcp_server::{McpResult, McpServer};
