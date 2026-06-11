@@ -24,7 +24,7 @@ A comprehensive Rust framework for building Model Context Protocol (MCP) servers
 ## ✨ Key Highlights
 
 - **🏗️ 15 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
-- **📚 Comprehensive Examples**: Real-world business applications and framework demonstrations (43 build on the 2026-07-28 default; a small 2025-11-25 regression set is pinned to the opt-in)
+- **📚 Comprehensive Examples**: Real-world business applications and framework demonstrations (most build on the 2026-07-28 default lane; a 2025-11-25 regression set is pinned to the opt-in, and client-using examples are built by explicit CI steps — see EXAMPLES.md)
 - **🧪 Framework-Native Test Suite**: Core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
 - **🌐 Transport Flexibility**: Streamable HTTP via StreamableHttpHandler with SSE streaming (stdio planned)
@@ -1238,7 +1238,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 ### 🎯 Current Framework State
 - **MCP 2026-07-28 adoption (this branch)**: default build targets the 2026-07-28 stateless core; 2025-11-25 remains fully supported as the opt-in stateful line
-- **Examples Validated**: 43 examples build on the 2026-07-28 default; a small 2025-11-25 regression set is pinned to the opt-in
+- **Examples Validated**: 53 active examples compile under their lane's CI gates (2026-07-28 default lane plus the pinned 2025-11-25 regression set — see EXAMPLES.md)
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
 - **Beta Status**: Active development with API stability considerations before 1.0.0
 

@@ -168,7 +168,7 @@ cargo run -p tasks-e2e-inmemory-server
 cargo run -p tasks-e2e-inmemory-client -- --url http://127.0.0.1:8080/mcp
 ```
 
-## 📖 **TYPE SHOWCASES** (4 examples) - Print-Only Demonstrations
+## 📖 **TYPE SHOWCASES** (1 example) - Print-Only Demonstrations
 
 These examples demonstrate MCP 2025-11-25 type construction without starting a server:
 
@@ -176,14 +176,9 @@ These examples demonstrate MCP 2025-11-25 type construction without starting a s
 |---------|------|--------|-------------|-------------------|
 | **icon-showcase** | Demo | ✅ VALIDATED | Icon support | `Icon` struct on tools, resources, prompts |
 
-## 📚 **PERFORMANCE TESTING** (1 example) - Benchmarks
-
-| Example | Type | Status | Description | Purpose |
-|---------|------|--------|-------------|---------|
-
 ## 🚨 **COMPREHENSIVE VALIDATION RESULTS**
 
-### ✅ **ALL 50 ACTIVE EXAMPLES COMPILE UNDER THEIR LANE'S CI GATES**
+### ✅ **ALL 53 ACTIVE EXAMPLES COMPILE UNDER THEIR LANE'S CI GATES**
 **0.4.0 branch (MCP 2026-07-28 default, 2025-11-25 opt-in) — last reconciled 2026-06-12.**
 The per-example functional verification ledger lives in
 `docs/plans/2026-07-28-examples-review.md`; the 2026-06-12 migrate slice
@@ -192,28 +187,28 @@ re-verified its six examples live on the wire.
 - **Getting Started** - 5 examples (all tool creation levels)
 - **Session Storage** - 3 examples (SQLite, PostgreSQL, DynamoDB)
 - **Resource Servers** - 6 examples (session-aware resources)
-- **Feature-Specific** - 8 examples (prompts, sampling, elicitation, etc.)
+- **Feature-Specific** - 11 examples (prompts, sampling, elicitation, MRTR, origin policy, header binding, etc.)
 - **Advanced/Composite** - audit-trail, pagination, icon showcase
 - **Session & State** - stateful-server + session-aware-resource-server (2025-pinned) and the storage-backend trio
-- **Client Examples** - 7 examples (client-server communication — see the pairs table above)
+- **Client Examples** - see the pairs table above (9 pairing rows)
 - **AWS Lambda** - 4 examples (server, streaming, client, authorizer)
 - **Tool Creation & Schemas** - 6 examples (macro patterns + output schemas)
 - **Middleware** - 4 examples (auth, logging, rate-limiting, Lambda auth)
 - **Tasks** - 3 examples (MCP 2025-11-25 task lifecycle)
 - **Type Showcases** - 4 examples (print-only type demonstrations)
-- **Performance Testing** - 1 example (benchmarks)
 
-> 50 examples functionally verified (Start → Initialize → Execute or Run → Check Output).
-> 2 skipped (external deps: PostgreSQL, DynamoDB). 2 blocked by client library bug (OPTIONS preflight).
-> 4 Lambda/performance examples compile-verified only. See `EXAMPLE_VERIFICATION_LOG.md`.
+> Lane-by-lane compilation is enforced by CI (`scripts/ci-gates.sh all`); the
+> 2026-06-12 disposition slices live-verified every migrated and new example.
+> Historical per-example verification notes: `EXAMPLE_VERIFICATION_LOG.md`
+> (0.3-era snapshot).
 
-### 🎯 **KEY ACHIEVEMENTS**
-- **Session-Aware Resources**: All resources support SessionContext
-- **Full MCP 2025-11-25 Compliance**: Complete specification implementation
-- **Zero Breaking Changes**: All existing examples continue to work
+### 🎯 **CURRENT STATE**
+- **2026-07-28 default lane**: stateless core (per-request `_meta`, POST-only, `subscriptions/listen`, MRTR)
+- **2025-11-25 opt-in lane**: stateful session examples pinned per-manifest, feeding the regression gates
+- **Live-verified**: migrated and new examples were verified by running them and executing their own printed commands
 
 ### 📊 **Statistics**
-- **Total Examples**: 53 active (30 archived in `examples/archived/`)
+- **Total Examples**: 53 active (29 archived in `examples/archived/`)
 - **Session-Aware Resources**: 6 examples demonstrating session context integration
 - **Client-Server Pairs**: 9 pairing-table rows validating communication patterns
 - **Task Support**: 3 examples demonstrating MCP 2025-11-25 task lifecycle (InMemory storage)
