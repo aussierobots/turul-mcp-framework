@@ -1,3 +1,7 @@
+# Test client for lambda-mcp-server, which is PINNED to the 2025-11-25
+# stateful lane — the bilingual McpClient inside negotiates down to 2025
+# against it (initialize handshake + Mcp-Session-Id). For the 2026 stateless
+# client pattern see streamable-http-client-2026-07-28.
 [package]
 name = "lambda-turul-mcp-client"
 version = "0.4.0"

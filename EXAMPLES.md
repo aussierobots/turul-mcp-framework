@@ -5,6 +5,21 @@ This document provides a comprehensive overview of all **58 examples** in the MC
 **✅ All examples compile and phases 1-5 functionally verified (Compile → Start → Initialize → Execute)**
 **Last verified**: 2026-02-26 (v0.3.0, MCP 2025-11-25)
 
+## Client ↔ Server Example Pairs
+
+Every client example has a corresponding server example **on the same spec
+lane** — run the server first, then point the client at it.
+
+| Client example | Lane | Corresponding server | Notes |
+|---|---|---|---|
+| `streamable-http-client-2026-07-28` | **2026-07-28** | `minimal-server` (port 8641) | The canonical 2026 stateless pair: `connect()` negotiation, discover retention, `call_tool`, request-scoped progress |
+| `streamable-http-client` | 2025-11-25 | any 2025-pinned server (e.g. `client-initialise-server`) | Hand-parsed 2025 POST SSE framing |
+| `client-initialise-report` | 2025-11-25 (wire-pinned) | `client-initialise-server` | Raw-wire lifecycle compliance probe |
+| `session-management-compliance-test` | 2025-11-25 (wire-pinned) | `client-initialise-server` | Session-contract regression client |
+| `logging-test-client` | 2025-11-25 | `logging-test-server` | `logging/setLevel` wire contract |
+| `tasks-e2e-inmemory-client` | 2025-11-25 | `tasks-e2e-inmemory-server` | 2025 task lifecycle driver |
+| `lambda-mcp-client` | 2025-11-25 (via negotiation) | `lambda-mcp-server` (2025-pinned) | The bilingual client falls back to 2025 against this peer |
+
 **Legend**:
 - ✅ **Verified Working** - Tested and confirmed functional
 - ⚙️ **Requires Setup** - External dependencies needed
