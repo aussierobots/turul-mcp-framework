@@ -123,3 +123,46 @@ async fn client_disconnect_cancels_the_in_flight_request() {
          and stop work on the request"
     );
 }
+
+/// CancelledNotification has a 2026 schema binding: the server accepts it
+/// (202) instead of 404ing, and ignores it — on Streamable HTTP the
+/// cancellation MECHANISM is closing the response stream; request ids are
+/// per-client on the stateless lane. "Invalid cancellation notifications
+/// SHOULD be ignored."
+#[tokio::test]
+async fn inbound_cancelled_notification_is_accepted_and_ignored() {
+    let completed = Arc::new(AtomicBool::new(false));
+    let url = start_server(completed.clone()).await;
+    let client = reqwest::Client::new();
+
+    for params in [
+        serde_json::json!({ "requestId": 999, "reason": "user clicked stop", "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": { "name": "t", "version": "1" },
+            "io.modelcontextprotocol/clientCapabilities": {}
+        }}),
+        // invalid shape: no requestId at all — still ignored, not an error
+        serde_json::json!({ "garbage": true, "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": { "name": "t", "version": "1" },
+            "io.modelcontextprotocol/clientCapabilities": {}
+        }}),
+    ] {
+        let resp = client
+            .post(&url)
+            .header("Accept", "application/json")
+            .header("MCP-Protocol-Version", "2026-07-28")
+            .header("Mcp-Method", "notifications/cancelled")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "method": "notifications/cancelled", "params": params
+            }))
+            .send()
+            .await
+            .expect("POST");
+        assert_eq!(
+            resp.status(),
+            202,
+            "notifications/cancelled is a schema-bound notification — accept, never 404"
+        );
+    }
+}

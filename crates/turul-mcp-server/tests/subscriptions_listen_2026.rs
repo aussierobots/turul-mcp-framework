@@ -63,6 +63,25 @@ impl EmitChangesTool {
                 "notifications/prompts/list_changed".to_string(),
             ))
             .await;
+        let _ = broadcaster
+            .broadcast_to_all_sessions(JsonRpcNotification::new_no_params(
+                "notifications/tools/list_changed".to_string(),
+            ))
+            .await;
+        // notifications/message MUST NOT ride listen streams — emitted here so
+        // the exclusion is observable.
+        let mut msg = HashMap::new();
+        msg.insert("level".to_string(), serde_json::json!("info"));
+        msg.insert(
+            "data".to_string(),
+            serde_json::json!("should not ride listen"),
+        );
+        let _ = broadcaster
+            .broadcast_to_all_sessions(JsonRpcNotification::new_with_object_params(
+                "notifications/message".to_string(),
+                msg,
+            ))
+            .await;
 
         let mut watched = HashMap::new();
         watched.insert("uri".to_string(), serde_json::json!("file:///watched.txt"));
@@ -428,5 +447,158 @@ async fn resources_subscribe_capability_is_advertised_truthfully() {
         body["result"]["capabilities"]["resources"]["subscribe"], true,
         "subscriptions/listen serves per-URI resource updates — the capability \
          must say so: {body}"
+    );
+}
+
+async fn open_listen(
+    client: &reqwest::Client,
+    url: &str,
+    id: i64,
+    notifications: serde_json::Value,
+) -> SseReader<impl futures::Stream<Item = reqwest::Result<bytes::Bytes>> + Unpin> {
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json, text/event-stream")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "subscriptions/listen")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": id, "method": "subscriptions/listen",
+            "params": { "notifications": notifications, "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("listen POST");
+    assert_eq!(resp.status(), 200);
+    let mut reader = SseReader::new(resp.bytes_stream());
+    let ack = reader
+        .next_json(Duration::from_secs(3))
+        .await
+        .expect("ack frame");
+    assert_eq!(ack["method"], "notifications/subscriptions/acknowledged");
+    reader
+}
+
+async fn trigger_emit(client: &reqwest::Client, url: &str) {
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "emit_changes")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 99, "method": "tools/call",
+            "params": { "name": "emit_changes", "arguments": {}, "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("emit POST");
+    assert_eq!(resp.status(), 200);
+}
+
+/// "A client MAY have multiple active subscriptions concurrently" — two
+/// listen streams with different filters each receive exactly their subset,
+/// stamped with their OWN subscriptionId; and notifications/message rides
+/// neither ("the server MUST NOT deliver it on a subscriptions/listen
+/// stream").
+#[tokio::test]
+async fn concurrent_subscriptions_receive_their_own_subsets() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let mut tools_stream = open_listen(
+        &client,
+        &url,
+        41,
+        serde_json::json!({ "toolsListChanged": true }),
+    )
+    .await;
+    let mut prompts_stream = open_listen(
+        &client,
+        &url,
+        42,
+        serde_json::json!({ "promptsListChanged": true }),
+    )
+    .await;
+
+    trigger_emit(&client, &url).await;
+
+    let tools_event = tools_stream
+        .next_json(Duration::from_secs(3))
+        .await
+        .expect("tools stream event");
+    assert_eq!(
+        tools_event["method"], "notifications/tools/list_changed",
+        "{tools_event}"
+    );
+    assert_eq!(
+        tools_event["params"]["_meta"]["io.modelcontextprotocol/subscriptionId"],
+        serde_json::json!("41"),
+        "each stream is stamped with its OWN listen request id: {tools_event}"
+    );
+
+    let prompts_event = prompts_stream
+        .next_json(Duration::from_secs(3))
+        .await
+        .expect("prompts stream event");
+    assert_eq!(
+        prompts_event["method"], "notifications/prompts/list_changed",
+        "{prompts_event}"
+    );
+    assert_eq!(
+        prompts_event["params"]["_meta"]["io.modelcontextprotocol/subscriptionId"],
+        serde_json::json!("42"),
+        "{prompts_event}"
+    );
+
+    // Exclusions: neither stream may carry notifications/message (or the
+    // other's type). Drain briefly and assert.
+    for (reader, own) in [
+        (&mut tools_stream, "notifications/tools/list_changed"),
+        (&mut prompts_stream, "notifications/prompts/list_changed"),
+    ] {
+        while let Some(event) = reader.next_json(Duration::from_millis(600)).await {
+            assert_ne!(
+                event["method"], "notifications/message",
+                "notifications/message MUST NOT ride a listen stream"
+            );
+            assert_eq!(event["method"], own, "only the requested type: {event}");
+        }
+    }
+}
+
+/// Dropping one listen stream must not disturb a surviving one — the server
+/// unregisters the dropped connection and keeps delivering to the rest.
+#[tokio::test]
+async fn dropping_one_subscription_leaves_others_delivering() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let dropped = open_listen(
+        &client,
+        &url,
+        51,
+        serde_json::json!({ "toolsListChanged": true }),
+    )
+    .await;
+    let mut survivor = open_listen(
+        &client,
+        &url,
+        52,
+        serde_json::json!({ "toolsListChanged": true }),
+    )
+    .await;
+
+    drop(dropped);
+    tokio::time::sleep(Duration::from_millis(200)).await;
+
+    trigger_emit(&client, &url).await;
+    let event = survivor
+        .next_json(Duration::from_secs(3))
+        .await
+        .expect("survivor must still receive after the sibling dropped");
+    assert_eq!(event["method"], "notifications/tools/list_changed");
+    assert_eq!(
+        event["params"]["_meta"]["io.modelcontextprotocol/subscriptionId"],
+        serde_json::json!("52")
     );
 }

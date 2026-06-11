@@ -197,3 +197,26 @@ fn numeric_token_parses_into_call_params() {
         typed.meta
     );
 }
+
+/// Progress §Behavior: "Progress notifications MUST stop after completion" —
+/// the final response terminates the stream; nothing follows it.
+#[tokio::test]
+async fn progress_stops_after_completion() {
+    let url = start_server().await;
+    let events = call_worker(&url, Some(serde_json::json!("tok-done"))).await;
+    let final_idx = events
+        .iter()
+        .position(|e| e.get("result").is_some() || e.get("error").is_some())
+        .expect("final response must arrive");
+    assert_eq!(
+        final_idx,
+        events.len() - 1,
+        "no events may follow the final response: {events:?}"
+    );
+    assert!(
+        events[..final_idx]
+            .iter()
+            .any(|e| e["method"] == "notifications/progress"),
+        "the progress notification precedes the final response: {events:?}"
+    );
+}

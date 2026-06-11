@@ -183,6 +183,17 @@ impl McpServerBuilder {
             "notifications/progress".to_string(),
             notifications_handler.clone(),
         );
+        // CancelledNotification has a schema binding on both lanes. On
+        // Streamable HTTP the cancellation MECHANISM is closing the request's
+        // response stream (the transport cancels in-flight dispatch); an
+        // inbound notifications/cancelled is accepted and ignored — request
+        // ids are per-client on the stateless lane and cannot be correlated
+        // across connections ("Invalid cancellation notifications SHOULD be
+        // ignored").
+        handlers.insert(
+            "notifications/cancelled".to_string(),
+            notifications_handler.clone(),
+        );
         // MCP 2025-11-25 spec-correct underscore form
         handlers.insert(
             "notifications/resources/list_changed".to_string(),
@@ -1940,7 +1951,7 @@ mod tests {
         assert!(builder.tools.is_empty());
         #[cfg(feature = "protocol-2025-11-25")]
         {
-            assert_eq!(builder.handlers.len(), 21); // spec + legacy compat
+            assert_eq!(builder.handlers.len(), 22); // spec + legacy compat
             assert!(builder.handlers.contains_key("ping"));
         }
         #[cfg(feature = "protocol-2026-07-28")]
@@ -1948,7 +1959,7 @@ mod tests {
             // The stateless core drops ping/initialize, the task methods,
             // and the inbound roots surface (roots/list + its notifications
             // — roots is requested via MRTR on 2026, never hosted).
-            assert_eq!(builder.handlers.len(), 14);
+            assert_eq!(builder.handlers.len(), 15);
             assert!(!builder.handlers.contains_key("ping"));
             assert!(!builder.handlers.contains_key("roots/list"));
             assert!(

@@ -174,3 +174,35 @@ async fn declared_level_is_the_severity_threshold() {
         "info-level message must be filtered below an 'error' threshold: {events:?}"
     );
 }
+
+/// Logging §logLevel: "If the io.modelcontextprotocol/logLevel value … is not
+/// a recognized log level, the server SHOULD reject that request with …
+/// -32602."
+#[tokio::test]
+async fn unrecognized_log_level_is_rejected_with_32602() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "chatty")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 9, "method": "tools/call",
+            "params": { "name": "chatty", "arguments": {}, "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientInfo": { "name": "t", "version": "1" },
+                "io.modelcontextprotocol/clientCapabilities": {},
+                "io.modelcontextprotocol/logLevel": "extra-loud"
+            }}
+        }))
+        .send()
+        .await
+        .expect("POST");
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert_eq!(
+        body["error"]["code"], -32602,
+        "unrecognized logLevel must be invalid params: {body}"
+    );
+}

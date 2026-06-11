@@ -1639,6 +1639,7 @@ impl McpHandler for NotificationsHandler {
         vec![
             "notifications/message".to_string(),
             "notifications/progress".to_string(),
+            "notifications/cancelled".to_string(),
             // MCP 2025-11-25 spec (underscore)
             "notifications/resources/list_changed".to_string(),
             "notifications/tools/list_changed".to_string(),

@@ -660,3 +660,178 @@ async fn resources_read_capability_gate_applies() {
     assert_eq!(status, 400, "{body}");
     assert_eq!(body["error"]["code"], -32003, "{body}");
 }
+
+// ---- MRTR negative paths (PAT/G7) ----
+
+/// Errs InputRequired with NEITHER inputRequests nor requestState — the
+/// schema invariant ("at least one of") makes this a server error, not an
+/// input_required result.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "broken_mrtr", description = "Violates the MRTR invariant", output = String)]
+struct BrokenMrtrTool {}
+
+impl BrokenMrtrTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Err(McpError::InputRequired {
+            input_requests: None,
+            request_state: None,
+        })
+    }
+}
+
+/// "Servers MUST include at least one of inputRequests or requestState in
+/// every InputRequiredResult" — the neither-field case surfaces as a JSON-RPC
+/// error, never as a resultType:"input_required" result.
+#[tokio::test]
+async fn input_required_with_neither_field_is_a_server_error() {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("mrtr-neg-2026")
+        .version("0.4.0")
+        .tool(BrokenMrtrTool::default())
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "broken_mrtr")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "broken_mrtr", "arguments": {},
+                        "_meta": meta_with_capabilities(serde_json::json!({"elicitation": {}})) }
+        }))
+        .send()
+        .await
+        .expect("POST");
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert!(
+        body.get("error").is_some(),
+        "neither-field InputRequired must be an error: {body}"
+    );
+    assert!(
+        body["result"].get("resultType").is_none(),
+        "must NOT surface as input_required: {body}"
+    );
+}
+
+/// "Servers MUST NOT send InputRequiredResult responses on any other client
+/// requests" — an InputRequired escaping a non-MRTR method (completion/complete)
+/// surfaces as an internal error, never as an input_required result.
+struct EscapingCompleter;
+
+impl turul_mcp_server::prelude::HasCompletionMetadata for EscapingCompleter {
+    fn method(&self) -> &str {
+        "completion/complete"
+    }
+    fn reference(&self) -> &turul_mcp_protocol::completion::CompletionReference {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::completion::{CompletionReference, PromptReference};
+        static R: OnceLock<CompletionReference> = OnceLock::new();
+        R.get_or_init(|| CompletionReference::Prompt(PromptReference::new("escape")))
+    }
+}
+impl turul_mcp_server::prelude::HasCompletionContext for EscapingCompleter {
+    fn argument(&self) -> &turul_mcp_protocol::completion::CompleteArgument {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::completion::CompleteArgument;
+        static A: OnceLock<CompleteArgument> = OnceLock::new();
+        A.get_or_init(|| CompleteArgument::new("arg", ""))
+    }
+}
+impl turul_mcp_server::prelude::HasCompletionHandling for EscapingCompleter {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpCompletion for EscapingCompleter {
+    async fn complete(
+        &self,
+        _request: turul_mcp_protocol::completion::CompleteRequest,
+    ) -> McpResult<turul_mcp_protocol::completion::CompleteResult> {
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "q1".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form(
+                "escape attempt",
+                ElicitationSchema::new(),
+            )),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: None,
+        })
+    }
+}
+
+#[tokio::test]
+async fn input_required_escaping_a_non_mrtr_method_is_an_error() {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("mrtr-escape-2026")
+        .version("0.4.0")
+        .tool(GatedEchoTool::default())
+        .completion_provider(EscapingCompleter)
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "completion/complete")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 2, "method": "completion/complete",
+            "params": {
+                "ref": { "type": "ref/prompt", "name": "escape" },
+                "argument": { "name": "arg", "value": "x" },
+                "_meta": meta_with_capabilities(serde_json::json!({"elicitation": {}}))
+            }
+        }))
+        .send()
+        .await
+        .expect("POST");
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert!(
+        body.get("error").is_some(),
+        "InputRequired on a non-MRTR method must be an error: {body}"
+    );
+    assert_ne!(
+        body["result"]["resultType"], "input_required",
+        "completion/complete may NEVER return input_required: {body}"
+    );
+}
