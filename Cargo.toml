@@ -74,7 +74,7 @@ members = [
   "examples/session-logging-proof-test",
   "examples/session-management-compliance-test",
   "examples/streamable-http-client",
-  "examples/streamable-http-client-2026-07-28",
+  "examples/streamable-http-client-2025-11-25",
 
   # AWS/Lambda authorizer examples
   "examples/lambda-authorizer",

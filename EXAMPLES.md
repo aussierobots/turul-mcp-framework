@@ -1,9 +1,12 @@
 # MCP Framework Examples
 
-This document provides a comprehensive overview of all **58 examples** in the MCP Framework, organized by learning progression from basic concepts to advanced implementations.
+This document provides a comprehensive overview of all **55 active examples** in the MCP Framework (plus `examples/archived/`), organized by learning progression from basic concepts to advanced implementations.
 
-**✅ All examples compile and phases 1-5 functionally verified (Compile → Start → Initialize → Execute)**
-**Last verified**: 2026-02-26 (v0.3.0, MCP 2025-11-25)
+**✅ All active examples compile under their lane's CI gates** (2026-07-28 default lane
++ per-manifest 2025-11-25 pins). Per-example functional re-verification against the
+2026 stateless core is tracked in `docs/plans/2026-07-28-examples-review.md` — the
+2026-02-26 "phases 1-5" sweep predates the 2026 cutover and no longer applies as stated.
+**Last verified**: 2026-06-12 (v0.4.0 branch — MCP 2026-07-28 default, 2025-11-25 opt-in)
 
 ## Client ↔ Server Example Pairs
 
@@ -12,8 +15,8 @@ lane** — run the server first, then point the client at it.
 
 | Client example | Lane | Corresponding server | Notes |
 |---|---|---|---|
-| `streamable-http-client-2026-07-28` | **2026-07-28** | `minimal-server` (port 8641) | The canonical 2026 stateless pair: `connect()` negotiation, discover retention, `call_tool`, request-scoped progress |
-| `streamable-http-client` | 2025-11-25 | any 2025-pinned server (e.g. `client-initialise-server`) | Hand-parsed 2025 POST SSE framing |
+| `streamable-http-client` | **2026-07-28** | `minimal-server` (port 8641) | The canonical 2026 stateless pair: `connect()` negotiation, discover retention, `call_tool`, and the request-scoped progress API (shape demo — `echo` emits no progress events) |
+| `streamable-http-client-2025-11-25` | 2025-11-25 | `client-initialise-server` (alternatives: any 2025-pinned server) | Hand-parsed 2025 POST SSE framing |
 | `client-initialise-report` | 2025-11-25 (wire-pinned) | `client-initialise-server` | Raw-wire lifecycle compliance probe |
 | `session-management-compliance-test` | 2025-11-25 (wire-pinned) | `client-initialise-server` | Session-contract regression client |
 | `logging-test-client` | 2025-11-25 | `logging-test-server` | `logging/setLevel` wire contract |
@@ -107,7 +110,8 @@ cargo run --example minimal-server
 |---------|------|--------|-------------|---------|
 | **client-initialise-server** | Server | ✅ VALIDATED | Client connectivity test server | MCP session initialization testing |
 | **client-initialise-report** | Client | ✅ VALIDATED | MCP client implementation | Tests server initialization |
-| **streamable-http-client** | Client | ✅ VALIDATED | Streamable HTTP client | MCP 2025-11-25 streaming demo |
+| **streamable-http-client** | Client | ✅ VALIDATED | 2026-07-28 stateless client (pairs with minimal-server) | connect() negotiation, discover retention, request-scoped progress API |
+| **streamable-http-client-2025-11-25** | Client | ✅ VALIDATED | Hand-parsed 2025 Streamable HTTP client | MCP 2025-11-25 streaming demo |
 | **logging-test-client** | Client | ✅ VALIDATED | Logging client | Tests logging functionality |
 | **session-management-compliance-test** | Combined | ✅ VALIDATED | Session compliance testing | MCP session spec compliance |
 
@@ -194,7 +198,7 @@ These examples demonstrate MCP 2025-11-25 type construction without starting a s
 - **Feature-Specific** - 8 examples (prompts, sampling, elicitation, etc.)
 - **Advanced/Composite** - 5 examples (comprehensive, alerts, audit, logging)
 - **Session & State** - 4 examples (stateful operations, logging)
-- **Client Examples** - 5 examples (client-server communication)
+- **Client Examples** - 7 examples (client-server communication — see the pairs table above)
 - **AWS Lambda** - 4 examples (server, streaming, client, authorizer)
 - **Tool Creation & Schemas** - 6 examples (macro patterns + output schemas)
 - **Middleware** - 4 examples (auth, logging, rate-limiting, Lambda auth)
@@ -247,4 +251,4 @@ cargo run --features dynamodb --example simple-dynamodb-session
 
 ---
 
-**📋 Framework Status**: v0.3.0 — Full MCP 2025-11-25 compliance including tasks, icons, sampling tools, and URL elicitation.
+**📋 Framework Status**: 0.4.0 branch (`feat/turul-mcp-protocol-2026-07-28`) — MCP 2026-07-28 stateless core by default with the 2025-11-25 stateful line as a per-manifest opt-in. Registered spec-gap status lives in `docs/plans/2026-07-28-spec-compliance.md`.

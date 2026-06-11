@@ -69,7 +69,7 @@ jobs:
       - name: Bilingual client (not in default-members)
         run: cargo test -p turul-mcp-client
       - name: 2026 client example (pairs with minimal-server)
-        run: cargo build -p streamable-http-client-2026-07-28
+        run: cargo build -p streamable-http-client
 
   opt-in-2025:
     name: Opt-in lane (2025-11-25)

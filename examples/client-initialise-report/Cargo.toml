@@ -1,7 +1,7 @@
 # 2025-11-25-ONLY by design: this raw-wire probe (no turul protocol deps)
 # hardcodes the 2025 lifecycle — initialize → notifications/initialized →
 # Mcp-Session-Id — and pairs with client-initialise-server (2025-pinned).
-# For the 2026 stateless pair see streamable-http-client-2026-07-28 +
+# For the 2026 stateless pair see streamable-http-client +
 # minimal-server.
 [package]
 name = "client-initialise-report"

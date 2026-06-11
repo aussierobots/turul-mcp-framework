@@ -3,7 +3,7 @@
 //! Raw-wire probe of the 2025-11-25 stateful lifecycle: `initialize` →
 //! `notifications/initialized` → `Mcp-Session-Id` on every request. Pairs
 //! with `client-initialise-server` (2025-pinned). The 2026-07-28 stateless
-//! pair is `streamable-http-client-2026-07-28` + `minimal-server`.
+//! pair is `streamable-http-client` + `minimal-server`.
 
 //! # MCP Initialize Session Report Client
 //!
