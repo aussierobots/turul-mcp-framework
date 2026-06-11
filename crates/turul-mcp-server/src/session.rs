@@ -357,6 +357,43 @@ impl SessionContext {
             .and_then(|v| v.as_str().map(String::from))
     }
 
+    /// The request's `_meta.progressToken`, when the caller opted in to
+    /// `notifications/progress` (populated by the 2026 tools/call and
+    /// resources/read handlers).
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub fn progress_token(&self) -> Option<turul_mcp_protocol::meta::ProgressToken> {
+        self.extensions
+            .get("mcp:progressToken")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    }
+
+    /// Emit a request-scoped `notifications/progress` referencing the
+    /// REQUEST's `_meta.progressToken`, preserving its JSON type (string or
+    /// number). No-op (returns `false`) when the request declared no token —
+    /// "Progress notifications MUST only reference tokens that were provided
+    /// in an active request."
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub async fn notify_request_progress(&self, progress: f64, total: Option<f64>) -> bool {
+        let Some(token) = self.extensions.get("mcp:progressToken").cloned() else {
+            return false;
+        };
+        let mut params = std::collections::HashMap::new();
+        params.insert("progressToken".to_string(), token);
+        params.insert("progress".to_string(), serde_json::json!(progress));
+        if let Some(total) = total {
+            params.insert("total".to_string(), serde_json::json!(total));
+        }
+        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
+            "notifications/progress".to_string(),
+            params,
+        );
+        self.notify(SessionEvent::Notification(
+            serde_json::to_value(notification).unwrap(),
+        ))
+        .await;
+        true
+    }
+
     /// Send a custom notification to this session (async)
     pub async fn notify(&self, event: SessionEvent) {
         debug!(
@@ -780,10 +817,13 @@ async fn parse_and_send_notification_with_broadcaster(
                     }
                 }
                 "notifications/progress" => {
+                    // ProgressToken is string-or-number — deserialize the raw
+                    // value so numeric tokens round-trip as JSON numbers.
                     if let Some(params) = json_value.get("params")
-                        && let Some(token) = params.get("progressToken").and_then(|v| v.as_str())
+                        && let Some(raw_token) = params.get("progressToken")
+                        && let Ok(progress_token) = serde_json::from_value(raw_token.clone())
                     {
-                        debug!("📊 Progress notification detected: token={}", token);
+                        debug!("📊 Progress notification detected: token={}", raw_token);
 
                         // Get progress value
                         let progress = params
@@ -795,7 +835,7 @@ async fn parse_and_send_notification_with_broadcaster(
                         let notification = ProgressNotification {
                             method: "notifications/progress".to_string(),
                             params: turul_mcp_protocol::notifications::ProgressNotificationParams {
-                                progress_token: token.to_string().into(),
+                                progress_token,
                                 progress,
                                 total: params.get("total").and_then(|v| v.as_f64()),
                                 message: params

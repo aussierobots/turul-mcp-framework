@@ -1915,6 +1915,16 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                 {
                     session.extensions.insert("mcp:logLevel".to_string(), v);
                 }
+                // Progress opt-in: surface the request's progressToken so the
+                // tool can emit notifications/progress referencing it
+                // (SessionContext::notify_request_progress).
+                if let Some(ref token) = call_params.meta.progress_token
+                    && let Ok(v) = serde_json::to_value(token)
+                {
+                    session
+                        .extensions
+                        .insert("mcp:progressToken".to_string(), v);
+                }
             }
             ctx
         };

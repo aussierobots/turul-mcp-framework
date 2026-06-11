@@ -901,6 +901,11 @@ impl McpHandler for ResourcesReadHandler {
                         Value::String(state.clone()),
                     );
                 }
+                if let Some(ref token) = read_params.meta.progress_token
+                    && let Ok(v) = serde_json::to_value(token)
+                {
+                    ctx.extensions.insert("mcp:progressToken".to_string(), v);
+                }
             }
             session
         };
