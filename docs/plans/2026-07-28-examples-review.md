@@ -50,6 +50,15 @@ own binary. The worst offenders print broken curl commands from their own stdout
 
 ## 🔁 Migrate to 2026 idioms (6) — valuable pattern, wrong-era demonstration
 
+> **EXECUTED 2026-06-12** (slice 2, all live-verified):
+> `middleware-rate-limit-server` re-keyed to X-API-Key in the pre-session
+> phase (limiter genuinely fires now); `completion-server` serves the real
+> `completion/complete` via a registered provider; the storage trio drives
+> the backend API directly against per-run records (restart durability
+> observable via `storage_info` counts); `notification-server` rewritten
+> around the two 2026 surfaces (`subscriptions/listen` + request-scoped
+> progress/log).
+
 | Example | Lane | Teaches | Why / required fixes | Gate-ref |
 |---|---|---|---|---|
 | `completion-server` | 2026-default | Nominally the MCP completion feature — in reality it only teaches a derive-macro tool ('ide_completion') that returns suggestion lists; it never implements the protocol's completion/complete. | Completion is current on 2026 (plan section 'Completion (draft 2026-07-28)') and the framework has first-class completion_provider support, so the teaching slot is valuable — but this example teaches the wrong thing on every axis: README advertises a protocol feature the code does not implement, claims data-file loading the code does not do, and its wire examples are pre-2026. Rewrite it to register a real McpCompletion provider answering completion/complete with 2026 _meta-bearing curls (the existing data/ files can finally be used). Referenced only by legacy scripts/verify_phase3.sh and the unwired tests/working_examples_validation.rs (not in tests/Cargo.toml [[test]] list) — no CI gate. — **Staleness:** README.md:66,115,156 give curl examples calling method 'completion/complete', but src/main.rs registers only a tool via .tool() (main.rs:117-124) and never calls McpServer::builder().completion_provider() (the real API, crates/turul-mcp-server/src/builder.rs:920) — those curls fail against the actual server; README also claims 'loads data from external JSON files at startup' and shows a data/ tree, but main.rs:32-58 hardcodes all suggestion vectors and never reads data/; README curls carry no per-request _meta and no MCP-Protocol-Version header, so they would be rejected on the 2026 enforced-_meta path; main.rs:119 .version("1.0.0") matches house style (not stale). | no |

@@ -1,131 +1,23 @@
-//! # Simple DynamoDB Session Storage Example
+//! # Simple DynamoDB Storage Backend Example (2026-07-28 lane)
 //!
-//! This example demonstrates DynamoDB-backed session storage for MCP servers.
-//! It shows how session state persists in AWS DynamoDB with automatic TTL cleanup.
+//! Demonstrates wiring a durable DynamoDB storage backend into an MCP
+//! server. On the 2026 stateless core there are NO client-visible sessions —
+//! the storage backs the transport's internal per-request contexts and event
+//! streams. The demo tools drive the `SessionStorage` backend API DIRECTLY
+//! against one durable record per run, so the persistence teaching stays
+//! observable and true: `storage_info` counts accumulate across restarts.
 //!
-//! ## Setup
-//!
-//! Configure AWS credentials:
-//! ```bash
-//! export AWS_ACCESS_KEY_ID=your_access_key
-//! export AWS_SECRET_ACCESS_KEY=your_secret_key
-//! export AWS_REGION=us-east-1
-//! ```
-//!
-//! ## Features Demonstrated
-//!
-//! - Session state persistence in DynamoDB
-//! - Automatic TTL-based cleanup
-//! - AWS-native storage backend
+//! Cross-request APPLICATION state belongs in your own store; the
+//! 2025-11-25 stateful session model lives on the opt-in lane (see
+//! `stateful-server`).
 
 use serde_json::{Value, json};
 use std::sync::Arc;
-use tracing::{debug, error, info};
-use turul_mcp_derive::McpTool;
-use turul_mcp_server::{McpResult, McpServer, SessionContext};
+use tracing::{error, info};
+use turul_mcp_builders::ToolBuilder;
+use turul_mcp_server::McpServer;
+use turul_mcp_session_storage::SessionStorage;
 use turul_mcp_session_storage::{DynamoDbConfig, DynamoDbSessionStorage};
-
-/// Tool that stores a key-value pair in this session's DynamoDB storage
-#[derive(McpTool, Default)]
-#[tool(
-    name = "store_value",
-    description = "Store a value in this session's DynamoDB storage (session-scoped)"
-)]
-struct StoreValueTool {
-    #[param(description = "Key to store in session")]
-    key: String,
-    #[param(description = "Value to store in session")]
-    value: Value,
-}
-
-impl StoreValueTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| {
-            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
-        })?;
-
-        debug!("Storing value in DynamoDB: {} = {}", self.key, self.value);
-
-        // Store value in this session's DynamoDB storage
-        (session.set_state)(&self.key, self.value.clone()).await;
-
-        Ok(json!({
-            "stored": true,
-            "session_id": session.session_id,
-            "key": self.key,
-            "value": self.value,
-            "storage": "DynamoDB (session-scoped)",
-            "message": format!("Stored '{}' in session {} (DynamoDB)", self.key, session.session_id),
-            "timestamp": chrono::Utc::now()
-        }))
-    }
-}
-
-/// Tool that retrieves a value from this session's DynamoDB storage
-#[derive(McpTool, Default)]
-#[tool(
-    name = "get_value",
-    description = "Retrieve a value from this session's DynamoDB storage (session-scoped)"
-)]
-struct GetValueTool {
-    #[param(description = "Key to retrieve from session")]
-    key: String,
-}
-
-impl GetValueTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| {
-            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
-        })?;
-
-        debug!("Getting value from DynamoDB: {}", self.key);
-
-        // Retrieve value from this session's DynamoDB storage
-        let value = (session.get_state)(&self.key).await;
-
-        Ok(json!({
-            "found": value.is_some(),
-            "session_id": session.session_id,
-            "key": self.key,
-            "value": value,
-            "storage": "DynamoDB (session-scoped)",
-            "message": if value.is_some() {
-                format!("Retrieved '{}' from session {} (DynamoDB)", self.key, session.session_id)
-            } else {
-                format!("Key '{}' not found in session {} (DynamoDB)", self.key, session.session_id)
-            },
-            "timestamp": chrono::Utc::now()
-        }))
-    }
-}
-
-/// Tool that shows session information
-#[derive(McpTool, Default)]
-#[tool(
-    name = "session_info",
-    description = "Get information about the DynamoDB session"
-)]
-struct SessionInfoTool {}
-
-impl SessionInfoTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| {
-            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
-        })?;
-
-        Ok(json!({
-            "session_id": session.session_id,
-            "storage_backend": "DynamoDB",
-            "features": [
-                "Persistent storage",
-                "Automatic TTL cleanup",
-                "AWS native integration"
-            ],
-            "message": "Session data isolated per session, backed by AWS DynamoDB",
-            "timestamp": chrono::Utc::now()
-        }))
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -170,6 +62,87 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // One durable demo record per run — the tools below drive the backend
+    // API directly against it.
+    let demo = dynamodb_storage
+        .create_session(Default::default())
+        .await
+        .map_err(|e| format!("create demo record: {e}"))?;
+    let demo_id = Arc::new(demo.session_id);
+    info!("📌 This run's demo record id: {demo_id}");
+
+    let store_value = {
+        let (storage, id) = (dynamodb_storage.clone(), demo_id.clone());
+        ToolBuilder::new("store_value")
+            .description("Store a value in this run's durable DynamoDB demo record")
+            .string_param("key", "Key to store")
+            .string_param("value", "Value to store")
+            .execute(move |args| {
+                let (storage, id) = (storage.clone(), id.clone());
+                async move {
+                    let key = args
+                        .get("key")
+                        .and_then(Value::as_str)
+                        .ok_or("missing key")?;
+                    let value = args.get("value").cloned().unwrap_or(Value::Null);
+                    storage
+                        .set_session_state(&id, key, value.clone())
+                        .await
+                        .map_err(|e| format!("dynamodb write: {e}"))?;
+                    Ok(json!({ "result": format!("stored {key} in DynamoDB record {id}") }))
+                }
+            })
+            .build()
+            .expect("store_value tool")
+    };
+
+    let get_value = {
+        let (storage, id) = (dynamodb_storage.clone(), demo_id.clone());
+        ToolBuilder::new("get_value")
+            .description("Read a value back from this run's DynamoDB demo record")
+            .string_param("key", "Key to read")
+            .execute(move |args| {
+                let (storage, id) = (storage.clone(), id.clone());
+                async move {
+                    let key = args
+                        .get("key")
+                        .and_then(Value::as_str)
+                        .ok_or("missing key")?;
+                    let value = storage
+                        .get_session_state(&id, key)
+                        .await
+                        .map_err(|e| format!("dynamodb read: {e}"))?;
+                    Ok(json!({ "result": value }))
+                }
+            })
+            .build()
+            .expect("get_value tool")
+    };
+
+    let storage_info = {
+        let storage = dynamodb_storage.clone();
+        ToolBuilder::new("storage_info")
+            .description(
+                "Durable-storage stats — counts accumulate across server restarts, \\
+                 which is the persistence proof",
+            )
+            .execute(move |_args| {
+                let storage = storage.clone();
+                async move {
+                    let sessions = storage.session_count().await.unwrap_or(0);
+                    let events = storage.event_count().await.unwrap_or(0);
+                    Ok(json!({ "result": {
+                        "backend": "dynamodb",
+                        "stored_records": sessions,
+                        "stored_events": events,
+                        "note": "restart the server and call again — prior runs' rows persist"
+                    }}))
+                }
+            })
+            .build()
+            .expect("storage_info tool")
+    };
+
     // Build MCP server with DynamoDB session storage
     let server = McpServer::builder()
         .name("simple-dynamodb-session")
@@ -177,9 +150,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .title("DynamoDB Session Storage Example")
         .instructions("Demonstrates DynamoDB-backed session storage for MCP servers. Use the tools to store and retrieve values that persist in AWS DynamoDB.")
         .with_session_storage(dynamodb_storage)
-        .tool(StoreValueTool::default())
-        .tool(GetValueTool::default())
-        .tool(SessionInfoTool::default())
+        .tool(store_value)
+        .tool(get_value)
+        .tool(storage_info)
         .bind_address("127.0.0.1:8062".parse()?)
         .sse(true)
         .build()?;
@@ -190,15 +163,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🔄 SSE Notifications: Enabled");
     info!("");
     info!("Available tools:");
-    info!("  • store_value    - Store value in DynamoDB");
-    info!("  • get_value      - Retrieve value from DynamoDB");
-    info!("  • session_info   - View session storage information");
+    info!("  • store_value   - write to this run's durable demo record");
+    info!("  • get_value     - read it back (within this run)");
+    info!("  • storage_info  - backend stats; counts accumulate across restarts");
     info!("");
-    info!("Example usage:");
-    info!("  1. store_value(key='theme', value='dark')");
-    info!("  2. Restart the server");
-    info!("  3. get_value(key='theme')  // Returns 'dark' - persisted!");
-    info!("  4. session_info()  // View DynamoDB backend info");
+    info!("Durability walkthrough:");
+    info!("  1. storage_info()              // note stored_records");
+    info!("  2. store_value(key='theme', value='dark'); get_value(key='theme')");
+    info!("  3. Restart the server");
+    info!("  4. storage_info()              // stored_records grew — prior rows persist");
 
     server.run().await?;
     Ok(())

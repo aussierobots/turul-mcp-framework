@@ -1,9 +1,12 @@
-//! # IDE Auto-Completion Server Example
+//! # IDE Auto-Completion Server
 //!
-//! This example demonstrates a simple MCP tool that provides intelligent
-//! auto-completion suggestions for developers working in IDEs and code editors.
-//! The server provides context-aware suggestions for programming languages,
-//! frameworks, file extensions, and development commands.
+//! Demonstrates the REAL MCP completion protocol (`completion/complete`):
+//! an `McpCompletion` provider registered via `.completion_provider()`
+//! serves argument suggestions for the `code_review` prompt's `language`
+//! argument — reference-matched, prefix-filtered, and capped per the spec.
+//! A plain tool (`ide_completion`) is kept alongside to contrast the two
+//! surfaces: `completion/complete` is for argument autocomplete while
+//! editing a prompt/template; tools are for model-invoked actions.
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -104,6 +107,112 @@ impl IdeCompletionTool {
     }
 }
 
+/// Real `completion/complete` provider: completes the `language` argument
+/// of the `code_review` prompt (reference-matched by the routing handler).
+struct LanguageCompleter;
+
+impl turul_mcp_server::prelude::HasCompletionMetadata for LanguageCompleter {
+    fn method(&self) -> &str {
+        "completion/complete"
+    }
+    fn reference(&self) -> &turul_mcp_protocol::completion::CompletionReference {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::completion::{CompletionReference, PromptReference};
+        static R: OnceLock<CompletionReference> = OnceLock::new();
+        R.get_or_init(|| CompletionReference::Prompt(PromptReference::new("code_review")))
+    }
+}
+impl turul_mcp_server::prelude::HasCompletionContext for LanguageCompleter {
+    fn argument(&self) -> &turul_mcp_protocol::completion::CompleteArgument {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::completion::CompleteArgument;
+        static A: OnceLock<CompleteArgument> = OnceLock::new();
+        A.get_or_init(|| CompleteArgument::new("language", ""))
+    }
+}
+impl turul_mcp_server::prelude::HasCompletionHandling for LanguageCompleter {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpCompletion for LanguageCompleter {
+    async fn complete(
+        &self,
+        request: turul_mcp_protocol::completion::CompleteRequest,
+    ) -> McpResult<turul_mcp_protocol::completion::CompleteResult> {
+        use turul_mcp_protocol::completion::{CompleteResult, CompletionResult};
+        const LANGUAGES: &[&str] = &[
+            "c",
+            "cpp",
+            "csharp",
+            "go",
+            "java",
+            "javascript",
+            "kotlin",
+            "python",
+            "ruby",
+            "rust",
+            "scala",
+            "swift",
+            "typescript",
+            "zig",
+        ];
+        let prefix = request.params.argument.value.to_lowercase();
+        let values: Vec<String> = LANGUAGES
+            .iter()
+            .filter(|l| l.starts_with(&prefix))
+            .map(|l| l.to_string())
+            .collect();
+        Ok(CompleteResult::new(CompletionResult::new(values)))
+    }
+}
+
+/// The prompt whose `language` argument the completer serves.
+struct CodeReviewPrompt;
+
+impl turul_mcp_server::prelude::HasPromptMetadata for CodeReviewPrompt {
+    fn name(&self) -> &str {
+        "code_review"
+    }
+    fn title(&self) -> Option<&str> {
+        Some("Code Review")
+    }
+}
+impl turul_mcp_server::prelude::HasPromptDescription for CodeReviewPrompt {
+    fn description(&self) -> Option<&str> {
+        Some("Review code in a given language")
+    }
+}
+impl turul_mcp_server::prelude::HasPromptArguments for CodeReviewPrompt {
+    fn arguments(&self) -> Option<&Vec<turul_mcp_protocol::prompts::PromptArgument>> {
+        use std::sync::OnceLock;
+        use turul_mcp_protocol::prompts::PromptArgument;
+        static ARGS: OnceLock<Vec<PromptArgument>> = OnceLock::new();
+        Some(ARGS.get_or_init(|| {
+            vec![PromptArgument::new("language").with_description("Programming language")]
+        }))
+    }
+}
+impl turul_mcp_server::prelude::HasPromptAnnotations for CodeReviewPrompt {}
+impl turul_mcp_server::prelude::HasPromptMeta for CodeReviewPrompt {}
+impl turul_mcp_server::prelude::HasIcons for CodeReviewPrompt {}
+
+#[async_trait::async_trait]
+impl turul_mcp_server::McpPrompt for CodeReviewPrompt {
+    async fn render(
+        &self,
+        args: Option<std::collections::HashMap<String, Value>>,
+    ) -> McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>> {
+        let language = args
+            .as_ref()
+            .and_then(|a| a.get("language"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("rust")
+            .to_string();
+        Ok(vec![turul_mcp_protocol::prompts::PromptMessage::user_text(
+            format!("Please review the following {language} code for quality and safety."),
+        )])
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
@@ -120,6 +229,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .title("IDE Auto-Completion Server")
         .instructions("Provides intelligent auto-completion suggestions for developers. Use the ide_completion tool with category (language/framework/command/extension/all) and optional prefix parameters.")
         .tool(completion_tool)
+        .prompt(CodeReviewPrompt)
+        .completion_provider(LanguageCompleter)
         .bind_address("127.0.0.1:8042".parse()?)
         .build()?;
 

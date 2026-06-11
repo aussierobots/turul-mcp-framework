@@ -1,6 +1,14 @@
-# Simple PostgreSQL Session Storage Example
+# Simple PostgreSQL Storage Backend Example (2026-07-28 lane)
 
-This example demonstrates PostgreSQL-backed session storage for MCP servers. It shows how session state persists across server restarts and can be shared across multiple server instances.
+Demonstrates wiring a **durable PostgreSQL storage backend** into an MCP
+server. On the 2026 stateless core there are no client-visible sessions —
+the storage backs the transport's internal per-request contexts and event
+streams. The demo tools drive the `SessionStorage` backend API directly
+against one durable record per run: `storage_info` counts accumulate across
+server restarts, which is the observable persistence proof.
+
+Cross-request APPLICATION state belongs in your own store; the 2025-11-25
+stateful session model lives on the opt-in lane (see `stateful-server`).
 
 ## Features
 
@@ -84,7 +92,7 @@ The server runs at `http://127.0.0.1:8060/mcp` and provides these tools:
   "id": 3,
   "method": "tools/call",
   "params": {
-    "name": "session_info",
+    "name": "storage_info",
     "arguments": {}
   }
 }
@@ -92,14 +100,14 @@ The server runs at `http://127.0.0.1:8060/mcp` and provides these tools:
 
 ## Available Tools
 
-- **`store_value`** - Store a value in this session's PostgreSQL storage (session-scoped)
-- **`get_value`** - Retrieve a value from this session's PostgreSQL storage (session-scoped)
-- **`session_info`** - Get information about the PostgreSQL session
+- **`store_value`** - Write to this run's durable demo record
+- **`get_value`** - Read it back (within this run)
+- **`storage_info`** - Backend stats; counts accumulate across restarts
 
 ## Session Storage Behavior
 
 - **Session-scoped**: Data is isolated per session ID
-- **Persistent**: Data survives server restarts
+- **Durable**: rows outlive the process — restart and watch `storage_info` counts grow
 - **Multi-instance**: Multiple servers can share the same database
 - **ACID compliance**: PostgreSQL ensures data consistency
 
@@ -132,7 +140,7 @@ DATABASE_URL="postgres://mcp:pass@db.example.com:5432/shared_sessions" cargo run
 1. **Create tables**: `DATABASE_URL="postgres://..." cargo run --bin postgres-setup`
 2. **Start server**: `DATABASE_URL="postgres://..." cargo run --bin simple-postgres-session`
 3. **Store data**: `store_value(key='user_id', value=123)`
-4. **Restart server**: Server restarts, session persists in PostgreSQL
+4. **Restart server**: prior rows persist in the backend — `storage_info` shows the accumulated count
 5. **Retrieve data**: `get_value(key='user_id')` returns `123`
 
 Each session maintains its own isolated storage space in the PostgreSQL database.

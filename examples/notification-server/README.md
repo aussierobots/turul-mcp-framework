@@ -1,460 +1,77 @@
-# Real-time Notification Server Example
+# Notification Server (2026-07-28)
 
-This example demonstrates SSE (Server-Sent Events) real-time notifications in an MCP server, showing how to broadcast updates to connected clients for progress tracking and live updates.
+Demonstrates **both** server-initiated notification surfaces of the 2026
+stateless core. There is no GET SSE stream and no session on this lane —
+the endpoint is POST-only.
 
-## 🚀 What This Example Shows
+| Surface | Carried by | Opt-in |
+|---|---|---|
+| Subscription notifications (`*/list_changed`, `resources/updated`) | a long-lived `subscriptions/listen` POST SSE stream | the listen request's filter |
+| Request-scoped notifications (`notifications/progress`, `notifications/message`) | the originating POST's own SSE response | `_meta.progressToken` / `_meta` `logLevel` |
 
-- **Server-Sent Events (SSE)**: Real-time push notifications to clients
-- **Progress Tracking**: Live progress updates for long-running operations
-- **Broadcast Notifications**: Send messages to all connected SSE clients
-- **Connection Management**: Monitor and report SSE connection status
-- **Real-time Workflows**: Build interactive applications with live feedback
-
-## 🛠️ Available Tools
-
-### 1. Simulate Progress (`simulate_progress`)
-Simulate a long-running operation with real-time progress updates:
-
-**Parameters:**
-- `task_name` (string): Name of the task to simulate
-- `duration_seconds` (number): Duration of the task in seconds (1-60, default: 10)
-- `step_count` (integer): Number of progress steps (1-20, default: 5)
-
-**Features:**
-- Sends incremental progress updates via SSE
-- Provides step-by-step completion status
-- Unique task ID for tracking multiple operations
-
-### 2. Send Notification (`send_notification`)
-Broadcast notifications to all connected SSE clients:
-
-**Parameters:**
-- `message` (string): Message to broadcast
-- `type` (enum): Notification type ("info", "warning", "error", "success")
-- `data` (object, optional): Additional data to include
-
-**Features:**
-- Broadcasts to all active SSE connections
-- Supports different notification types
-- Includes timestamps and unique IDs
-
-### 3. Connection Status (`connection_status`)
-Get the current SSE connection status:
-
-**Returns:**
-- SSE enablement status
-- Active connection count
-- Connection endpoint information
-- Usage instructions
-
-## 🏃 Running the Example
+## Run
 
 ```bash
 cargo run -p notification-server
+# → http://127.0.0.1:8005/mcp
 ```
 
-The server starts on `http://127.0.0.1:8005/mcp` with SSE enabled.
+## 1. Open a listen stream
 
-## 🧪 Testing Real-time Notifications
-
-### 1. Open a subscriptions/listen stream
-On 2026-07-28 the endpoint is POST-only (a GET returns 405) and the
-long-lived notification stream is the `subscriptions/listen` request:
 ```bash
+META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
+
 curl -N -X POST http://127.0.0.1:8005/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: text/event-stream" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -H "Mcp-Method: subscriptions/listen" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true,"resourcesListChanged":true,"promptsListChanged":true},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: subscriptions/listen' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"subscriptions/listen\",\"params\":{\"notifications\":{\"resourcesListChanged\":true,\"toolsListChanged\":true,\"resourceSubscriptions\":[\"file:///watched.txt\"]},$META}}"
 ```
-The first frame is `notifications/subscriptions/acknowledged`; request-scoped
-notifications (progress, log messages) ride each originating POST's own SSE
-response instead.
 
-> **Note**: this example's custom notification types predate the 2026
-> subscriptions model — a rewrite around `subscriptions/listen` is tracked in
-> `docs/plans/2026-07-28-examples-review.md`.
+The first frame is `notifications/subscriptions/acknowledged` (the honored
+filter). The stream then carries ONLY the requested types, each stamped with
+`io.modelcontextprotocol/subscriptionId`. Dropping the stream cancels the
+subscription — clients reconnect by re-issuing the request.
 
-### 2. Discover the Server
-The 2026-07-28 core is stateless: there is no `initialize`/`notifications/initialized`
-handshake and no `Mcp-Session-Id`. Every request carries its own per-request `_meta`
-(`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`) and the
-`MCP-Protocol-Version: 2026-07-28` header. In another terminal:
+## 2. Trigger subscription notifications
+
+In another terminal:
+
 ```bash
-curl -X POST http://127.0.0.1:8005/mcp \
-  -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -H "Mcp-Method: server/discover" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "server/discover",
-    "params": {
-      "_meta": {
-        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
-        "io.modelcontextprotocol/clientCapabilities": {}
-      }
-    },
-    "id": "1"
-  }'
+curl -s -X POST http://127.0.0.1:8005/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/call' -H 'Mcp-Name: trigger_changes' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{\"name\":\"trigger_changes\",\"arguments\":{},$META}}"
 ```
 
-### 3. Start a Progress Task
-Send a progress simulation request:
+The listen stream receives `resources/list_changed`, `tools/list_changed`,
+and the watched-URI `resources/updated` — but NOT `prompts/list_changed`
+(not in the filter).
+
+## 3. Request-scoped notifications
+
 ```bash
-curl -X POST http://127.0.0.1:8005/mcp \
-  -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2026-07-28" \
-  -H "Mcp-Method: tools/call" \
-  -H "Mcp-Name: test-client" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "_meta": {
-        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
-        "io.modelcontextprotocol/clientCapabilities": {}
-      },
-      "name": "simulate_progress",
-      "arguments": {
-        "task_name": "File Processing",
-        "duration_seconds": 15,
-        "step_count": 10
-      }
-    },
-    "id": "2"
-  }'
+META2='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{},"progressToken":"job-1","io.modelcontextprotocol/logLevel":"info"}'
+
+curl -N -X POST http://127.0.0.1:8005/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/call' -H 'Mcp-Name: long_job' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"long_job\",\"arguments\":{},$META2}}"
 ```
 
-You should see real-time progress updates in the SSE terminal:
-```
-data: {"type":"progress","task_id":"uuid","task_name":"File Processing","progress":10,"step":1,"total_steps":10,"message":"Completed step 1 of 10"}
+Three `notifications/progress` and three `notifications/message` frames ride
+this request's own stream before the final result. Omit `progressToken` or
+`logLevel` from `_meta` and the server stays silent for that surface — both
+are per-request opt-ins.
 
-data: {"type":"progress","task_id":"uuid","task_name":"File Processing","progress":20,"step":2,"total_steps":10,"message":"Completed step 2 of 10"}
+## Framework APIs shown
 
-...
-```
-
-### 4. Send Custom Notifications
-Broadcast custom notifications:
-```bash
-curl -X POST http://127.0.0.1:8005/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "send_notification",
-      "arguments": {
-        "message": "System maintenance will begin in 10 minutes",
-        "type": "warning",
-        "data": {
-          "maintenance_window": "2024-01-15T02:00:00Z",
-          "expected_duration": "30 minutes"
-        }
-      }
-    },
-    "id": "3"
-  }'
-```
-
-### 5. Check Connection Status
-Monitor active SSE connections:
-```bash
-curl -X POST http://127.0.0.1:8005/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "connection_status",
-      "arguments": {}
-    },
-    "id": "4"
-  }'
-```
-
-## 📡 SSE Event Types
-
-### Progress Events
-```json
-{
-  "type": "progress",
-  "task_id": "uuid-string",
-  "task_name": "Task Name",
-  "progress": 45.5,
-  "step": 5,
-  "total_steps": 10,
-  "message": "Completed step 5 of 10",
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
-### Notification Events
-```json
-{
-  "type": "notification",
-  "notification_id": "uuid-string",
-  "notification_type": "warning",
-  "message": "System maintenance starting",
-  "timestamp": "2024-01-15T02:00:00Z",
-  "data": {
-    "maintenance_window": "2024-01-15T02:00:00Z",
-    "expected_duration": "30 minutes"
-  }
-}
-```
-
-### Status Updates
-```json
-{
-  "type": "status",
-  "status": "connected",
-  "connection_id": "uuid-string",
-  "client_count": 3,
-  "timestamp": "2024-01-15T10:30:00Z"
-}
-```
-
-## 🔧 SSE Implementation Details
-
-### Server Configuration
-```rust
-let server = McpServer::builder()
-    .name("notification-server")
-    .version("1.0.0")
-    .title("Real-time Notification Server")
-    .tool(ProgressTool)
-    .tool(NotificationTool)
-    .tool(ConnectionStatusTool)
-    .bind_address("127.0.0.1:8005".parse()?)
-    .sse(true)  // Enable SSE support
-    .build()?;
-```
-
-### Broadcasting Notifications
-```rust
-// In a production implementation with SSE access:
-async fn call(&self, args: Value, sse_manager: Option<SSEManager>) -> Result<Vec<ToolResult>, String> {
-    if let Some(sse_manager) = sse_manager {
-        sse_manager.send_data(json!({
-            "type": "progress",
-            "task_id": task_id,
-            "progress": progress,
-            "message": "Step completed"
-        })).await;
-    }
-    
-    Ok(vec![ToolResult::text("Progress sent".to_string())])
-}
-```
-
-### Progress Tracking Pattern
-```rust
-// Simulate long-running operation with progress updates
-for step in 1..=step_count {
-    tokio::time::sleep(step_duration).await;
-    
-    let progress = (step as f64 / step_count as f64) * 100.0;
-    
-    // Send progress update via SSE
-    sse_manager.send_data(json!({
-        "type": "progress",
-        "task_id": task_id,
-        "progress": progress,
-        "step": step,
-        "total_steps": step_count
-    })).await;
-}
-```
-
-## 🎯 Use Cases Demonstrated
-
-### 1. Progress Tracking
-- File upload/download progress
-- Data processing operations
-- Backup and restore operations
-- Batch job monitoring
-
-### 2. Real-time Notifications
-- System alerts and warnings
-- User activity notifications
-- Status change announcements
-- Chat message broadcasting
-
-### 3. Live Dashboards
-- System monitoring displays
-- Real-time analytics
-- Live data feeds
-- Activity monitoring
-
-### 4. Interactive Applications
-- Multi-user collaboration
-- Live chat systems
-- Real-time gaming
-- Live polling and voting
-
-## 🌐 Client-Side Integration
-
-### JavaScript SSE Client
-```javascript
-const eventSource = new EventSource('http://127.0.0.1:8005/mcp');
-
-eventSource.onmessage = function(event) {
-  const data = JSON.parse(event.data);
-  
-  switch(data.type) {
-    case 'progress':
-      updateProgressBar(data.task_id, data.progress);
-      break;
-    case 'notification':
-      showNotification(data.message, data.notification_type);
-      break;
-    case 'status':
-      updateConnectionStatus(data.status);
-      break;
-  }
-};
-
-eventSource.onerror = function(event) {
-  console.error('SSE connection error:', event);
-};
-```
-
-### React Integration
-```jsx
-import { useEffect, useState } from 'react';
-
-function useSSENotifications(url) {
-  const [notifications, setNotifications] = useState([]);
-  const [progress, setProgress] = useState({});
-  
-  useEffect(() => {
-    const eventSource = new EventSource(url);
-    
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      
-      if (data.type === 'progress') {
-        setProgress(prev => ({
-          ...prev,
-          [data.task_id]: data
-        }));
-      } else if (data.type === 'notification') {
-        setNotifications(prev => [...prev, data]);
-      }
-    };
-    
-    return () => eventSource.close();
-  }, [url]);
-  
-  return { notifications, progress };
-}
-```
-
-### Python SSE Client
-```python
-import requests
-import json
-
-def listen_to_notifications():
-    response = requests.get(
-        'http://127.0.0.1:8005/mcp',
-        headers={'Accept': 'text/event-stream'},
-        stream=True
-    )
-    
-    for line in response.iter_lines():
-        if line.startswith(b'data: '):
-            data = json.loads(line[6:])
-            handle_notification(data)
-
-def handle_notification(data):
-    if data['type'] == 'progress':
-        print(f"Progress: {data['progress']:.1f}% - {data['message']}")
-    elif data['type'] == 'notification':
-        print(f"Notification: {data['message']}")
-```
-
-## 🚨 Production Considerations
-
-### 1. Connection Management
-- Handle connection drops and reconnection
-- Implement connection pooling
-- Add authentication for SSE connections
-- Monitor connection health
-
-### 2. Performance Optimization
-- Limit message frequency to prevent flooding
-- Implement message queuing for reliability
-- Add message filtering and targeting
-- Use connection-specific channels
-
-### 3. Security
-- Validate SSE connection authorization
-- Implement rate limiting for notifications
-- Add CSRF protection
-- Secure message content
-
-### 4. Reliability
-- Implement message persistence
-- Add retry mechanisms for failed deliveries
-- Handle network interruptions gracefully
-- Provide message acknowledgment
-
-## 🔧 Advanced Features
-
-### Message Filtering
-```rust
-// Filter messages by client preferences
-if sse_manager.should_send_to_client(&client_id, &message_type) {
-    sse_manager.send_to_client(&client_id, &message).await;
-}
-```
-
-### Targeted Notifications
-```rust
-// Send to specific clients
-sse_manager.send_to_clients(&client_ids, &message).await;
-
-// Send to all clients in a group
-sse_manager.send_to_group("admin", &message).await;
-```
-
-### Message Persistence
-```rust
-// Store messages for offline clients
-message_store.save(&message).await;
-
-// Replay missed messages on reconnection
-let missed_messages = message_store.get_since(&client_id, &last_seen).await;
-for message in missed_messages {
-    sse_manager.send_to_client(&client_id, &message).await;
-}
-```
-
-## 📚 Related Examples
-
-### Foundation Examples
-- **[minimal-server](../minimal-server/)**: Basic MCP server setup
-- **[stateful-server](../stateful-server/)**: Session state management
-
-### Advanced Examples
-- **[comprehensive-server](../comprehensive-server/)**: All MCP features
-- **[performance-testing](../performance-testing/)**: Load testing with notifications
-
-## 🤝 Best Practices
-
-1. **Message Design**: Keep messages small and focused
-2. **Connection Handling**: Implement proper connection lifecycle management
-3. **Error Recovery**: Handle network failures gracefully
-4. **Rate Limiting**: Prevent message flooding
-5. **Authentication**: Secure SSE endpoints appropriately
-6. **Monitoring**: Track connection health and message delivery
-7. **Testing**: Test with multiple concurrent connections
-
----
-
-This example demonstrates how to build real-time, interactive MCP servers using Server-Sent Events for live updates and notifications.
+- `SessionContext::notify_request_progress_with_message` — progress
+  referencing the request's token (no-op without one)
+- `SessionContext::notify_log` — gated by the request's declared `logLevel`
+- `SharedNotificationBroadcaster::broadcast_to_all_sessions` — feeds every
+  open listen stream, which filters per its own subscription
