@@ -111,6 +111,8 @@ pub struct McpServerBuilder {
     enable_sse: bool,
     #[cfg(feature = "http")]
     allow_unauthenticated_ping: Option<bool>,
+    #[cfg(feature = "http")]
+    origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
 
     /// Validation errors collected during builder configuration
     validation_errors: Vec<String>,
@@ -262,6 +264,8 @@ impl McpServerBuilder {
             enable_sse: cfg!(feature = "sse"),
             #[cfg(feature = "http")]
             allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
+            #[cfg(feature = "http")]
+            origin_policy: None, // Default: ServerConfig default (SameOriginOrLoopback)
             validation_errors: Vec::new(),
             tool_change_mode: crate::ToolChangeMode::Static,
             #[cfg(feature = "dynamic-tools")]
@@ -1393,6 +1397,17 @@ impl McpServerBuilder {
         self
     }
 
+    /// Set the Origin-header validation policy (DNS-rebinding protection;
+    /// requires "http" feature).
+    ///
+    /// Default: `OriginPolicy::SameOriginOrLoopback` — requests with a
+    /// present-and-invalid `Origin` header are rejected with HTTP 403.
+    #[cfg(feature = "http")]
+    pub fn origin_policy(mut self, policy: turul_http_mcp_server::OriginPolicy) -> Self {
+        self.origin_policy = Some(policy);
+        self
+    }
+
     /// Auto-generate security configuration based on registered resources
     fn build_resource_security(&self) -> crate::security::SecurityMiddleware {
         use crate::security::{AccessLevel, ResourceAccessControl, SecurityMiddleware};
@@ -1806,6 +1821,8 @@ impl McpServerBuilder {
             self.enable_sse,
             #[cfg(feature = "http")]
             self.allow_unauthenticated_ping,
+            #[cfg(feature = "http")]
+            self.origin_policy,
         ))
     }
 }

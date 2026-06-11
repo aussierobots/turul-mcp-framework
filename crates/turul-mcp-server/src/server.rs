@@ -118,6 +118,8 @@ pub struct McpServer {
     enable_sse: bool,
     #[cfg(feature = "http")]
     allow_unauthenticated_ping: Option<bool>,
+    #[cfg(feature = "http")]
+    origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
 }
 
 impl McpServer {
@@ -148,6 +150,7 @@ impl McpServer {
         #[cfg(feature = "http")] enable_cors: bool,
         #[cfg(feature = "http")] enable_sse: bool,
         #[cfg(feature = "http")] allow_unauthenticated_ping: Option<bool>,
+        #[cfg(feature = "http")] origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
     ) -> Self {
         // Create session manager with server capabilities, custom timeouts, and storage
         let session_manager = match &session_storage {
@@ -244,6 +247,8 @@ impl McpServer {
             enable_sse,
             #[cfg(feature = "http")]
             allow_unauthenticated_ping,
+            #[cfg(feature = "http")]
+            origin_policy,
         }
     }
 
@@ -516,6 +521,9 @@ impl McpServer {
         // Pass allow_unauthenticated_ping config to HTTP layer
         if let Some(allow) = self.allow_unauthenticated_ping {
             builder = builder.allow_unauthenticated_ping(allow);
+        }
+        if let Some(policy) = self.origin_policy.clone() {
+            builder = builder.origin_policy(policy);
         }
 
         // Register all MCP handlers with session awareness
@@ -790,6 +798,9 @@ impl McpServer {
         // Pass allow_unauthenticated_ping config to HTTP layer
         if let Some(allow) = self.allow_unauthenticated_ping {
             builder = builder.allow_unauthenticated_ping(allow);
+        }
+        if let Some(policy) = self.origin_policy.clone() {
+            builder = builder.origin_policy(policy);
         }
 
         // TODO investigate if this also adds the tools/list and tools/call handlers

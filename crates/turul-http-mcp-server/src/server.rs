@@ -46,6 +46,11 @@ pub struct ServerConfig {
     ///
     /// Set to false for hardened deployments that require session for all methods.
     pub allow_unauthenticated_ping: bool,
+    /// Origin-header validation policy (DNS-rebinding protection).
+    ///
+    /// Streamable HTTP §Security: "If the `Origin` header is present and
+    /// invalid, servers MUST respond with HTTP 403 Forbidden."
+    pub origin_policy: crate::origin::OriginPolicy,
 }
 
 impl Default for ServerConfig {
@@ -59,6 +64,7 @@ impl Default for ServerConfig {
             enable_post_sse: false, // Disabled by default for better client compatibility (e.g., MCP Inspector)
             session_expiry_minutes: 30, // 30 minutes default
             allow_unauthenticated_ping: true, // Allow pre-init pings per MCP spec
+            origin_policy: crate::origin::OriginPolicy::default(),
         }
     }
 }
@@ -195,6 +201,12 @@ impl HttpMcpServerBuilder {
     ///
     /// Default: `true` (sessionless pings allowed per MCP spec).
     /// Set to `false` for hardened deployments requiring session for all methods.
+    /// Set the Origin-header validation policy (DNS-rebinding protection).
+    pub fn origin_policy(mut self, policy: crate::origin::OriginPolicy) -> Self {
+        self.config.origin_policy = policy;
+        self
+    }
+
     pub fn allow_unauthenticated_ping(mut self, allow: bool) -> Self {
         self.config.allow_unauthenticated_ping = allow;
         self

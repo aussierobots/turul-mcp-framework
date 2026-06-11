@@ -52,6 +52,7 @@ pub mod json_rpc_responses;
 pub mod mcp_session;
 pub mod middleware;
 pub mod notification_bridge;
+pub mod origin;
 pub mod prelude;
 pub mod protocol;
 pub mod routes;
@@ -71,6 +72,7 @@ pub use notification_bridge::{
     BroadcastError, NotificationBroadcaster, SharedNotificationBroadcaster,
     StreamManagerNotificationBroadcaster,
 };
+pub use origin::OriginPolicy;
 pub use protocol::{
     McpProtocolVersion, extract_last_event_id, extract_protocol_version, extract_session_id,
 };

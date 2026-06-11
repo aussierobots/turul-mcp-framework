@@ -161,6 +161,7 @@ pub struct LambdaMcpServerBuilder {
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
+    origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
 }
 
 impl LambdaMcpServerBuilder {
@@ -286,6 +287,7 @@ impl LambdaMcpServerBuilder {
             strict_lifecycle: true, // MCP 2025-11-25: require notifications/initialized
             enable_sse: cfg!(feature = "sse"),
             server_config: ServerConfig::default(),
+            origin_policy: None,
             stream_config: StreamConfig::default(),
             middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack::new(),
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
@@ -906,6 +908,16 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Configure server settings
+    /// Set the Origin-header validation policy explicitly (DNS-rebinding
+    /// protection). When not set, the policy is derived from the CORS
+    /// configuration at build time (ADR-031): `cors_allow_all_origins()` →
+    /// `Disabled`, an explicit origin list → `AllowList`, no CORS config →
+    /// the `SameOriginOrLoopback` default.
+    pub fn origin_policy(mut self, policy: turul_http_mcp_server::OriginPolicy) -> Self {
+        self.origin_policy = Some(policy);
+        self
+    }
+
     pub fn server_config(mut self, config: ServerConfig) -> Self {
         self.server_config = config;
         self
@@ -983,8 +995,22 @@ impl LambdaMcpServerBuilder {
     /// Build the Lambda MCP server
     ///
     /// Returns a server that can create handlers when needed.
-    pub async fn build(self) -> Result<LambdaMcpServer> {
+    pub async fn build(mut self) -> Result<LambdaMcpServer> {
         use turul_mcp_session_storage::InMemorySessionStorage;
+
+        // Origin validation policy (ADR-031): an explicit `.origin_policy()`
+        // wins; otherwise an explicit CORS configuration is the operator's
+        // declaration of allowed origins and the policy follows it. With no
+        // CORS config, the `SameOriginOrLoopback` default stands.
+        if let Some(policy) = self.origin_policy.take() {
+            self.server_config.origin_policy = policy;
+        } else if let Some(cors) = &self.cors_config {
+            self.server_config.origin_policy = if cors.allowed_origins.iter().any(|o| o == "*") {
+                turul_http_mcp_server::OriginPolicy::Disabled
+            } else {
+                turul_http_mcp_server::OriginPolicy::AllowList(cors.allowed_origins.clone())
+            };
+        }
 
         // Validate configuration (same as MCP server)
         if self.name.is_empty() {
@@ -1492,6 +1518,48 @@ mod tests {
             assert!(
                 resp.headers().contains_key("access-control-allow-methods"),
                 "preflight must advertise methods",
+            );
+        }
+
+        /// CORS origin list derives the origin-validation AllowList
+        /// (ADR-031): the listed origin reaches dispatch; an unlisted
+        /// cross-origin request is rejected 403 before anything else runs.
+        #[tokio::test]
+        async fn cors_origin_list_derives_origin_allowlist() {
+            let server = LambdaMcpServerBuilder::new()
+                .cors_allow_origins(vec!["https://client.example.test".to_string()])
+                .storage(Arc::new(InMemorySessionStorage::new()))
+                .sse(false)
+                .build()
+                .await
+                .unwrap();
+            let handler = server.handler().await.unwrap();
+
+            // Listed origin: passes the origin gate (reaches protocol handling).
+            let resp = handler.handle_streaming(post_request()).await.unwrap();
+            assert_ne!(
+                resp.status(),
+                403,
+                "allowlisted origin must pass the origin gate"
+            );
+
+            // Unlisted origin: rejected by the origin gate.
+            let req = Request::builder()
+                .method("POST")
+                .uri("/mcp")
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/event-stream")
+                .header("MCP-Protocol-Version", "2025-11-25")
+                .header("Origin", "https://other.example.test")
+                .body(LambdaBody::Text(
+                    r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+                ))
+                .unwrap();
+            let resp = handler.handle_streaming(req).await.unwrap();
+            assert_eq!(
+                resp.status(),
+                403,
+                "unlisted cross-origin request must get 403 Forbidden"
             );
         }
 

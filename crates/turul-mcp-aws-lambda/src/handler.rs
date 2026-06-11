@@ -1574,7 +1574,12 @@ mod tests {
             let session_storage = Arc::new(InMemorySessionStorage::new());
             let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
             let dispatcher = Arc::new(JsonRpcDispatcher::new());
-            let config = ServerConfig::default();
+            // Direct construction bypasses the builder's CORS→origin-policy
+            // derivation (ADR-031); allow-all CORS pairs with Disabled.
+            let config = ServerConfig {
+                origin_policy: turul_http_mcp_server::OriginPolicy::Disabled,
+                ..Default::default()
+            };
             let capabilities = ServerCapabilities::default();
 
             let mut middleware = MiddlewareStack::new();

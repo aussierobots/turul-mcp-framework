@@ -513,6 +513,24 @@ impl StreamableHttpHandler {
                 .map(|body| body.map_err(|never| match never {}).boxed_unsync());
         }
 
+        // DNS-rebinding protection (ADR-031): "If the `Origin` header is
+        // present and invalid, servers MUST respond with HTTP 403 Forbidden."
+        // OPTIONS preflight (handled above) is exempt; the actual request is
+        // gated here, ahead of validation, auth, and body parsing.
+        if let Err(origin) =
+            crate::origin::validate_origin(req.headers(), &self.config.origin_policy)
+        {
+            warn!("Rejecting request with disallowed Origin: {origin}");
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .header("Content-Type", "text/plain")
+                .body(Full::new(Bytes::from_static(
+                    b"Forbidden: Origin not allowed",
+                )))
+                .unwrap()
+                .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+        }
+
         // 2026-07-28 stateless core: the MCP endpoint accepts POST only. Legacy-era
         // GET (standalone SSE stream, optionally resumed via Last-Event-ID) and
         // DELETE (session termination) get 405 Method Not Allowed

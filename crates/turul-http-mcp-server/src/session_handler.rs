@@ -259,6 +259,22 @@ impl SessionMcpHandler {
             req.method(),
             req.uri().path()
         );
+        // DNS-rebinding protection (ADR-031): present-and-invalid Origin → 403.
+        // OPTIONS preflight is exempt; the actual request is gated.
+        if *req.method() != Method::OPTIONS
+            && let Err(origin) =
+                crate::origin::validate_origin(req.headers(), &self.config.origin_policy)
+        {
+            warn!("Rejecting request with disallowed Origin: {origin}");
+            let response: Response<JsonRpcBody> = Response::builder()
+                .status(hyper::StatusCode::FORBIDDEN)
+                .header("Content-Type", "text/plain")
+                .body(Full::new(bytes::Bytes::from_static(
+                    b"Forbidden: Origin not allowed",
+                )))
+                .expect("static 403 response");
+            return Ok(response.map(convert_to_unified_body));
+        }
         match *req.method() {
             Method::POST => {
                 let response = self.handle_json_rpc_request(req).await?;

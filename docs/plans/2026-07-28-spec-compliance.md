@@ -15,7 +15,7 @@
 
 | Total requirements audited | ✅ | 🟡 | ❌ | 🧪 | ➖ |
 |---|---|---|---|---|---|
-| 489 | 235 | 92 | 32 | 30 | 100 |
+| 489 | 236 | 92 | 31 | 30 | 100 |
 
 **Confirmed gaps:** 73 (1 P0, 14 P1, 58 P2) — see the
 [gap register](#gap-register). 17 additional claims were refuted in verification and are NOT carried here.
@@ -341,7 +341,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/transports/stre
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
 | "The server MUST provide a single HTTP endpoint path (the MCP endpoint) that supports POST" | MUST | ✅ compliant | streamable_http.rs:543-563 POST routing on the /mcp path; every 2026 test suite exercises it (e.g. crates/turul-mcp-server/tests/stateless_2026_http_surface.rs) |
-| "Servers MUST validate the Origin header on all incoming connections to prevent DNS rebinding attacks"; "If the Origin header is present and invalid, servers MUST respond with HTTP 403 Forbidden" | MUST | ❌ gap | No Origin validation exists anywhere in crates/turul-http-mcp-server: src/cors.rs only EMITS Access-Control-Allow-Origin: * (cors.rs:49-51); grep for Origin checking in server.rs/routes.rs/middleware/ returns nothing; no 403-on-invalid-Origin path — *GAP-1 (P0). The default bind is localhost, exactly the DNS-rebinding target this MUST protects* |
+| "Servers MUST validate the Origin header on all incoming connections to prevent DNS rebinding attacks"; "If the Origin header is present and invalid, servers MUST respond with HTTP 403 Forbidden" | MUST | ✅ compliant | FIXED 2026-06-11 (ADR-031): `OriginPolicy` on `ServerConfig` (default `SameOriginOrLoopback`; `AllowList`/`Disabled` knobs), enforced at both handler entries (`origin.rs::validate_origin`); wire tests `turul-mcp-server/tests/origin_validation_2026.rs` (7 tests, revert-and-fail proven) + 6 unit tests |
 | "When running locally, servers SHOULD bind only to localhost (127.0.0.1)" | SHOULD | ✅ compliant | Default bind address is 127.0.0.1:8000 — crates/turul-mcp-server/src/builder.rs:256 and src/http.rs:30 |
 | "Servers SHOULD implement proper authentication for all connections" | SHOULD | ✅ compliant | Opt-in OAuth 2.1 resource server (crates/turul-mcp-oauth) wired via pre-session middleware; 401 challenge path streamable_http.rs:1301-1312 + build_http_challenge_response:2775-2796 — *Opt-in, not default — acceptable for SHOULD* |
 | "Every JSON-RPC message sent from the client MUST be a new HTTP POST request to the MCP endpoint" / "The client MUST use HTTP POST" | MUST | ✅ compliant | crates/turul-mcp-client/src/transport/http.rs:650-880 — all sends are POSTs; e2e crates/turul-mcp-client/tests/e2e_2026_real_server.rs::bilingual_client_negotiates_and_calls_tools_on_a_real_2026_server |
@@ -747,7 +747,7 @@ in the same slice as the fix.
 
 ### P0
 
-- [ ] **TX/GAP-1** — No Origin-header validation (DNS-rebinding protection) on the Streamable HTTP endpoint
+- [x] **TX/GAP-1** — No Origin-header validation (DNS-rebinding protection) on the Streamable HTTP endpoint — **FIXED 2026-06-11** (ADR-031; `origin_validation_2026.rs`)
   - Requirement: "Servers MUST validate the Origin header on all incoming connections to prevent DNS rebinding attacks. If the Origin header is present and invalid, servers MUST respond with HTTP 403 Forbidden." — https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http §Security & Endpoint
   - Current: No code path reads or validates Origin. crates/turul-http-mcp-server/src/cors.rs:49-51 only EMITS Access-Control-Allow-Origin: * on responses (which actively weakens browser-side protection); grep across crates/turul-http-mcp-server/src/{server.rs,routes.rs,streamable_http.rs,middleware/} finds no Origin check and no 403-on-invalid-Origin path. Default server binds 127.0.0.1:8000 (crates/turul-mcp
   - Fix: crates/turul-http-mcp-server (streamable_http.rs handle_request, before validate(); config knob on ServerConfig for allowed origins). Governing: ADR-027 (2026 lane); add wire tests per CLAUDE.md §Test Coverage Discipline (invalid Origin → 403, absent Origin → pass).
@@ -1089,8 +1089,9 @@ The 2026-07-28 stateless core changes the deployment posture (see
   --features protocol-2025-11-25` = stateful 2025 line (single-spec per build, ADR-029).
 - `subscriptions/listen` streams are held in-process; scale-out needs either sticky routing
   for listen connections or acceptance of re-subscribe-on-rebalance (spec-sanctioned).
-- Origin validation / DNS-rebinding protection (gap TX/GAP-1, P0) applies to any deployment
-  that binds beyond loopback — fix lands as a transport config knob.
+- Origin validation / DNS-rebinding protection is ON by default (`OriginPolicy::SameOriginOrLoopback`,
+  ADR-031); cross-origin browser deployments must configure `AllowList`, and deployments that
+  enforce origin upstream (API Gateway / ALB) may set `Disabled`.
 
 **Version negotiation in mixed fleets**
 - The bilingual client (`turul-mcp-client`, ADR-030) probes `server/discover` and falls back
