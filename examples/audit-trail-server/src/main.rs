@@ -2,6 +2,10 @@
 //!
 //! This example demonstrates a compliance-focused audit trail system using SQLite for persistence.
 //! It shows how to log immutable audit events, search audit logs, and generate compliance reports.
+//!
+//! Attribution is actor-centric: callers pass an explicit `actor`, and each row also
+//! records the per-request correlation id. On the 2026-07-28 stateless core there is no
+//! client-visible session, so nothing here keys on cross-request session identity.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -12,7 +16,6 @@ use std::sync::{Arc, OnceLock};
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::{McpError, McpResult};
 use turul_mcp_server::{McpServer, SessionContext};
-use turul_mcp_session_storage::SqliteSessionStorage;
 use uuid::Uuid;
 
 /// Global database pool shared by all tools
@@ -28,7 +31,7 @@ fn get_db_pool() -> McpResult<&'static Arc<SqlitePool>> {
 struct AuditEvent {
     id: String,
     timestamp: DateTime<Utc>,
-    session_id: String,
+    request_id: String,
     event_type: String,
     actor: Option<String>,
     resource: Option<String>,
@@ -44,7 +47,7 @@ async fn init_database(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         CREATE TABLE IF NOT EXISTS audit_logs (
             id TEXT PRIMARY KEY,
             timestamp TEXT NOT NULL,
-            session_id TEXT NOT NULL,
+            request_id TEXT NOT NULL,
             event_type TEXT NOT NULL,
             actor TEXT,
             resource TEXT,
@@ -54,7 +57,7 @@ async fn init_database(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         );
 
         CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
-        CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_logs(session_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_request ON audit_logs(request_id);
         CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_logs(event_type);
         CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_logs(actor);
         "#,
@@ -95,9 +98,13 @@ pub struct LogAuditEventTool {
 
 impl LogAuditEventTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session =
-            session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
         let db_pool = get_db_pool()?;
+        // Correlation id for this request: the framework's per-request internal
+        // context id when present, otherwise a fresh UUID.
+        let request_id = session
+            .as_ref()
+            .map(|s| s.session_id.clone())
+            .unwrap_or_else(|| Uuid::now_v7().as_simple().to_string());
 
         let metadata = self.metadata.clone().unwrap_or(json!({}));
 
@@ -105,7 +112,7 @@ impl LogAuditEventTool {
         let audit_event = AuditEvent {
             id: Uuid::now_v7().as_simple().to_string(),
             timestamp: Utc::now(),
-            session_id: session.session_id.clone(),
+            request_id,
             event_type: self.event_type.clone(),
             actor: self.actor.clone(),
             resource: self.resource.clone(),
@@ -117,13 +124,13 @@ impl LogAuditEventTool {
         // Store in database (immutable)
         let db_result = sqlx::query(
             r#"
-            INSERT INTO audit_logs (id, timestamp, session_id, event_type, actor, resource, action, result, metadata)
+            INSERT INTO audit_logs (id, timestamp, request_id, event_type, actor, resource, action, result, metadata)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(&audit_event.id)
         .bind(audit_event.timestamp.to_rfc3339())
-        .bind(&audit_event.session_id)
+        .bind(&audit_event.request_id)
         .bind(&audit_event.event_type)
         .bind(&audit_event.actor)
         .bind(&audit_event.resource)
@@ -135,13 +142,10 @@ impl LogAuditEventTool {
 
         match db_result {
             Ok(_) => {
-                // Send progress notification
-                session
-                    .notify_progress(
-                        format!("audit_{}", audit_event.event_type.to_lowercase()),
-                        1,
-                    )
-                    .await;
+                // Request-scoped progress: no-op unless the caller sent a progressToken
+                if let Some(session) = &session {
+                    session.notify_request_progress(1.0, Some(1.0)).await;
+                }
 
                 Ok(json!({
                     "logged": true,
@@ -238,7 +242,7 @@ impl SearchAuditTrailTool {
                 json!({
                     "id": row.get::<String, _>("id"),
                     "timestamp": timestamp_str,
-                    "session_id": row.get::<String, _>("session_id"),
+                    "request_id": row.get::<String, _>("request_id"),
                     "event_type": row.get::<String, _>("event_type"),
                     "actor": row.get::<Option<String>, _>("actor"),
                     "resource": row.get::<Option<String>, _>("resource"),
@@ -343,17 +347,17 @@ impl GenerateComplianceReportTool {
             .map(|row| (row.get::<String, _>("result"), row.get::<i32, _>("count")))
             .collect();
 
-        // Get session statistics
-        let session_stats_query = format!(
-            "SELECT COUNT(DISTINCT session_id) as unique_sessions, COUNT(*) as total_events FROM audit_logs WHERE 1=1 {}",
+        // Actor-centric statistics (attribution comes from the explicit actor param)
+        let actor_stats_query = format!(
+            "SELECT COUNT(DISTINCT actor) as unique_actors, COUNT(*) as total_events FROM audit_logs WHERE 1=1 {}",
             time_filter
         );
-        let stats_row = sqlx::query(&session_stats_query)
+        let stats_row = sqlx::query(&actor_stats_query)
             .fetch_one(&**db_pool)
             .await
-            .map_err(|e| McpError::tool_execution(&format!("Session stats query failed: {}", e)))?;
+            .map_err(|e| McpError::tool_execution(&format!("Actor stats query failed: {}", e)))?;
 
-        let unique_sessions: i32 = stats_row.get("unique_sessions");
+        let unique_actors: i32 = stats_row.get("unique_actors");
         let total_events: i32 = stats_row.get("total_events");
 
         let report = match self.report_type.as_str() {
@@ -366,8 +370,8 @@ impl GenerateComplianceReportTool {
                 },
                 "summary": {
                     "total_events": total_events,
-                    "unique_sessions": unique_sessions,
-                    "events_per_session": if unique_sessions > 0 { total_events as f64 / unique_sessions as f64 } else { 0.0 },
+                    "unique_actors": unique_actors,
+                    "events_per_actor": if unique_actors > 0 { total_events as f64 / unique_actors as f64 } else { 0.0 },
                     "success_rate": *result_counts.get("SUCCESS").unwrap_or(&0) as f64 / total_events.max(1) as f64 * 100.0
                 }
             }),
@@ -380,7 +384,7 @@ impl GenerateComplianceReportTool {
                 },
                 "statistics": {
                     "total_events": total_events,
-                    "unique_sessions": unique_sessions,
+                    "unique_actors": unique_actors,
                     "event_types": event_counts,
                     "results": result_counts
                 }
@@ -439,10 +443,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set global database pool
     DB_POOL.set(db_pool).expect("DB_POOL already initialized");
 
-    // Create SQLite session storage
-    let session_storage = Arc::new(SqliteSessionStorage::new().await?);
-    println!("Session storage initialized successfully");
-
     let server = McpServer::builder()
         .name("audit-trail-server")
         .version("1.0.0")
@@ -450,12 +450,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions(
             "This server provides compliance-focused audit trail logging with SQLite persistence.",
         )
-        .with_session_storage(session_storage)
         .tool(LogAuditEventTool::default())
         .tool(SearchAuditTrailTool::default())
         .tool(GenerateComplianceReportTool::default())
         .bind_address("127.0.0.1:8009".parse()?)
-        .sse(true)
         .build()?;
 
     println!("Audit trail server running at: http://127.0.0.1:8009/mcp");

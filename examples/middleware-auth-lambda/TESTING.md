@@ -209,7 +209,7 @@ Both test events include:
 - [ ] **V1 flat extraction works**: Same fields as V1 nested (internal fields filtered)
 - [ ] **Field sanitization**: camelCase → snake_case (`userId` → `user_id`)
 - [ ] **Defensive behavior**: No crashes on missing/invalid data
-- [ ] **Initialize succeeds**: Returns valid MCP initialize response
+- [ ] **Discover succeeds**: `server/discover` returns serverInfo and capabilities
 
 ### 🔍 What to Look For
 

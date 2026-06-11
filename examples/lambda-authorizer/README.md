@@ -4,11 +4,14 @@ API Gateway **REQUEST** authorizer Lambda for MCP Streamable HTTP transport.
 
 ## Why This Exists
 
-MCP Streamable HTTP uses multiple HTTP methods on the same endpoint:
+An MCP API serves more than one method/path even when the MCP endpoint itself
+is POST-only (the 2026-07-28 stateless default):
 
-- **POST** `/` — JSON-RPC requests
-- **GET** `/` — SSE streaming (notifications, task progress)
-- **DELETE** `/` — session termination
+- **POST** `/mcp` — JSON-RPC requests (the only MCP method on 2026-07-28)
+- **OPTIONS** `*` — CORS preflight for browser clients
+- **GET** `/.well-known/*` — OAuth protected-resource metadata routes
+- **GET / DELETE** `/mcp` — SSE streaming and session termination on the
+  2025-11-25 lane (the paired `lambda-mcp-server`)
 
 API Gateway REST API (v1) caches authorizer responses keyed by the full `methodArn`
 (which includes the HTTP method). Without wildcarding, the first cached policy

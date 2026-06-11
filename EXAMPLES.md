@@ -61,7 +61,7 @@ cargo run --example minimal-server
 - **PostgreSQL**: Requires Docker container (instructions in example)
 - **DynamoDB**: Requires AWS credentials configuration
 
-## 🟡 **RESOURCE SERVERS** (6 examples) - Resource Handling & Phase 6 Session-Aware
+## 🟡 **RESOURCE SERVERS** - Resource Handling & Session-Aware (2025 lane)
 
 | Example | Port | Status | Description | Key Features |
 |---------|------|--------|-------------|--------------|
@@ -88,7 +88,6 @@ cargo run --example minimal-server
 
 | Example | Port | Status | Description | Advanced Features |
 |---------|------|--------|-------------|-------------------|
-| **comprehensive-server** | 8002 | ✅ VALIDATED | All MCP features in one server | Complete framework showcase |
 | **audit-trail-server** | 8009 | ✅ VALIDATED | Audit logging | Comprehensive audit logging system |
 | **zero-config-getting-started** | 8641 | ✅ VALIDATED | Zero-configuration setup | Getting started tutorial server |
 
@@ -125,7 +124,6 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 | Example | Type | Status | Description | AWS Features |
 |---------|------|--------|-------------|--------------|
 | **lambda-mcp-server** | Lambda | ✅ VALIDATED | Serverless MCP server | Basic Lambda deployment |
-| **lambda-mcp-server-streaming** | Lambda | ✅ VALIDATED | Streaming Lambda server | Lambda with streaming support |
 | **lambda-mcp-client** | Lambda Client | ✅ VALIDATED | Lambda MCP client | AWS Lambda client integration |
 | **lambda-authorizer** | Lambda | ✅ VALIDATED | API Gateway authorizer | REQUEST authorizer with wildcard methodArn for MCP |
 
@@ -154,7 +152,6 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 |---------|------|--------|-------------|---------------|
 | **tasks-e2e-inmemory-server** | Server | ✅ VALIDATED | Task-enabled MCP server | `slow_add` tool with configurable delay, InMemory storage |
 | **tasks-e2e-inmemory-client** | Client | ✅ VALIDATED | Task lifecycle client | Full task lifecycle: create, poll, cancel, result |
-| **client-task-lifecycle** | Client | ✅ VALIDATED | Task API demonstration | `call_tool_with_task`, `get_task`, `cancel_task` |
 
 **Task E2E Testing**:
 ```bash
@@ -171,28 +168,27 @@ These examples demonstrate MCP 2025-11-25 type construction without starting a s
 
 | Example | Type | Status | Description | Types Demonstrated |
 |---------|------|--------|-------------|-------------------|
-| **builders-showcase** | Demo | ✅ VALIDATED | All 9 MCP builders | Tool, Resource, Prompt, Completion builders |
 | **icon-showcase** | Demo | ✅ VALIDATED | Icon support | `Icon` struct on tools, resources, prompts |
-| **sampling-with-tools-showcase** | Demo | ✅ VALIDATED | Sampling with tools | `tools` field on `CreateMessageParams` |
-| **task-types-showcase** | Demo | ✅ VALIDATED | Task type system | `Task`, `TaskStatus`, `TaskMetadata`, CRUD types |
 
 ## 📚 **PERFORMANCE TESTING** (1 example) - Benchmarks
 
 | Example | Type | Status | Description | Purpose |
 |---------|------|--------|-------------|---------|
-| **performance-testing** | Benchmark | ✅ VALIDATED | Performance benchmarks | Comprehensive benchmark suite |
 
 ## 🚨 **COMPREHENSIVE VALIDATION RESULTS**
 
-### ✅ **ALL 58 EXAMPLES COMPILE — 50 FUNCTIONALLY VERIFIED**
-**v0.3.0 (MCP 2025-11-25) — Last verified: 2026-02-26**
+### ✅ **ALL 50 ACTIVE EXAMPLES COMPILE UNDER THEIR LANE'S CI GATES**
+**0.4.0 branch (MCP 2026-07-28 default, 2025-11-25 opt-in) — last reconciled 2026-06-12.**
+The per-example functional verification ledger lives in
+`docs/plans/2026-07-28-examples-review.md`; the 2026-06-12 migrate slice
+re-verified its six examples live on the wire.
 
 - **Getting Started** - 5 examples (all tool creation levels)
 - **Session Storage** - 3 examples (SQLite, PostgreSQL, DynamoDB)
 - **Resource Servers** - 6 examples (session-aware resources)
 - **Feature-Specific** - 8 examples (prompts, sampling, elicitation, etc.)
-- **Advanced/Composite** - 5 examples (comprehensive, alerts, audit, logging)
-- **Session & State** - 4 examples (stateful operations, logging)
+- **Advanced/Composite** - audit-trail, pagination, icon showcase
+- **Session & State** - stateful-server + session-aware-resource-server (2025-pinned) and the storage-backend trio
 - **Client Examples** - 7 examples (client-server communication — see the pairs table above)
 - **AWS Lambda** - 4 examples (server, streaming, client, authorizer)
 - **Tool Creation & Schemas** - 6 examples (macro patterns + output schemas)

@@ -146,8 +146,8 @@ impl McpMiddleware for AuthMiddleware {
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip authentication for initialize (session creation) and ping (pre-init health check)
-        if ctx.method() == "initialize" || ctx.method() == "ping" {
+        // Skip authentication for ping health checks only
+        if ctx.method() == "ping" {
             debug!("Skipping auth for {} method", ctx.method());
             return Ok(());
         }
@@ -253,14 +253,17 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
 
     info!("🔧 Creating Lambda MCP handler with auth middleware");
 
-    // Create DynamoDB session storage
+    // DynamoDB backs the framework's internal per-request contexts and event
+    // streams on the 2026 stateless lane — there is no client-visible session.
+    // Each request writes an ephemeral row; for auth-only deployments the
+    // in-memory default avoids that per-request DynamoDB cost.
     let storage = Arc::new(
         DynamoDbSessionStorage::new()
             .await
             .map_err(|e| Error::from(format!("Failed to create DynamoDB storage: {}", e)))?,
     );
 
-    info!("💾 DynamoDB session storage initialized");
+    info!("💾 DynamoDB storage initialized (per-request internal contexts)");
 
     // Create authentication middleware
     let auth_middleware = Arc::new(AuthMiddleware::new());
@@ -300,7 +303,7 @@ async fn main() -> Result<(), Error> {
     info!("  - X-API-Key header validation");
     info!("  - Lambda authorizer context extraction");
     info!("  - User context injection");
-    info!("  - DynamoDB session storage");
+    info!("  - DynamoDB-backed per-request contexts (no client sessions on 2026)");
     info!("  - CORS support");
 
     info!("📋 Environment variables:");
@@ -319,7 +322,7 @@ async fn main() -> Result<(), Error> {
 
     // Build the handler eagerly in main() so DDB session storage init,
     // server build, and tool registration land in Lambda's Init Duration
-    // — not inside the first invocation's handler_total. See ADR-024.
+    // — not inside the first invocation's handler_total.
     let handler = create_lambda_mcp_handler().await?;
     info!("🎯 Lambda handler ready with auth middleware");
 

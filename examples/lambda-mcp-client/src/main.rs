@@ -43,12 +43,6 @@ enum Commands {
     Test(TestArgs),
     /// Connect to server and run interactive session
     Connect(ConnectArgs),
-    /// Validate tool schemas
-    ValidateSchemas(ValidateArgs),
-    /// Benchmark server performance
-    Benchmark(BenchmarkArgs),
-    /// Monitor server health
-    Monitor(MonitorArgs),
 }
 
 #[derive(Args)]
@@ -103,60 +97,6 @@ struct ConnectArgs {
     debug: bool,
 }
 
-#[derive(Args)]
-struct ValidateArgs {
-    /// Server URL to test
-    #[arg(
-        long,
-        default_value = "http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server"
-    )]
-    url: String,
-
-    /// Tool to validate (or 'all')
-    #[arg(long, default_value = "all")]
-    tool: String,
-}
-
-#[derive(Args)]
-struct BenchmarkArgs {
-    /// Server URL to benchmark
-    #[arg(
-        long,
-        default_value = "http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server"
-    )]
-    url: String,
-
-    /// Number of requests to send
-    #[arg(long, default_value = "100")]
-    requests: u32,
-
-    /// Number of concurrent clients
-    #[arg(long, default_value = "10")]
-    concurrency: u32,
-
-    /// Request rate limit (requests/second)
-    #[arg(long)]
-    rate_limit: Option<u32>,
-}
-
-#[derive(Args)]
-struct MonitorArgs {
-    /// Server URL to monitor
-    #[arg(
-        long,
-        default_value = "http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server"
-    )]
-    url: String,
-
-    /// Monitoring interval in seconds
-    #[arg(long, default_value = "30")]
-    interval: u64,
-
-    /// Alert thresholds configuration file
-    #[arg(long)]
-    alert_config: Option<String>,
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize logging
@@ -172,9 +112,6 @@ async fn main() -> Result<()> {
     match cli.command {
         Commands::Test(args) => run_tests(args).await,
         Commands::Connect(args) => run_interactive_session(args).await,
-        Commands::ValidateSchemas(args) => validate_schemas(args).await,
-        Commands::Benchmark(args) => run_benchmark(args).await,
-        Commands::Monitor(args) => run_monitoring(args).await,
     }
 }
 
@@ -192,7 +129,7 @@ async fn run_tests(args: TestArgs) -> Result<()> {
     let client_config = McpClientConfig {
         base_url: args.url.clone(),
         timeout: Duration::from_secs(args.timeout),
-        user_agent: "lambda-mcp-client/0.1.0".to_string(),
+        user_agent: "lambda-mcp-client/0.4.0".to_string(),
     };
 
     let test_runner = TestRunner::new(client_config, args.concurrency);
@@ -245,7 +182,7 @@ async fn run_interactive_session(args: ConnectArgs) -> Result<()> {
     let client_config = McpClientConfig {
         base_url: args.url,
         timeout: Duration::from_secs(30),
-        user_agent: "lambda-mcp-client-interactive/0.1.0".to_string(),
+        user_agent: "lambda-mcp-client-interactive/0.4.0".to_string(),
     };
 
     let session_id = args
@@ -348,53 +285,6 @@ async fn run_interactive_session(args: ConnectArgs) -> Result<()> {
     }
 
     println!("\n{}", "👋 Session ended".bright_blue());
-    Ok(())
-}
-
-/// Validate tool schemas
-async fn validate_schemas(args: ValidateArgs) -> Result<()> {
-    println!("{}", "🔍 Schema Validation".bright_blue().bold());
-    println!("Server URL: {}", args.url.bright_cyan());
-    println!("Tool: {}", args.tool.bright_cyan());
-    println!();
-
-    // Implementation for schema validation
-    println!("📋 Schema validation would check MCP protocol compliance");
-    println!("   Example checks: request format, response structure, error codes");
-    Ok(())
-}
-
-/// Run performance benchmark
-async fn run_benchmark(args: BenchmarkArgs) -> Result<()> {
-    println!("{}", "⚡ Performance Benchmark".bright_blue().bold());
-    println!("Server URL: {}", args.url.bright_cyan());
-    println!("Requests: {}", args.requests.to_string().bright_cyan());
-    println!(
-        "Concurrency: {}",
-        args.concurrency.to_string().bright_cyan()
-    );
-    println!();
-
-    // Implementation for benchmarking
-    println!("🏃 Performance benchmark would measure:");
-    println!("   • Request/response latency");
-    println!("   • Throughput under load");
-    println!("   • Memory usage patterns");
-    Ok(())
-}
-
-/// Run health monitoring
-async fn run_monitoring(args: MonitorArgs) -> Result<()> {
-    println!("{}", "📊 Health Monitoring".bright_blue().bold());
-    println!("Server URL: {}", args.url.bright_cyan());
-    println!("Interval: {}s", args.interval.to_string().bright_cyan());
-    println!();
-
-    // Implementation for monitoring
-    println!("📊 Health monitoring would track:");
-    println!("   • Server availability and response times");
-    println!("   • Error rates and failure patterns");
-    println!("   • Resource usage metrics");
     Ok(())
 }
 

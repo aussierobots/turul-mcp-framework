@@ -1,16 +1,23 @@
 # Pagination Server Example
 
-A comprehensive example demonstrating cursor-based pagination in MCP servers. This server shows how to handle large datasets efficiently using pagination with proper MCP 2026-07-28 compliant `_meta` fields.
+A comprehensive example demonstrating **application-level** cursor pagination
+inside tool results: a SQLite-backed dataset navigated with opaque cursor
+strings that the client passes back on each call.
+
+> **Not the protocol's list pagination.** MCP's own `cursor`/`nextCursor`
+> contract applies to list operations (`tools/list`, `resources/list`, ...)
+> and the framework handles it for you. This example shows the complementary
+> *application* pattern: paginating large data through ordinary `tools/call`
+> results, with the cursor carried in the tool's JSON payload.
 
 ## Overview
 
 This example implements a complete pagination system with:
-- **Cursor-based pagination** for large datasets (2500 sample users)
+- **Cursor-based pagination** for large datasets (10,000 sample users)
 - **Configurable page sizes** with proper validation and limits
 - **Advanced search capabilities** with relevance scoring
-- **Batch processing** with progress tracking
+- **Dataset refresh operations** with summary statistics
 - **Filtering options** including active-only user filtering
-- **MCP 2026-07-28 compliant** `_meta` fields for proper pagination metadata
 
 ## Features
 
@@ -18,30 +25,33 @@ This example implements a complete pagination system with:
 
 1. **`list_users`** - List users with cursor-based pagination and filtering
 2. **`search_users`** - Search users by name, email, or ID with pagination
-3. **`batch_process`** - Process users in batches with progress tracking
+3. **`refresh_data`** - Refresh user activity status / report dataset statistics
 
 ### 📊 **Advanced Dataset Management**
 
-- **2500 sample users** with realistic names, emails, and metadata
+- **10,000 sample users** with realistic names, emails, and metadata
 - **Configurable page sizes** (up to 100 per page for listing, 50 for search)
 - **Thread-safe access** using Arc<Mutex<>> for concurrent operations
 - **Memory efficient** cursor-based navigation
 
-### 🎯 **MCP 2026-07-28 Compliance**
+### 🎯 **Stateless cursors**
 
-- **Proper `_meta` fields** with cursor, total, and has_more information
-- **Cursor management** with string-based position tracking
-- **Pagination metadata** including total counts and navigation hints
+- **Opaque cursor strings** returned in each tool result's `pagination` block
+- **Client-supplied position**: the server keeps no per-client cursor state —
+  pass `cursor` back on the next call to continue
+- **Pagination metadata** (`has_more`, `next_cursor`, `total`) inside the
+  tool's JSON result
 
 ## Quick Start
 
 ### 1. Start the Server
 
 ```bash
-cargo run --bin pagination-server
+cargo run -p pagination-server
 ```
 
-The server will start on `http://127.0.0.1:8044/mcp` and generate a dataset with 2500 sample users.
+The server picks a free local port, prints its `http://127.0.0.1:<port>/mcp`
+URL on startup, and seeds a SQLite dataset with 10,000 sample users.
 
 ### 2. Test with MCP Client
 
@@ -80,14 +90,12 @@ You can interact with the server using any MCP client. Here are example tool cal
 }
 ```
 
-#### Batch Process Users
+#### Refresh Data
 ```json
 {
-  "name": "batch_process",
+  "name": "refresh_data",
   "arguments": {
-    "operation": "validate_emails",
-    "batch_size": 50,
-    "dry_run": true
+    "operation": "update_activity"
   }
 }
 ```
@@ -129,24 +137,16 @@ Searches users by name, email, or ID with relevance scoring and pagination.
 - **60 points**: Email contains query  
 - **40 points**: Name starts with query (word boundary)
 
-### ⚙️ `batch_process`
+### ⚙️ `refresh_data`
 
-Processes users in batches with progress tracking and cursor-based resumption.
+Mutates and reports on the dataset in place.
 
 **Parameters:**
-- `operation` (required): Operation to perform
-  - `validate_emails` - Validate email format
-  - `export_data` - Export user data
-  - `send_notifications` - Send notifications to active users
-  - `cleanup_inactive` - Mark inactive users for cleanup
-- `batch_size` (optional): Users per batch (1-200, default: 50)
-- `cursor` (optional): Resume processing from cursor position
-- `dry_run` (optional): Preview operation without changes (default: false)
+- `operation` (optional): `update_activity` (toggle user activity status) or
+  `full_stats` (report dataset statistics)
 
 **Returns:**
-- Batch processing results with detailed operation data
-- Progress tracking with completion percentage
-- Next cursor for batch resumption
+- Operation summary with affected-row counts or dataset statistics
 
 ## Data Structure
 
@@ -163,9 +163,8 @@ struct User {
 
 ### Dataset Management
 ```rust
-struct DatasetManager {
-    users: Vec<User>,    // 2500 pre-generated users
-    page_size: usize,    // Default page size (25)
+struct DatabaseManager {
+    pool: SqlitePool,    // SQLite-backed dataset (10,000 seeded users)
 }
 ```
 
@@ -191,29 +190,18 @@ let next_cursor = if end_pos < total {
 };
 ```
 
-### MCP 2026-07-28 Meta Fields
-
-All paginated responses include proper `_meta` fields:
-
-```rust
-let meta = Meta::with_pagination(
-    next_cursor.as_ref().map(|c| Cursor::new(c.clone())),
-    Some(total as u64),
-    end_pos < total  // has_more flag
-);
-```
-
 ### Response Format
 
-Paginated responses include both text summaries and structured data:
+Paginated responses carry the cursor inside the tool's JSON result, alongside
+the data and a text summary:
 
 ```json
 {
   "users": [...],
   "pagination": {
     "has_more": true,
-    "next_cursor": "50", 
-    "total": 2500,
+    "next_cursor": "50",
+    "total": 10000,
     "current_page_size": 25
   }
 }
@@ -229,11 +217,11 @@ Paginated responses include both text summaries and structured data:
 ### Scalability
 - **Thread-safe operations**: Multiple concurrent requests supported
 - **Configurable limits**: Prevents resource exhaustion
-- **Batch processing**: Handles large operations efficiently
+- **Connection pooling**: SQLite pool shared across concurrent requests
 
 ### Response Times
 - **Fast pagination**: O(1) cursor-based navigation
-- **Efficient filtering**: In-memory string matching
+- **Efficient filtering**: SQL WHERE-clause filtering in the database
 - **Search optimization**: Relevance scoring with early termination
 
 ## Error Handling
@@ -242,15 +230,14 @@ The server includes comprehensive error handling:
 
 - **Parameter validation**: Limit checking and required parameter enforcement
 - **Cursor validation**: Graceful handling of invalid cursor values
-- **Resource limits**: Protection against excessive batch sizes
 - **Operation validation**: Proper error messages for invalid operations
 
 ## Thread Safety
 
 All operations are thread-safe using:
-- **Arc<Mutex<DatasetManager>>**: Shared dataset access
-- **Data cloning**: Avoid holding locks across await points
-- **Session isolation**: Independent cursors per client session
+- **Global `OnceLock<DatabaseManager>`**: one shared SQLite pool for all tools
+- **Pool-managed connections**: no locks held across await points
+- **No server-side cursor state**: cursors are client-supplied strings, so concurrent clients never interfere
 
 ## Use Cases
 
@@ -259,9 +246,6 @@ Perfect for applications that need to present large datasets to users with effic
 
 ### 2. **Search with Pagination** 
 Demonstrates how to implement search functionality that works seamlessly with pagination.
-
-### 3. **Batch Operations**
-Shows how to implement long-running batch operations with progress tracking and resumption.
 
 ### 4. **Real-world Data Patterns**
 Realistic user data with proper email formats, names, and activity status.
@@ -275,14 +259,14 @@ let server = McpServer::builder()
     .version("1.0.0") 
     .title("MCP Pagination Server")
     .instructions("Comprehensive MCP pagination functionality...")
-    .bind_address("127.0.0.1:8044".parse()?)
+    .bind_address(format!("127.0.0.1:{}", port).parse()?)  // free local port
     .build()?;
 ```
 
 ### Dataset Configuration
 ```rust
-// Create dataset with 2500 users, 25 per page default
-let dataset = Arc::new(Mutex::new(DatasetManager::new(2500, 25)));
+// Seed the SQLite dataset with 10,000 users at startup
+let db = Arc::new(DatabaseManager::new().await?);
 ```
 
 ## Integration Examples
@@ -290,7 +274,7 @@ let dataset = Arc::new(Mutex::new(DatasetManager::new(2500, 25)));
 ### Client Implementation
 ```javascript
 // Example MCP client usage
-const client = new McpClient("http://127.0.0.1:8044/mcp");
+const client = new McpClient("http://127.0.0.1:<port>/mcp"); // port printed at startup
 
 // Paginate through all users
 let cursor = null;
@@ -334,13 +318,16 @@ async function searchUsers(query) {
 
 ### Basic Functionality Test
 ```bash
-# Start the server
-cargo run --bin pagination-server &
+# Start the server (it prints its URL, e.g. http://127.0.0.1:55123/mcp)
+cargo run -p pagination-server &
 
-# Test with curl (requires MCP client setup)
-curl -X POST http://127.0.0.1:8044/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"method": "tools/call", "params": {"name": "list_users", "arguments": {"limit": 5}}}'
+# Test with curl (substitute the printed port; 2026-07-28 stateless)
+curl -X POST http://127.0.0.1:<port>/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/call' \
+  -H 'Mcp-Name: list_users' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}},"name":"list_users","arguments":{"limit":5}}}'
 ```
 
 ### Load Testing
@@ -358,7 +345,7 @@ done
 2. **Proper Limits**: Configurable limits prevent resource exhaustion  
 3. **Thread Safety**: Safe concurrent access to shared data
 4. **Error Handling**: Comprehensive validation and error messages
-5. **MCP Compliance**: Proper use of `_meta` fields per specification
+5. **Honest framing**: app-level cursors in tool results, distinct from protocol list pagination
 6. **Memory Management**: Efficient data handling without memory leaks
 7. **Progress Tracking**: Real-time progress for long-running operations
 
@@ -366,11 +353,11 @@ done
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   MCP Client    │────│  Pagination      │────│  DatasetManager │
+│   MCP Client    │────│  Pagination      │────│ DatabaseManager │
 │                 │    │  Server          │    │                 │
-│ - Navigation    │    │ - ListUsersTool  │    │ - 2500 Users    │
+│ - Navigation    │    │ - ListUsersTool  │    │ - 10,000 Users  │
 │ - Search        │    │ - SearchTool     │    │ - Thread Safety │
-│ - Batch Ops     │    │ - BatchTool      │    │ - Filtering     │
+│ - Refresh Ops   │    │ - RefreshTool    │    │ - Filtering     │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 

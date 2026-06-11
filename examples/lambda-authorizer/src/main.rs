@@ -1,9 +1,11 @@
 //! API Gateway REQUEST Authorizer for MCP Streamable HTTP
 //!
 //! A standalone Lambda authorizer that validates API keys and returns IAM policy
-//! responses with **wildcarded methodArn**. This is essential for MCP Streamable
-//! HTTP, which uses POST (requests), GET (SSE streaming), and DELETE (session
-//! termination) on the same endpoint.
+//! responses with **wildcarded methodArn**. MCP deployments serve more than one
+//! method/path per API: on the 2026-07-28 stateless lane the MCP endpoint is
+//! POST-only but the same API also answers OPTIONS preflight and GET
+//! `/.well-known/*` metadata routes; on the 2025-11-25 lane (the paired
+//! `lambda-mcp-server`) the endpoint itself takes POST + GET (SSE) + DELETE.
 //!
 //! ## Why Wildcard the methodArn?
 //!
@@ -147,8 +149,9 @@ fn extract_api_key_from_object(headers: Option<&Value>) -> Option<String> {
 /// methodArn format: `arn:aws:execute-api:{region}:{account}:{api-id}/{stage}/{method}/{resource...}`
 ///
 /// This replaces `{stage}/{method}/{resource...}` with `{stage}/*/*`, ensuring
-/// the cached IAM policy applies to all methods and paths. Required for MCP
-/// Streamable HTTP which uses POST + GET + DELETE on the same endpoint.
+/// the cached IAM policy applies to all methods and paths the API serves
+/// (POST /mcp, OPTIONS preflight, GET /.well-known/* — plus GET/DELETE on the
+/// 2025-11-25 session lane).
 fn wildcard_method_arn(method_arn: &str) -> String {
     // Split on '/' to find the stage, then wildcard everything after it
     if let Some(slash_pos) = method_arn.find('/')

@@ -116,11 +116,11 @@ impl McpResource for ProjectDocumentationResource {
              - **Resources**: Structured data and files that clients can access\n\
              - **Prompts**: AI prompt templates for language model interactions\n\
              - **Completion**: Auto-completion suggestions for user inputs\n\
-             - **Notifications**: Real-time updates via Server-Sent Events\n\n\
-             ## Session Management\n\
-             - Stateful operations with automatic cleanup\n\
-             - Type-safe state storage and retrieval\n\
-             - Progress tracking and notification broadcasting\n\n\
+             - **Notifications**: Request-scoped updates on the originating POST's SSE response\n\n\
+             ## Stateless Core (2026-07-28)\n\
+             - Each request carries its own per-request _meta\n\
+             - No handshake and no client-visible session\n\
+             - Progress rides the request when a progressToken is supplied\n\n\
              ## Development Patterns\n\
              1. **Manual Implementation**: Full control with trait implementation\n\
              2. **Derive Macros**: Automatic schema generation from structs\n\
@@ -579,7 +579,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .resource(ConfigurationResource)
         .resource(DatabaseSchemaResource)
         .resource(SystemStatusResource)
-        .with_resources()
         .bind_address("127.0.0.1:8041".parse()?)
         .build()?;
 

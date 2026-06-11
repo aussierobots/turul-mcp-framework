@@ -76,7 +76,7 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
     // Build Lambda MCP server with all AWS tools
     let server = LambdaMcpServerBuilder::new()
         .name("aws-lambda-mcp-server")
-        .version("1.0.0")
+        .version("0.4.0")
         // AWS Lambda tools
         .tool(DynamoDbQueryTool::default())
         .tool(SnsPublishTool::default())
@@ -136,7 +136,7 @@ async fn main() -> Result<(), Error> {
 
     // Build the handler eagerly in main() so DDB session storage init,
     // server build, and tool registration land in Lambda's Init Duration
-    // — not inside the first invocation's handler_total. See ADR-024.
+    // — not inside the first invocation's handler_total.
     let handler = create_lambda_mcp_handler().await?;
     info!("🎯 Lambda handler ready (snapshot-based SSE)");
 

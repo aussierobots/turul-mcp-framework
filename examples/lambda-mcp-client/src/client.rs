@@ -93,8 +93,8 @@ impl McpClient {
             .await
             .context("Framework connection failed")?;
 
-        // For now, return a simple initialization result
-        // The framework doesn't expose the initialize method directly in the API I see
+        // connect() performed the 2025 initialize handshake internally;
+        // surface a static summary of the negotiated server here
         let init_result = InitializeResult {
             capabilities: json!({
                 "tools": {"listChanged": false},  // MCP compliance: static framework

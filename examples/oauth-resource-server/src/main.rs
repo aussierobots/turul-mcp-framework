@@ -9,16 +9,20 @@
 //! - External AS issues JWTs (this server does NOT issue tokens)
 //! - Bearer tokens are validated via JWKS fetched from the AS
 //! - RFC 9728 metadata is served at `/.well-known/oauth-protected-resource`
+//! - Required scopes are enforced per-token: a token whose `scope` claim is
+//!   missing any `--required-scope` gets HTTP 403 with a `WWW-Authenticate`
+//!   challenge carrying `error="insufficient_scope"`
 //! - Auth claims are available to tools via `SessionContext.extensions`
 //!
 //! # Usage
 //!
 //! ```bash
 //! # Start server (requires a running Authorization Server with JWKS endpoint)
-//! cargo run --bin oauth-resource-server -- \
+//! cargo run -p oauth-resource-server -- \
 //!   --jwks-uri https://auth.example.com/.well-known/jwks.json \
 //!   --resource https://example.com/mcp \
-//!   --auth-server https://auth.example.com
+//!   --auth-server https://auth.example.com \
+//!   --required-scope mcp:read
 //!
 //! # The server exposes:
 //! #   POST /mcp                                          — MCP endpoint (requires Bearer token)
@@ -41,7 +45,10 @@
 use clap::Parser;
 use serde_json::json;
 use turul_mcp_derive::McpTool;
-use turul_mcp_oauth::{ProtectedResourceMetadata, TokenClaims};
+use turul_mcp_oauth::{
+    JwtValidator, OAuthResourceMiddleware, ProtectedResourceMetadata, TokenClaims,
+    WellKnownOAuthHandler,
+};
 use turul_mcp_protocol::{McpError, McpResult};
 use turul_mcp_server::prelude::*;
 
@@ -62,6 +69,11 @@ struct Args {
     /// Authorization Server URL
     #[arg(long, default_value = "https://auth.example.com")]
     auth_server: String,
+
+    /// Scopes every validated token must carry (space-delimited `scope`
+    /// claim). Tokens missing any of them get HTTP 403 `insufficient_scope`.
+    #[arg(long = "required-scope", default_value = "mcp:read")]
+    required_scopes: Vec<String>,
 }
 
 /// Tool that reads authenticated user claims from the Bearer token
@@ -117,13 +129,24 @@ async fn main() -> McpResult<()> {
         })?
         .with_scopes(vec!["mcp:read".to_string(), "mcp:write".to_string()]);
 
-    // Create OAuth middleware + well-known route handlers (root + path form per RFC 9728 §3)
-    let (auth_middleware, routes) =
-        turul_mcp_oauth::oauth_resource_server(metadata, &args.jwks_uri).map_err(|e| {
-            McpError::InvalidRequest {
-                message: format!("OAuth setup failed: {}", e),
-            }
-        })?;
+    // Manual construction (vs the one-call `oauth_resource_server` factory)
+    // so the middleware can enforce required scopes: tokens missing any of
+    // them are rejected with 403 + WWW-Authenticate `insufficient_scope`.
+    let validator = std::sync::Arc::new(
+        JwtValidator::new(&args.jwks_uri, &args.resource).with_issuer(&args.auth_server),
+    );
+    let auth_middleware = std::sync::Arc::new(
+        OAuthResourceMiddleware::new(validator, metadata.clone())
+            .with_required_scopes(args.required_scopes.clone()),
+    );
+
+    // Well-known metadata routes, root + path form per RFC 9728 §3
+    let well_known = std::sync::Arc::new(WellKnownOAuthHandler::new(&metadata));
+    let routes: Vec<(String, std::sync::Arc<WellKnownOAuthHandler>)> = metadata
+        .well_known_paths()
+        .into_iter()
+        .map(|path| (path, well_known.clone()))
+        .collect();
 
     let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", args.port)
         .parse()
@@ -131,7 +154,7 @@ async fn main() -> McpResult<()> {
 
     let mut builder = McpServer::builder()
         .name("oauth-resource-server")
-        .version("0.3.47")
+        .version("0.4.0")
         .title("OAuth 2.1 Resource Server Example")
         .instructions(
             "This server requires a valid Bearer token from the configured \

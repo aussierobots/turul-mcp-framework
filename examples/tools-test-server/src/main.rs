@@ -695,7 +695,7 @@ impl LegacyCalculatorTool {
                 "deprecated": true,
                 "since": "0.1.0",
                 "replacement": "calculator",
-                "removal_date": "2025-12-31"
+                "removal_date": "2027-12-31"
             }
         }))
     }
@@ -762,13 +762,13 @@ struct CountAnnouncementsResult {
     pub count: u32,
 }
 
-/// Test tool that reproduces the output_field schema bug
+/// Test tool exercising a custom structuredContent field name via output_field
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "count_announcements_struct",
     description = "Count announcements using struct macro with custom output field",
     output = CountAnnouncementsResult,
-    output_field = "countResult"  // This should show up in schema, but doesn't
+    output_field = "countResult"
 )]
 pub struct CountAnnouncementsTool {
     #[param(description = "Text to analyze")]
@@ -855,7 +855,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create server with comprehensive tool collection (with strict lifecycle for testing)
     let server = McpServer::builder()
         .name("tools-test-server")
-        .version("0.3.47")
+        .version("0.4.0")
         .title("MCP Tools Test Server")
         .instructions("Comprehensive test tools for E2E validation")
         .with_strict_lifecycle() // Enable strict lifecycle enforcement for E2E testing

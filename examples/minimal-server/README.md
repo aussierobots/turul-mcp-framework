@@ -7,7 +7,7 @@ This example demonstrates the absolute minimum setup for an MCP server using the
 - **Minimal Setup**: Just 50 lines of code for a working MCP server
 - **Basic Tool Implementation**: Simple echo tool using function macro
 - **Default Configuration**: HTTP on 127.0.0.1:8641
-- **Essential MCP Functionality**: Initialize, list tools, call tools
+- **Essential MCP Functionality**: Discover the server, list tools, call tools
 
 ## Running the Example
 
@@ -17,7 +17,7 @@ cargo run --bin minimal-server
 
 The server will start on `http://127.0.0.1:8641/mcp` and provide:
 - One tool: `echo` - echoes back text input
-- Standard MCP endpoints: initialize, tools/list, tools/call
+- Standard MCP methods: server/discover, tools/list, tools/call
 
 ## Testing the Server
 
@@ -99,4 +99,4 @@ curl -X POST http://127.0.0.1:8641/mcp \
 ## Next Steps
 
 - See [calculator-add-manual-server](../calculator-add-manual-server) for the manual trait-implementation reference
-- See [comprehensive-server](../comprehensive-server) for all MCP features
+- See [streamable-http-client](../streamable-http-client) for the paired 2026 client walkthrough

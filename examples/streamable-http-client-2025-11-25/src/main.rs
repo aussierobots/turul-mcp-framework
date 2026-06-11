@@ -70,7 +70,7 @@ struct Args {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct ProgressUpdate {
-    progress: Option<u64>,
+    progress: Option<f64>,
     message: Option<String>,
     token: Option<String>,
     timestamp: std::time::Instant,
@@ -117,8 +117,10 @@ impl StreamableHttpMcpClient {
 
         self.base_client.connect().await?;
 
-        // Get server info which should include session management
-        let server_info = serde_json::json!({"placeholder": "server info"});
+        let negotiated = self.base_client.negotiated_version().await;
+        let server_info = serde_json::json!({
+            "negotiatedVersion": negotiated.map(|v| v.to_string()),
+        });
         info!("✅ Connected successfully!");
         info!(
             "📋 Server info: {}",
@@ -160,7 +162,7 @@ impl StreamableHttpMcpClient {
             .http_client
             .post(&self.base_url)
             .header("Content-Type", "application/json")
-            .header("Accept", "application/json, text/event-stream") // ✅ CRITICAL: Both formats
+            .header("Accept", "application/json, text/event-stream") // 2025 Streamable HTTP: server may answer JSON or SSE
             .header("MCP-Protocol-Version", "2025-11-25")
             // Note: Session ID handling should be done by transport layer
             .json(&request)
@@ -326,7 +328,7 @@ impl StreamableHttpMcpClient {
         let params = json.get("params").unwrap_or(&default_params);
 
         ProgressUpdate {
-            progress: params.get("progress").and_then(|p| p.as_u64()),
+            progress: params.get("progress").and_then(|p| p.as_f64()),
             message: params
                 .get("message")
                 .or_else(|| params.get("data"))
@@ -394,49 +396,56 @@ async fn main() -> Result<()> {
     let available_tools = client.list_tools().await?;
     info!("🛠️  Available tools: {:?}", available_tools);
 
-    if !available_tools.contains(&args.tool) {
+    // Use the requested tool when the server has it; otherwise fall back to
+    // the first advertised tool so the streaming demo always runs.
+    let selected_tool = if available_tools.contains(&args.tool) {
+        args.tool.clone()
+    } else {
         warn!(
             "⚠️  Tool '{}' not found. Available: {:?}",
             args.tool, available_tools
         );
         info!("🔄 Trying first available tool instead...");
+        available_tools
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("No tools available on server"))?
+    };
 
-        if let Some(first_tool) = available_tools.first() {
-            info!("🔧 Using tool: {}", first_tool);
+    let first_tool = &selected_tool;
+    info!("🔧 Using tool: {}", first_tool);
 
-            // Adjust args for common tools
-            let adjusted_args = if first_tool == "echo" {
-                json!({"message": "Hello from Streamable HTTP!"})
-            } else {
-                tool_args
-            };
+    // Adjust args for common tools
+    let adjusted_args = if first_tool == "echo" {
+        json!({"message": "Hello from Streamable HTTP!"})
+    } else {
+        tool_args
+    };
 
-            info!("");
-            info!("🌊 Step 2: Streamable HTTP Tool Execution");
-            info!("═══════════════════════════════════════════");
+    info!("");
+    info!("🌊 Step 2: Streamable HTTP Tool Execution");
+    info!("═══════════════════════════════════════════");
 
-            let result = client
-                .call_tool_streaming(first_tool, adjusted_args)
-                .await?;
+    let result = client
+        .call_tool_streaming(first_tool, adjusted_args)
+        .await?;
 
-            info!("");
-            info!("📊 Step 3: Results Analysis");
-            info!("═══════════════════════════");
-            info!("⏱️  Total duration: {:?}", result.duration);
-            info!("📡 SSE events processed: {}", result.total_events);
-            info!("📈 Progress updates: {}", result.progress_updates.len());
+    info!("");
+    info!("📊 Step 3: Results Analysis");
+    info!("═══════════════════════════");
+    info!("⏱️  Total duration: {:?}", result.duration);
+    info!("📡 SSE events processed: {}", result.total_events);
+    info!("📈 Progress updates: {}", result.progress_updates.len());
 
-            info!("");
-            info!("📋 Final Tool Result:");
-            info!("{}", serde_json::to_string_pretty(&result.final_result)?);
+    info!("");
+    info!("📋 Final Tool Result:");
+    info!("{}", serde_json::to_string_pretty(&result.final_result)?);
 
-            if !result.progress_updates.is_empty() {
-                info!("");
-                info!("📈 Progress Updates:");
-                for (i, update) in result.progress_updates.iter().enumerate() {
-                    info!("  {}. {:?}", i + 1, update);
-                }
-            }
+    if !result.progress_updates.is_empty() {
+        info!("");
+        info!("📈 Progress Updates:");
+        for (i, update) in result.progress_updates.iter().enumerate() {
+            info!("  {}. {:?}", i + 1, update);
 
             info!("");
             if result.total_events > 0 && !result.progress_updates.is_empty() {
@@ -453,8 +462,6 @@ async fn main() -> Result<()> {
                 warn!("⚠️  FALLBACK: Server returned JSON instead of SSE stream");
                 info!("📋 This may indicate Streamable HTTP is disabled for compatibility");
             }
-        } else {
-            return Err(anyhow::anyhow!("No tools available on server"));
         }
     }
 

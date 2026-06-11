@@ -70,6 +70,34 @@ own binary. The worst offenders print broken curl commands from their own stdout
 
 ## 🛠️ Update (30) — keep, fix named staleness
 
+> **EXECUTED 2026-06-12** (slice 3, mechanical batch): every named staleness
+> item below is fixed or dispositioned. Highlights: version-string sweep
+> (`0.3.47` → `0.4.0` everywhere; named `1.0.0` cases in
+> client-initialise-server/lambda-mcp-server bumped); derive-macro-server,
+> resource-server, function-macro-server READMEs rewritten to match their
+> actual code; pagination-server README reframed as app-level cursors (not
+> protocol `_meta` pagination) with the real 10,000-row/`refresh_data`
+> facts; prompts-server README rewritten (port 8006, 3 real prompts,
+> `_meta` curls — live-verified incl. the -32602 missing-arg contract) and
+> its no-op `.sse(true)` dropped; middleware-logging-server now measures
+> real durations via context metadata (live-verified) and prints a 2026
+> `server/discover` curl; middleware-auth-{server,lambda} dead `initialize`
+> bypasses dropped; audit-trail-server re-anchored to actor-centric stats +
+> `request_id` correlation (session-keyed `unique_sessions` removed);
+> lambda-mcp-client println-stub subcommands removed, dev-log comment
+> scrubbed, user agents bumped; lambda-authorizer motivation reframed for
+> the POST-only 2026 surface (OPTIONS/.well-known still need wildcarding);
+> streamable-http-client-2025-11-25 progress moved to the `f64` contract,
+> placeholder server-info replaced with `negotiated_version()`, and the
+> streaming demo now always runs; oauth-resource-server gained
+> `--required-scope` enforcement via manual `OAuthResourceMiddleware`
+> construction; zero-config + minimal-server README session/initialize
+> prose corrected. Dispositions: client-initialise-report "Phase 1/2/3"
+> strings are runtime test stages (not dev-phase tags) — kept; 2025-lane
+> initialize banners/curls in pinned examples are lane-correct — kept;
+> house-placeholder `.version("1.0.0")` strings outside the two named
+> examples — kept per the audit's own function-resource-server note.
+
 | Example | Lane | Teaches | Why / required fixes | Gate-ref |
 |---|---|---|---|---|
 | `audit-trail-server` | 2026-default | Application-owned persistence inside tools: an immutable SQLite (sqlx) audit log with log/search/report tools, independent of the framework's session storage. | The core pattern — tools owning their own sqlx pool (OnceLock at main.rs:19) for durable, queryable application data — is spec-neutral and fully current on 2026; it compiles clean on the default lane. The fix is narrow: re-anchor actor/correlation from session_id to a 2026-meaningful identity (per-request _meta clientInfo, W3C traceparent per the spec plan's distributed-tracing item, or an explicit actor param), rewrite the unique_sessions stats, and drop the session-required framing. Not a merge/archive candidate — no sibling teaches app-owned DB persistence. — **Staleness:** src/main.rs:108 keys every audit row by session.session_id and main.rs:347-370 reports 'unique_sessions' / 'events_per_session' stats — on the 2026 default the session id is an ephemeral per-request internal id (never sent to the client), so unique_sessions ≈ total_events and the attribution/statistics are meaningless; main.rs:99 'Session required' gating implies a client-visible session that no longer exists; main.rs:443 with_session_storage(SqliteSessionStorage) is incidental to the example's teaching | no |

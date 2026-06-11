@@ -440,7 +440,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("1.0.0")
+                    .version("0.4.0")
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -473,7 +473,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("1.0.0")
+                    .version("0.4.0")
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -515,7 +515,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("1.0.0")
+                    .version("0.4.0")
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -543,7 +543,7 @@ async fn main() -> Result<()> {
 
             McpServer::builder()
                 .name("client-initialise-server")
-                .version("1.0.0")
+                .version("0.4.0")
                 .title("MCP Initialize Test Server")
                 .bind_address(bind_address)
                 .with_session_storage(storage_arc)

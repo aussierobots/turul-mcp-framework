@@ -220,7 +220,7 @@ curl -X POST http://127.0.0.1:8041/mcp \
 **Content Includes:**
 - Complete database schema with tables, indexes, and constraints
 - User management, content, and media tables
-- Audit logging and session management
+- Audit logging
 - Views for common queries and default data
 - Schema management best practices
 - Migration strategy and backup procedures

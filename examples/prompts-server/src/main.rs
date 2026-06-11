@@ -602,7 +602,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .prompt(code_review)
         .prompt(architecture_guidance)
         .bind_address("127.0.0.1:8006".parse()?)
-        .sse(true)
         .build()?;
 
     info!("🚀 Real MCP prompts server running at: http://127.0.0.1:8006/mcp");

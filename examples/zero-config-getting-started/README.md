@@ -7,7 +7,7 @@
 ✅ **Zero Configuration** - Users NEVER specify method strings  
 ✅ **Auto-Determination** - Framework maps types to methods automatically  
 ✅ **Simple Patterns** - Derive macros replace complex trait implementations  
-✅ **Pluggable Storage** - InMemory (default) → SQLite → PostgreSQL → AWS  
+✅ **Stateless by Default** - 2026-07-28 transport: no handshake, no session header  
 
 ## How It Works
 
@@ -31,9 +31,10 @@ impl Calculator {
 
 ### Built-in Progress Notifications (30 seconds)
 ```rust
-// ✅ Use session's built-in progress notification
+// ✅ Request-scoped progress: no-op unless the caller opted in by sending
+// a progressToken in the request's _meta
 if let Some(session) = session {
-session.notify_progress("Processing", 75).await;
+    session.notify_request_progress(75.0, Some(100.0)).await;
 }
 ```
 
@@ -58,7 +59,6 @@ server.run().await
 - **IntelliSense**: Perfect IDE integration with zero memorization
 
 ### For Production
-- **Pluggable Storage**: Start with InMemory, scale to PostgreSQL/AWS
 - **MCP 2026-07-28 Compliance**: Latest specification support (stateless core)
 - **Stateless requests**: Each request carries its own `_meta`; no `initialize`/`notifications/initialized` handshake and no `Mcp-Session-Id`
 - **Optional application state**: `SessionContext` typed state when an example needs it, layered above the stateless transport
@@ -103,6 +103,6 @@ curl -X POST http://127.0.0.1:8641/mcp \
 ## Next Steps
 
 1. **Add More Tools**: Use `#[derive(McpTool)]` on any struct.
-2. **Change Storage**: Swap the default in-memory storage for a persistent backend, e.g., `PostgresSessionStorage::with_config(config).await?`.
-3. **Add Resources**: Use the `#[mcp_resource]` macro to serve data and files.
-4. **Scale Up**: The framework's architecture is ready for enterprise deployment.
+2. **Add Resources**: Use the `#[mcp_resource]` macro to serve data and files.
+3. **Stream Notifications**: Send `Accept: text/event-stream` with a `progressToken` to watch request-scoped progress (see `notification-server`).
+4. **Go Durable**: Persistent app-state backends are demonstrated in `simple-sqlite-session` / `simple-postgres-session` / `simple-dynamodb-session`.

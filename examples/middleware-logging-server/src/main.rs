@@ -1,17 +1,16 @@
 //! Middleware Logging Example
 //!
 //! Demonstrates request timing and tracing middleware that:
-//! 1. Captures request start time in before_dispatch
-//! 2. Logs request duration in after_dispatch
-//! 3. Injects last_request_ms into session metadata
-//!
-//! Tools can read the injected metadata to see request timing.
+//! 1. Captures the request start time in before_dispatch (stored on the
+//!    request context's metadata, which the dispatcher threads through to
+//!    after_dispatch)
+//! 2. Logs the measured request duration in after_dispatch
 
 use async_trait::async_trait;
 use clap::Parser;
 use serde_json::json;
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{SystemTime, UNIX_EPOCH};
 use turul_mcp_server::prelude::*;
 
 #[derive(Parser)]
@@ -30,12 +29,13 @@ impl McpMiddleware for TimingMiddleware {
         &self,
         ctx: &mut RequestContext<'_>,
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
-        injection: &mut SessionInjection,
+        _injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        let start = Instant::now();
-
-        // Store start time in metadata for after_dispatch
-        injection.set_metadata("_timing_start_ms", json!(start.elapsed().as_millis()));
+        let start_us = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros() as u64;
+        ctx.add_metadata("timing_start_us", json!(start_us));
 
         tracing::info!("→ {} starting", ctx.method());
         Ok(())
@@ -44,11 +44,26 @@ impl McpMiddleware for TimingMiddleware {
     async fn after_dispatch(
         &self,
         ctx: &RequestContext<'_>,
-        _result: &mut DispatcherResult,
+        result: &mut DispatcherResult,
     ) -> Result<(), MiddlewareError> {
-        // In production, you'd calculate duration from stored start time
-        // For this example, we'll use a simple log
-        tracing::info!("← {} completed", ctx.method());
+        let now_us = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros() as u64;
+        let elapsed_ms = ctx
+            .metadata()
+            .get("timing_start_us")
+            .and_then(|v| v.as_u64())
+            .map(|start_us| (now_us.saturating_sub(start_us)) as f64 / 1000.0);
+
+        match elapsed_ms {
+            Some(ms) => tracing::info!(
+                "← {} completed in {ms:.2}ms ({})",
+                ctx.method(),
+                if result.is_success() { "ok" } else { "error" }
+            ),
+            None => tracing::info!("← {} completed", ctx.method()),
+        }
         Ok(())
     }
 }
@@ -84,7 +99,7 @@ async fn main() -> McpResult<()> {
 
     tracing::info!("Server listening on http://localhost:{}/mcp", args.port);
     tracing::info!(
-        "Try: curl -X POST http://localhost:{}/mcp -H 'Content-Type: application/json' -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{...}}}}'",
+        "Try: curl -X POST http://localhost:{}/mcp -H 'Content-Type: application/json' -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: server/discover' -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\",\"params\":{{\"_meta\":{{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientInfo\":{{\"name\":\"curl\",\"version\":\"1.0\"}},\"io.modelcontextprotocol/clientCapabilities\":{{}}}}}}}}'",
         args.port
     );
 
