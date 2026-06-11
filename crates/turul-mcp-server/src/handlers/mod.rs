@@ -48,9 +48,13 @@ fn extract_cursor_from_params(params: &Option<Value>) -> Option<turul_mcp_protoc
 /// MRTR (SEP-2322): convert a provider's `McpError::InputRequired` outcome
 /// into a successful `InputRequiredResult` value, after enforcing that every
 /// input request targets a capability the client declared in the request's
-/// `_meta` `clientCapabilities` (undeclared → `-32003`, HTTP 400). Shared by
-/// the three methods permitted to return `input_required`: `tools/call`,
-/// `resources/read`, `prompts/get`.
+/// `_meta` `clientCapabilities` (undeclared → `-32003`, HTTP 400). Gating is
+/// mode-aware: URL-mode elicitation needs `elicitation.url`, form mode rides
+/// the empty object ("an empty capabilities object is equivalent to declaring
+/// support for form mode only"), and tool-enabled sampling (`tools` /
+/// `toolChoice` present) needs `sampling.tools`. Shared by the three methods
+/// permitted to return `input_required`: `tools/call`, `resources/read`,
+/// `prompts/get`.
 #[cfg(feature = "protocol-2026-07-28")]
 pub(crate) fn input_required_to_result(
     input_requests: Option<turul_mcp_protocol::input_required::InputRequests>,
@@ -63,12 +67,37 @@ pub(crate) fn input_required_to_result(
         for request in requests.values() {
             #[allow(deprecated)]
             let missing = match request {
-                InputRequest::Elicit(_) if caps.elicitation.is_none() => {
-                    Some(serde_json::json!({ "elicitation": {} }))
-                }
-                InputRequest::CreateMessage(_) if caps.sampling.is_none() => {
-                    Some(serde_json::json!({ "sampling": {} }))
-                }
+                InputRequest::Elicit(elicit) => match &caps.elicitation {
+                    None => Some(serde_json::json!({ "elicitation": {} })),
+                    Some(e) => {
+                        use turul_mcp_protocol::elicitation::ElicitRequestParams;
+                        match &elicit.params {
+                            // URL mode needs the explicit url sub-capability.
+                            ElicitRequestParams::Url(_) if e.url.is_none() => {
+                                Some(serde_json::json!({ "elicitation": { "url": {} } }))
+                            }
+                            // Form mode: an empty capabilities object declares
+                            // form-only support; an explicit url-only object
+                            // does NOT imply form.
+                            ElicitRequestParams::Form(_) if e.form.is_none() && e.url.is_some() => {
+                                Some(serde_json::json!({ "elicitation": { "form": {} } }))
+                            }
+                            _ => None,
+                        }
+                    }
+                },
+                InputRequest::CreateMessage(create) => match &caps.sampling {
+                    None => Some(serde_json::json!({ "sampling": {} })),
+                    // Tool-enabled sampling needs the tools sub-capability.
+                    Some(sc)
+                        if (create.params.tools.is_some()
+                            || create.params.tool_choice.is_some())
+                            && sc.tools.is_none() =>
+                    {
+                        Some(serde_json::json!({ "sampling": { "tools": {} } }))
+                    }
+                    Some(_) => None,
+                },
                 InputRequest::ListRoots(_) if caps.roots.is_none() => {
                     Some(serde_json::json!({ "roots": {} }))
                 }

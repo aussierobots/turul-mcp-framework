@@ -208,6 +208,193 @@ async fn undeclared_capability_is_rejected_with_32003() {
 #[allow(dead_code)]
 fn _t(_: HashMap<String, String>) {}
 
+// ---- Sub-capability gating (elicitation modes; sampling.tools) ----
+
+/// Demands a URL-mode elicitation — needs `elicitation.url` declared.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "url_gated", description = "Needs a URL elicitation", output = String)]
+struct UrlGatedTool {}
+
+impl UrlGatedTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && session.input_responses().is_some()
+        {
+            return Ok("done".to_string());
+        }
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "auth".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_url(
+                "Authorize via browser",
+                "el-1",
+                "https://example.test/authorize",
+            )),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: None,
+        })
+    }
+}
+
+/// Demands tool-enabled sampling — needs `sampling.tools` declared.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "sampler", description = "Needs tool-enabled sampling", output = String)]
+struct SamplingGatedTool {}
+
+impl SamplingGatedTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && session.input_responses().is_some()
+        {
+            return Ok("done".to_string());
+        }
+        #[allow(deprecated)]
+        let request = {
+            use turul_mcp_protocol::sampling::{
+                CreateMessageRequest, CreateMessageRequestParams, SamplingMessage,
+            };
+            let mut params =
+                CreateMessageRequestParams::new(vec![SamplingMessage::user_text("hi")], 64);
+            params.tools = Some(vec![turul_mcp_protocol::tools::Tool::new(
+                "lookup",
+                turul_mcp_protocol::ToolSchema::object(),
+            )]);
+            CreateMessageRequest::new(vec![], 64).with_params(params)
+        };
+        let mut requests = InputRequests::new();
+        requests.insert("s1".to_string(), InputRequest::CreateMessage(request));
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: None,
+        })
+    }
+}
+
+async fn start_subcap_server() -> String {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let server = McpServer::builder()
+        .name("mrtr-2026-subcap")
+        .version("0.4.0")
+        .tool(UrlGatedTool::default())
+        .tool(SamplingGatedTool::default())
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    url
+}
+
+async fn call_tool_with_caps(
+    url: &str,
+    tool: &str,
+    capabilities: serde_json::Value,
+) -> (reqwest::StatusCode, serde_json::Value) {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", tool)
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "name": tool,
+                "arguments": {},
+                "_meta": meta_with_capabilities(capabilities)
+            }
+        }))
+        .send()
+        .await
+        .expect("tools/call POST");
+    let status = resp.status();
+    let body: serde_json::Value = resp.json().await.unwrap_or_default();
+    (status, body)
+}
+
+/// Elicitation §Capabilities: "Servers MUST NOT send elicitation requests
+/// with modes that are not supported by the client" and "an empty
+/// capabilities object is equivalent to declaring support for form mode
+/// only" — a URL-mode request against `elicitation: {}` must be -32003.
+#[tokio::test]
+async fn url_mode_elicitation_requires_the_url_subcapability() {
+    let url = start_subcap_server().await;
+
+    // Form-only declaration (empty object): URL mode rejected.
+    let (status, body) =
+        call_tool_with_caps(&url, "url_gated", serde_json::json!({ "elicitation": {} })).await;
+    assert_eq!(status, 400, "url mode vs form-only client: {body}");
+    assert_eq!(body["error"]["code"], -32003, "{body}");
+
+    // URL declared: passes the gate, input_required comes back.
+    let (status, body) = call_tool_with_caps(
+        &url,
+        "url_gated",
+        serde_json::json!({ "elicitation": { "url": {} } }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["result"]["resultType"], "input_required", "{body}");
+}
+
+/// Elicitation §Capabilities: form mode rides both the empty object and an
+/// explicit form declaration.
+#[tokio::test]
+async fn form_mode_elicitation_passes_with_empty_capability_object() {
+    let url = start_server().await;
+    let (status, body) = call_gated_echo(
+        &url,
+        serde_json::json!({ "elicitation": {} }),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["result"]["resultType"], "input_required", "{body}");
+}
+
+/// Sampling §Tools in Sampling: "Servers MUST NOT send tool-enabled sampling
+/// requests to Clients that have not declared support for tool use via the
+/// sampling.tools capability."
+#[tokio::test]
+async fn tool_enabled_sampling_requires_the_tools_subcapability() {
+    let url = start_subcap_server().await;
+
+    // Bare sampling declaration: tool-enabled request rejected.
+    let (status, body) =
+        call_tool_with_caps(&url, "sampler", serde_json::json!({ "sampling": {} })).await;
+    assert_eq!(
+        status, 400,
+        "tool-enabled sampling vs bare sampling: {body}"
+    );
+    assert_eq!(body["error"]["code"], -32003, "{body}");
+
+    // sampling.tools declared: passes the gate.
+    let (status, body) = call_tool_with_caps(
+        &url,
+        "sampler",
+        serde_json::json!({ "sampling": { "tools": {} } }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["result"]["resultType"], "input_required", "{body}");
+}
+
 // ---- MRTR on resources/read and prompts/get ----
 
 /// Resource that demands an elicitation before serving content.
