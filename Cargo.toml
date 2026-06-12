@@ -33,6 +33,7 @@ members = [
   "examples/derive-macro-server",
   "examples/dynamic-tools-server",
   "examples/elicitation-server",
+  "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
   "examples/lambda-mcp-client",

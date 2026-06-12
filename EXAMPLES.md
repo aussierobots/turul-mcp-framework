@@ -1,6 +1,6 @@
 # MCP Framework Examples
 
-This document provides a comprehensive overview of all **53 active examples** in the MCP Framework (plus `examples/archived/` — grown by 5 in the 2026-06-12 archive slice, see `docs/plans/2026-07-28-examples-review.md`), organized by learning progression from basic concepts to advanced implementations.
+This document provides a comprehensive overview of all **54 active examples** in the MCP Framework (plus `examples/archived/` — grown by 5 in the 2026-06-12 archive slice, see `docs/plans/2026-07-28-examples-review.md`), organized by learning progression from basic concepts to advanced implementations.
 
 **✅ All active examples compile under their lane's CI gates** (2026-07-28 default lane
 + per-manifest 2025-11-25 pins). Per-example functional re-verification against the
@@ -17,6 +17,7 @@ lane** — run the server first, then point the client at it.
 |---|---|---|---|
 | `streamable-http-client` | **2026-07-28** | `minimal-server` (port 8641); point at `notification-server` (port 8005) for live subscription deliveries | The canonical 2026 stateless pair: `connect()` negotiation, discover retention, `call_tool`, request-scoped progress, and the ack-first `subscriptions_listen` stream |
 | `mrtr-elicitation-client` (in `mrtr-elicitation-server`) | **2026-07-28** | `mrtr-elicitation-server` (port 8642) | The MRTR round trip: `input_required` → answer → `call_tool_with_input_responses` |
+| `ext-tasks-client` (in `ext-tasks-server`) | **2026-07-28** | `ext-tasks-server` (port 8645) | SEP-2663 task lifecycle: `call_tool_or_task` → poll → `tasks/update` → completed; sync fallback for undeclared clients |
 | `bilingual-fleet-client` | **both** | any mix (demo: `minimal-server` + `client-initialise-server`) | One binary sweeping a mixed 2025/2026 fleet — per-connection negotiation |
 | `streamable-http-client-2025-11-25` | 2025-11-25 | `client-initialise-server` (alternatives: any 2025-pinned server) | Hand-parsed 2025 POST SSE framing |
 | `client-initialise-report` | 2025-11-25 (wire-pinned) | `client-initialise-server` | Raw-wire lifecycle compliance probe |
@@ -73,7 +74,7 @@ cargo run -p minimal-server
 | **function-resource-server** | 8008 | ✅ VALIDATED | Function-based resources | Resource function patterns |
 | **session-aware-resource-server** | 8008 | ✅ VALIDATED | Session-aware resources (2025-11-25 pinned) | Session context integration on the stateful lane |
 
-## 🟢 **FEATURE-SPECIFIC SERVERS** (13 examples) - Specialized MCP Features
+## 🟢 **FEATURE-SPECIFIC SERVERS** (14 examples) - Specialized MCP Features
 
 | Example | Port | Status | Description | Key Features |
 |---------|------|--------|-------------|--------------|
@@ -88,6 +89,7 @@ cargo run -p minimal-server
 | **mrtr-elicitation-server** | 8642 | ✅ VALIDATED | MRTR elicitation round trip (2026) | `InputRequired` → retry with `inputResponses`; paired client bin |
 | **origin-policy-server** | 8643 | ✅ VALIDATED | Origin validation / DNS-rebinding (2026) | `OriginPolicy` default/AllowList/Disabled; 403 matrix verified live |
 | **header-bound-tools-server** | 8644 | ✅ VALIDATED | SEP-2243 header-bound tool params (2026) | `x-mcp-header` → `Mcp-Param-*` mirroring; -32001 contract verified live |
+| **ext-tasks-server** | 8645 | ✅ VALIDATED | Tasks extension (SEP-2663, 2026) | Task election + polling + `tasks/update` mid-task input; paired client bin; live-verified |
 | **oauth-resource-server** | 8080 | ✅ VALIDATED | OAuth 2.1 Resource Server (RFC 9728) | JWKS Bearer validation, PRM well-known routes, `--required-scope` → 403 insufficient_scope |
 | **dynamic-tools-server** | 8484 | ✅ VALIDATED | Dynamic tool registration (2025-pinned) | `ToolRegistry` + `notifications/tools/list_changed` on the stateful lane |
 
@@ -180,7 +182,7 @@ These examples demonstrate MCP 2025-11-25 type construction without starting a s
 
 ## 🚨 **COMPREHENSIVE VALIDATION RESULTS**
 
-### ✅ **ALL 53 ACTIVE EXAMPLES COMPILE UNDER THEIR LANE'S CI GATES**
+### ✅ **ALL 54 ACTIVE EXAMPLES COMPILE UNDER THEIR LANE'S CI GATES**
 **0.4.0 branch (MCP 2026-07-28 default, 2025-11-25 opt-in) — last reconciled 2026-06-12.**
 The per-example functional verification ledger lives in
 `docs/plans/2026-07-28-examples-review.md`; the 2026-06-12 migrate slice
@@ -189,7 +191,7 @@ re-verified its six examples live on the wire.
 - **Getting Started** - 5 examples (all tool creation levels)
 - **Session Storage** - 3 examples (SQLite, PostgreSQL, DynamoDB)
 - **Resource Servers** - 6 examples (session-aware resources)
-- **Feature-Specific** - 13 examples (prompts, sampling, elicitation, MRTR, origin policy, header binding, OAuth RS, etc.)
+- **Feature-Specific** - 14 examples (prompts, sampling, elicitation, MRTR, tasks extension, origin policy, header binding, OAuth RS, etc.)
 - **Advanced/Composite** - audit-trail, pagination, icon showcase
 - **Session & State** - stateful-server + session-aware-resource-server (2025-pinned) and the storage-backend trio
 - **Client Examples** - see the pairs table above (9 pairing rows)
@@ -210,7 +212,7 @@ re-verified its six examples live on the wire.
 - **Live-verified**: migrated and new examples were verified by running them and executing their own printed commands
 
 ### 📊 **Statistics**
-- **Total Examples**: 53 active (29 archived in `examples/archived/`)
+- **Total Examples**: 54 active (29 archived in `examples/archived/`)
 - **Session state (2025-pinned lane)**: stateful-server, session-aware-resource-server, and the logging/session test fixtures demonstrate cross-request session state on the opt-in lane; 2026-default examples use request-scoped context or app-owned storage instead
 - **Client-Server Pairs**: 9 pairing-table rows validating communication patterns
 - **Task Support**: 3 examples demonstrating MCP 2025-11-25 task lifecycle (InMemory storage)
