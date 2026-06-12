@@ -154,12 +154,12 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply â€
 
 ## Server & Client Testing
 - Start a sessionâ€‘enabled server (choose backend):
-  - SQLite (dev): `cargo run --example client-initialise-server -- --port 52950 --storage-backend sqlite --create-tables`
-  - DynamoDB (prod): `cargo run --example client-initialise-server -- --port 52950 --storage-backend dynamodb --create-tables`
-  - PostgreSQL (enterprise): `cargo run --example client-initialise-server -- --port 52950 --storage-backend postgres`
-  - InMemory (fast, no persistence): `cargo run --example client-initialise-server -- --port 52950 --storage-backend inmemory`
+  - SQLite (dev): `cargo run -p client-initialise-server -- --port 52950 --storage-backend sqlite --create-tables`
+  - DynamoDB (prod): `cargo run -p client-initialise-server -- --port 52950 --storage-backend dynamodb --create-tables`
+  - PostgreSQL (enterprise): `cargo run -p client-initialise-server -- --port 52950 --storage-backend postgres`
+  - InMemory (fast, no persistence): `cargo run -p client-initialise-server -- --port 52950 --storage-backend inmemory`
 - Run the compliance client against it:
-  - `RUST_LOG=info cargo run --example session-management-compliance-test -- http://127.0.0.1:52950/mcp`
+  - `RUST_LOG=info cargo run -p session-management-compliance-test -- http://127.0.0.1:52950/mcp`
 - Explore additional servers/clients for manual testing:
   - Servers: `examples/minimal-server`, `examples/comprehensive-server`, `examples/notification-server`
   - Clients: `examples/logging-test-client`, `examples/lambda-mcp-client`

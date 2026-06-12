@@ -398,7 +398,7 @@ server.run().await
 ```bash
 cargo build
 cargo test
-cargo run --example minimal-server
+cargo run -p minimal-server
 
 # Specific test suites
 cargo test -p turul-mcp-server --features dynamic-tools     # Dynamic tools + registry tests
@@ -406,8 +406,8 @@ cargo test -p turul-mcp-framework-integration-tests --test event_dispatcher_pers
 cargo test -p turul-mcp-framework-integration-tests --test compliance  # MCP spec compliance
 
 # MCP Testing
-cargo run --example client-initialise-server -- --port 52935
-cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
+cargo run -p client-initialise-server -- --port 52935
+cargo run -p client-initialise-report -- --url http://127.0.0.1:52935/mcp
 ```
 
 ### Debugging: Stale Build Issues
