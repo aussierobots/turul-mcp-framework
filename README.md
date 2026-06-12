@@ -1075,29 +1075,10 @@ curl -X POST http://127.0.0.1:8080/mcp \
   }'
 ```
 
-> On the `2025-11-25` opt-in build, `tools/call` instead requires the stateful handshake
-> and the `Mcp-Session-Id` header, and GET SSE notifications are available on that stream.
-
-### MCP Session Management Compliance Testing
-
-Sessions (and the `Mcp-Session-Id` header) belong to the stateful **2025-11-25** spec;
-the example packages below are pinned to the `protocol-2025-11-25` opt-in in their own
-manifests, so the commands work unchanged on this branch. The default 2026-07-28 build
-is stateless and has no session management to test.
-
-#### Running the Session Management Compliance Test
-
-```bash
-# 1. Start a server with session storage (choose backend: sqlite, postgres, dynamodb, or inmemory)
-cargo run -p client-initialise-server -- --port 52950 --storage-backend dynamodb --create-tables
-
-# 2. In another terminal, run the comprehensive compliance test (IMPORTANT: include RUST_LOG=info)
-RUST_LOG=info cargo run -p session-management-compliance-test -- http://127.0.0.1:52950/mcp
-
-# 3. Alternative: Use different storage backends
-cargo run -p client-initialise-server -- --port 52951 --storage-backend sqlite --create-tables
-RUST_LOG=info cargo run -p session-management-compliance-test -- http://127.0.0.1:52951/mcp
-```
+> The 2026 core is stateless. Sessions, the `Mcp-Session-Id` header, and the session
+> lifecycle (DELETE termination, TTL/expiry) are part of the **2025-11-25 opt-in** lane;
+> the `client-initialise-server` + `session-management-compliance-test` packages exercise
+> them under that pin.
 
 ## 🛠️ Development & Testing
 
@@ -1119,14 +1100,14 @@ The framework includes a **comprehensive test suite** covering all functionality
 # Run all tests (recommended - includes E2E integration tests)
 cargo test --workspace
 
-# Run specific test suite
-cargo test --package mcp-e2e-shared --test all -- concurrent_session
+# Run the full lane-by-lane gate suite (2026 default + 2025 opt-in matrix)
+./scripts/ci-gates.sh all
+
+# Run a 2026 wire-acceptance suite directly
+cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test discover_stateless_2026
 
 # Run with logging output
 RUST_LOG=info cargo test --workspace
-
-# Clean build and test (verifies auto-build works)
-cargo clean && cargo test --workspace
 ```
 
 **Key Features:**
@@ -1136,132 +1117,19 @@ cargo clean && cargo test --workspace
 
 The test infrastructure automatically builds required test server binaries (`resource-test-server`, `prompts-test-server`, `tools-test-server`, etc.) when running integration tests. This ensures a seamless developer experience.
 
-#### What the Compliance Test Verifies
+### Notifications & Streaming
 
-The comprehensive test validates all MCP session management requirements:
+On the 2026 default, notifications ride **POST** SSE — request-scoped notifications
+(`notifications/progress`, `notifications/message`) flow on the originating request's
+own response stream, and server-push subscriptions use the long-lived
+`subscriptions/listen` POST stream. The 2025-era GET-SSE endpoint and
+`Mcp-Session-Id`-keyed streams are part of the 2025-11-25 opt-in lane (the HTTP+SSE
+transport is deprecated upstream, SEP-2596).
 
-- **✅ Session ID Generation**: UUID v7 with cryptographic security and ASCII compliance
-- **✅ Session Persistence**: Proper session validation and storage backend integration
-- **✅ Session Expiry**: TTL-based cleanup and 404 responses for expired sessions
-- **✅ Client Reinitialize**: Graceful session recovery on expiry
-- **✅ DELETE Termination**: Explicit session termination support
-- **✅ Session Isolation**: Multi-session security and data separation
-
-#### Expected Output
-
-```
-🧪 MCP Session Management Compliance Test
-═══════════════════════════════════════════
-✅ Session ID generation compliance verified
-✅ Session persistence compliance verified  
-✅ Session expiry compliance verified
-✅ Client reinitialize compliance verified
-✅ DELETE session termination compliance verified
-✅ Session isolation compliance verified
-
-🎉 MCP SESSION MANAGEMENT COMPLIANCE: COMPLETE
-═══════════════════════════════════════════════
-```
-
-#### Storage Backend Configuration
-
-**DynamoDB** (Development):
-- 5-minute TTL with automatic cleanup
-- GSI indexes for efficient queries
-- AWS credentials required
-
-**SQLite** (Development):  
-- File-based persistence
-- 5-minute TTL with background cleanup
-- No external dependencies
-
-**PostgreSQL** (Enterprise):
-- Full SQL features with indexing
-- 5-minute TTL with efficient cleanup
-- Connection string required
-
-**InMemory** (Testing):
-- Fast, no persistence
-- 5-minute TTL with memory cleanup
-- Zero configuration
-
-#### Customizing TTL Configuration
-
-```rust
-// Custom TTL configuration (default: 5 minutes)
-let config = DynamoDbConfig {
-    session_ttl_minutes: 30,  // 30-minute session TTL
-    event_ttl_minutes: 15,    // 15-minute event TTL
-    ..Default::default()
-};
-```
-
-### Server-Sent Events (SSE) Verification
-
-The framework includes comprehensive SSE testing to verify real-time notification streaming:
-
-#### Running SSE Tests
-
-```bash
-# Test SSE functionality in prompts package
-cargo test --package mcp-prompts-tests --test all -- sse
-
-# Test specific SSE scenarios
-cargo test --package mcp-prompts-tests test_sse_prompts_connection_establishment -- --nocapture
-cargo test --package mcp-prompts-tests test_sse_prompts_list_changed_notification -- --nocapture
-cargo test --package mcp-prompts-tests test_sse_prompts_session_isolation -- --nocapture
-
-# Test SSE functionality in resources package
-cargo test --package mcp-resources-tests --test all -- sse
-
-# Test specific resource SSE scenarios
-cargo test --package mcp-resources-tests test_sse_connection_establishment -- --nocapture
-cargo test --package mcp-resources-tests test_sse_resource_list_changed_notification -- --nocapture
-cargo test --package mcp-resources-tests test_sse_session_isolation -- --nocapture
-```
-
-#### Expected SSE Test Output
-
-```
-🚀 Starting MCP Resource Test Server on port 18994
-✅ Session 01997404-d8f4-7b20-b76d-ac1f4be628a3 created and immediately initialized
-✅ SSE connection: session=01997404-d908-7e62-ae74-af87f1523836, connection=01997404-d909-7001-8b95-296e806aa1e1
-✅ Total notifications detected: 1
-✅ Session ID correlation verified
-✅ Valid SSE format compliance verified
-
-test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
-```
-
-#### Manual SSE Verification (2025-11-25 opt-in)
-
-GET SSE with a session ID is part of the stateful 2025-11-25 core, which is the opt-in
-build (`--no-default-features --features protocol-2025-11-25`). The default 2026-07-28
-build is stateless and does not hold a session-keyed GET SSE stream.
-
-```bash
-# 1. Start a 2025-11-25-pinned server (the pin lives in the example's own manifest)
-cargo run -p prompts-test-server -- --port 8080
-
-# 2. Get session ID via initialization
-curl -X POST http://127.0.0.1:8080/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
-
-# 3. Connect to SSE stream (replace SESSION_ID with actual ID)
-curl -N -H "Accept: text/event-stream" \
-  -H "Mcp-Session-Id: SESSION_ID" \
-  http://127.0.0.1:8080/mcp
-
-# Expected SSE output:
-# id: 0
-# event: ping
-# data: {"type":"keepalive"}
-#
-# id: 1
-# event: notification
-# data: {"type":"resource_update","resource":"prompts/list"}
-```
+- **Live demo**: `cargo run -p notification-server`, then drive it with
+  `cargo run -p streamable-http-client http://127.0.0.1:8005/mcp` (opens a
+  `subscriptions/listen` stream and triggers list-changed + resource-update deliveries).
+- **Wire tests**: `cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test subscriptions_listen_2026`
 
 ## 📊 Business Value Examples
 
