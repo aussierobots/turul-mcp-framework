@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 pub const MCP_APP_HTML_MIME: &str = "text/html;profile=mcp-app";
 
 /// `_meta` key carrying UI metadata on tools and UI resources.
-/// (The flat `_meta["ui/resourceUri"]` form is deprecated upstream and
-/// will be removed before GA — not bound here.)
+/// (The flat `_meta["ui/resourceUri"]` form is deprecated upstream and is
+/// not modeled by this binding.)
 pub const META_KEY_UI: &str = "ui";
 
 /// Apps capability settings a client advertises under the extension

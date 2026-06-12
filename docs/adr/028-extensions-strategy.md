@@ -45,7 +45,7 @@ We mirror upstream's repo-per-extension separation at the crate level. Each offi
 **Why a separate crate per extension** (not a single `turul-mcp-extensions` blanket crate, not in-tree modules of `turul-mcp-protocol-2026-07-28`):
 
 - **Matches SEP-2133 governance.** Upstream is explicit that extensions evolve independently. Crates can version, ship, and break independently of the protocol crate.
-- **Honors the "disabled by default" rule.** A consumer that doesn't depend on `turul-mcp-ext-tasks-*` cannot accidentally import or expose task types. The Cargo dependency declaration is the opt-in.
+- **Honors the "disabled by default" rule.** A consumer that doesn't depend on a `turul-mcp-ext-*` crate cannot accidentally import or expose that extension's types. The Cargo dependency declaration is the opt-in.
 - **Keeps the protocol crate spec-pure.** `turul-mcp-protocol-2026-07-28` only hosts core schema types. The `extensions: HashMap<String, Value>` capability map field is the ONLY extension surface in the protocol crate itself — the values are opaque `serde_json::Value` so the protocol crate doesn't need to know about any specific extension.
 - **Allows non-core extensions.** Third-party extensions can publish `turul-mcp-ext-<vendor>-<name>` crates following the same naming pattern without touching `turul-mcp-protocol-*`.
 
