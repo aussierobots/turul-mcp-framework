@@ -135,7 +135,7 @@ field for classification.
 - **Wire-format coverage gap**: Current tests validate the pipeline with in-process
   channels and a mock transport, not over live HTTP/SSE. A regression in HTTP
   framing or content-type negotiation specific to response forwarding would not be
-  caught. Tracked as P2 in TODO_TRACKER.md for future live integration test.
+  caught. Was tracked as P2 in the 0.3-era TODO_TRACKER.md (deleted in the 0.4 docs purge).
 
 ## Implementation
 

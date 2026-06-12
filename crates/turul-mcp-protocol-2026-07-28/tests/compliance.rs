@@ -2708,8 +2708,8 @@ mod envelope {
 /// Error code compliance with draft schema.
 ///
 /// Asserts every McpError variant emits the on-wire code and structured data
-/// the schema declares. See `docs/plans/2026-07-28-compliance-plan.md` §1.4
-/// and `docs/plans/2026-07-28-migration-diff.md` "Foundational types > lib.rs".
+/// the schema declares. Symbol mapping:
+/// `docs/plans/2026-07-28-migration-diff.md` "Foundational types > lib.rs".
 #[cfg(test)]
 mod error_codes {
     use turul_mcp_protocol_2026_07_28::McpError;

@@ -1,5 +1,5 @@
 > **ARCHIVED 2026-06-12** — manual trait implementation is owned by `calculator-add-manual-server` (the CLAUDE.md-designated reference); its session-persistence teaching is false on the 2026 stateless lane.
-> Disposition record: `docs/plans/2026-07-28-examples-review.md`. Not a
+> Disposition record: the 2026-06-12 examples review (in git history). Not a
 > workspace member; kept for reference only.
 
 # Manual Tools Server Example

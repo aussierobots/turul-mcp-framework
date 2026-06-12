@@ -825,7 +825,7 @@ impl SessionMcpHandler {
     }
 
     // Note: create_post_sse_response method removed as it's unused in MCP Inspector compatibility mode
-    // SSE for tool calls is temporarily disabled - see WORKING_MEMORY.md for details
+    // SSE for tool calls is disabled on this legacy (≤2024-11-05) handler.
 
     /// Handle Server-Sent Events requests (SSE for streaming)
     async fn handle_sse_request<B>(&self, req: Request<B>) -> Result<Response<UnifiedMcpBody>>

@@ -813,7 +813,7 @@ in the same slice as the fix.
   - Current: Only parse_call_tool calls input_required_outcome (crates/turul-mcp-client/src/protocol/v2026_07_28.rs:158-169). parse_read_resource (:185-190) and parse_get_prompt (:199-204) deserialize straight into ReadResourceResult/GetPromptResult, so a spec-legal input_required result from this very framework's server (emitted at crates/turul-mcp-server/src/handlers/mod.rs:830,890; wire-tested in crates/tur
   - Fix: crates/turul-mcp-client/src/protocol/v2026_07_28.rs (add input_required_outcome to the read/get parsers) and src/client.rs (retry variants for resources/read and prompts/get); e2e in crates/turul-mcp-client/tests/e2e_2026_real_server.rs. Governed by ADR-030 (bilingual client); the ADR's 2026-06-10 '
 - [x] **CF/GAP-CF-4** — 2026 default server exposes an inbound roots/list method (wrong direction; non-spec on the stateless lane) — **FIXED 2026-06-11** (registrations 2025-gated; 404 wire test)
-  - Requirement: Roots is a client feature: 'servers send an InputRequiredResult containing a roots/list request' — roots/list is server→client only in the draft; the lane-split decision (docs/plans/2026-07-28-release-readiness-review.md §4 #1) states 'the 2026 default path serves them only in the forms the 2026 spec actually defines (MRTR input requests)'. https://modelcontextprotocol.io/specification/draft/clien
+  - Requirement: Roots is a client feature: 'servers send an InputRequiredResult containing a roots/list request' — roots/list is server→client only in the draft; the lane-split decision (ADR-027 + ADR-029, recorded in the 2026-06-10 release-readiness review since deleted in the 0.4 docs purge — git history) is that the 2026 default path serves roots only in the forms the 2026 spec actually defines (MRTR input requests). https://modelcontextprotocol.io/specification/draft/clien
   - Current: builder default-handler registration inserts roots/list unconditionally — no #[cfg(feature="protocol-2025-11-25")] guard (crates/turul-mcp-server/src/builder.rs:158, again at :1704), unlike sampling/createMessage and elicitation/create which ARE 2025-gated (:159-168). RootsHandler answers with the SERVER's own configured roots (crates/turul-mcp-server/src/handlers/mod.rs:1033-1126), reversing the 
   - Fix: crates/turul-mcp-server/src/builder.rs — gate the roots/list handler (and the roots list_changed notification handlers) behind protocol-2025-11-25 like sampling/elicitation; add a 2026-surface rejection test in stateless_2026_http_surface.rs. Governed by ADR-027 + ADR-029 lane split; record in COMPL
 - [x] **PRM/PR-2026-02** — Client cannot complete the MRTR round-trip on prompts/get — **FIXED 2026-06-11** (`get_prompt_with_input_responses` + e2e)
@@ -1114,7 +1114,7 @@ revert-and-fail check is recorded in the commit message.
 ## Deployment
 
 The 2026-07-28 stateless core changes the deployment posture (see
-`docs/plans/2026-07-28-release-readiness-review.md` for history; this section is forward-looking):
+the prior release-readiness review for history — deleted in the 0.4 docs purge, see git history; this section is forward-looking):
 
 **Lambda (primary serverless target — `turul-mcp-aws-lambda`)**
 - Stateless requests need no session storage, no DynamoDB session table, and no sticky
@@ -1149,5 +1149,5 @@ The 2026-07-28 stateless core changes the deployment posture (see
   row(s) and gap entries here; the CHANGELOG references slices, ADRs record decisions.
 - Re-audit triggers: upstream schema re-pin (ADR-027 §regeneration triggers), a new spec
   page in the ToC, or a release-readiness review.
-- The prior driver, `docs/plans/2026-07-28-release-readiness-review.md`, is historical
+- The prior driver (the 2026-06-10 release-readiness review) is historical
   context as of 2026-06-11; it is superseded by this document for open work.

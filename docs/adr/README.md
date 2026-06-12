@@ -108,5 +108,5 @@ Key implementation details and patterns to follow.
 ## See Also
 
 - [Framework Architecture](../../CLAUDE.md) - Main architectural documentation
-- [Working Memory](../../WORKING_MEMORY.md) - Current development status
+- Current 2026-07-28 driver: [spec compliance](../plans/2026-07-28-spec-compliance.md)
 - [Examples](../../examples/) - Code examples implementing these decisions

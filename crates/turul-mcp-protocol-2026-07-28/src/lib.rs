@@ -8,7 +8,7 @@
 //! Every `export interface`/`export type`/`export const` in the vendored
 //! `schema/draft-schema.ts` has a corresponding Rust binding here. Every
 //! binding has a compliance test in `tests/compliance.rs`. The full
-//! per-symbol coverage map is `docs/plans/2026-07-28-schema-coverage-matrix.md`.
+//! authoritative coverage source is `docs/plans/2026-07-28-spec-compliance.md`.
 //!
 //! ## Surface area
 //!

@@ -201,13 +201,12 @@ RUST_LOG=error timeout 30s cargo run --bin ...
 ## Next Steps
 
 1. Run all phases: `./scripts/run_all_phases.sh`
-2. Review results and update `EXAMPLE_VERIFICATION_LOG.md`
+2. Review results
 3. Fix any failing examples
 4. Re-run verification until all pass
 5. Document final results
 
 ## See Also
 
-- `../EXAMPLE_VERIFICATION_LOG.md` - Campaign tracking document
 - `../examples/` - Example source code
 - `../CLAUDE.md` - Development guidelines

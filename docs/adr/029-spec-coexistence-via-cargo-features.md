@@ -125,14 +125,14 @@ protocol-2025-11-25 = [
 The atomic cutover slice (the "flip" of ADR-027 Phase 9.4) ships:
 
 1. The feature-gated `crates/turul-mcp-protocol/src/lib.rs` shown above, plus `Cargo.toml` features.
-2. Workspace-wide `turul-rpc` pin bumped from `0.1` to `0.2.2` (currently isolated to `turul-mcp-protocol-2026-07-28`; required for the 2026 protocol types to flow through every consumer — see `docs/plans/2026-07-28-PARKED.md:121`).
+2. Workspace-wide `turul-rpc` pin bumped from `0.1` to `0.2.2` (currently isolated to `turul-mcp-protocol-2026-07-28`; required for the 2026 protocol types to flow through every consumer).
 3. Source updates in every consumer crate for the breaking surface deltas: `initialize` handshake → `server/discover`; `Mcp-Session-Id` header path → `_meta`-carried capability handshake; error code `-32002` → `-32602`; tasks calls routed to `turul-mcp-ext-tasks-2026-07-28` (scaffolding follows; until then, tasks-using code is gated behind `protocol-2025-11-25`).
 4. Roots/Sampling/Logging deprecation cascade: `#[allow(deprecated)]` on every framework-internal site that touches those types (consumers see the `#[deprecated]` warnings; the framework itself does not emit them spuriously).
 5. The Phase 9.4 strategy commitment: **flip-all-at-once.** The three options ADR-027 flagged (flip-all-at-once / dual-import / crate-by-crate) collapse to one under the user-locked decision — dual-import contradicts "one source of truth per process," crate-by-crate contradicts "0.4.0 ships with default = 2026 today, not staged." The atomicity is enforced by the `compile_error!` macros: a half-migrated workspace will not compile.
 
 ### Feature-gating rollout plan
 
-A separate plan document (`docs/plans/2026-07-28-feature-gating-rollout.md`, to be authored as part of the cutover slice) enumerates the per-crate `#[cfg(feature = "...")]` gates needed for downstream sources to compile under both feature configurations. Initial estimate: ~400–600 `#[cfg]` gates across `turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-builders`, derive macros, and the example fleet. The plan document is the verification artifact; the CI matrix (two configurations: default and `--no-default-features --features protocol-2025-11-25`) is the gate.
+A separate plan document (the feature-gating rollout plan — executed and deleted in the 0.4 docs purge) enumerated the per-crate `#[cfg(feature = "...")]` gates needed for downstream sources to compile under both feature configurations. Initial estimate: ~400–600 `#[cfg]` gates across `turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-builders`, derive macros, and the example fleet. The plan document is the verification artifact; the CI matrix (two configurations: default and `--no-default-features --features protocol-2025-11-25`) is the gate.
 
 ### CI surface (as built — see `.github/workflows/ci.yml` / `scripts/ci-gates.sh`)
 
@@ -177,9 +177,9 @@ The user-locked steelman from the decision phase (`docs/plans/2026-07-28-archite
 ### Negative
 
 - **2× CI matrix on the protocol surface.** Every PR that touches `turul-mcp-protocol` or any downstream crate must pass both feature configurations. CI runtime roughly doubles for those PRs. Accepted cost; without the second matrix, the legacy feature is unverified.
-- **~400–600 `#[cfg(feature = "...")]` gates across the framework.** Tasks-related code paths (still present in 2025-11-25, removed in 2026) are the largest concentration. The session/handshake machinery is the second. Each gate is a maintenance burden; the rollout plan (`docs/plans/2026-07-28-feature-gating-rollout.md`) enumerates them so the burden is bounded and auditable.
+- **~400–600 `#[cfg(feature = "...")]` gates across the framework.** Tasks-related code paths (still present in 2025-11-25, removed in 2026) are the largest concentration. The session/handshake machinery is the second. Each gate is a maintenance burden; the rollout plan (executed; in git history) enumerated them so the burden is bounded and auditable.
 - **No incremental migration.** A consumer on 2025-11-25 who wants to move to 2026 must update their source for every breaking surface delta (no `initialize`, `_meta` required, tasks via extension, etc.) in one slice. The cutover is binary at the binary level. Documented in CHANGELOG with migration recipes.
-- **Coverage gap inherited.** 78 of 86 upstream fixture directories remain `Kind::NotModeled` in `compliance/coverage.rs` (per `docs/plans/2026-07-28-PARKED.md:119`). Default = 2026 means consumers' wire shape compliance rests on the modeled 8; the unmodeled 78 are best-effort. Documented in CHANGELOG and COMPLIANCE.md §"Known follow-ups".
+- **Coverage gap inherited.** 78 of 86 upstream fixture directories remained `Kind::NotModeled` in `compliance/coverage.rs` at cutover time. Default = 2026 means consumers' wire shape compliance rests on the modeled 8; the unmodeled 78 are best-effort. Documented in CHANGELOG and COMPLIANCE.md §"Known follow-ups".
 
 ### Neutral
 

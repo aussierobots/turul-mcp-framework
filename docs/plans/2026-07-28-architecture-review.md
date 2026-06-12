@@ -6,7 +6,15 @@
 **Related**: ADR-027 (`docs/adr/027-targeting-mcp-draft-2026-v1.md`), ADR-028 (extensions strategy), ADR-029 (cargo-feature gating), ADR-030 (`turul-mcp-client` bilingual default).
 **Workflow lineage**: Persists the 5-pattern architecture-review output that previously lived in `/tmp` (`wf_2c892fb3-a06`), reshaped for the maintainer-locked decision recorded 2026-05-31.
 
-This document is the **doc-form persistence** of a prior architecture review (originally written to `/tmp`, now permanent per maintainer instruction: "we need this all documented properly in the docs dir not just in /tmp"). It captures the dual-spec problem, the five evaluated patterns, the maintainer's locked decisions, and the consequences that flow from them. Anyone resuming this branch should read this alongside `2026-07-28-PARKED.md`.
+> **Editorial note (2026-06-12):** this review is preserved only for the
+> maintainer-locked decisions in §1–6. Its original operational companion,
+> `2026-07-28-PARKED.md`, captured a transient pre-commit snapshot that has
+> since been fully resolved (all parked commits landed) and was deleted in the
+> 0.4 docs purge — see git history / the v0.3.x tags. The roadmap (§7), revision
+> table (§8), and resume protocol (§9) below are historical and no longer
+> actionable; line-number references into the deleted snapshot have been removed.
+
+This document is the **doc-form persistence** of a prior architecture review (originally written to `/tmp`, now permanent per maintainer instruction: "we need this all documented properly in the docs dir not just in /tmp"). It captures the dual-spec problem, the five evaluated patterns, the maintainer's locked decisions, and the consequences that flow from them.
 
 ---
 
@@ -93,7 +101,7 @@ Roadmap collapses because we are not publishing. The original 12–14 step publi
 1. Persist the architecture review (this document).
 2. Author ADR-029 (cargo-feature gating).
 3. Author ADR-030 (`turul-mcp-client` bilingual default).
-4. Land Slice A' + A'' + B commits per `2026-07-28-PARKED.md:108-113`.
+4. Land Slice A' + A'' + B commits. *(Done.)*
 5. Feature-flag consumer crates (`default = ["2026-07-28"]`, opt-in `legacy-2025-11-25`).
 6. Flip the alias in `crates/turul-mcp-protocol/src/lib.rs` under feature gate.
 7. Bump workspace `turul-rpc` pin from `0.1` to `0.2.2`.
@@ -112,16 +120,16 @@ Roadmap collapses because we are not publishing. The original 12–14 step publi
 | 2026-05-31 | ADR-029 (cargo-feature gating) planned | `docs/adr/029-...md` (planned) |
 | 2026-05-31 | ADR-030 (`turul-mcp-client` bilingual default) planned | `docs/adr/030-...md` (planned) |
 | 2026-05-31 | ADR-027 revision log already covers Slice A' + per-crate versioning | `docs/adr/027-targeting-mcp-draft-2026-v1.md:73-90` |
-| 2026-05-31 | Slice A' + A'' + B commits sequenced but awaiting maintainer authorization | `docs/plans/2026-07-28-PARKED.md:108-113` |
+| 2026-05-31 | Slice A' + A'' + B commits sequenced (since landed) | (tracked in the deleted PARKED snapshot — git history) |
 
 ---
 
 ## 9. Verification
 
 - Protocol crate compliance: `cargo test -p turul-mcp-protocol-2026-07-28 --features compliance` — 342 pass, 0 warn.
-- Branch state: `git status` against `docs/plans/2026-07-28-PARKED.md:79-95` (107 entries, uncommitted).
+- Branch state (2026-05-31): 107 uncommitted entries; all since committed.
 - Schema pin: `crates/turul-mcp-protocol-2026-07-28/schema/EXAMPLES_PIN.md` (commit `c3e3f09e...`, 2026-05-24).
 - No publish: `git log main..HEAD` is local-only.
 
-Resume protocol: read this → read `2026-07-28-PARKED.md` → `git status` → decide commit authorization. Branch lock binding regardless of test state.
+Resume protocol (historical): the parked work described here was committed and the PARKED snapshot deleted in the 0.4 docs purge. The branch lock remains binding regardless of test state.
 

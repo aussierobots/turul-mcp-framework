@@ -1,10 +1,10 @@
 # MCP Framework Examples
 
-This document provides a comprehensive overview of all **54 active examples** in the MCP Framework (plus `examples/archived/` — grown by 5 in the 2026-06-12 archive slice, see `docs/plans/2026-07-28-examples-review.md`), organized by learning progression from basic concepts to advanced implementations.
+This document provides a comprehensive overview of all **54 active examples** in the MCP Framework (plus `examples/archived/` — grown by 5 in the 2026-06-12 archive slice; the disposition review lives in git history), organized by learning progression from basic concepts to advanced implementations.
 
 **✅ All active examples compile under their lane's CI gates** (2026-07-28 default lane
 + per-manifest 2025-11-25 pins). Per-example functional re-verification against the
-2026 stateless core is tracked in `docs/plans/2026-07-28-examples-review.md` — the
+2026 stateless core was reviewed example-by-example in the 2026-06-12 disposition slices (review doc in git history) — the
 2026-02-26 "phases 1-5" sweep predates the 2026 cutover and no longer applies as stated.
 **Last verified**: 2026-06-12 (v0.4.0 branch — MCP 2026-07-28 default, 2025-11-25 opt-in)
 
@@ -185,7 +185,7 @@ These examples demonstrate MCP 2025-11-25 type construction without starting a s
 ### ✅ **ALL 54 ACTIVE EXAMPLES COMPILE UNDER THEIR LANE'S CI GATES**
 **0.4.0 branch (MCP 2026-07-28 default, 2025-11-25 opt-in) — last reconciled 2026-06-12.**
 The per-example functional verification ledger lives in
-`docs/plans/2026-07-28-examples-review.md`; the 2026-06-12 migrate slice
+the 2026-06-12 review (in git history); the migrate slice
 re-verified its six examples live on the wire.
 
 - **Getting Started** - 5 examples (all tool creation levels)
@@ -203,8 +203,8 @@ re-verified its six examples live on the wire.
 
 > Lane-by-lane compilation is enforced by CI (`scripts/ci-gates.sh all`); the
 > 2026-06-12 disposition slices live-verified every migrated and new example.
-> Historical per-example verification notes: `EXAMPLE_VERIFICATION_LOG.md`
-> (0.3-era snapshot).
+> Historical 0.3-era per-example verification notes live in the v0.3.x tags
+> (`EXAMPLE_VERIFICATION_LOG.md`, deleted in the 0.4 docs purge).
 
 ### 🎯 **CURRENT STATE**
 - **2026-07-28 default lane**: stateless core (per-request `_meta`, POST-only, `subscriptions/listen`, MRTR)

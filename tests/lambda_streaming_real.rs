@@ -101,7 +101,6 @@ async fn test_lambda_streaming_handler_execution() {
     // TODO: Verify frames contain expected data
 
     println!("⚠️  TEST STUB: This test needs implementation");
-    println!("    See TODO_TRACKER.md Phase Lambda-1 for implementation plan");
 }
 
 /// Test that progress notifications appear in SSE frames

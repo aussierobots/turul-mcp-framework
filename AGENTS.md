@@ -291,7 +291,7 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply â€
 
 ### Workspace State Triage (Required Before Review Conclusions)
 - Start with `git status --short --branch` to identify whether changes are code, docs, tests, or agent/process files.
-- If changes are primarily docs/agent guidance (e.g., `README.md`, `CLAUDE.md`, `GEMINI.md`, `.claude/agents/*`):
+- If changes are primarily docs/agent guidance (e.g., `README.md`, `CLAUDE.md`, `.claude/agents/*`):
   - Perform a consistency audit across all agent guidance files and this `AGENTS.md`.
   - Check that MCP terminology, method names, capability keys, and spec date are consistent.
   - Check that testing commands and compliance expectations match the current framework guidance in this file.

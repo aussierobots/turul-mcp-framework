@@ -87,8 +87,8 @@ schema/
 
 | Doc | What |
 |-----|------|
-| [`docs/plans/2026-07-28-schema-coverage-matrix.md`](../../docs/plans/2026-07-28-schema-coverage-matrix.md) | Every TS symbol → Rust binding → test → doc, plus the upstream-changelog coverage table |
-| [`docs/plans/2026-07-28-compliance-plan.md`](../../docs/plans/2026-07-28-compliance-plan.md) | Live status of each spec area + remaining items |
+| [`docs/plans/2026-07-28-spec-compliance.md`](../../docs/plans/2026-07-28-spec-compliance.md) | The driver: per-requirement status, gap register, e2e lanes |
+| [`docs/plans/2026-07-28-migration-diff.md`](../../docs/plans/2026-07-28-migration-diff.md) | Every TS symbol → Rust counterpart (NEW/REMOVED/CHANGED) |
 | [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md) | Wire-string target + regeneration trigger |
 | [`docs/adr/028-extensions-strategy.md`](../../docs/adr/028-extensions-strategy.md) | How extensions are hosted (separate `turul-mcp-ext-*` crates) |
 | Per-module rustdoc | Schema-line refs threaded through every `pub` type |

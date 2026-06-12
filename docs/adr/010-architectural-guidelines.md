@@ -194,4 +194,4 @@ impl HasAnnotations for LegacyTool {
 - **MCP 2025-06-18 Specification**: Official protocol specification
 - **ADR-007**: Auto-Detection Resource Security
 - **ADR-009**: Protocol-Based Handler Routing
-- **WORKING_MEMORY.md**: Historical context and completed phases
+- WORKING_MEMORY.md: historical context at the time *(historical 0.3-era doc — deleted in the 0.4 docs purge; see the v0.3.x tags)*

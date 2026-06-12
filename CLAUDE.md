@@ -10,7 +10,6 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 > **Source of Truth**
 > - **AGENTS.md** — repo policy, compliance rules, full architecture
 > - **CLAUDE.md** — concise operator playbook (this file)
-> - **WORKING_MEMORY.md** — historical context and status
 > - **docs/adr/** — architectural decisions
 > - If conflict: AGENTS.md wins.
 

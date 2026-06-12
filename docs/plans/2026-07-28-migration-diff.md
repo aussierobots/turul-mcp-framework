@@ -1,6 +1,6 @@
 # Migration Diff: 2025-11-25 → DRAFT-2026-v1
 
-Derived from `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts` (vendored 2026-05-24, ETag `8bdd4ae5...`). This document maps every TS symbol to its Rust counterpart and flags what's NEW, REMOVED, or CHANGED. Compliance work in `docs/plans/2026-07-28-compliance-plan.md` is driven from this diff.
+Derived from `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts` (vendored 2026-05-24, ETag `8bdd4ae5...`). This document maps every TS symbol to its Rust counterpart and flags what's NEW, REMOVED, or CHANGED. Compliance work was driven from this diff via the (since executed and deleted) phase plan; current tracking is `docs/plans/2026-07-28-spec-compliance.md`.
 
 **Convention:** schema line refs are `[L<n>]`. Existing Rust files refer to `crates/turul-mcp-protocol-2026-07-28/src/`.
 
@@ -297,4 +297,4 @@ These four unions drive the compliance-test exhaustive-coverage check: every var
 
 ## Workflow note
 
-This diff is read-only. Updates land in `docs/plans/2026-07-28-compliance-plan.md` (checkbox progression) and in the source files themselves (the eventual truth). If upstream schema changes invalidate this diff, regenerate.
+This diff is read-only. Status tracking lives in `docs/plans/2026-07-28-spec-compliance.md`; the source files themselves are the eventual truth. If upstream schema changes invalidate this diff, regenerate.

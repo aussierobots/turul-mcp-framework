@@ -1,5 +1,5 @@
 > **ARCHIVED 2026-06-12** — its name/README promised dynamic-resource teaching the code never contained (zero resources registered); URI-template resources are owned by `function-resource-server`.
-> Disposition record: `docs/plans/2026-07-28-examples-review.md`. Not a
+> Disposition record: the 2026-06-12 examples review (in git history). Not a
 > workspace member; kept for reference only.
 
 # Dynamic Resource Server Example

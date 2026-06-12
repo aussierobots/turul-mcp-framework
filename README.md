@@ -296,7 +296,7 @@ curl -X POST http://127.0.0.1:$PORT/mcp \
 
 For detailed testing instructions, server running guides, and compliance verification:
 
-**📚 [Complete Testing Guide](TESTING_GUIDE.md)**
+**📚 Testing**: lane-by-lane gates run via `./scripts/ci-gates.sh all`; the per-requirement test inventory is `docs/plans/2026-07-28-spec-compliance.md` §E2E test plan
 
 This guide includes:
 - ✅ All server running instructions with expected outputs

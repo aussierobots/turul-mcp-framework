@@ -6,7 +6,6 @@
 //! - Correct SSE event type mapping
 //!
 //! This is Option A: Structure testing only (no actual SSE streaming)
-//! See WORKING_MEMORY.md for Options B & C (future phases)
 
 use serde_json::json;
 use std::collections::HashMap;

@@ -159,7 +159,7 @@ The lifecycle is now stateless (per SEP-2567/2575): no `tasks/list` because ther
 4. **Repeat for `turul-mcp-ext-apps`** — MCP-side surface. ✅ (2026-06-12; identifier is `io.modelcontextprotocol/ui`)
 5. **Auth**: existing `turul-mcp-oauth` is already aligned with `io.modelcontextprotocol/oauth-*` extensions — just confirm/update identifiers to match SEP-2133 reverse-DNS form.
 
-Tracked as plan items §5.2 and §5.3 in `docs/plans/2026-07-28-compliance-plan.md`.
+Originally tracked as plan items §5.2 and §5.3 in the compliance phase plan; both executed 2026-06-12 (the plan doc was deleted in the 0.4 docs purge).
 
 ## Open items
 

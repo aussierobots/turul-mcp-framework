@@ -30,7 +30,7 @@ Establish a **Critical Documentation Verification Process** with the following p
 - **Crate README files**: All API examples, constructors, method signatures
 - **Main project README**: Statistics, claims, client examples
 - **Example documentation**: Code accuracy, API patterns
-- **Developer guidance**: CLAUDE.md, TESTING_GUIDE.md
+- **Developer guidance**: CLAUDE.md (TESTING_GUIDE.md was 0.3-era; deleted in the 0.4 docs purge)
 
 ### Documentation Standards
 - **No Fabricated APIs**: All documented methods must exist in source code
@@ -103,6 +103,6 @@ The turul-mcp-framework is production-ready across all major MCP specification a
 
 ## See Also
 
-- [TODO_TRACKER.md](../../TODO_TRACKER.md) - Complete verification task tracking
-- [WORKING_MEMORY.md](../../WORKING_MEMORY.md) - Detailed verification findings
+- TODO_TRACKER.md - verification task tracking at the time *(historical 0.3-era doc — deleted in the 0.4 docs purge; see the v0.3.x tags)*
+- WORKING_MEMORY.md - verification findings at the time *(historical 0.3-era doc — deleted in the 0.4 docs purge; see the v0.3.x tags)*
 - [CLAUDE.md](../../CLAUDE.md) - Developer guidance with correct patterns
