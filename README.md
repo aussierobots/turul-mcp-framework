@@ -12,24 +12,84 @@
 > - Servers are single-spec per build; the client (`turul-mcp-client`) is bilingual.
 > - Expect churn: examples, docs, and E2E tests are still being migrated to 2026 semantics.
 
-# Turul MCP Framework - Beta Rust Implementation
+# Turul MCP Framework
 
 A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. On this branch the default build targets the **MCP 2026-07-28 specification** (stateless core: `server/discover`, per-request `_meta`, no `Mcp-Session-Id`); **MCP 2025-11-25 remains available** as an opt-in (`--no-default-features --features protocol-2025-11-25`).
 
-⚠️ **Beta Status** - Active development with ongoing feature enhancements. Default build is MCP 2026-07-28 (stateless); 2025-11-25 is opt-in. Suitable for development and testing.
+**Pre-1.0 (0.4.x).** The framework is production-shaped — comprehensive test coverage, zero-warning gates — but public APIs may still change before 1.0.0. The default build is MCP 2026-07-28 (stateless); 2025-11-25 is opt-in.
 
-## 🧪 **Active Development** - Comprehensive Test Coverage
+## 🧪 Comprehensive Test Coverage
 **Broad test coverage across the workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
 
 ## ✨ Key Highlights
 
-- **🏗️ 15 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
+- **🏗️ 17 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, serverless support, and opt-in protocol extensions (Tasks, Apps)
 - **📚 Comprehensive Examples**: Real-world business applications and framework demonstrations (most build on the 2026-07-28 default lane; a 2025-11-25 regression set is pinned to the opt-in, and client-using examples are built by explicit CI steps — see EXAMPLES.md)
 - **🧪 Framework-Native Test Suite**: Core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
 - **🌐 Transport Flexibility**: Streamable HTTP via StreamableHttpHandler with SSE streaming (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
 - **🔧 Development Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
+
+## 🆕 MCP 2026-07-28
+
+The default build targets the 2026-07-28 release candidate. This is a **stateless
+rewrite** of the protocol with several core methods removed — if you're coming from
+2025-11-25, read this section first.
+
+### What's new (and implemented here)
+
+- **Stateless core** — `server/discover` advertises versions/capabilities/identity;
+  every request carries `protocolVersion` + `clientInfo` + `clientCapabilities` in
+  `_meta` under `io.modelcontextprotocol/*`. Any server instance serves any request.
+- **MRTR (Multi-Round-Trip Requests, SEP-2322)** — a tool/resource/prompt returns an
+  `InputRequiredResult` to ask for elicitation/sampling/roots input; the client
+  answers and retries the original call. This replaces all server-initiated requests.
+  → `examples/mrtr-elicitation-server`
+- **`subscriptions/listen`** — the ack-first, filtered, long-lived POST SSE stream that
+  replaces 2025's GET-SSE resumability and the `resources/subscribe` RPC.
+- **Tasks extension** (`io.modelcontextprotocol/tasks`, SEP-2663) — durable poll handles
+  via `turul-mcp-ext-tasks` (opt-in `ext-tasks` feature): `.with_ext_tasks()` +
+  `.ext_task_tool()` server-side, `call_tool_or_task` / `task_*` client-side.
+  → `examples/ext-tasks-server`
+- **MCP Apps extension** (`io.modelcontextprotocol/ui`, SEP-1865) — MCP-side bindings
+  (`turul-mcp-ext-apps`).
+- **SEP-2243 request-metadata headers** — `Mcp-Method` / `Mcp-Name` / `Mcp-Param-*` let
+  infrastructure route on method/tool/arguments without parsing JSON bodies.
+  → `examples/header-bound-tools-server`
+- **Origin validation / DNS-rebinding protection** — on by default (ADR-031).
+  → `examples/origin-policy-server`
+- **JSON Schema 2020-12**, **caching headers** (`ttlMs` / `cacheScope` on list/read
+  results), and OAuth 2.1 Resource Server hardening (RFC 9207/9728).
+
+### What changed from 2025-11-25
+
+- **No handshake** — `initialize` → `notifications/initialized` → `Mcp-Session-Id` is
+  gone; capabilities ride per-request `_meta` instead.
+- **Error codes** — resource-not-found moved from `-32002` to `-32602`; new
+  `-32001` (header mismatch), `-32003` (missing required client capability),
+  `-32004` (unsupported protocol version).
+- **Per-request logging** — log level is set per-request via `io.modelcontextprotocol/logLevel`
+  in `_meta`; servers must not emit `notifications/message` for requests that didn't opt in.
+- **Deprecations (SEP-2577)** — Roots, Sampling, and Logging are deprecated (earliest
+  removal 2027-07-28). Still implemented; on 2026 the server-initiated forms ride MRTR.
+
+### What's removed from the core (2026 default → these 404 / 405)
+
+| Removed | SEP | Replacement on 2026 |
+|---|---|---|
+| `initialize` / `notifications/initialized` | 2575 | `server/discover` + per-request `_meta` |
+| Protocol sessions / `Mcp-Session-Id` | 2567 | stateless; server-minted handles as tool args |
+| `ping` | 2575 | — (use `server/discover` for liveness) |
+| `logging/setLevel` | 2575 | per-request `_meta.logLevel` |
+| `notifications/roots/list_changed` | 2575 | — |
+| GET SSE endpoint / `resources/subscribe` | 2575 | `subscriptions/listen` |
+| Core `tasks/*` (incl. `tasks/list`, blocking `tasks/result`) | 2663 | the Tasks **extension** (`tasks/get` polling + `tasks/update`) |
+
+**2025-11-25 stays fully supported** as the opt-in stateful lane
+(`--no-default-features --features protocol-2025-11-25`) — the handshake, sessions,
+GET SSE, and core tasks all work there. Per-requirement compliance status:
+[`docs/plans/2026-07-28-spec-compliance.md`](docs/plans/2026-07-28-spec-compliance.md).
 
 ## Turul MCP vs Turul RPC
 
@@ -53,7 +113,7 @@ async fn add(
     #[param(description = "First number")] a: f64,
     #[param(description = "Second number")] b: f64,
 ) -> McpResult<f64> {
-    Ok(a + b)  // Framework wraps as {"output": 8.0} in JSON-RPC response
+    Ok(a + b)  // Function macro wraps as {"result": 8.0} (override with output_field)
 }
 
 #[tokio::main]
@@ -69,7 +129,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-> **Task support:** Add `task_support = "optional"` to enable the "Run as Task" button in MCP Inspector. Values: `"optional"`, `"required"`, `"forbidden"`. Requires `.with_task_storage()` on the server builder.
+> **Task support:**
+> - **2026-07-28** — tasks are the `io.modelcontextprotocol/tasks` extension (SEP-2663). Enable the `ext-tasks` feature, register the store with `.with_ext_tasks(store)`, and mark electable tools with `.ext_task_tool(tool)`. See `examples/ext-tasks-server`.
+> - **2025-11-25 opt-in** — tasks are a core capability: add `task_support = "optional"` (`"optional"` / `"required"` / `"forbidden"`) to enable the "Run as Task" button in MCP Inspector; requires `.with_task_storage()` on the builder.
 
 ### 2. Derive Macros (Struct-Based)
 
@@ -212,15 +274,15 @@ curl -X POST http://127.0.0.1:8641/mcp \
 
 ### Example Servers - Ready to Run
 
-**Core Test Servers:**
+**Core Test Servers** (manifest-pinned to the **2025-11-25** opt-in lane — they are the stateful regression fixtures, so use the 2025 handshake against them, not the 2026 `server/discover` curls below):
 ```bash
 # Tools server (test tools)
 cargo run --package tools-test-server -- --port 8002
 
-# Resource server (17 test resources)  
+# Resource server (test resources)
 cargo run --package resource-test-server -- --port 8080
 
-# Prompts server (11 test prompts)
+# Prompts server (test prompts)
 cargo run --package prompts-test-server -- --port 8081
 ```
 
@@ -243,11 +305,14 @@ cargo run -p stateful-server
 
 The default build is stateless: there is no `initialize` handshake and no `Mcp-Session-Id`
 header. Capabilities, client info, and the protocol version travel in `_meta` on every
-request under the `io.modelcontextprotocol/*` namespace.
+request under the `io.modelcontextprotocol/*` namespace. Use a **2026-default** server such
+as `minimal-server` (port 8641) — the `*-test-server` fixtures above are 2025-pinned and
+will not answer `server/discover`.
 
 **Step 1: Discover the server**
 ```bash
-PORT=8080  # Replace with your server's port
+cargo run -p minimal-server   # 2026 default, binds 127.0.0.1:8641
+PORT=8641  # a 2026-default server's port
 curl -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
   -H 'MCP-Protocol-Version: 2026-07-28' \
@@ -423,7 +488,7 @@ impl McpMiddleware for AuthMiddleware {
 - `examples/middleware-auth-lambda` - Full authorizer extraction pattern (V1 nested, V1 flat, V2)
 - Test events: V1 nested, V1 flat, V2 authorizer shapes (`test-events/`)
 
-### Core Framework (15 Crates)
+### Core Framework (17 Crates)
 - **`turul-mcp-server`** - High-level server builder with session management and task runtime
 - **`turul-mcp-client`** - Comprehensive client library with HTTP transport support (bilingual: 2026-07-28 + 2025-11-25)
 - **`turul-http-mcp-server`** - HTTP/SSE transport with CORS and streaming
@@ -433,6 +498,8 @@ impl McpMiddleware for AuthMiddleware {
 - **`turul-mcp-protocol-2025-06-18`** - Legacy MCP specification (frozen historical snapshot)
 - **`turul-mcp-derive`** - Procedural macros for all MCP areas
 - **`turul-mcp-builders`** - Runtime builder patterns for dynamic MCP components
+- **`turul-mcp-ext-tasks`** - Tasks extension (`io.modelcontextprotocol/tasks`, SEP-2663) for the 2026-07-28 lane (opt-in `ext-tasks` feature)
+- **`turul-mcp-ext-apps`** - MCP Apps extension (`io.modelcontextprotocol/ui`, SEP-1865) — MCP-side bindings
 - **`turul-mcp-json-rpc-server`** - Frozen 0.3.x compatibility shim re-exporting [`turul-rpc`](https://github.com/aussierobots/turul-rpc); the framework crates depend on `turul-rpc` directly (see ADR-025)
 - **`turul-mcp-session-storage`** - Session storage backends (SQLite, PostgreSQL, DynamoDB)
 - **`turul-mcp-task-storage`** - Task storage for long-running operations (InMemory, with pluggable backends)
@@ -440,11 +507,17 @@ impl McpMiddleware for AuthMiddleware {
 - **`turul-mcp-aws-lambda`** - AWS Lambda integration for serverless deployment
 - **`turul-mcp-oauth`** - OAuth 2.1 Resource Server support (JWT validation, Bearer middleware)
 
-### Tasks Architecture ADRs
+### Tasks Architecture
 
-Tasks are a 2026-07-28 *extension* (and were a core MCP 2025-11-25 capability). On the 2026-07-28 default build the in-tree task runtime is gated to the `protocol-2025-11-25` opt-in (`#[cfg(feature = "protocol-2025-11-25")]`); the framework provides full implementation support (protocol types, storage, runtime, handlers, and tests) under that opt-in. See the architecture decision records for design rationale:
+Tasks moved from a **core capability (2025-11-25)** to an **extension (2026-07-28)**, and the framework implements both:
 
-- [ADR-015: Protocol Crate Strategy](docs/adr/015-mcp-2025-11-25-protocol-crate.md) — separate crate for 2025-11-25 spec types including Tasks
+- **2026-07-28** — the `io.modelcontextprotocol/tasks` extension (SEP-2663) in `turul-mcp-ext-tasks`, wired into the server behind the opt-in `ext-tasks` feature (`.with_ext_tasks(store)` + `.ext_task_tool(...)`) and the client (`call_tool_or_task`, `task_get`/`task_update`/`task_cancel`/`task_wait`). Server election, the `-32003` capability gate, mid-task input via `tasks/update`, and `notifications/tasks` over `subscriptions/listen` are all implemented. See `examples/ext-tasks-server`.
+- **2025-11-25 opt-in** — the original in-tree core task runtime, gated to `#[cfg(feature = "protocol-2025-11-25")]` (protocol types, storage, runtime, handlers, tests).
+
+Architecture decision records:
+
+- [ADR-028: Extensions Strategy](docs/adr/028-extensions-strategy.md) — per-extension crates; how the 2026 Tasks/Apps extensions are hosted
+- [ADR-015: Protocol Crate Strategy](docs/adr/015-mcp-2025-11-25-protocol-crate.md) — separate crate for 2025-11-25 spec types including core Tasks
 - [ADR-016: Task Storage Architecture](docs/adr/016-task-storage-architecture.md) — `TaskStorage` trait, 4 backends, state machine, parity test suite
 - [ADR-017: Task Runtime-Executor Boundary](docs/adr/017-task-runtime-executor-boundary.md) — three-layer split: storage / executor / runtime
 - [ADR-018: Task Pagination Cursor Contract](docs/adr/018-task-pagination-cursor-contract.md) — deterministic cursor-based pagination across backends
@@ -561,12 +634,13 @@ let server = McpServer::builder()
 - ✅ **Resources** (`ResourceDefinition`) - Static and dynamic content serving with access control
 - ✅ **Prompts** (`PromptDefinition`) - AI interaction template generation with parameter validation
 - ✅ **Completion** (`CompletionDefinition`) - Context-aware text completion with model preferences
-- ✅ **Logging** (`LoggerDefinition`) - Dynamic log level management with structured output
 - ✅ **Notifications** (`NotificationDefinition`) - Real-time SSE event broadcasting with filtering
-- ✅ **Roots** (`RootDefinition`) - Secure file system access boundaries with permissions
-- ✅ **Sampling** (`SamplingDefinition`) - AI model integration patterns with constraints
-- ✅ **Elicitation** (`ElicitationDefinition`) - Structured user input collection with validation
-- ✅ **Session Management** - Stateful operations with UUID v7 correlation IDs
+- ✅ **Elicitation** (`ElicitationDefinition`) - Structured user input collection with validation (rides MRTR on 2026)
+- ⚠️ **Logging** (`LoggerDefinition`) - Dynamic log level management — *deprecated on 2026 (SEP-2577); per-request `logLevel` opt-in*
+- ⚠️ **Roots** (`RootDefinition`) - Secure file system access boundaries — *deprecated on 2026 (SEP-2577); rides MRTR*
+- ⚠️ **Sampling** (`SamplingDefinition`) - AI model integration patterns — *deprecated on 2026 (SEP-2577); rides MRTR*
+- ✅ **Tasks** — Tasks extension on 2026 (`turul-mcp-ext-tasks`); core capability on the 2025-11-25 opt-in
+- ✅ **Session Management** - Stateful operations with UUID v7 — *2025-11-25 opt-in only; the 2026 core is stateless*
 
 ### Transport Support
 - **Streamable HTTP** - Production transport via `StreamableHttpHandler` (HTTP/1.1 & HTTP/2 with chunked SSE; stateless on the 2026-07-28 default, stateful with GET SSE on the 2025-11-25 opt-in)
@@ -593,6 +667,7 @@ Development servers for actual business problems:
 ### 🔧 Framework Demonstrations
 Educational examples showcasing framework patterns:
 - **Basic Patterns**: minimal-server, calculator-add-manual-server, zero-config-getting-started
+- **2026 Protocol Features**: ext-tasks-server (Tasks extension), mrtr-elicitation-server (multi-round-trip input), origin-policy-server (DNS-rebinding protection), header-bound-tools-server (SEP-2243 `Mcp-Param`), streamable-http-client (paired 2026 client)
 - **Advanced Features**: stateful-server (2025-pinned), pagination-server, tasks-e2e-inmemory-server (2025-pinned)
 - **Macro System**: derive-macro-server, function-macro-server, function-resource-server
 - **Serverless**: lambda-mcp-server (AWS Lambda with SQS integration)
@@ -1238,9 +1313,9 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 ### 🎯 Current Framework State
 - **MCP 2026-07-28 adoption (this branch)**: default build targets the 2026-07-28 stateless core; 2025-11-25 remains fully supported as the opt-in stateful line
-- **Examples Validated**: 53 active examples compile under their lane's CI gates (2026-07-28 default lane plus the pinned 2025-11-25 regression set — see EXAMPLES.md)
+- **Examples Validated**: 54 active examples compile under their lane's CI gates (2026-07-28 default lane plus the pinned 2025-11-25 regression set — see EXAMPLES.md)
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
-- **Beta Status**: Active development with API stability considerations before 1.0.0
+- **Pre-1.0 (0.4.x)**: production-shaped with comprehensive test coverage; public APIs may still change before 1.0.0
 
 ### 🚧 Current Limitations
 
@@ -1259,7 +1334,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 - **Concurrency Stress Testing**: Some resource tests show occasional failures under extreme load
 - **Browser Compatibility**: CORS support available but may need tuning for specific client requirements
 
-**Framework Philosophy**: We prioritize honest documentation over inflated claims. This beta status reflects our commitment to transparency about the current development state.
+**Framework Philosophy**: We prioritize honest documentation over inflated claims. The limitations above reflect our commitment to transparency about the current development state.
 
 ---
 
