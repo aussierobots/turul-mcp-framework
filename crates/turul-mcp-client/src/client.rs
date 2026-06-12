@@ -1379,6 +1379,99 @@ impl McpClient {
         .into())
     }
 
+    /// `tools/call` that accepts EITHER a synchronous completion or a
+    /// `CreateTaskResult` (`resultType: "task"`, SEP-2663). Requires a
+    /// 2026-07-28 connection and `declared_capabilities.ext_tasks = true`
+    /// (servers MUST NOT return task handles to clients that did not declare
+    /// the extension).
+    #[cfg(feature = "ext-tasks")]
+    pub async fn call_tool_or_task(
+        &self,
+        name: &str,
+        arguments: Value,
+    ) -> McpClientResult<ToolCallOutcome> {
+        if self.negotiated_version().await != Some(crate::version::McpVersion::V2026_07_28) {
+            return Err(crate::error::ProtocolError::MethodNotFound(
+                "the Tasks extension requires a 2026-07-28 connection".to_string(),
+            )
+            .into());
+        }
+        let extra = json!({ "name": name, "arguments": arguments });
+        self.send_2026_07_28_with_extra_headers(
+            "tools/call",
+            extra,
+            &[("Mcp-Name".to_string(), name.to_string())],
+            |result| {
+                if result.get("resultType").and_then(|v| v.as_str())
+                    == Some(turul_mcp_ext_tasks::RESULT_TYPE_TASK)
+                {
+                    let task: turul_mcp_ext_tasks::CreateTaskResult =
+                        serde_json::from_value(result.clone())?;
+                    return Ok(ToolCallOutcome::Task(task));
+                }
+                crate::protocol::v2026_07_28::parse_call_tool(result)
+                    .map(ToolCallOutcome::Completed)
+            },
+        )
+        .await
+    }
+
+    /// `tasks/get` — poll one task's state (SEP-2663).
+    #[cfg(feature = "ext-tasks")]
+    pub async fn task_get(
+        &self,
+        task_id: &str,
+    ) -> McpClientResult<turul_mcp_ext_tasks::DetailedTask> {
+        self.send_2026_07_28("tasks/get", json!({ "taskId": task_id }), |result| {
+            let r: turul_mcp_ext_tasks::GetTaskResult = serde_json::from_value(result.clone())?;
+            Ok(r.task)
+        })
+        .await
+    }
+
+    /// `tasks/update` — deliver input responses to an `input_required` task
+    /// (SEP-2663). `input_responses` is the `{key: InputResponse}` map whose
+    /// keys answer the task's outstanding `inputRequests`.
+    #[cfg(feature = "ext-tasks")]
+    pub async fn task_update(&self, task_id: &str, input_responses: Value) -> McpClientResult<()> {
+        self.send_2026_07_28(
+            "tasks/update",
+            json!({ "taskId": task_id, "inputResponses": input_responses }),
+            |_| Ok(()),
+        )
+        .await
+    }
+
+    /// `tasks/cancel` — cooperative cancellation (SEP-2663); the ack does not
+    /// guarantee a `cancelled` terminal status.
+    #[cfg(feature = "ext-tasks")]
+    pub async fn task_cancel(&self, task_id: &str) -> McpClientResult<()> {
+        self.send_2026_07_28("tasks/cancel", json!({ "taskId": task_id }), |_| Ok(()))
+            .await
+    }
+
+    /// Poll `tasks/get` until the task reaches a terminal status, honoring
+    /// the server's `pollIntervalMs` hint (clamped to [50ms, 30s]; default
+    /// 500ms when the server sends none).
+    #[cfg(feature = "ext-tasks")]
+    pub async fn task_wait(
+        &self,
+        task_id: &str,
+    ) -> McpClientResult<turul_mcp_ext_tasks::DetailedTask> {
+        loop {
+            let task = self.task_get(task_id).await?;
+            if task.status().is_terminal() {
+                return Ok(task);
+            }
+            let interval_ms = task
+                .fields()
+                .poll_interval_ms
+                .unwrap_or(500.0)
+                .clamp(50.0, 30_000.0);
+            tokio::time::sleep(std::time::Duration::from_millis(interval_ms as u64)).await;
+        }
+    }
+
     /// List available resources (returns cached result if available)
     ///
     /// Returns the FIRST page only — use
@@ -2121,6 +2214,18 @@ fn value_to_request_params(params: Value) -> Option<RequestParams> {
             other
         ),
     }
+}
+
+/// Outcome of [`McpClient::call_tool_or_task`] (SEP-2663): the server is the
+/// sole decider of task materialization.
+#[cfg(feature = "ext-tasks")]
+#[derive(Debug)]
+pub enum ToolCallOutcome {
+    /// The call completed synchronously with an ordinary tool result.
+    Completed(CallToolResult),
+    /// The server elected a task — poll with
+    /// [`McpClient::task_wait`]/[`McpClient::task_get`].
+    Task(turul_mcp_ext_tasks::CreateTaskResult),
 }
 
 /// A live `subscriptions/listen` stream: the acknowledged filter subset, the

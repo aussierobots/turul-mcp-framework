@@ -242,6 +242,8 @@ pub mod transport;
 pub mod version;
 
 // Re-export main types
+#[cfg(feature = "ext-tasks")]
+pub use client::ToolCallOutcome;
 /// High-level MCP client with session management and automatic reconnection
 pub use client::{
     McpClient, McpClientBuilder, NotificationCallback, SubscriptionStream, ToolCallResponse,

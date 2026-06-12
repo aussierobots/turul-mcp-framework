@@ -76,6 +76,8 @@ jobs:
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-tasks --test ext_tasks_2026
       - name: Extension crates standalone
         run: cargo test -p turul-mcp-ext-tasks -p turul-mcp-ext-apps
+      - name: Tasks extension client e2e
+        run: cargo test -p turul-mcp-client --features ext-tasks --test ext_tasks_e2e_2026
 
   opt-in-2025:
     name: Opt-in lane (2025-11-25)

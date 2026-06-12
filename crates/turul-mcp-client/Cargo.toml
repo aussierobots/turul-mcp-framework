@@ -20,6 +20,7 @@ description = "Comprehensive MCP client library with multi-transport support"
 # the alias's protocol features and trip the spec mutex (e.g. linking this
 # client and a 2026-default server into one test binary).
 turul-mcp-protocol-2025-11-25 = { workspace = true }
+turul-mcp-ext-tasks = { workspace = true, optional = true }
 turul-mcp-protocol-2026-07-28 = { workspace = true, optional = true }
 turul-rpc = { workspace = true }
 
@@ -62,6 +63,9 @@ all-transports = ["http", "sse", "stdio"]
 # Bilingual (default) links both protocol crates; one McpClient negotiates the
 # wire spec per connection at connect() time.
 client-bilingual = ["dep:turul-mcp-protocol-2026-07-28"]
+# Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) client surface —
+# 2026-07-28 connections only; off by default per SEP-2133.
+ext-tasks = ["dep:turul-mcp-ext-tasks"]
 # Narrowing: each speaks exactly ONE wire spec. Requires --no-default-features
 # (otherwise client-bilingual is also active and the mutex fires). The frozen
 # 2025-11-25 protocol crate is always linked as the shared type vocabulary;
@@ -75,7 +79,7 @@ wiremock = "0.6"
 # Real-server e2e: bilingual client against an in-process 2026 stateless server.
 # Default features (http, sse -> protocol-2026-07-28); no alias-mutex conflict
 # because this crate links the versioned protocol crates directly, not the alias.
-turul-mcp-server = { path = "../turul-mcp-server", version = "0.4.0" }
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.4.0", features = ["ext-tasks"] }
 turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4.0" }
 # The derive macros expand to `turul_mcp_protocol::` / `turul_mcp_builders::`
 # paths, so the e2e test target needs both (2026 default, matching the dev

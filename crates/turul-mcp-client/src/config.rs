@@ -60,6 +60,12 @@ pub struct DeclaredCapabilities {
     pub sampling_context: bool,
     /// Can answer `roots/list` input requests (deprecated per SEP-2577).
     pub roots: bool,
+    /// Declares the Tasks extension (`io.modelcontextprotocol/tasks`,
+    /// SEP-2663) in every 2026 request's `_meta` `clientCapabilities.extensions`
+    /// — servers may then answer task-electing calls with a `CreateTaskResult`
+    /// instead of the normal result. Use the `call_tool_or_task`/`task_*`
+    /// client APIs (requires the `ext-tasks` cargo feature).
+    pub ext_tasks: bool,
 }
 
 /// Client identification information

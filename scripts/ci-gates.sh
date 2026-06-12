@@ -44,6 +44,7 @@ gate_default() {
   run "client-using examples (not in default-members)" cargo build -p mrtr-elicitation-server --bins -p bilingual-fleet-client
   run "Tasks extension (SEP-2663, opt-in feature)" cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-tasks --test ext_tasks_2026
   run "ext crates standalone" cargo test -p turul-mcp-ext-tasks -p turul-mcp-ext-apps
+  run "Tasks extension client e2e" cargo test -p turul-mcp-client --features ext-tasks --test ext_tasks_e2e_2026
 }
 
 gate_opt_in_2025() {

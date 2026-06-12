@@ -39,6 +39,12 @@ pub(crate) fn request_meta(
             },
         ),
         roots: declared.roots.then(Default::default),
+        extensions: declared.ext_tasks.then(|| {
+            std::collections::HashMap::from([(
+                "io.modelcontextprotocol/tasks".to_string(),
+                serde_json::json!({}),
+            )])
+        }),
         ..Default::default()
     };
     p::meta::RequestMetaObject::new(
@@ -285,6 +291,29 @@ mod tests {
     /// Sub-capability declarations reach the wire shapes the gating servers
     /// check: elicitation.url and sampling.tools/.context.
     #[test]
+    fn ext_tasks_declaration_rides_request_meta_extensions() {
+        let declared = crate::config::DeclaredCapabilities {
+            ext_tasks: true,
+            ..Default::default()
+        };
+        let meta = request_meta("t", "1", &declared);
+        let v = serde_json::to_value(&meta).unwrap();
+        assert_eq!(
+            v["io.modelcontextprotocol/clientCapabilities"]["extensions"]["io.modelcontextprotocol/tasks"],
+            serde_json::json!({})
+        );
+
+        let none = request_meta("t", "1", &Default::default());
+        let v = serde_json::to_value(&none).unwrap();
+        assert!(
+            v["io.modelcontextprotocol/clientCapabilities"]
+                .get("extensions")
+                .is_none(),
+            "no declaration without the opt-in: {v}"
+        );
+    }
+
+    #[test]
     fn sub_capabilities_map_into_request_meta() {
         let declared = crate::config::DeclaredCapabilities {
             elicitation: true,
@@ -293,6 +322,7 @@ mod tests {
             sampling_tools: true,
             sampling_context: false,
             roots: false,
+            ext_tasks: false,
         };
         let meta = request_meta("t", "1", &declared);
         let v = serde_json::to_value(&meta).unwrap();
