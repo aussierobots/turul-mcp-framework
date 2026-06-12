@@ -1,0 +1,25 @@
+# Spec-NEUTRAL extension crate (no date suffix): one crate hosts the tasks
+# extension across spec lines, gated like the protocol coexistence features.
+# Extension crates version independently (SEP-2133 §Evolution) — literal
+# version, never version.workspace = true.
+[package]
+name = "turul-mcp-ext-tasks"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "MCP Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) — spec-neutral crate, 2026-07-28 lane first"
+
+[features]
+default = ["protocol-2026-07-28"]
+# The SEP-2663 extension surface for the 2026-07-28 stateless line.
+protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
+
+[dependencies]
+# Extension modules bind to their protocol-schema-version sibling directly,
+# behind the matching feature gate.
+turul-mcp-protocol-2026-07-28 = { version = "0.4.0", path = "../turul-mcp-protocol-2026-07-28", optional = true }
+serde.workspace = true
+serde_json.workspace = true

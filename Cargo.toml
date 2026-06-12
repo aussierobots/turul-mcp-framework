@@ -6,6 +6,8 @@ members = [
   "crates/turul-mcp-protocol-2025-06-18",
   "crates/turul-mcp-protocol-2025-11-25",
   "crates/turul-mcp-protocol-2026-07-28",
+  "crates/turul-mcp-ext-apps",
+  "crates/turul-mcp-ext-tasks",
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
   "crates/turul-mcp-task-storage",
@@ -105,6 +107,8 @@ members = [
 # Examples are added back here as they are migrated to 2026.
 default-members = [
   "crates/turul-mcp-protocol-2026-07-28",
+  "crates/turul-mcp-ext-apps",
+  "crates/turul-mcp-ext-tasks",
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
   "crates/turul-mcp-server-state-storage",

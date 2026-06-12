@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-24
-**Crate(s):** `turul-mcp-protocol-2026-07-28` (host of the `extensions` capability map) + future `turul-mcp-ext-tasks-2026-07-28` (and siblings)
+**Crate(s):** `turul-mcp-protocol-2026-07-28` (host of the `extensions` capability map) + `turul-mcp-ext-tasks` / `turul-mcp-ext-apps` (and future siblings)
 **Branch:** `2026-07-28-MCP-Specification` (and sub-branches)
 **Related:** ADR-027 (DRAFT-2026-v1 wire-string target), SEP-2133 (extensions framework), SEP-2663 (tasks extension), SEP-1865 (MCP Apps extension)
 
@@ -30,14 +30,16 @@ The framework therefore needs to answer five questions about how it hosts extens
 
 ## Decision
 
-### 1. Extensions live in their own crates, named `turul-mcp-ext-<name>-<schema-version>`
+### 1. Extensions live in their own SPEC-NEUTRAL crates, named `turul-mcp-ext-<name>`
 
-We mirror upstream's repo-per-extension separation at the crate level. Each official extension that the framework chooses to support gets its own crate:
+(Revised 2026-06-07; original schema-version-suffixed convention recorded in the revision log.)
+
+We mirror upstream's repo-per-extension separation at the crate level. Each official extension that the framework chooses to support gets its own crate, named WITHOUT a schema-version suffix — per-spec-line surfaces live in feature-gated modules inside the one crate (`v2026_07_28`, …), the same coexistence pattern the protocol features use:
 
 | Upstream repo | Framework crate | Extension identifier | Initial version |
 |---------------|------------------|----------------------|-----------------|
-| `modelcontextprotocol/ext-tasks` | `turul-mcp-ext-tasks-2026-07-28` | `io.modelcontextprotocol/tasks` | `0.1.0` |
-| `modelcontextprotocol/ext-apps` | `turul-mcp-ext-apps-2026-07-28` | `io.modelcontextprotocol/apps` (SEP-1865) | `0.1.0` |
+| `modelcontextprotocol/ext-tasks` | `turul-mcp-ext-tasks` | `io.modelcontextprotocol/tasks` | `0.1.0` |
+| `modelcontextprotocol/ext-apps` | `turul-mcp-ext-apps` | `io.modelcontextprotocol/ui` (SEP-1865; upstream reserves this label — see the 2026-06-12 revision entry) | `0.1.0` |
 | `modelcontextprotocol/ext-auth` | (already covered by existing `turul-mcp-oauth` crate; rebrand only if needed) | `io.modelcontextprotocol/oauth-client-credentials` etc. | inherits existing version |
 
 **Why a separate crate per extension** (not a single `turul-mcp-extensions` blanket crate, not in-tree modules of `turul-mcp-protocol-2026-07-28`):
@@ -45,34 +47,37 @@ We mirror upstream's repo-per-extension separation at the crate level. Each offi
 - **Matches SEP-2133 governance.** Upstream is explicit that extensions evolve independently. Crates can version, ship, and break independently of the protocol crate.
 - **Honors the "disabled by default" rule.** A consumer that doesn't depend on `turul-mcp-ext-tasks-*` cannot accidentally import or expose task types. The Cargo dependency declaration is the opt-in.
 - **Keeps the protocol crate spec-pure.** `turul-mcp-protocol-2026-07-28` only hosts core schema types. The `extensions: HashMap<String, Value>` capability map field is the ONLY extension surface in the protocol crate itself — the values are opaque `serde_json::Value` so the protocol crate doesn't need to know about any specific extension.
-- **Allows non-core extensions.** Third-party extensions can publish `turul-mcp-ext-<vendor>-<name>-<version>` crates following the same naming pattern without touching `turul-mcp-protocol-*`.
+- **Allows non-core extensions.** Third-party extensions can publish `turul-mcp-ext-<vendor>-<name>` crates following the same naming pattern without touching `turul-mcp-protocol-*`.
 
-**Why `-<schema-version>` suffix on the crate name** (not just `turul-mcp-ext-tasks`):
+**Why spec-NEUTRAL crate names + feature-gated lane modules** (not `-<schema-version>` suffixed crates):
 
-- The extension's wire shape is fixed against a specific protocol schema version. When the protocol moves to e.g. `2027-NN-NN`, the extension may need to update its types (the schema's `Result`/`InputRequiredResult` shapes etc. may shift). Suffixing the schema version lets multiple major versions coexist in the workspace, just like the protocol crates themselves (`turul-mcp-protocol-2025-11-25`, `turul-mcp-protocol-2026-07-28`).
-- Mirrors the "frozen crate" rule (`CLAUDE.md`/`AGENTS.md` "Frozen Protocol Crates"): the `2026-07-28` extensions are frozen once their schema version is frozen, and new spec-version work happens in `-<new-version>` siblings.
+- One crate can host and RECONCILE an extension across spec lines — tasks is the proving case (2025-11-25 carries tasks in core; 2026-07-28 moves them to the `io.modelcontextprotocol/tasks` extension). A per-spec crate fork would force the cross-spec story into a third place.
+- Per-spec surfaces live in feature-gated modules (`#[cfg(feature = "protocol-2026-07-28")] pub mod v2026_07_28;`) with the protocol-sibling dependency optional behind the matching feature — exactly the coexistence pattern of the protocol features (ADR-029). `--no-default-features` compiles to an empty crate.
+- Per SEP-2133, a breaking change to the extension's own wire shape mints a new extension IDENTIFIER (e.g. `io.modelcontextprotocol/tasks-v2`); that is versioned inside the crate (a new module + semver major), not by a crate-name suffix.
+- A bare-name crate also satisfies the repo's spec-version naming rule: names without a date are deliberately spec-neutral (`CLAUDE.md` §Spec-Version Naming).
 
 ### 2. Where the extension types and wire surface live
 
 Per extension crate, the layout mirrors the protocol crate idiom:
 
 ```
-crates/turul-mcp-ext-tasks-2026-07-28/
-├── Cargo.toml
-├── README.md
+crates/turul-mcp-ext-tasks/
+├── Cargo.toml          # features: protocol-2026-07-28 (default), later protocol-2025-11-25
 ├── schema/
-│   └── README.md       # provenance of any vendored upstream extension schema fragments
+│   └── README.md       # provenance of vendored upstream extension schema (pinned commit)
 └── src/
-    ├── lib.rs          # public re-exports + module doc
-    ├── types.rs        # Task, CreateTaskResult, GetTaskRequest/Result, etc.
-    ├── lifecycle.rs    # tasks/get, tasks/update, tasks/cancel method bindings
-    ├── capability.rs   # extension capability shape, helper to detect + assert support
-    └── compliance_test.rs   # wire-shape tests against vendored SEP-2663 fragments
+    ├── lib.rs          # feature-gated lane modules + flat re-exports
+    └── v2026_07_28/
+        ├── mod.rs
+        ├── types.rs    # Task, DetailedTask, CreateTaskResult, etc.
+        ├── lifecycle.rs # tasks/get, tasks/update, tasks/cancel method bindings
+        ├── capability.rs # extension capability shape + support detection
+        └── compliance_test.rs # wire-shape tests against the vendored schema
 ```
 
 Each extension crate:
 
-- Depends on `turul-mcp-protocol-2026-07-28` (for `Result`, `ResultType`, `RequestMetaObject`, error types).
+- Depends on the protocol-schema-version sibling for each lane module (`turul-mcp-protocol-2026-07-28` for `v2026_07_28`), as an OPTIONAL dependency behind the matching `protocol-*` feature.
 - Re-exports the extension identifier as a `pub const EXTENSION_IDENTIFIER: &str = "..."`.
 - Provides a `capability()` helper returning the value to insert under the identifier in `ClientCapabilities.extensions` / `ServerCapabilities.extensions`.
 - Has its own `compliance_test.rs` mirroring the protocol crate's approach (schema-line refs in doc comments, wire-shape tests, drift detectors).
@@ -82,7 +87,7 @@ Each extension crate:
 `turul-mcp-protocol-2026-07-28::initialize::ClientCapabilities.extensions: Option<HashMap<String, Value>>` and the corresponding `ServerCapabilities.extensions` field stay typed as `serde_json::Value` for the per-extension settings. Each extension crate provides a typed helper:
 
 ```rust
-// In turul-mcp-ext-tasks-2026-07-28/src/capability.rs:
+// In turul-mcp-ext-tasks/src/v2026_07_28/capability.rs:
 pub const EXTENSION_IDENTIFIER: &str = "io.modelcontextprotocol/tasks";
 
 pub fn capability() -> serde_json::Value {
@@ -115,7 +120,7 @@ Per SEP-2133 §Evolution: "All extensions evolve independently of the core proto
 
 - The extension crate's `Cargo.toml` declares its own `version`, NOT `version.workspace = true` (same independent-versioning pattern established for `turul-mcp-protocol-2026-07-28 = "0.4.0"` in ADR-027).
 - Breaking changes to an extension's types REQUIRE a major bump per the extension crate's own semver — independent of whether the protocol crate has bumped.
-- Per SEP-2133's breaking-change rule, breaking changes to the extension's wire shape MUST also use a new extension identifier (e.g. `io.modelcontextprotocol/tasks-v2`). When this happens, the existing crate is frozen and a new crate is created at the next protocol-schema-version boundary (`turul-mcp-ext-tasks-v2-NNNN-NN-NN`).
+- Per SEP-2133's breaking-change rule, breaking changes to the extension's wire shape MUST also use a new extension identifier (e.g. `io.modelcontextprotocol/tasks-v2`). The new identifier's surface lands as a new module (and a semver-major bump) inside the SAME crate — crate names stay spec-neutral.
 
 ## Consequences
 
@@ -123,14 +128,14 @@ Per SEP-2133 §Evolution: "All extensions evolve independently of the core proto
 
 - **Spec-pure protocol crate.** `turul-mcp-protocol-2026-07-28` stays a faithful 1:1 mapping of `schema/draft-schema.ts` with no extension-specific types leaking in.
 - **Independent release cadence.** Tasks can ship a `0.1.x` patch tomorrow without bumping the protocol crate. The protocol crate can move to `2027-NN-NN` without forcing every extension to immediately migrate.
-- **Opt-in by Cargo dependency.** Consumers add `turul-mcp-ext-tasks-2026-07-28 = "0.1"` to get task support. Consumers that don't need tasks have a smaller dependency tree and a smaller wire surface.
+- **Opt-in by Cargo dependency.** Consumers add `turul-mcp-ext-tasks = "0.1"` to get task support. Consumers that don't need tasks have a smaller dependency tree and a smaller wire surface.
 - **Matches upstream governance.** When MCP creates `modelcontextprotocol/ext-tasks` as a separate repo, we mirror with a separate crate. Easier for downstream readers to find the corresponding crate from a SEP link.
 
 ### Bad / accepted tradeoffs
 
 - **More crates to publish and version.** Each official extension is a separate publish step. This is the cost of independent evolution.
 - **Cross-crate consumer wiring.** A consumer using tasks needs to import the extension types from a different crate than where they import core types. The `turul-mcp-server` framework smooths this with `register_extension(ext_tasks::capability())` helpers, but downstream code is still explicit about the boundary.
-- **No "everything in one crate" convenience.** A consumer that wants every extension must depend on every extension crate. We provide a meta crate `turul-mcp-extensions-2026-07-28` (purely a re-export, no logic) for convenience.
+- **No "everything in one crate" convenience.** A consumer that wants every extension must depend on every extension crate. A re-export-only meta crate (`turul-mcp-extensions`) can be added if demand materializes.
 
 ### Migration from 2025-11-25 task users
 
@@ -139,7 +144,7 @@ Per SEP-2133 §Evolution: "All extensions evolve independently of the core proto
 For consumers moving from 2025-11-25 to 2026-07-28:
 
 1. Drop the in-line `task: Some(TaskMetadata {..})` field from `CallToolParams` etc. — schema removed it.
-2. Add the extension crate to `Cargo.toml`: `turul-mcp-ext-tasks-2026-07-28 = "0.1"`.
+2. Add the extension crate to `Cargo.toml`: `turul-mcp-ext-tasks = "0.1"`.
 3. Declare extension support in client capabilities: `extensions.insert("io.modelcontextprotocol/tasks".into(), serde_json::json!({}))` (or via the helper).
 4. Handle the new `CreateTaskResult` result variant returned by the server at server's discretion (per SEP-2663 — server is sole decider).
 5. Use `tasks/get`/`tasks/update`/`tasks/cancel` instead of the removed `tasks/list`.
@@ -149,16 +154,16 @@ The lifecycle is now stateless (per SEP-2567/2575): no `tasks/list` because ther
 ## Implementation order
 
 1. **Land ADR-028** (this document). ✅
-2. **Scaffold `turul-mcp-ext-tasks-2026-07-28`** following the layout in §2. Vendor relevant SEP-2663 fragments under `schema/`. Implement types + capability + lifecycle + compliance tests. Schema-line refs in doc comments per the protocol-crate convention.
+2. **Scaffold `turul-mcp-ext-tasks`** following the layout in §2. Vendor the upstream extension schema under `schema/` at a pinned commit. Implement types + capability + lifecycle + compliance tests. ✅ (2026-06-12)
 3. **Wire extension registration into `turul-mcp-server`** behind a Cargo feature flag (`ext-tasks`) so the protocol crate stays free of the dependency.
-4. **Repeat for `turul-mcp-ext-apps-2026-07-28`** when SEP-1865 implementation work is prioritized.
+4. **Repeat for `turul-mcp-ext-apps`** — MCP-side surface. ✅ (2026-06-12; identifier is `io.modelcontextprotocol/ui`)
 5. **Auth**: existing `turul-mcp-oauth` is already aligned with `io.modelcontextprotocol/oauth-*` extensions — just confirm/update identifiers to match SEP-2133 reverse-DNS form.
 
 Tracked as plan items §5.2 and §5.3 in `docs/plans/2026-07-28-compliance-plan.md`.
 
 ## Open items
 
-- The meta-crate name `turul-mcp-extensions-2026-07-28` is provisional; revisit at first publish.
+- The meta-crate idea (`turul-mcp-extensions`, re-export only) is provisional; revisit at first publish.
 - Server-side dispatcher API for `register_extension(...)` to be designed when `turul-mcp-server` migration to 2026-07-28 lands (separate slice).
 - Whether to publish `turul-mcp-ext-*` crates from the same workspace or as siblings (like `turul-rpc`) is a release-engineering decision to revisit before first publish.
 
@@ -169,3 +174,9 @@ Tracked as plan items §5.2 and §5.3 in `docs/plans/2026-07-28-compliance-plan.
 - **2026-05-31**: Cross-reference with ADR-027 §"Status update (2026-05-31)". The 0.4.0 default-cutover to DRAFT-2026-v1 does not change this ADR's strategy. Extensions remain per-crate, schema-version-suffixed, opt-in by Cargo dependency. The scaffolding of `turul-mcp-ext-tasks-2026-07-28` (SEP-2663) and `turul-mcp-ext-apps-2026-07-28` (SEP-1865) remains tracked in `docs/plans/2026-07-28-compliance-plan.md` §5.2 and §5.3 — they are not blockers for 0.4.0 publication. The release notes for 0.4.0 will state that tasks and apps support require the respective extension crates (when scaffolded). No content change to this ADR.
 
 - **2026-06-07 (amendment — drop schema-version suffix; build tasks)** — **Active extension crates are named without the schema-version suffix: `turul-mcp-ext-tasks` / `turul-mcp-ext-apps` (was `turul-mcp-ext-tasks-2026-07-28` / `-apps-2026-07-28`).** §1's `turul-mcp-ext-<name>-<schema-version>` convention and the §"Why `-<schema-version>` suffix" rationale are superseded for the active crates: a single `turul-mcp-ext-tasks` crate hosts the tasks extension and reconciles the cross-spec task representations (2025-11-25 carries tasks in core; 2026-07-28 moves them to the `io.modelcontextprotocol/tasks` extension), gated the same way as the protocol coexistence features rather than forked per schema version. Per SEP-2133, a breaking change to the extension's own wire shape still mints a new extension identifier, but that is versioned inside the crate (semver), not by a crate-name suffix. Decision: `turul-mcp-ext-tasks` is to be built (not merely scaffolded) so the bilingual client and server reach tasks against both specs; tracked as its own slice.
+
+- **2026-06-12 (scaffold landed)** — `crates/turul-mcp-ext-tasks` created per the 2026-06-07 amendment (spec-neutral name, feature-gated lanes): `v2026_07_28` module carries the SEP-2663 surface (status-tagged `DetailedTask`, `CreateTaskResult` with `resultType: "task"`, `tasks/get`/`tasks/update`/`tasks/cancel` bindings, `notifications/tasks`, `taskIds` subscription filter fields, capability negotiation helpers incl. SEP-2133 identifier validation) with 13 wire-shape compliance tests; upstream schema vendored from `modelcontextprotocol/ext-tasks@8966bea9` with provenance README. `protocol-2026-07-28` is the default feature; `--no-default-features` compiles to an empty crate. NOT yet wired into `turul-mcp-server` dispatch (step 3 of §Migration path) and the 2025-11-25 reconciliation module is not started — both remain their own slices.
+
+- **2026-06-12 (apps scaffold landed; identifier corrected)** — `crates/turul-mcp-ext-apps` created (spec-neutral name per the 2026-06-07 amendment). **The extension identifier is `io.modelcontextprotocol/ui`, not `io.modelcontextprotocol/apps`** — the original table guessed `/apps` before upstream published; `modelcontextprotocol/ext-apps`'s spec (`specification/draft/apps.mdx`) states "This extension is identified as: io.modelcontextprotocol/ui" and reserves that label. Scope decision: the crate binds the **MCP-side** surface only (client capability `mimeTypes` incl. the `text/html;profile=mcp-app` gate, tool `_meta.ui` → `UiToolMeta` (`resourceUri`/`visibility`), UI-resource `_meta.ui` → `UiResourceMeta` (CSP/permissions/domain/prefersBorder)); the host↔view iframe protocol (`ui/*` over postMessage) belongs to app/host SDKs and is out of a server framework's scope. Vendored from `modelcontextprotocol/ext-apps@ca1d2989` with provenance README; 5 wire-shape compliance tests; `--no-default-features` compiles empty. The Apps protocol versions independently (`2026-01-26`); the crate's `v2026_07_28` module names the CORE lane it pairs with.
+
+- **2026-06-12 (normative body rewritten to the spec-neutral strategy)** — §1 (naming + table), the suffix rationale, §2 layout, §5 breaking-change rule, Consequences, Migration step 2, and Implementation order now state the unsuffixed `turul-mcp-ext-<name>` convention with feature-gated lane modules as normative — the 2026-06-07 amendment had superseded the suffixed convention but only in this log, leaving the body contradicting the implemented crates (ADR drift). The original suffixed-name decision survives only in the dated entries above.
