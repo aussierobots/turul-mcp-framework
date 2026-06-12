@@ -147,6 +147,8 @@ pub use turul_mcp_session_storage as session_storage;
 #[cfg(feature = "protocol-2025-11-25")]
 pub use turul_mcp_task_storage as task_storage;
 pub mod dispatch;
+#[cfg(feature = "ext-tasks")]
+pub mod ext_tasks;
 pub mod prelude;
 pub mod security;
 pub mod uri_template;

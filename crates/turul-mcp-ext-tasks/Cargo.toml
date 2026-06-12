@@ -23,3 +23,6 @@ protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
 turul-mcp-protocol-2026-07-28 = { version = "0.4.0", path = "../turul-mcp-protocol-2026-07-28", optional = true }
 serde.workspace = true
 serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+chrono.workspace = true

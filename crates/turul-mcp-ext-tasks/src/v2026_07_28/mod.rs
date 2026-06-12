@@ -2,6 +2,7 @@
 
 pub mod capability;
 pub mod lifecycle;
+pub mod store;
 pub mod types;
 
 #[cfg(test)]
@@ -17,6 +18,7 @@ pub use lifecycle::{
     TaskStatusNotificationParams, TaskSubscriptionAcknowledgedNotifications,
     TaskSubscriptionNotifications, UpdateTaskParams,
 };
+pub use store::{InMemoryTaskStore, InputDelivery, TaskState, TaskStore, TaskStoreError};
 pub use types::{
     CreateTaskResult, DetailedTask, Nullable, RESULT_TYPE_TASK, Task, TaskFields, TaskStatus,
 };

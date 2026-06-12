@@ -18,9 +18,13 @@ sqlite = ["turul-mcp-session-storage/sqlite", "turul-mcp-task-storage?/sqlite", 
 postgres = ["turul-mcp-session-storage/postgres", "turul-mcp-task-storage?/postgres", "turul-mcp-server-state-storage?/postgres"]
 dynamodb = ["turul-mcp-session-storage/dynamodb", "turul-mcp-task-storage?/dynamodb", "turul-mcp-server-state-storage?/dynamodb"]
 dynamic-tools = ["turul-mcp-server-state-storage"]
+# Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) on the 2026 lane.
+# Off by default: SEP-2133 requires extensions disabled unless opted into.
+ext-tasks = ["protocol-2026-07-28", "dep:turul-mcp-ext-tasks"]
 test-utils = []
 
 [dependencies]
+turul-mcp-ext-tasks = { workspace = true, optional = true }
 # Framework dependencies
 turul-rpc = { workspace = true, features = ["async"] }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }

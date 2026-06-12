@@ -1993,6 +1993,28 @@ impl StreamableHttpHandler {
                 .filter(|uris| !uris.is_empty() && caps.resources.is_some()),
         };
 
+        // Tasks-extension filter addition (SEP-2663 `taskIds`): rides the same
+        // `notifications` object but is not a core-schema field, so it is read
+        // from the raw params; honored only when the server advertises
+        // `io.modelcontextprotocol/tasks` in `capabilities.extensions`.
+        let tasks_extension_advertised = caps
+            .extensions
+            .as_ref()
+            .is_some_and(|m| m.contains_key("io.modelcontextprotocol/tasks"));
+        let honored_task_ids: Option<Vec<String>> = request
+            .params
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok())
+            .as_ref()
+            .and_then(|v| v.pointer("/notifications/taskIds"))
+            .and_then(|v| v.as_array())
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|i| i.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|ids| !ids.is_empty() && tasks_extension_advertised);
+
         // Gate delivery at the broadcast layer: the subscription registry entry is
         // created even when empty, so an empty filter delivers nothing (the
         // registry's no-entry default is allow-all).
@@ -2008,6 +2030,9 @@ impl StreamableHttpHandler {
         }
         if honored.resource_subscriptions.is_some() {
             allowed_types.push("notifications/resources/updated".to_string());
+        }
+        if honored_task_ids.is_some() {
+            allowed_types.push("notifications/tasks".to_string());
         }
         self.stream_manager
             .subscribe_to_notifications(&session_id, allowed_types)
@@ -2033,10 +2058,11 @@ impl StreamableHttpHandler {
 
         // Acknowledgement — wire-complete JSON-RPC notification, first frame.
         let mut ack_params = std::collections::HashMap::new();
-        ack_params.insert(
-            "notifications".to_string(),
-            serde_json::to_value(&honored).unwrap_or_default(),
-        );
+        let mut honored_value = serde_json::to_value(&honored).unwrap_or_default();
+        if let (Some(obj), Some(ids)) = (honored_value.as_object_mut(), honored_task_ids.as_ref()) {
+            obj.insert("taskIds".to_string(), serde_json::json!(ids));
+        }
+        ack_params.insert("notifications".to_string(), honored_value);
         ack_params.insert(
             "_meta".to_string(),
             serde_json::json!({ META_KEY_SUBSCRIPTION_ID: subscription_id }),
@@ -2054,6 +2080,7 @@ impl StreamableHttpHandler {
         // drops the rest — this is the per-URI filter plus defense in depth) and
         // stamp the subscription id into every delivered notification.
         let filter = honored;
+        let filter_task_ids = honored_task_ids;
         let sub_id = subscription_id;
         let live = ReceiverStream::new(rx).filter_map(move |ev| {
             let mut data = ev.data;
@@ -2074,6 +2101,17 @@ impl StreamableHttpHandler {
                         .and_then(|u| u.as_str());
                     match (uri, &filter.resource_subscriptions) {
                         (Some(u), Some(uris)) => uris.iter().any(|x| x == u),
+                        _ => false,
+                    }
+                }
+                // Tasks extension (SEP-2663): per-taskId delivery.
+                "notifications/tasks" => {
+                    let task_id = data
+                        .get("params")
+                        .and_then(|p| p.get("taskId"))
+                        .and_then(|t| t.as_str());
+                    match (task_id, &filter_task_ids) {
+                        (Some(id), Some(ids)) => ids.iter().any(|x| x == id),
                         _ => false,
                     }
                 }

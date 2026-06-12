@@ -51,6 +51,13 @@ pub struct McpServerBuilder {
 
     /// Completion providers registered with the server
     completions: Vec<Arc<dyn McpCompletion>>,
+    /// Tasks-extension store (SEP-2663); presence advertises the extension.
+    #[cfg(feature = "ext-tasks")]
+    ext_task_store: Option<Arc<dyn turul_mcp_ext_tasks::TaskStore>>,
+    /// Tool names marked for task election; value = required (true → -32003
+    /// when the client did not declare the extension; false → sync fallback).
+    #[cfg(feature = "ext-tasks")]
+    ext_task_tools: std::collections::HashMap<String, bool>,
 
     /// Loggers registered with the server
     #[cfg(feature = "protocol-2025-11-25")]
@@ -253,6 +260,10 @@ impl McpServerBuilder {
             #[cfg(feature = "protocol-2025-11-25")]
             sampling: HashMap::new(),
             completions: Vec::new(),
+            #[cfg(feature = "ext-tasks")]
+            ext_task_store: None,
+            #[cfg(feature = "ext-tasks")]
+            ext_task_tools: std::collections::HashMap::new(),
             #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
             root_providers: HashMap::new(),
@@ -383,6 +394,35 @@ impl McpServerBuilder {
         let name = tool.name().to_string();
         self.tools.insert(name, Arc::new(tool));
         self
+    }
+
+    /// Configure the Tasks extension (`io.modelcontextprotocol/tasks`,
+    /// SEP-2663): advertises the extension in `capabilities.extensions` and
+    /// registers the `tasks/get`/`tasks/update`/`tasks/cancel` handlers.
+    /// Tools opt into task election via [`Self::ext_task_tool`] /
+    /// [`Self::ext_task_tool_required`].
+    #[cfg(feature = "ext-tasks")]
+    pub fn with_ext_tasks(mut self, store: Arc<dyn turul_mcp_ext_tasks::TaskStore>) -> Self {
+        self.ext_task_store = Some(store);
+        self
+    }
+
+    /// Register a tool that runs as a task when the request's declared
+    /// `clientCapabilities.extensions` activates the Tasks extension, and
+    /// synchronously otherwise (progressive enhancement).
+    #[cfg(feature = "ext-tasks")]
+    pub fn ext_task_tool<T: McpTool + 'static>(mut self, tool: T) -> Self {
+        self.ext_task_tools.insert(tool.name().to_string(), false);
+        self.tool(tool)
+    }
+
+    /// Register a tool that REQUIRES task execution: calls from clients that
+    /// did not declare the Tasks extension are rejected with `-32003` and
+    /// `data.requiredCapabilities.extensions`.
+    #[cfg(feature = "ext-tasks")]
+    pub fn ext_task_tool_required<T: McpTool + 'static>(mut self, tool: T) -> Self {
+        self.ext_task_tools.insert(tool.name().to_string(), true);
+        self.tool(tool)
     }
 
     /// Register a function tool created with `#[mcp_tool]` macro
@@ -1840,6 +1880,42 @@ impl McpServerBuilder {
             _ => crate::tool::compute_tool_fingerprint(&self.tools),
         };
 
+        // Tasks extension (SEP-2663): advertise + register handlers only when
+        // a store is configured (capability truthfulness, same rule as 2025).
+        #[cfg(feature = "ext-tasks")]
+        let ext_tasks_runtime = match self.ext_task_store {
+            Some(store) => {
+                let runtime = Arc::new(crate::ext_tasks::ExtTasksRuntime::new(store));
+                handlers.insert(
+                    "tasks/get".to_string(),
+                    Arc::new(crate::ext_tasks::ExtTasksGetHandler::new(Arc::clone(
+                        &runtime,
+                    ))),
+                );
+                handlers.insert(
+                    "tasks/update".to_string(),
+                    Arc::new(crate::ext_tasks::ExtTasksUpdateHandler::new(Arc::clone(
+                        &runtime,
+                    ))),
+                );
+                handlers.insert(
+                    "tasks/cancel".to_string(),
+                    Arc::new(crate::ext_tasks::ExtTasksCancelHandler::new(Arc::clone(
+                        &runtime,
+                    ))),
+                );
+                self.capabilities
+                    .extensions
+                    .get_or_insert_with(std::collections::HashMap::new)
+                    .insert(
+                        turul_mcp_ext_tasks::EXTENSION_IDENTIFIER.to_string(),
+                        turul_mcp_ext_tasks::capability(),
+                    );
+                Some(runtime)
+            }
+            None => None,
+        };
+
         // Create server
         Ok(McpServer::new(
             implementation,
@@ -1852,6 +1928,10 @@ impl McpServerBuilder {
             self.session_storage,
             #[cfg(feature = "protocol-2025-11-25")]
             self.task_runtime,
+            #[cfg(feature = "ext-tasks")]
+            ext_tasks_runtime,
+            #[cfg(feature = "ext-tasks")]
+            Arc::new(self.ext_task_tools),
             self.strict_lifecycle,
             self.middleware_stack,
             self.route_registry,

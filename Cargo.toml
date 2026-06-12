@@ -223,6 +223,7 @@ turul-http-mcp-server = { version = "0.4.0", path = "crates/turul-http-mcp-serve
 turul-mcp-server = { version = "0.4.0", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.4.0", path = "crates/turul-mcp-derive" }
 turul-mcp-client = { version = "0.4.0", path = "crates/turul-mcp-client" }
+turul-mcp-ext-tasks = { version = "0.1.0", path = "crates/turul-mcp-ext-tasks" }
 turul-mcp-builders = { version = "0.4.0", path = "crates/turul-mcp-builders" }
 turul-mcp-aws-lambda = { version = "0.4.0", path = "crates/turul-mcp-aws-lambda" }
 turul-mcp-oauth = { version = "0.4.0", path = "crates/turul-mcp-oauth" }

@@ -96,6 +96,10 @@ pub struct McpServer {
     /// Task runtime for long-running operations (None = tasks not supported)
     #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+    #[cfg(feature = "ext-tasks")]
+    ext_tasks_runtime: Option<Arc<crate::ext_tasks::ExtTasksRuntime>>,
+    #[cfg(feature = "ext-tasks")]
+    ext_task_tools: Arc<HashMap<String, bool>>,
     /// Custom HTTP route registry
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Stable fingerprint of the registered tool set for session versioning
@@ -137,6 +141,10 @@ impl McpServer {
         #[cfg(feature = "protocol-2025-11-25")] task_runtime: Option<
             Arc<crate::task::runtime::TaskRuntime>,
         >,
+        #[cfg(feature = "ext-tasks")] ext_tasks_runtime: Option<
+            Arc<crate::ext_tasks::ExtTasksRuntime>,
+        >,
+        #[cfg(feature = "ext-tasks")] ext_task_tools: Arc<HashMap<String, bool>>,
         strict_lifecycle: bool,
         middleware_stack: crate::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
@@ -228,6 +236,10 @@ impl McpServer {
             session_storage,
             #[cfg(feature = "protocol-2025-11-25")]
             task_runtime,
+            #[cfg(feature = "ext-tasks")]
+            ext_tasks_runtime,
+            #[cfg(feature = "ext-tasks")]
+            ext_task_tools,
             instructions,
             strict_lifecycle,
             middleware_stack,
@@ -445,6 +457,11 @@ impl McpServer {
         #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
+        }
+        #[cfg(feature = "ext-tasks")]
+        if let Some(ref runtime) = self.ext_tasks_runtime {
+            tool_handler =
+                tool_handler.with_ext_tasks(Arc::clone(runtime), Arc::clone(&self.ext_task_tools));
         }
         #[cfg(feature = "dynamic-tools")]
         if let Some(ref registry) = self.tool_registry {
@@ -723,6 +740,11 @@ impl McpServer {
         #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
+        }
+        #[cfg(feature = "ext-tasks")]
+        if let Some(ref runtime) = self.ext_tasks_runtime {
+            tool_handler =
+                tool_handler.with_ext_tasks(Arc::clone(runtime), Arc::clone(&self.ext_task_tools));
         }
         #[cfg(feature = "dynamic-tools")]
         if let Some(ref registry) = self.tool_registry {
@@ -1745,6 +1767,13 @@ impl JsonRpcHandler for ListToolsHandler {
 }
 
 /// Session-aware handler for tool execution
+/// Runtime + the task-election tool map (`name → required`).
+#[cfg(feature = "ext-tasks")]
+type ExtTasksWiring = (
+    Arc<crate::ext_tasks::ExtTasksRuntime>,
+    Arc<HashMap<String, bool>>,
+);
+
 pub struct SessionAwareToolHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
     session_manager: Arc<SessionManager>,
@@ -1753,6 +1782,8 @@ pub struct SessionAwareToolHandler {
     /// the handler creates a task and executes asynchronously.
     #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+    #[cfg(feature = "ext-tasks")]
+    ext_tasks: Option<ExtTasksWiring>,
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
 }
@@ -1769,6 +1800,8 @@ impl SessionAwareToolHandler {
             strict_lifecycle,
             #[cfg(feature = "protocol-2025-11-25")]
             task_runtime: None,
+            #[cfg(feature = "ext-tasks")]
+            ext_tasks: None,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
         }
@@ -1777,6 +1810,16 @@ impl SessionAwareToolHandler {
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
+        self
+    }
+
+    #[cfg(feature = "ext-tasks")]
+    pub fn with_ext_tasks(
+        mut self,
+        runtime: Arc<crate::ext_tasks::ExtTasksRuntime>,
+        task_tools: Arc<HashMap<String, bool>>,
+    ) -> Self {
+        self.ext_tasks = Some((runtime, task_tools));
         self
     }
 
@@ -2028,6 +2071,27 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                         }
                     }
                 }
+            }
+        }
+
+        // Task election (2026-07-28 Tasks extension, SEP-2663): the server is
+        // the sole decider. A tool marked for election runs as a task when
+        // this request's declared `clientCapabilities.extensions` activates
+        // the extension; otherwise it runs synchronously (progressive
+        // enhancement) — unless the tool REQUIRES tasks, which answers
+        // -32003 with `data.requiredCapabilities.extensions`.
+        #[cfg(feature = "ext-tasks")]
+        if let Some((runtime, task_tools)) = self.ext_tasks.as_ref()
+            && let Some(&required) = task_tools.get(&call_params.name)
+        {
+            if crate::ext_tasks::declared(&call_params.meta.client_capabilities) {
+                let result = runtime
+                    .create_and_spawn(Arc::clone(&tool), args, mcp_session_context)
+                    .await?;
+                return serde_json::to_value(result).map_err(McpError::SerializationError);
+            }
+            if required {
+                return Err(crate::ext_tasks::missing_capability_error());
             }
         }
 

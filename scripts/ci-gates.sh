@@ -42,6 +42,8 @@ gate_default() {
   run "bilingual client (not in default-members)" cargo test -p turul-mcp-client
   run "2026 client example (pairs with minimal-server)" cargo build -p streamable-http-client
   run "client-using examples (not in default-members)" cargo build -p mrtr-elicitation-server --bins -p bilingual-fleet-client
+  run "Tasks extension (SEP-2663, opt-in feature)" cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-tasks --test ext_tasks_2026
+  run "ext crates standalone" cargo test -p turul-mcp-ext-tasks -p turul-mcp-ext-apps
 }
 
 gate_opt_in_2025() {
