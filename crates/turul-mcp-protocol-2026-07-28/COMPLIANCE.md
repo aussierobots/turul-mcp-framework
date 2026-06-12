@@ -188,12 +188,34 @@ DRAFT-2026-v1 deprecates **Roots**, **Sampling**, and **Logging** per SEP-2577 (
 
 **Pre-existing bug also fixed**: `LoggingMessageNotification` was previously defined twice — once in `src/logging.rs` (with `LoggingMessageParams`) and once in `src/notifications.rs` (with `LoggingMessageNotificationParams`). The two had the same wire shape but were distinct Rust types. The `logging.rs` duplicate was removed; only the spec-aligned `notifications.rs` version remains. The `HasLevelParam` / `HasLoggerParam` / `HasMetaParam` field-getter trait impls moved to `notifications::LoggingMessageNotificationParams`.
 
+## Supported JSON Schema dialects
+
+The 2026-07-28 line adopts **JSON Schema 2020-12** (SEP-2106) as the default
+dialect for tool input/output schemas and elicitation form schemas. This
+workspace's posture:
+
+- **Emission**: schemas produced by the derive/builders pipeline target
+  2020-12 (`$defs`/`$ref` preserved on the 2026 lane; see
+  `schema_fidelity_2026.rs`). `ElicitationSchema` carries the optional
+  `$schema` dialect declaration (`with_schema_dialect`).
+- **Processing**: the framework does **not** run a validating JSON Schema
+  processor. Schemas are transported faithfully and surfaced to applications;
+  instance validation (tool arguments against `inputSchema`,
+  `structuredContent` against `outputSchema`, elicitation responses against
+  the requested form schema) is delegated to the application layer, which can
+  pick a 2020-12 validator suited to its needs. Consequently the framework
+  neither validates against a declared non-default dialect nor rejects
+  unsupported dialects — a `$schema` value rides through verbatim.
+
+This section is the dialect-support statement the spec's Basic-Protocol
+SHOULD asks implementations to publish.
+
 ## Known follow-ups (not blockers for current state)
 
 - **Elicitation enum schemas (2026-06-10)** — `EnumSchema` now binds the schema's union (`SingleSelectEnumSchema | MultiSelectEnumSchema | LegacyTitledEnumSchema`); the legacy `enumNames` shape is `LegacyTitledEnumSchema` (with its `default` field). `StringSchema`/`NumberSchema`/`BooleanSchema` and the untitled select shapes carry `deny_unknown_fields` so the untagged `PrimitiveSchemaDefinition` lands every payload on its precise variant instead of silently dropping `enum`/numeric constraints. Round-trip fidelity tests cover the union incl. through `ElicitationSchema.properties`.
 - **`ContentBlock` union split** — the schema declares two distinct unions: `ContentBlock = Text | Image | Audio | ResourceLink | EmbeddedResource` (5) and `SamplingMessageContentBlock = Text | Image | Audio | ToolUse | ToolResult` (5). The crate models them as a single 7-variant enum, allowing wire-impossible shapes (a `CallToolResult.content` carrying `ToolUseContent`, etc.). Wire-equivalent for the 3-variant overlap; documented in §Intentional deviations.
 - **`ResourceReference` ↔ `Resource` duplication** — A4 closed the wire-shape gap (size/icons now present on `ResourceReference`), but the two structs remain parallel. Collapsing onto one canonical `Resource` (per schema's `ResourceLink extends Resource`) is the cleaner end-state and queued for a follow-up.
-- **`turul-mcp-ext-tasks` extension crate** (spec-neutral name per ADR-028's 2026-06-07 amendment) — SEP-2663 moved tasks out of the core protocol; the extension crate is not yet scaffolded. Tasks types are correctly absent from the protocol crate.
+- **`turul-mcp-ext-tasks` extension crate** (spec-neutral name per ADR-028's 2026-06-07 amendment) — SEP-2663 moved tasks out of the core protocol; the extension crate is scaffolded (2026-06-12: `v2026_07_28` types/lifecycle/capability + wire-shape compliance tests against the vendored `modelcontextprotocol/ext-tasks` schema). Tasks types remain correctly absent from the protocol crate; server dispatch wiring is a separate slice.
 
 ## Intentional deviations from strict schema
 
