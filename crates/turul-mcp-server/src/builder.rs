@@ -189,10 +189,10 @@ impl McpServerBuilder {
         // inbound notifications/cancelled is accepted and ignored — request
         // ids are per-client on the stateless lane and cannot be correlated
         // across connections ("Invalid cancellation notifications SHOULD be
-        // ignored").
+        // ignored"). The dedicated handler logs requestId + reason.
         handlers.insert(
             "notifications/cancelled".to_string(),
-            notifications_handler.clone(),
+            Arc::new(CancelledNotificationHandler),
         );
         // MCP 2025-11-25 spec-correct underscore form
         handlers.insert(

@@ -171,6 +171,8 @@ pub use traits::*;
 /// Builder for completion provider configuration with sampling parameters
 #[cfg(feature = "protocol-2025-11-25")]
 pub use completion::CompletionBuilder;
+#[cfg(feature = "protocol-2026-07-28")]
+pub use elicitation::validate_elicit_content;
 /// Builders for interactive data collection and result formatting
 pub use elicitation::{ElicitResultBuilder, ElicitationBuilder};
 /// Builders for structured logging messages and level configuration

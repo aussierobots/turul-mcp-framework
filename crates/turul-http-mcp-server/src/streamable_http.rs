@@ -1495,12 +1495,18 @@ impl StreamableHttpHandler {
                     JsonRpcMessage::Request(r) => Some(r.id.clone()),
                     JsonRpcMessage::Notification(_) => None,
                 };
+                // Versioning §Backward Compatibility: name the supported
+                // versions in any error returned to an initialize request —
+                // a true legacy client (no MCP-Protocol-Version header)
+                // lands here and this may be its only diagnostic.
+                let data = (body_method == "initialize")
+                    .then(|| serde_json::json!({ "supported": [turul_mcp_protocol::MCP_VERSION] }));
                 let err = turul_rpc::JsonRpcError::new(
                     id,
                     turul_rpc::error::JsonRpcErrorObject::server_error(
                         turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
                         &format!("Header mismatch: {reason}"),
-                        None::<serde_json::Value>,
+                        data,
                     ),
                 );
                 let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());

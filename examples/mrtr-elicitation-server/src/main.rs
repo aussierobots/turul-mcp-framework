@@ -29,6 +29,15 @@ use turul_mcp_protocol::elicitation::{
 use turul_mcp_protocol::input_required::{InputRequest, InputRequests, InputResponse};
 use turul_mcp_server::prelude::*;
 
+/// The confirmation form both legs share: requested on leg 1, used to
+/// validate the elicited content on leg 2.
+fn confirm_schema() -> ElicitationSchema {
+    let mut schema = ElicitationSchema::new()
+        .with_property("proceed".to_string(), PrimitiveSchemaDefinition::boolean());
+    schema.required = Some(vec!["proceed".to_string()]);
+    schema
+}
+
 /// Pretend deploy that demands an elicited confirmation first.
 #[derive(McpTool, Clone, Default)]
 #[tool(
@@ -55,19 +64,28 @@ impl DeployServiceTool {
                 )));
             }
 
-            let confirmed = responses
+            let elicit = responses
                 .get("confirm")
                 .and_then(|r| match r {
-                    InputResponse::Elicit(e) => e
-                        .content
-                        .as_ref()
-                        .and_then(|c| c.get("proceed"))
-                        .and_then(|v| v.as_bool()),
+                    InputResponse::Elicit(e) => e.content.clone(),
                     _ => None,
                 })
                 .ok_or_else(|| {
                     McpError::InvalidParameters("confirm elicit response missing".into())
                 })?;
+
+            // Form security: validate the elicited content against the same
+            // schema the first leg requested (re-derived — nothing persists
+            // between legs on the stateless lane).
+            let content = serde_json::to_value(&elicit)
+                .map_err(|e| McpError::tool_execution(&e.to_string()))?;
+            turul_mcp_builders::validate_elicit_content(&confirm_schema(), &content)
+                .map_err(McpError::InvalidParameters)?;
+
+            let confirmed = content
+                .get("proceed")
+                .and_then(|v| v.as_bool())
+                .ok_or_else(|| McpError::InvalidParameters("proceed must be a boolean".into()))?;
 
             return if confirmed {
                 Ok(format!("deployed {} ✅", self.service))
@@ -77,8 +95,7 @@ impl DeployServiceTool {
         }
 
         // First leg: demand a confirmation form via MRTR.
-        let schema = ElicitationSchema::new()
-            .with_property("proceed".to_string(), PrimitiveSchemaDefinition::boolean());
+        let schema = confirm_schema();
         let mut requests = InputRequests::new();
         requests.insert(
             "confirm".to_string(),

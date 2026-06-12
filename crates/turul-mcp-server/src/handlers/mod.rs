@@ -1704,6 +1704,47 @@ impl McpHandler for ElicitationHandler {
 
 use crate::session::SessionManager;
 
+/// Dedicated handler for inbound `notifications/cancelled`: the cancellation
+/// MECHANISM on Streamable HTTP is closing the request's response stream, so
+/// the notification is accepted and ignored — but its `requestId` and
+/// `reason` are extracted into a structured log line ("Both parties SHOULD
+/// log cancellation reasons for debugging", Cancellation §Behavior).
+pub struct CancelledNotificationHandler;
+
+impl CancelledNotificationHandler {
+    /// `(requestId, reason)` from `notifications/cancelled` params.
+    pub(crate) fn extract(params: Option<&Value>) -> (Option<String>, Option<String>) {
+        let request_id = params.and_then(|p| p.get("requestId")).map(|v| {
+            v.as_str()
+                .map(String::from)
+                .unwrap_or_else(|| v.to_string())
+        });
+        let reason = params
+            .and_then(|p| p.get("reason"))
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        (request_id, reason)
+    }
+}
+
+#[async_trait]
+impl McpHandler for CancelledNotificationHandler {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        let (request_id, reason) = Self::extract(params.as_ref());
+        tracing::info!(
+            request_id = request_id.as_deref().unwrap_or("<none>"),
+            reason = reason.as_deref().unwrap_or("<none>"),
+            "Cancellation requested by peer (accepted and ignored on Streamable HTTP — \
+             the stream close is the cancellation mechanism)"
+        );
+        Ok(Value::Null)
+    }
+
+    fn supported_methods(&self) -> Vec<String> {
+        vec!["notifications/cancelled".to_string()]
+    }
+}
+
 /// Generic notifications handler for most notification endpoints
 pub struct NotificationsHandler;
 
@@ -1719,7 +1760,7 @@ impl McpHandler for NotificationsHandler {
         vec![
             "notifications/message".to_string(),
             "notifications/progress".to_string(),
-            "notifications/cancelled".to_string(),
+            // notifications/cancelled has its own CancelledNotificationHandler
             // MCP 2025-11-25 spec (underscore)
             "notifications/resources/list_changed".to_string(),
             "notifications/tools/list_changed".to_string(),
@@ -1864,5 +1905,34 @@ impl McpHandler for InitializedNotificationHandler {
 
     fn supported_methods(&self) -> Vec<String> {
         vec!["notifications/initialized".to_string()]
+    }
+}
+
+#[cfg(test)]
+mod cancelled_notification_tests {
+    use super::CancelledNotificationHandler;
+    use serde_json::json;
+
+    #[test]
+    fn extracts_request_id_and_reason() {
+        let params = json!({ "requestId": "req-9", "reason": "user clicked stop" });
+        let (id, reason) = CancelledNotificationHandler::extract(Some(&params));
+        assert_eq!(id.as_deref(), Some("req-9"));
+        assert_eq!(reason.as_deref(), Some("user clicked stop"));
+    }
+
+    #[test]
+    fn numeric_request_id_and_absent_reason() {
+        let params = json!({ "requestId": 42 });
+        let (id, reason) = CancelledNotificationHandler::extract(Some(&params));
+        assert_eq!(id.as_deref(), Some("42"));
+        assert_eq!(reason, None);
+    }
+
+    #[test]
+    fn missing_params_is_harmless() {
+        let (id, reason) = CancelledNotificationHandler::extract(None);
+        assert_eq!(id, None);
+        assert_eq!(reason, None);
     }
 }

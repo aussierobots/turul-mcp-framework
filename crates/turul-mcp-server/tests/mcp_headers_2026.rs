@@ -295,3 +295,37 @@ async fn notifications_also_require_mcp_method() {
         "notifications without Mcp-Method must be rejected"
     );
 }
+
+/// Versioning §Backward Compatibility: "A server that supports only modern
+/// versions SHOULD name the protocol versions it supports in any error it
+/// returns to an initialize request, on any transport." A true legacy client
+/// sends `initialize` with NO version header — the missing-header rejection
+/// may be its only diagnostic, so it must carry `error.data.supported`.
+#[tokio::test]
+async fn headerless_initialize_rejection_names_supported_versions() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": { "name": "legacy", "version": "1.0" }
+            }
+        }))
+        .send()
+        .await
+        .expect("headerless initialize");
+    assert_eq!(resp.status(), 400);
+    let body: serde_json::Value = resp.json().await.expect("body");
+    assert_eq!(body["error"]["code"], -32001);
+    assert_eq!(
+        body["error"]["data"]["supported"],
+        serde_json::json!(["2026-07-28"]),
+        "the initialize rejection must name the supported versions: {body}"
+    );
+}
