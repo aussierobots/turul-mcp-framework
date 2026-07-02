@@ -1394,7 +1394,7 @@ impl StreamableHttpHandler {
         // pre-2025-06-18 clients, so an absent header is rejected) and Mcp-Method
         // matching the body method; tools/call, resources/read, and prompts/get
         // additionally require Mcp-Name matching params.name / params.uri.
-        // Failures → HTTP 400 + JSON-RPC -32001 HeaderMismatch (id-less when the
+        // Failures → HTTP 400 + JSON-RPC -32020 HeaderMismatch (id-less when the
         // body is a notification). Header names compare case-insensitively
         // (hyper lowercases them in `context.headers`); values are case-sensitive.
         #[cfg(feature = "protocol-2026-07-28")]
@@ -1408,7 +1408,7 @@ impl StreamableHttpHandler {
 
             // Version negotiation: a requested version this build does not
             // implement (unknown or known-but-unsupported) → 400 +
-            // UnsupportedProtocolVersionError (-32004) listing the supported set.
+            // UnsupportedProtocolVersionError (-32022) listing the supported set.
             if let Some(requested) = header("mcp-protocol-version")
                 && requested != turul_mcp_protocol::MCP_VERSION
             {
@@ -1656,7 +1656,7 @@ impl StreamableHttpHandler {
         // with protocolVersion/clientInfo/clientCapabilities (schema: RequestParams._meta
         // is required). Missing/incomplete `_meta` → -32602 (HTTP 400); a `_meta`
         // protocolVersion that disagrees with the (already validated) header is a
-        // header-validation failure → -32001 HeaderMismatch (HTTP 400).
+        // header-validation failure → -32020 HeaderMismatch (HTTP 400).
         #[cfg(feature = "protocol-2026-07-28")]
         if let JsonRpcMessage::Request(req) = &message {
             let v = serde_json::to_value(req).unwrap_or(serde_json::Value::Null);
@@ -1912,7 +1912,11 @@ impl StreamableHttpHandler {
     /// - Every delivered notification carries
     ///   `io.modelcontextprotocol/subscriptionId` in `_meta`, set to the JSON-RPC
     ///   id of the listen request.
-    /// - The client cancels by closing the stream; there is no JSON-RPC result.
+    /// - Client-initiated cancellation (closing the stream) carries no JSON-RPC
+    ///   result. Schema also defines `SubscriptionsListenResult` for a
+    ///   server-initiated graceful teardown (e.g. shutdown) — this handler has
+    ///   no such teardown path yet, so that result is never emitted; see
+    ///   `turul_mcp_protocol::subscriptions::SubscriptionsListenResult`.
     #[cfg(feature = "protocol-2026-07-28")]
     async fn handle_subscriptions_listen(
         &self,
@@ -2216,7 +2220,7 @@ impl StreamableHttpHandler {
         let connection_id = format!("post-{}", uuid::Uuid::now_v7().as_simple());
 
         // 2026 + JSON framing: dispatch inline so the HTTP status can reflect
-        // the JSON-RPC outcome. MissingRequiredClientCapabilityError (-32003)
+        // the JSON-RPC outcome. MissingRequiredClientCapabilityError (-32021)
         // MUST ride HTTP 400 per its schema; the chunked-channel path below
         // commits 200 before dispatch completes and cannot retro-status.
         // (SSE-framed responses inherently stay 200 — errors ride the stream.)
@@ -2231,10 +2235,13 @@ impl StreamableHttpHandler {
                 )
                 .await;
             let status = match &response {
-                // -32003 MissingRequiredClientCapability and -32001
+                // -32021 MissingRequiredClientCapability and -32020
                 // HeaderMismatch both mandate HTTP 400.
                 turul_rpc::JsonRpcResponse::Error(err)
-                    if matches!(err.error.code, -32001 | -32003) =>
+                    if matches!(
+                        err.error.code,
+                        turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH | -32021
+                    ) =>
                 {
                     StatusCode::BAD_REQUEST
                 }

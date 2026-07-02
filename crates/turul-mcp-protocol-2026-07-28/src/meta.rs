@@ -211,8 +211,11 @@ pub const META_KEY_TRACESTATE: &str = "tracestate";
 pub const META_KEY_BAGGAGE: &str = "baggage";
 
 /// `_meta` key carrying the subscription id used by the server to tag
-/// notifications delivered on a `subscriptions/listen` stream (changelog
-/// Major #4 / SEP-2575). Conventional, not schema-declared.
+/// notifications delivered on a `subscriptions/listen` stream. Schema-declared:
+/// `NotificationMetaObject.io.modelcontextprotocol/subscriptionId` (optional;
+/// value = the `RequestId` of the `subscriptions/listen` request that opened
+/// the stream) and `SubscriptionsListenResultMeta.io.modelcontextprotocol/subscriptionId`
+/// (required, on the result that closes the stream).
 pub const META_KEY_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscriptionId";
 
 /// Schema-declared `_meta` key for the per-request log level opt-in.

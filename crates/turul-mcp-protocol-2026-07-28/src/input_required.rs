@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn input_required_result_field_getters_via_trait() {
-        // Drive through the `HasInputRequiredResult` trait (A8). Returns the
+        // Drive through the `HasInputRequiredResult` trait. Returns the
         // same field bodies as direct struct access.
         use crate::traits::HasInputRequiredResult;
         let r = InputRequiredResult::with_state("opaque-blob");

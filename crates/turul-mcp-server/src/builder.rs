@@ -54,7 +54,7 @@ pub struct McpServerBuilder {
     /// Tasks-extension store (SEP-2663); presence advertises the extension.
     #[cfg(feature = "ext-tasks")]
     ext_task_store: Option<Arc<dyn turul_mcp_ext_tasks::TaskStore>>,
-    /// Tool names marked for task election; value = required (true → -32003
+    /// Tool names marked for task election; value = required (true → -32021
     /// when the client did not declare the extension; false → sync fallback).
     #[cfg(feature = "ext-tasks")]
     ext_task_tools: std::collections::HashMap<String, bool>,
@@ -417,7 +417,7 @@ impl McpServerBuilder {
     }
 
     /// Register a tool that REQUIRES task execution: calls from clients that
-    /// did not declare the Tasks extension are rejected with `-32003` and
+    /// did not declare the Tasks extension are rejected with `-32021` and
     /// `data.requiredCapabilities.extensions`.
     #[cfg(feature = "ext-tasks")]
     pub fn ext_task_tool_required<T: McpTool + 'static>(mut self, tool: T) -> Self {

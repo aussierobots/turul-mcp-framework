@@ -6,7 +6,7 @@
 //! opaque `requestState`), and the client retries the ORIGINAL request with
 //! `inputResponses` + the echoed `requestState` under a new JSON-RPC id.
 //! Servers MUST NOT request capabilities the client did not declare in the
-//! request's `_meta` `clientCapabilities` (→ `-32003`, HTTP 400).
+//! request's `_meta` `clientCapabilities` (→ `-32021`, HTTP 400).
 //!
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
@@ -188,19 +188,19 @@ async fn mrtr_round_trip_completes_the_original_call() {
 }
 
 #[tokio::test]
-async fn undeclared_capability_is_rejected_with_32003() {
+async fn undeclared_capability_is_rejected_with_32021() {
     let url = start_server().await;
 
     // The client declares NO capabilities — the server must not emit an
-    // elicitation input request, per the MRTR rules: -32003 + HTTP 400.
+    // elicitation input request, per the MRTR rules: -32021 + HTTP 400.
     let (status, body) = call_gated_echo(&url, serde_json::json!({}), serde_json::json!({})).await;
     assert_eq!(
         status, 400,
         "MissingRequiredClientCapabilityError must be HTTP 400: {body}"
     );
     assert_eq!(
-        body["error"]["code"], -32003,
-        "must be -32003 MissingRequiredClientCapability: {body}"
+        body["error"]["code"], -32021,
+        "must be -32021 MissingRequiredClientCapability: {body}"
     );
 }
 
@@ -227,7 +227,6 @@ impl UrlGatedTool {
             "auth".to_string(),
             InputRequest::Elicit(ElicitRequest::new_url(
                 "Authorize via browser",
-                "el-1",
                 "https://example.test/authorize",
             )),
         );
@@ -331,7 +330,7 @@ async fn call_tool_with_caps(
 /// Elicitation §Capabilities: "Servers MUST NOT send elicitation requests
 /// with modes that are not supported by the client" and "an empty
 /// capabilities object is equivalent to declaring support for form mode
-/// only" — a URL-mode request against `elicitation: {}` must be -32003.
+/// only" — a URL-mode request against `elicitation: {}` must be -32021.
 #[tokio::test]
 async fn url_mode_elicitation_requires_the_url_subcapability() {
     let url = start_subcap_server().await;
@@ -340,7 +339,7 @@ async fn url_mode_elicitation_requires_the_url_subcapability() {
     let (status, body) =
         call_tool_with_caps(&url, "url_gated", serde_json::json!({ "elicitation": {} })).await;
     assert_eq!(status, 400, "url mode vs form-only client: {body}");
-    assert_eq!(body["error"]["code"], -32003, "{body}");
+    assert_eq!(body["error"]["code"], -32021, "{body}");
 
     // URL declared: passes the gate, input_required comes back.
     let (status, body) = call_tool_with_caps(
@@ -382,7 +381,7 @@ async fn tool_enabled_sampling_requires_the_tools_subcapability() {
         status, 400,
         "tool-enabled sampling vs bare sampling: {body}"
     );
-    assert_eq!(body["error"]["code"], -32003, "{body}");
+    assert_eq!(body["error"]["code"], -32021, "{body}");
 
     // sampling.tools declared: passes the gate.
     let (status, body) = call_tool_with_caps(
@@ -646,7 +645,7 @@ async fn mrtr_round_trip_on_prompts_get() {
 #[tokio::test]
 async fn resources_read_capability_gate_applies() {
     let url = start_full_server().await;
-    // No elicitation capability declared → -32003 at HTTP 400.
+    // No elicitation capability declared → -32021 at HTTP 400.
     let (status, body) = post_mrtr(
         &url,
         "resources/read",
@@ -658,7 +657,7 @@ async fn resources_read_capability_gate_applies() {
     )
     .await;
     assert_eq!(status, 400, "{body}");
-    assert_eq!(body["error"]["code"], -32003, "{body}");
+    assert_eq!(body["error"]["code"], -32021, "{body}");
 }
 
 // ---- MRTR negative paths (PAT/G7) ----
@@ -913,17 +912,17 @@ async fn start_caparm_server() -> String {
     url
 }
 
-/// The roots and sampling arms of the -32003 capability gate, both
-/// directions: undeclared → 400 -32003; declared → input_required.
+/// The roots and sampling arms of the -32021 capability gate, both
+/// directions: undeclared → 400 -32021; declared → input_required.
 #[tokio::test]
 async fn roots_and_sampling_capability_arms_are_gated() {
     let url = start_caparm_server().await;
 
     for (tool, cap) in [("roots_gated", "roots"), ("plain_sampler", "sampling")] {
-        // Undeclared capability → -32003 + HTTP 400.
+        // Undeclared capability → -32021 + HTTP 400.
         let (status, body) = call_tool_with_caps(&url, tool, serde_json::json!({})).await;
         assert_eq!(status, 400, "{tool} vs no caps: {body}");
-        assert_eq!(body["error"]["code"], -32003, "{tool}: {body}");
+        assert_eq!(body["error"]["code"], -32021, "{tool}: {body}");
 
         // Declared → the input request rides input_required.
         let (status, body) = call_tool_with_caps(&url, tool, serde_json::json!({ cap: {} })).await;

@@ -8,7 +8,7 @@
 //!   - `Mcp-Name` is REQUIRED for `tools/call` (`params.name`),
 //!     `resources/read` (`params.uri`), and `prompts/get` (`params.name`)
 //!     and MUST match the body value.
-//!   - Validation failures → HTTP 400 + JSON-RPC `-32001` (`HeaderMismatch`).
+//!   - Validation failures → HTTP 400 + JSON-RPC `-32020` (`HeaderMismatch`).
 //!
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
@@ -80,8 +80,8 @@ async fn assert_header_mismatch(resp: reqwest::Response, case: &str) {
     assert_eq!(resp.status(), 400, "{case}: must be HTTP 400 Bad Request");
     let body: serde_json::Value = resp.json().await.expect("error body");
     assert_eq!(
-        body["error"]["code"], -32001,
-        "{case}: must be JSON-RPC -32001 HeaderMismatch, got: {body}"
+        body["error"]["code"], -32020,
+        "{case}: must be JSON-RPC -32020 HeaderMismatch, got: {body}"
     );
 }
 
@@ -322,7 +322,7 @@ async fn headerless_initialize_rejection_names_supported_versions() {
         .expect("headerless initialize");
     assert_eq!(resp.status(), 400);
     let body: serde_json::Value = resp.json().await.expect("body");
-    assert_eq!(body["error"]["code"], -32001);
+    assert_eq!(body["error"]["code"], -32020);
     assert_eq!(
         body["error"]["data"]["supported"],
         serde_json::json!(["2026-07-28"]),

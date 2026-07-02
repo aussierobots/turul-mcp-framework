@@ -4,7 +4,7 @@
 //! annotation in its `inputSchema`. A server processing the body MUST validate
 //! that mirrored header values (Base64 sentinel decoded) match the body
 //! arguments — missing header with the value in the body, spurious header, or
-//! a decoded mismatch → HTTP 400 + JSON-RPC `-32001` (`HeaderMismatch`).
+//! a decoded mismatch → HTTP 400 + JSON-RPC `-32020` (`HeaderMismatch`).
 //!
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
@@ -176,7 +176,7 @@ async fn omitted_param_header_with_body_value_is_rejected() {
         status, 400,
         "annotated param in body without its header must be rejected: {body}"
     );
-    assert_eq!(body["error"]["code"], -32001, "{body}");
+    assert_eq!(body["error"]["code"], -32020, "{body}");
 }
 
 #[tokio::test]
@@ -184,7 +184,7 @@ async fn mismatched_param_header_is_rejected() {
     let url = start_server().await;
     let (status, body) = call_execute_sql(&url, "us-west1", Some("eu-central1")).await;
     assert_eq!(status, 400, "header/body mismatch must be rejected: {body}");
-    assert_eq!(body["error"]["code"], -32001, "{body}");
+    assert_eq!(body["error"]["code"], -32020, "{body}");
 }
 
 /// Integer-typed annotated parameter compared numerically: "servers SHOULD
@@ -291,7 +291,7 @@ async fn integer_params_compare_numerically() {
             assert!(resp_body.get("error").is_none(), "{resp_body}");
         } else {
             assert_eq!(status, 400, "mismatch must be 400: {resp_body}");
-            assert_eq!(resp_body["error"]["code"], -32001, "{resp_body}");
+            assert_eq!(resp_body["error"]["code"], -32020, "{resp_body}");
         }
     }
 }

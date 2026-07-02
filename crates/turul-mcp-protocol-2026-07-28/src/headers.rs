@@ -51,12 +51,11 @@ pub const MCP_PARAM_BASE64_PREFIX: &str = "=?base64?";
 /// Sentinel suffix closing a Base64-encoded `Mcp-Param-*` value.
 pub const MCP_PARAM_BASE64_SUFFIX: &str = "?=";
 
-/// JSON-RPC error code for header-validation failures (`HeaderMismatch`,
-/// implementation-defined server error range). Returned with HTTP
-/// `400 Bad Request` when a required standard header is missing/malformed or
-/// a header value does not match the corresponding request-body value.
-/// Prose-only contract — the pinned schema defines no symbol for it.
-pub const ERROR_CODE_HEADER_MISMATCH: i64 = -32001;
+/// JSON-RPC error code for header-validation failures. Matches the schema's
+/// `HEADER_MISMATCH` const and `HeaderMismatchError` interface. Returned with
+/// HTTP `400 Bad Request` when a required standard header is missing/malformed
+/// or a header value does not match the corresponding request-body value.
+pub const ERROR_CODE_HEADER_MISMATCH: i64 = -32020;
 
 #[cfg(test)]
 mod tests {
@@ -80,8 +79,8 @@ mod tests {
     }
 
     #[test]
-    fn header_mismatch_code_in_server_error_range() {
-        assert_eq!(ERROR_CODE_HEADER_MISMATCH, -32001);
+    fn header_mismatch_code_matches_schema() {
+        assert_eq!(ERROR_CODE_HEADER_MISMATCH, -32020);
         assert!((-32099..=-32000).contains(&ERROR_CODE_HEADER_MISMATCH));
     }
 }

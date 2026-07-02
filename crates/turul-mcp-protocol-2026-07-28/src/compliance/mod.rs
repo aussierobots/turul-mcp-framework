@@ -3,7 +3,7 @@
 //! Three sub-modules:
 //! - [`fetch`] — shallow sparse `git clone` of the pinned upstream tree, with
 //!   an idempotent local cache.
-//! - [`coverage`] — the table of 86 upstream example directories mapped to
+//! - [`coverage`] — the table of upstream example directories mapped to
 //!   their Rust binding (or [`coverage::Kind::NotModeled`] for entries we
 //!   haven't bound yet).
 //! - [`roundtrip`] — parse / re-serialize / semantic-diff each modeled case

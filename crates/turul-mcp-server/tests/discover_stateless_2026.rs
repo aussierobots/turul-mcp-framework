@@ -274,7 +274,7 @@ async fn incomplete_meta_missing_client_capabilities_is_rejected() {
 }
 
 #[tokio::test]
-async fn unsupported_protocol_version_header_is_rejected_with_32004() {
+async fn unsupported_protocol_version_header_is_rejected_with_32022() {
     let url = start_server().await;
     // A 2026-only build does not implement 2025-11-25: requesting it must get
     // 400 + UnsupportedProtocolVersionError listing the supported set.
@@ -294,16 +294,16 @@ async fn unsupported_protocol_version_header_is_rejected_with_32004() {
         .expect("POST");
     assert_eq!(resp.status(), 400);
     let out: serde_json::Value = resp.json().await.expect("json body");
-    assert_eq!(out["error"]["code"], -32004, "must be -32004: {out}");
+    assert_eq!(out["error"]["code"], -32022, "must be -32022: {out}");
     assert_eq!(out["error"]["data"]["supported"][0], "2026-07-28");
     assert_eq!(out["error"]["data"]["requested"], "2025-11-25");
 }
 
 #[tokio::test]
-async fn header_body_protocol_version_mismatch_is_rejected_with_32001() {
+async fn header_body_protocol_version_mismatch_is_rejected_with_32020() {
     let url = start_server().await;
     // Header carries the supported 2026-07-28, but _meta claims 2025-11-25:
-    // a header-validation failure → 400 + -32001 HeaderMismatch.
+    // a header-validation failure → 400 + -32020 HeaderMismatch.
     let client = reqwest::Client::new();
     let resp = client
         .post(&url)
@@ -327,7 +327,7 @@ async fn header_body_protocol_version_mismatch_is_rejected_with_32001() {
         .expect("POST");
     assert_eq!(resp.status(), 400);
     let out: serde_json::Value = resp.json().await.expect("json body");
-    assert_eq!(out["error"]["code"], -32001, "must be -32001: {out}");
+    assert_eq!(out["error"]["code"], -32020, "must be -32020: {out}");
 }
 
 #[tokio::test]

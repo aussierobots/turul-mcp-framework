@@ -1996,7 +1996,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // every annotated parameter's mirrored header against the body argument
         // (Base64 sentinel decoded; integers compared numerically). A value in
         // the body without its header, a header without its value, or a
-        // decoded mismatch → -32001 HeaderMismatch at HTTP 400.
+        // decoded mismatch → -32020 HeaderMismatch at HTTP 400.
         #[cfg(feature = "protocol-2026-07-28")]
         {
             let header_mismatch = |detail: String| McpError::JsonRpcError {
@@ -2079,7 +2079,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // this request's declared `clientCapabilities.extensions` activates
         // the extension; otherwise it runs synchronously (progressive
         // enhancement) — unless the tool REQUIRES tasks, which answers
-        // -32003 with `data.requiredCapabilities.extensions`.
+        // -32021 with `data.requiredCapabilities.extensions`.
         #[cfg(feature = "ext-tasks")]
         if let Some((runtime, task_tools)) = self.ext_tasks.as_ref()
             && let Some(&required) = task_tools.get(&call_params.name)

@@ -422,7 +422,7 @@ impl McpHandler for ExtTasksCancelHandler {
     }
 }
 
-/// The `-32003` payload for a task-requiring tool called without the
+/// The `-32021` payload for a task-requiring tool called without the
 /// declared extension — `data.requiredCapabilities.extensions` shape per the
 /// upstream overview.
 pub fn missing_capability_error() -> McpError {

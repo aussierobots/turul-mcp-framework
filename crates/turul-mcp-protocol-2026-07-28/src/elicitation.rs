@@ -276,13 +276,67 @@ pub enum MultiSelectEnumSchema {
 
 /// Restricted schema definitions that only allow primitive types
 /// without nested objects or arrays (per MCP spec).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Schema fixes a literal `type` discriminator per interface (`"string"`,
+/// `"number" | "integer"`, `"boolean"`) — `#[serde(untagged)]` alone tries
+/// variants in declaration order and can't tell them apart when a payload
+/// carries only the discriminator (e.g. `{"type":"integer"}` structurally
+/// matches [`StringSchema`] too, since `schema_type` is a bare `String`).
+/// `Deserialize` is hand-written to dispatch on `type` (and `enum`
+/// presence, to route to [`EnumSchema`]) before ever trying a variant.
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum PrimitiveSchemaDefinition {
     String(StringSchema),
     Number(NumberSchema),
     Boolean(BooleanSchema),
     Enum(EnumSchema),
+}
+
+impl<'de> Deserialize<'de> for PrimitiveSchemaDefinition {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        let type_str = value.get("type").and_then(Value::as_str);
+        // Enum-schema variants are structurally distinguished from
+        // StringSchema/BooleanSchema by carrying `enum` (untitled) or
+        // `oneOf` (titled, per-option display titles) — StringSchema and
+        // BooleanSchema carry neither.
+        let is_enum_shaped = value.get("enum").is_some() || value.get("oneOf").is_some();
+
+        let variant = match (type_str, is_enum_shaped) {
+            (Some("string"), false) => "String",
+            (Some("number") | Some("integer"), _) => "Number",
+            (Some("boolean"), false) => "Boolean",
+            // `enum`/`oneOf`-bearing string schemas and multi-select `array`
+            // schemas all route through the untagged `EnumSchema` union,
+            // which discriminates structurally among its own variants.
+            (Some("string"), true) | (Some("array"), _) => "Enum",
+            _ => {
+                return Err(serde::de::Error::custom(format!(
+                    "PrimitiveSchemaDefinition: unrecognized or missing `type` \
+                     discriminator in {value}"
+                )));
+            }
+        };
+
+        match variant {
+            "String" => serde_json::from_value(value)
+                .map(PrimitiveSchemaDefinition::String)
+                .map_err(serde::de::Error::custom),
+            "Number" => serde_json::from_value(value)
+                .map(PrimitiveSchemaDefinition::Number)
+                .map_err(serde::de::Error::custom),
+            "Boolean" => serde_json::from_value(value)
+                .map(PrimitiveSchemaDefinition::Boolean)
+                .map_err(serde::de::Error::custom),
+            _ => serde_json::from_value(value)
+                .map(PrimitiveSchemaDefinition::Enum)
+                .map_err(serde::de::Error::custom),
+        }
+    }
 }
 
 /// String format constraints
@@ -338,10 +392,6 @@ pub struct ElicitRequestURLParams {
     /// The message to present to the user explaining why the interaction is needed.
     pub message: String,
 
-    /// The ID of the elicitation, unique within the context of the server.
-    /// The client MUST treat this as an opaque value.
-    pub elicitation_id: String,
-
     /// The URL the user should navigate to.
     pub url: String,
 }
@@ -364,8 +414,8 @@ pub enum UrlModeMarker {
 /// `ElicitRequestParams = ElicitRequestFormParams | ElicitRequestURLParams`.
 ///
 /// Wire discrimination: `mode: "url"` selects URL; otherwise (absent or `"form"`)
-/// selects Form. URL is tried first because its `mode`/`elicitationId`/`url`
-/// fields uniquely identify it.
+/// selects Form. URL is tried first because its `mode`/`url` fields uniquely
+/// identify it.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ElicitRequestParams {
@@ -399,17 +449,12 @@ impl ElicitRequest {
     }
 
     /// Construct a URL-mode elicitation request.
-    pub fn new_url(
-        message: impl Into<String>,
-        elicitation_id: impl Into<String>,
-        url: impl Into<String>,
-    ) -> Self {
+    pub fn new_url(message: impl Into<String>, url: impl Into<String>) -> Self {
         Self {
             method: "elicitation/create".to_string(),
             params: ElicitRequestParams::Url(ElicitRequestURLParams {
                 mode: UrlModeMarker::Url,
                 message: message.into(),
-                elicitation_id: elicitation_id.into(),
                 url: url.into(),
             }),
         }
@@ -433,15 +478,10 @@ impl ElicitRequestFormParams {
 }
 
 impl ElicitRequestURLParams {
-    pub fn new(
-        message: impl Into<String>,
-        elicitation_id: impl Into<String>,
-        url: impl Into<String>,
-    ) -> Self {
+    pub fn new(message: impl Into<String>, url: impl Into<String>) -> Self {
         Self {
             mode: UrlModeMarker::Url,
             message: message.into(),
-            elicitation_id: elicitation_id.into(),
             url: url.into(),
         }
     }
@@ -1250,5 +1290,41 @@ mod enum_union_fidelity_tests {
             "numeric constraints must select NumberSchema, got: {parsed:?}"
         );
         assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn bare_integer_discriminator_selects_number_not_string() {
+        // Regression: a bare {"type":"integer"} with no numeric-only field
+        // (minimum/maximum/default) used to fall through to StringSchema
+        // because untagged dispatch tried the String variant first and
+        // schema_type: String accepts any string value.
+        let wire = json!({"type": "integer"});
+        let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();
+        assert!(
+            matches!(&parsed, PrimitiveSchemaDefinition::Number(_)),
+            "bare integer discriminator must select NumberSchema, got: {parsed:?}"
+        );
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn bare_boolean_discriminator_selects_boolean_not_string() {
+        let wire = json!({"type": "boolean", "title": "x"});
+        let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();
+        assert!(
+            matches!(&parsed, PrimitiveSchemaDefinition::Boolean(_)),
+            "bare boolean discriminator must select BooleanSchema, got: {parsed:?}"
+        );
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn unknown_type_discriminator_is_rejected() {
+        // A `type` value that matches none of string/number/integer/boolean
+        // and carries no `enum` must fail to deserialize, not silently
+        // collapse into StringSchema.
+        let wire = json!({"type": "banana"});
+        let result: Result<PrimitiveSchemaDefinition, _> = serde_json::from_value(wire);
+        assert!(result.is_err(), "unknown type discriminator must be rejected");
     }
 }

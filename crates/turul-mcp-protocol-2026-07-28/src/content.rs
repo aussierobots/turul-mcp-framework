@@ -132,15 +132,17 @@ pub enum ContentBlock {
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         meta: Option<HashMap<String, Value>>,
     },
-    /// Resource link (ResourceLink from MCP spec)
+    /// Resource link (ResourceLink from MCP spec).
+    ///
+    /// Schema: `ResourceLink extends Resource` — exactly ONE `annotations?`
+    /// and ONE `_meta?`, both inherited from `Resource`. The flattened
+    /// [`ResourceReference`] is the single source of truth for both — do NOT
+    /// add variant-level `annotations`/`meta` fields alongside it, which
+    /// would emit the same key twice on the wire.
     #[serde(rename = "resource_link")]
     ResourceLink {
         #[serde(flatten)]
         resource: ResourceReference,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        annotations: Option<Annotations>,
-        #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-        meta: Option<HashMap<String, Value>>,
     },
     /// Embedded resource (EmbeddedResource from MCP spec)
     #[serde(rename = "resource")]
@@ -233,11 +235,7 @@ impl ContentBlock {
 
     /// Create resource link
     pub fn resource_link(resource: ResourceReference) -> Self {
-        Self::ResourceLink {
-            resource,
-            annotations: None,
-            meta: None,
-        }
+        Self::ResourceLink { resource }
     }
 
     /// Create embedded resource
@@ -308,9 +306,11 @@ impl ContentBlock {
             ContentBlock::Text { annotations: a, .. }
             | ContentBlock::Image { annotations: a, .. }
             | ContentBlock::Audio { annotations: a, .. }
-            | ContentBlock::ResourceLink { annotations: a, .. }
             | ContentBlock::Resource { annotations: a, .. } => {
                 *a = Some(annotations);
+            }
+            ContentBlock::ResourceLink { resource } => {
+                resource.annotations = Some(annotations);
             }
             // ToolUse and ToolResult don't have annotations per MCP spec
             ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } => {}
@@ -325,11 +325,13 @@ impl ContentBlock {
             ContentBlock::Text { meta: m, .. }
             | ContentBlock::Image { meta: m, .. }
             | ContentBlock::Audio { meta: m, .. }
-            | ContentBlock::ResourceLink { meta: m, .. }
             | ContentBlock::Resource { meta: m, .. }
             | ContentBlock::ToolUse { meta: m, .. }
             | ContentBlock::ToolResult { meta: m, .. } => {
                 *m = Some(meta);
+            }
+            ContentBlock::ResourceLink { resource } => {
+                resource.meta = Some(meta);
             }
         }
         self
@@ -489,6 +491,11 @@ mod tests {
 
     #[test]
     fn test_resource_reference_serialization_with_annotations_and_meta() {
+        // Schema: `ResourceLink extends Resource` — exactly ONE `annotations?`
+        // and ONE `_meta?`. `ContentBlock::ResourceLink` has no variant-level
+        // copies of these fields, so `ResourceReference` (flattened) is the
+        // single source of truth — no duplicate wire keys, no field asymmetry
+        // on round-trip.
         let mut meta = HashMap::new();
         meta.insert("version".to_string(), json!("1.0"));
         meta.insert("created_by".to_string(), json!("test"));
@@ -502,17 +509,29 @@ mod tests {
 
         let resource_link = ContentBlock::resource_link(resource_ref);
 
-        // Test serialization round-trip
+        // Outbound: exactly one `annotations` / `_meta` key on the wire.
+        // MUST check the raw serialized text, not `serde_json::to_value()` —
+        // `to_value()` builds a `Map` that cannot represent duplicate keys
+        // (a second `serialize_entry` for the same key silently overwrites
+        // the first in-memory), so counting keys on a `Value` can never
+        // observe a duplicate-key defect even when the byte stream produced
+        // by `to_string()`/`to_writer()` genuinely repeats the key.
         let json_str = serde_json::to_string(&resource_link).unwrap();
+        assert_eq!(
+            json_str.matches("\"annotations\":").count(),
+            1,
+            "must emit exactly one annotations key on the wire: {json_str}"
+        );
+        assert_eq!(
+            json_str.matches("\"_meta\":").count(),
+            1,
+            "must emit exactly one _meta key on the wire: {json_str}"
+        );
+
+        // Round-trip.
         let deserialized: ContentBlock = serde_json::from_str(&json_str).unwrap();
 
-        // Verify structure - with #[serde(flatten)], ResourceReference fields get flattened
-        if let ContentBlock::ResourceLink {
-            resource,
-            annotations,
-            meta,
-        } = deserialized
-        {
+        if let ContentBlock::ResourceLink { resource } = deserialized {
             assert_eq!(resource.uri, "file:///test/data.json");
             assert_eq!(resource.name, "test_data");
             assert_eq!(resource.title, Some("Test Data".to_string()));
@@ -522,25 +541,15 @@ mod tests {
             );
             assert_eq!(resource.mime_type, Some("application/json".to_string()));
 
-            // With #[serde(flatten)], the ResourceReference annotations and meta get flattened
-            // during serialization, but during deserialization, serde routes them to the
-            // ContentBlock level since both structs have these fields.
-
-            // ResourceReference level should be None after deserialization
-            assert!(resource.annotations.is_none());
-            assert!(resource.meta.is_none());
-
-            // ContentBlock level should contain the annotations and meta
-            assert!(annotations.is_some());
+            // Annotations and meta survive on the ResourceReference itself —
+            // no ContentBlock-level duplicate to route them to instead.
             assert_eq!(
-                annotations.unwrap().audience,
+                resource.annotations.unwrap().audience,
                 Some(vec![crate::prompts::Role::User])
             );
-
-            assert!(meta.is_some());
-            let cb_meta = meta.unwrap();
-            assert_eq!(cb_meta.get("version"), Some(&json!("1.0")));
-            assert_eq!(cb_meta.get("created_by"), Some(&json!("test")));
+            let resource_meta = resource.meta.unwrap();
+            assert_eq!(resource_meta.get("version"), Some(&json!("1.0")));
+            assert_eq!(resource_meta.get("created_by"), Some(&json!("test")));
         } else {
             panic!("Expected ResourceLink variant");
         }

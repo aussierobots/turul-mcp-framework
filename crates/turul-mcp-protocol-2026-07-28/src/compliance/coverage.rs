@@ -67,7 +67,7 @@ where
 }
 
 // ============================================================
-// CASES table — 86 entries, sorted lexicographically to match
+// CASES table — 87 entries, sorted lexicographically to match
 // `list_example_dirs` output for trivial diffing.
 // ============================================================
 
@@ -194,11 +194,6 @@ pub const CASES: &[Case] = &[
         parse_and_reserialize: roundtrip::<crate::elicitation::ElicitResult>,
     },
     Case {
-        dir: "ElicitationCompleteNotification",
-        kind: Kind::NotModeled,
-        parse_and_reserialize: not_modeled,
-    },
-    Case {
         dir: "EmbeddedResource",
         kind: Kind::NotModeled,
         parse_and_reserialize: not_modeled,
@@ -220,6 +215,11 @@ pub const CASES: &[Case] = &[
     },
     Case {
         dir: "GetPromptResultResponse",
+        kind: Kind::NotModeled,
+        parse_and_reserialize: not_modeled,
+    },
+    Case {
+        dir: "HeaderMismatchError",
         kind: Kind::NotModeled,
         parse_and_reserialize: not_modeled,
     },
@@ -459,6 +459,11 @@ pub const CASES: &[Case] = &[
         parse_and_reserialize: not_modeled,
     },
     Case {
+        dir: "SubscriptionsListenResult",
+        kind: Kind::NotModeled,
+        parse_and_reserialize: not_modeled,
+    },
+    Case {
         dir: "TextContent",
         kind: Kind::NotModeled,
         parse_and_reserialize: not_modeled,
@@ -533,6 +538,6 @@ mod tests {
     #[test]
     fn cases_table_has_86_entries() {
         // Hard count — matches the upstream tree at the pinned SHA.
-        assert_eq!(CASES.len(), 86);
+        assert_eq!(CASES.len(), 87);
     }
 }

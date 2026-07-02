@@ -172,9 +172,10 @@ pub trait HasProgressTokenParam: Params {
 // ---------------------- notifications/cancelled ------------------------
 
 pub trait HasCancelledParams: Params {
-    /// Schema: `requestId?` — optional per the spec text (cancellations MAY
-    /// arrive after the originating request has finished).
-    fn request_id(&self) -> Option<&turul_rpc::RequestId>;
+    /// Schema: `requestId` — required. Must correspond to the ID of a
+    /// request the client previously issued (the only server-sent form is
+    /// closing a `subscriptions/listen` stream on stdio).
+    fn request_id(&self) -> &turul_rpc::RequestId;
     fn reason(&self) -> Option<&str>;
 }
 

@@ -17,6 +17,15 @@ use crate::logging::LoggingLevel;
 use turul_rpc::RequestId;
 
 /// Base notification parameters that can include _meta
+///
+/// Schema retypes `_meta` from `MetaObject` to `NotificationMetaObject` (which
+/// extends `MetaObject` with the optional
+/// `io.modelcontextprotocol/subscriptionId` key — see
+/// [`crate::meta::META_KEY_SUBSCRIPTION_ID`]). Both are structurally
+/// `Record<string, unknown>` with named keys layered on top, so the untyped
+/// `HashMap<String, Value>` binding here already accepts and round-trips the
+/// subscription-id key without a dedicated struct — the same faithful-loosening
+/// rationale the crate applies to `MetaObject` itself.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotificationParams {
@@ -321,11 +330,12 @@ pub struct CancelledNotification {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CancelledNotificationParams {
-    /// The ID of the request to cancel. Optional per schema (`requestId?`) —
-    /// a cancellation MAY arrive after the originating request has already
-    /// finished, in which case the id is unknown to the sender.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub request_id: Option<RequestId>,
+    /// The ID of the request to cancel. Required — must correspond to the ID
+    /// of a request the client previously issued. Client→server only, except
+    /// a stdio-only server-sent form solely to close a
+    /// `subscriptions/listen` stream (referencing the ID of the `listen`
+    /// request that opened it).
+    pub request_id: RequestId,
     /// An optional reason for cancelling
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
@@ -335,17 +345,9 @@ pub struct CancelledNotificationParams {
 }
 
 impl CancelledNotification {
-    /// Cancel a specific in-flight request.
+    /// Cancel a specific in-flight request (or close a `subscriptions/listen`
+    /// stream, on stdio, by its request id).
     pub fn new(request_id: RequestId) -> Self {
-        Self::new_optional(Some(request_id))
-    }
-
-    /// Cancellation without a specific request id (spec-valid late-arrival case).
-    pub fn without_id() -> Self {
-        Self::new_optional(None)
-    }
-
-    fn new_optional(request_id: Option<RequestId>) -> Self {
         Self {
             method: "notifications/cancelled".to_string(),
             params: CancelledNotificationParams {
@@ -430,45 +432,6 @@ impl LoggingMessageNotification {
     pub fn with_logger(mut self, logger: impl Into<String>) -> Self {
         self.params.logger = Some(logger.into());
         self
-    }
-
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.params.meta = Some(meta);
-        self
-    }
-}
-
-/// Method: `"notifications/elicitation/complete"`.
-///
-/// Sent by the client when an elicitation has been completed.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ElicitationCompleteNotification {
-    /// Method name (always "notifications/elicitation/complete")
-    pub method: String,
-    /// Elicitation complete parameters
-    pub params: ElicitationCompleteNotificationParams,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ElicitationCompleteNotificationParams {
-    /// The ID of the elicitation that was completed
-    pub elicitation_id: String,
-    /// Optional MCP meta information
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<HashMap<String, Value>>,
-}
-
-impl ElicitationCompleteNotification {
-    pub fn new(elicitation_id: impl Into<String>) -> Self {
-        Self {
-            method: "notifications/elicitation/complete".to_string(),
-            params: ElicitationCompleteNotificationParams {
-                elicitation_id: elicitation_id.into(),
-                meta: None,
-            },
-        }
     }
 
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
@@ -584,8 +547,8 @@ impl ResourceUpdatedNotificationTrait for ResourceUpdatedNotification {}
 // CancelledNotificationParams + CancelledNotification
 impl Params for CancelledNotificationParams {}
 impl HasCancelledParams for CancelledNotificationParams {
-    fn request_id(&self) -> Option<&turul_rpc::RequestId> {
-        self.request_id.as_ref()
+    fn request_id(&self) -> &turul_rpc::RequestId {
+        &self.request_id
     }
     fn reason(&self) -> Option<&str> {
         self.reason.as_deref()
@@ -748,7 +711,7 @@ mod tests {
             CancelledNotification::new(RequestId::Number(123)).with_reason("User cancelled");
 
         assert_eq!(notification.method, "notifications/cancelled");
-        assert_eq!(notification.params.request_id, Some(RequestId::Number(123)));
+        assert_eq!(notification.params.request_id, RequestId::Number(123));
         assert_eq!(
             notification.params.reason,
             Some("User cancelled".to_string())
@@ -756,32 +719,26 @@ mod tests {
     }
 
     #[test]
-    fn test_cancelled_notification_without_id() {
-        let notification =
-            CancelledNotification::without_id().with_reason("Request finished before cancel");
+    fn test_cancelled_notification_always_emits_request_id() {
+        use turul_rpc::RequestId;
+        let notification = CancelledNotification::new(RequestId::Number(7))
+            .with_reason("User cancelled");
 
         let json = serde_json::to_value(&notification).unwrap();
         assert_eq!(json["method"], "notifications/cancelled");
-        // requestId must be omitted entirely when None per schema.
-        assert!(
-            !json["params"]
-                .as_object()
-                .unwrap()
-                .contains_key("requestId")
-        );
-        assert_eq!(json["params"]["reason"], "Request finished before cancel");
+        assert_eq!(json["params"]["requestId"], 7);
+        assert_eq!(json["params"]["reason"], "User cancelled");
     }
 
     #[test]
-    fn test_cancelled_notification_deserializes_without_request_id() {
-        // Spec-valid late-arrival shape — `notifications/cancelled` MAY arrive
-        // after the request finished, with no `requestId`.
+    fn test_cancelled_notification_rejects_missing_request_id() {
+        // Schema: `requestId` is required — a payload without it must fail
+        // to deserialize.
         let wire = serde_json::json!({
             "reason": "late arrival"
         });
-        let params: CancelledNotificationParams = serde_json::from_value(wire).unwrap();
-        assert!(params.request_id.is_none());
-        assert_eq!(params.reason.as_deref(), Some("late arrival"));
+        let result: Result<CancelledNotificationParams, _> = serde_json::from_value(wire);
+        assert!(result.is_err(), "requestId is required by schema");
     }
 
     #[test]
@@ -796,17 +753,6 @@ mod tests {
         assert_eq!(notification.params.level, LoggingLevel::Info);
         assert_eq!(notification.params.logger, Some("test-logger".to_string()));
         assert_eq!(notification.params.data, data);
-    }
-
-    #[test]
-    fn test_elicitation_complete_notification() {
-        let notification = ElicitationCompleteNotification::new("elicit-xyz-789");
-
-        assert_eq!(notification.method, "notifications/elicitation/complete");
-
-        let json = serde_json::to_value(&notification).unwrap();
-        assert_eq!(json["method"], "notifications/elicitation/complete");
-        assert_eq!(json["params"]["elicitationId"], "elicit-xyz-789");
     }
 
     // ---- Notification trait coverage ----
@@ -826,14 +772,14 @@ mod tests {
     fn cancelled_params_field_getters_via_trait() {
         use turul_rpc::RequestId;
         let params = CancelledNotificationParams {
-            request_id: Some(RequestId::Number(42)),
+            request_id: RequestId::Number(42),
             reason: Some("user clicked stop".to_string()),
             meta: None,
         };
         // Drive the field-getters through the `HasCancelledParams` trait.
-        let request_id: Option<&RequestId> = HasCancelledParams::request_id(&params);
+        let request_id: &RequestId = HasCancelledParams::request_id(&params);
         let reason: Option<&str> = HasCancelledParams::reason(&params);
-        assert_eq!(request_id, Some(&RequestId::Number(42)));
+        assert_eq!(request_id, &RequestId::Number(42));
         assert_eq!(reason, Some("user clicked stop"));
     }
 

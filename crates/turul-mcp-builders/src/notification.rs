@@ -498,12 +498,10 @@ mod tests {
             .build();
 
         assert_eq!(notification.method, "notifications/cancelled");
-        // CancelledNotificationParams.request_id is a bare RequestId under 2025-11-25
-        // and Option<RequestId> under 2026-07-28.
-        #[cfg(feature = "protocol-2025-11-25")]
+        // CancelledNotificationParams.request_id is a required bare RequestId
+        // on both lanes (the 2026-07-02 re-pin reverted the 2026-05-31
+        // Option<RequestId> relaxation on the 2026-07-28 lane).
         assert_eq!(notification.params.request_id, RequestId::Number(123));
-        #[cfg(feature = "protocol-2026-07-28")]
-        assert_eq!(notification.params.request_id, Some(RequestId::Number(123)));
         assert_eq!(
             notification.params.reason,
             Some("User cancelled operation".to_string())

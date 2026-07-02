@@ -519,7 +519,7 @@ async fn handle_request(
 
         // The 2026 stateless build serves a single spec: every request goes to the
         // streamable handler, whose Server Validation rejects unsupported
-        // MCP-Protocol-Version values with 400 + -32004. Routing legacy version
+        // MCP-Protocol-Version values with 400 + -32022. Routing legacy version
         // headers to the 2025-era session handler would bypass that contract.
         #[cfg(feature = "protocol-2026-07-28")]
         let route_streamable = true;

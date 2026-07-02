@@ -362,14 +362,14 @@ async fn undeclared_call_runs_synchronously() {
     assert_eq!(body["result"]["content"][0]["text"], "8", "{body}");
 }
 
-/// A task-REQUIRED tool without the declared extension → -32003 with the
+/// A task-REQUIRED tool without the declared extension → -32021 with the
 /// upstream overview's exact data shape.
 #[tokio::test]
-async fn required_tool_without_extension_is_32003() {
+async fn required_tool_without_extension_is_32021() {
     let url = start_server().await;
     let (status, body) = call_tool(&url, "must_be_task", json!({}), false).await;
     assert_eq!(status, 400, "{body}");
-    assert_eq!(body["error"]["code"], -32003, "{body}");
+    assert_eq!(body["error"]["code"], -32021, "{body}");
     assert!(
         body["error"]["data"]["requiredCapabilities"]["extensions"][EXT].is_object(),
         "data.requiredCapabilities.extensions must name the extension: {body}"

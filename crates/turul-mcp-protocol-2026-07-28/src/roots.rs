@@ -72,12 +72,18 @@ impl Root {
     }
 }
 
+/// Params for [`ListRootsRequest`]. Schema: `{ _meta?: MetaObject }` — a
+/// bespoke inline shape, NOT the full `RequestParams` extension (no
+/// required typed `_meta`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ListRootsRequestParams {
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+}
+
 /// Complete roots/list request.
 ///
-/// Schema: `ListRootsRequest { method: "roots/list"; params?: RequestParams; }`.
-/// `params` is the standard [`crate::json_rpc::RequestParams`] when present,
-/// or omitted entirely — the schema's `params?` is honored by serializing as
-/// `None`.
+/// Schema: `ListRootsRequest { method: "roots/list"; params?: { _meta?: MetaObject } }`.
 ///
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
@@ -93,7 +99,7 @@ pub struct ListRootsRequest {
     pub method: String,
     /// Optional standard request params.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub params: Option<crate::json_rpc::RequestParams>,
+    pub params: Option<ListRootsRequestParams>,
 }
 
 /// Response for `roots/list` — `{ roots: Root[] }`.
@@ -131,15 +137,15 @@ impl ListRootsRequest {
     }
 
     /// Construct with explicit per-request meta.
-    pub fn with_meta(meta: crate::meta::RequestMetaObject) -> Self {
+    pub fn with_meta(meta: HashMap<String, Value>) -> Self {
         Self {
             method: "roots/list".to_string(),
-            params: Some(crate::json_rpc::RequestParams::new(meta)),
+            params: Some(ListRootsRequestParams { meta: Some(meta) }),
         }
     }
 
     /// Attach a fully-constructed params struct.
-    pub fn with_params(mut self, params: crate::json_rpc::RequestParams) -> Self {
+    pub fn with_params(mut self, params: ListRootsRequestParams) -> Self {
         self.params = Some(params);
         self
     }
@@ -161,6 +167,8 @@ impl HasMethod for ListRootsRequest {
         &self.method
     }
 }
+
+impl Params for ListRootsRequestParams {}
 
 #[allow(deprecated)]
 impl HasParams for ListRootsRequest {
@@ -241,15 +249,11 @@ mod tests {
 
     #[test]
     fn test_list_roots_request_matches_typescript_spec() {
-        // Schema-anchor: `ListRootsRequest { method: "roots/list"; params?: RequestParams }`.
-        // When `params` is present it carries the standard `RequestParams._meta:
-        // RequestMetaObject` (required, typed).
-        let meta = crate::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
-            crate::initialize::Implementation::new("c", "1"),
-            crate::initialize::ClientCapabilities::default(),
-        )
-        .with_extra("requestId", json!("req-123"));
+        // Schema-anchor: `ListRootsRequest { method: "roots/list";
+        // params?: { _meta?: MetaObject } }` — a bespoke inline shape, NOT the
+        // full `RequestParams` extension (no required typed `_meta`).
+        let mut meta = std::collections::HashMap::new();
+        meta.insert("requestId".to_string(), json!("req-123"));
 
         let request = ListRootsRequest::with_meta(meta);
 
@@ -257,10 +261,6 @@ mod tests {
 
         assert_eq!(json_value["method"], "roots/list");
         assert!(json_value["params"].is_object());
-        assert_eq!(
-            json_value["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"],
-            "DRAFT-2026-v1"
-        );
         assert_eq!(json_value["params"]["_meta"]["requestId"], "req-123");
     }
 

@@ -5,9 +5,9 @@ maintained alongside the spec at:
 
 - **Repository**: `modelcontextprotocol/modelcontextprotocol`
 - **Subpath**: `schema/draft/examples`
-- **Commit SHA** (pin used by `git checkout`): `1304c8fe5f079358a0ff22b6afdb675dc96d75d1`
-- **Tree SHA** (audit only — subpath digest at this commit): `9f9415b427c4db6f7ad375ca7b86d1a5ee955072`
-- **Captured**: 2026-06-10 (pin advanced with the 1bf94a60… schema re-pin; see ADR-027 revision log)
+- **Commit SHA** (pin used by `git checkout`): `60dc69e9a9723a7bab535ade6c5c5b9695d97dfc`
+- **Tree SHA** (audit only — subpath digest at this commit): `77e6db47d7ea41eb0e011638e98ad8a26ba8f2a3`
+- **Captured**: 2026-07-02 (pin advanced with the 6e4cba2d… schema re-pin; see ADR-027 revision log). Prior: 2026-06-10 (1bf94a60… schema re-pin)
 
 The compliance harness (`src/compliance/`) fetches the pinned tree via
 shallow sparse `git clone`, caches under `target/upstream-fixtures/` for

@@ -1,5 +1,7 @@
 # MCP 2026-07-28 Final Readiness Audit
 
+> **Note (2026-07-02): substantially superseded.** Most of this report's P1 findings have since closed (CI workflow now exists, ADR index covers 022–031, `turul-mcp-ext-tasks` is wired, `_meta` is enforced on the 2026 wire path, `notifications/roots/list_changed` is cfg-gated, crate README/lib.rs default-spec claims are corrected, `roots-server` is pinned to the 2025 lane). See `OUTSTANDING.md` at the repo root for the current schema re-pin (2026-06-10 → 2026-07-02) and its fix slice. Treat specific claims below as point-in-time, not current state.
+
 Branch: `feat/turul-mcp-protocol-2026-07-28` (side-branch of `2026-07-28-MCP-Specification`).
 Reconciled from seven read-only auditors (ADR consistency, protocol/schema, feature-topology, examples, test-matrix, documentation/CI, security). Spec lanes referenced by full date: **2026-07-28** (default, stateless core) and **2025-11-25** (opt-in legacy).
 

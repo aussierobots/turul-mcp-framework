@@ -396,7 +396,7 @@ async fn invalid_base64_blob_is_rejected() {
 
 /// prompts/list carries title, icons, and _meta (Prompt extends
 /// BaseMetadata, Icons); prompts/get for an unknown prompt → -32602; a
-/// mismatched Mcp-Name on prompts/get → -32001 + 400.
+/// mismatched Mcp-Name on prompts/get → -32020 + 400.
 #[tokio::test]
 async fn prompt_descriptors_and_error_codes() {
     let url = start_server().await;
@@ -432,7 +432,7 @@ async fn prompt_descriptors_and_error_codes() {
     .await;
     assert_eq!(body["error"]["code"], -32602, "unknown prompt: {body}");
 
-    // Mcp-Name MUST equal params.name (SEP-2243) — mismatch is -32001/400.
+    // Mcp-Name MUST equal params.name (SEP-2243) — mismatch is -32020/400.
     let (status, body) = post_method(
         &url,
         "prompts/get",
@@ -441,7 +441,7 @@ async fn prompt_descriptors_and_error_codes() {
     )
     .await;
     assert_eq!(status, 400, "{body}");
-    assert_eq!(body["error"]["code"], -32001, "{body}");
+    assert_eq!(body["error"]["code"], -32020, "{body}");
 }
 
 /// An unconfigured server answers completion/complete with 404 + -32601

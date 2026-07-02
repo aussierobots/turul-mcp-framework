@@ -95,8 +95,8 @@ pub fn run_all_with_pin(dest: &Path, pin: &Pin) -> Result<Report, super::fetch::
     Ok(report)
 }
 
-/// Verify the table is in sync with the fetched tree — exactly 86 entries,
-/// one per upstream example directory, no extras, no missing.
+/// Verify the table is in sync with the fetched tree — one entry per upstream
+/// example directory, no extras, no missing.
 pub fn assert_table_matches_upstream(dest: &Path) -> Result<(), String> {
     let examples_dir = fetch::ensure_fixtures(dest, &PIN).map_err(|e| e.to_string())?;
     let upstream = list_example_dirs(&examples_dir).map_err(|e| e.to_string())?;
@@ -112,9 +112,9 @@ pub fn assert_table_matches_upstream(dest: &Path) -> Result<(), String> {
             "coverage table out of sync with upstream tree: missing={missing:?} extra={extra:?}"
         ));
     }
-    if table.len() != 86 {
+    if table.len() != upstream.len() {
         return Err(format!(
-            "coverage table size {} != expected 86 (upstream has {})",
+            "coverage table size {} != upstream tree size {}",
             table.len(),
             upstream.len()
         ));

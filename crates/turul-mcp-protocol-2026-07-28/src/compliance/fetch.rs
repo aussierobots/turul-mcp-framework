@@ -19,7 +19,7 @@ pub const PIN: Pin = Pin {
     // `schema/draft/examples` at the time of the 2026-05-24 capture.
     // The tree SHA for that subpath at this commit is
     // `9f9415b427c4db6f7ad375ca7b86d1a5ee955072` (recorded for audit only).
-    sha: "1304c8fe5f079358a0ff22b6afdb675dc96d75d1",
+    sha: "60dc69e9a9723a7bab535ade6c5c5b9695d97dfc",
     subpath: "schema/draft/examples",
 };
 
@@ -105,7 +105,7 @@ pub fn ensure_fixtures(dest: &Path, pin: &Pin) -> Result<PathBuf, FetchError> {
     Ok(examples_dir)
 }
 
-/// Enumerate every example sub-directory under the fetched tree (i.e. the 86
+/// Enumerate every example sub-directory under the fetched tree (i.e. the
 /// upstream PascalCase dirs), sorted lexicographically for stable iteration.
 pub fn list_example_dirs(examples_dir: &Path) -> Result<Vec<String>, FetchError> {
     let mut names: Vec<String> = fs::read_dir(examples_dir)

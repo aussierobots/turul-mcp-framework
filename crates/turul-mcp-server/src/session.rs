@@ -394,28 +394,6 @@ impl SessionContext {
         true
     }
 
-    /// Emit `notifications/elicitation/complete` for an out-of-band (URL
-    /// mode) elicitation: "Servers MAY send a
-    /// notifications/elicitation/complete notification … MUST include the
-    /// elicitationId" — sent on this request's stream, so the
-    /// only-to-the-initiating-client MUST holds by construction.
-    #[cfg(feature = "protocol-2026-07-28")]
-    pub async fn notify_elicitation_complete(&self, elicitation_id: impl Into<String>) {
-        let mut params = std::collections::HashMap::new();
-        params.insert(
-            "elicitationId".to_string(),
-            serde_json::json!(elicitation_id.into()),
-        );
-        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
-            "notifications/elicitation/complete".to_string(),
-            params,
-        );
-        self.notify(SessionEvent::Notification(
-            serde_json::to_value(notification).unwrap(),
-        ))
-        .await;
-    }
-
     /// Send a request-scoped progress notification carrying an optional
     /// human-readable status message (Progress §Behavior: `message` is the
     /// optional progress text). No-op without a request token — see

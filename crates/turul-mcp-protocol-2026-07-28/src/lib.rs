@@ -34,8 +34,9 @@
 //! - **Extensions** ([SEP-2133]) — `extensions` map on capabilities; extension
 //!   *types* live in separate `turul-mcp-ext-*` crates, not in this crate.
 //! - **Error codes** ([SEP-2164]) — JSON-RPC standard codes; missing
-//!   tool/resource/prompt → `-32602`; MCP-specific `-32003`/`-32004` for
-//!   capability/version negotiation failures.
+//!   tool/resource/prompt → `-32602`; MCP-specific `-32020`/`-32021`/`-32022`
+//!   (header mismatch / capability / version negotiation failures) allocated
+//!   sequentially from the schema's spec-reserved `-32020..-32099` range.
 //!
 //! ## `_meta` key + HTTP header constants
 //!
@@ -166,16 +167,17 @@ pub use meta::{
     META_KEY_PROTOCOL_VERSION, META_KEY_SUBSCRIPTION_ID, META_KEY_TRACEPARENT, META_KEY_TRACESTATE,
 };
 pub use notifications::{
-    CancelledNotification, ElicitationCompleteNotification, Notification, NotificationParams,
-    ProgressNotification, ProgressNotificationParams, ProgressTokenValue,
-    PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
+    CancelledNotification, Notification, NotificationParams, ProgressNotification,
+    ProgressNotificationParams, ProgressTokenValue, PromptListChangedNotification,
+    ResourceListChangedNotification, ResourceUpdatedNotification,
     ResourceUpdatedNotificationParams, ToolListChangedNotification,
 };
 pub use result_type::ResultType;
 pub use subscriptions::{
     SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, SUBSCRIPTIONS_LISTEN_METHOD, SubscriptionFilter,
     SubscriptionsAcknowledgedNotification, SubscriptionsAcknowledgedNotificationParams,
-    SubscriptionsListenRequest, SubscriptionsListenRequestParams,
+    SubscriptionsListenRequest, SubscriptionsListenRequestParams, SubscriptionsListenResult,
+    SubscriptionsListenResultMeta,
 };
 // SEP-2577-deprecated re-exports kept available during the migration window.
 #[allow(deprecated)]
@@ -296,7 +298,7 @@ pub enum McpError {
         data: Option<serde_json::Value>,
     },
 
-    /// MCP `-32003` — server requires a client capability that was not declared
+    /// MCP `-32021` — server requires a client capability that was not declared
     /// in the request's `clientCapabilities`. See draft schema `MissingRequiredClientCapabilityError`.
     ///
     /// Wire `data` shape: `{"requiredCapabilities": <ClientCapabilities>}`. The
@@ -308,7 +310,7 @@ pub enum McpError {
         required: serde_json::Value,
     },
 
-    /// MCP `-32004` — request's protocol version is not supported by the server.
+    /// MCP `-32022` — request's protocol version is not supported by the server.
     /// See draft schema `UnsupportedProtocolVersionError`.
     ///
     /// Wire `data` shape: `{"supported": [..], "requested": ".."}`.
@@ -470,11 +472,12 @@ impl McpError {
                 JsonRpcErrorObject::invalid_params(&format!("Unknown prompt: {}", name))
             }
 
-            // MCP-specific structured errors: MissingRequiredClientCapabilityError (-32003)
-            // and UnsupportedProtocolVersionError (-32004) per DRAFT-2026-v1 schema.
+            // MCP-specific structured errors: MissingRequiredClientCapabilityError (-32021)
+            // and UnsupportedProtocolVersionError (-32022) per the schema's allocated
+            // -32020..-32099 spec-reserved range.
             McpError::MissingRequiredClientCapability { required } => {
                 JsonRpcErrorObject::server_error(
-                    -32003,
+                    -32021,
                     "Missing required client capability",
                     Some(serde_json::json!({ "requiredCapabilities": required })),
                 )
@@ -483,7 +486,7 @@ impl McpError {
                 supported,
                 requested,
             } => JsonRpcErrorObject::server_error(
-                -32004,
+                -32022,
                 "Unsupported protocol version",
                 Some(serde_json::json!({
                     "supported": supported,
@@ -521,19 +524,22 @@ impl McpError {
                 None,
             ),
 
-            // Validation errors
+            // Validation errors. Codes live in the -32000..-32019
+            // implementation-defined range — the schema now reserves
+            // -32020..-32099 for its own sequential allocations, so
+            // framework-internal codes MUST stay below -32020.
             McpError::ValidationError(msg) => JsonRpcErrorObject::server_error(
-                -32020,
+                -32014,
                 &format!("Validation error: {}", msg),
                 None,
             ),
             McpError::InvalidCapability(cap) => JsonRpcErrorObject::server_error(
-                -32021,
+                -32015,
                 &format!("Invalid capability: {}", cap),
                 None,
             ),
             McpError::VersionMismatch { expected, actual } => JsonRpcErrorObject::server_error(
-                -32022,
+                -32016,
                 &format!(
                     "Protocol version mismatch: expected {}, got {}",
                     expected, actual
@@ -543,20 +549,20 @@ impl McpError {
 
             // Configuration and session errors
             McpError::ConfigurationError(msg) => JsonRpcErrorObject::server_error(
-                -32030,
+                -32017,
                 &format!("Configuration error: {}", msg),
                 None,
             ),
             McpError::SessionError(msg) => {
-                JsonRpcErrorObject::server_error(-32031, &format!("Session error: {}", msg), None)
+                JsonRpcErrorObject::server_error(-32018, &format!("Session error: {}", msg), None)
             }
 
             // Transport and protocol layer errors
             McpError::TransportError(msg) => {
-                JsonRpcErrorObject::server_error(-32040, &format!("Transport error: {}", msg), None)
+                JsonRpcErrorObject::server_error(-32019, &format!("Transport error: {}", msg), None)
             }
             McpError::JsonRpcProtocolError(msg) => JsonRpcErrorObject::server_error(
-                -32041,
+                -32000,
                 &format!("JSON-RPC protocol error: {}", msg),
                 None,
             ),
@@ -598,6 +604,127 @@ impl turul_rpc::r#async::ToJsonRpcError for McpError {
     fn to_error_object(&self) -> turul_rpc::error::JsonRpcErrorObject {
         // Delegate to our existing type-safe implementation
         McpError::to_error_object(self)
+    }
+}
+
+#[cfg(test)]
+mod mcp_error_code_partition {
+    //! Schema partitions JSON-RPC's server-error range: `-32000..-32019` is
+    //! implementation-defined (never assigned by the spec), `-32020..-32099`
+    //! is spec-reserved and allocated sequentially. Every spec-registered
+    //! structured error MUST use its assigned number; every
+    //! framework-internal `McpError` variant MUST stay out of the
+    //! spec-reserved range so a future spec allocation can never collide
+    //! with it.
+    use super::McpError;
+
+    #[test]
+    fn missing_required_client_capability_uses_spec_code() {
+        let err = McpError::MissingRequiredClientCapability {
+            required: serde_json::json!({}),
+        };
+        assert_eq!(err.to_error_object().code, -32021);
+    }
+
+    #[test]
+    fn unsupported_protocol_version_uses_spec_code() {
+        let err = McpError::UnsupportedProtocolVersion {
+            supported: vec!["2026-07-28".to_string()],
+            requested: "2099-01-01".to_string(),
+        };
+        assert_eq!(err.to_error_object().code, -32022);
+    }
+
+    #[test]
+    fn header_mismatch_constant_uses_spec_code() {
+        assert_eq!(crate::headers::ERROR_CODE_HEADER_MISMATCH, -32020);
+    }
+
+    #[test]
+    fn framework_internal_errors_stay_out_of_spec_reserved_range() {
+        let cases: Vec<(McpError, &str)> = vec![
+            (
+                McpError::ToolExecutionError("x".into()),
+                "ToolExecutionError",
+            ),
+            (
+                McpError::ResourceAccessDenied("x".into()),
+                "ResourceAccessDenied",
+            ),
+            (
+                McpError::ResourceExecutionError("x".into()),
+                "ResourceExecutionError",
+            ),
+            (
+                McpError::PromptExecutionError("x".into()),
+                "PromptExecutionError",
+            ),
+            (McpError::ValidationError("x".into()), "ValidationError"),
+            (McpError::InvalidCapability("x".into()), "InvalidCapability"),
+            (
+                McpError::VersionMismatch {
+                    expected: "a".into(),
+                    actual: "b".into(),
+                },
+                "VersionMismatch",
+            ),
+            (
+                McpError::ConfigurationError("x".into()),
+                "ConfigurationError",
+            ),
+            (McpError::SessionError("x".into()), "SessionError"),
+            (McpError::TransportError("x".into()), "TransportError"),
+            (
+                McpError::JsonRpcProtocolError("x".into()),
+                "JsonRpcProtocolError",
+            ),
+        ];
+        for (err, name) in cases {
+            let code = err.to_error_object().code;
+            assert!(
+                (-32019..=-32000).contains(&code),
+                "{name} emits {code}, which is outside the -32000..-32019 \
+                 implementation-defined range (spec now reserves -32020..-32099)"
+            );
+        }
+    }
+
+    #[test]
+    fn no_two_framework_internal_errors_share_a_code() {
+        let codes = [
+            McpError::ToolExecutionError("x".into()).to_error_object().code,
+            McpError::ResourceAccessDenied("x".into())
+                .to_error_object()
+                .code,
+            McpError::ResourceExecutionError("x".into())
+                .to_error_object()
+                .code,
+            McpError::PromptExecutionError("x".into())
+                .to_error_object()
+                .code,
+            McpError::ValidationError("x".into()).to_error_object().code,
+            McpError::InvalidCapability("x".into())
+                .to_error_object()
+                .code,
+            McpError::VersionMismatch {
+                expected: "a".into(),
+                actual: "b".into(),
+            }
+            .to_error_object()
+            .code,
+            McpError::ConfigurationError("x".into())
+                .to_error_object()
+                .code,
+            McpError::SessionError("x".into()).to_error_object().code,
+            McpError::TransportError("x".into()).to_error_object().code,
+            McpError::JsonRpcProtocolError("x".into())
+                .to_error_object()
+                .code,
+        ];
+        let mut sorted = codes.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), codes.len(), "duplicate internal error code in {codes:?}");
     }
 }
 

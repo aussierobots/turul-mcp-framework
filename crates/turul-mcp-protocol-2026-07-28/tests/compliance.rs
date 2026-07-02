@@ -839,31 +839,32 @@ mod elicitation_modes {
 
     #[test]
     fn url_mode_round_trips_with_required_mode_and_fields() {
-        // `ElicitRequestURLParams`: mode:"url" REQUIRED, plus elicitationId + url.
-        let r = ElicitRequest::new_url(
-            "Please authorize",
-            "elicit-abc-123",
-            "https://auth.example/login",
-        );
+        // `ElicitRequestURLParams`: mode:"url" REQUIRED, plus url. `elicitationId`
+        // was removed from the schema in the 2026-07-02 re-pin (completion is now
+        // learned by retrying the original MRTR request).
+        let r = ElicitRequest::new_url("Please authorize", "https://auth.example/login");
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["method"], "elicitation/create");
         assert_eq!(v["params"]["mode"], "url");
         assert_eq!(v["params"]["message"], "Please authorize");
-        assert_eq!(v["params"]["elicitationId"], "elicit-abc-123");
         assert_eq!(v["params"]["url"], "https://auth.example/login");
+        assert!(
+            !v["params"].as_object().unwrap().contains_key("elicitationId"),
+            "elicitationId was removed from ElicitRequestURLParams upstream"
+        );
     }
 
     #[test]
     fn untagged_discrimination_picks_url_when_mode_url_present() {
         let wire = json!({
             "method": "elicitation/create",
-            "params": {"mode": "url", "message": "go here", "elicitationId": "id-1", "url": "https://x"}
+            "params": {"mode": "url", "message": "go here", "url": "https://x"}
         });
         let parsed: ElicitRequest = serde_json::from_value(wire).unwrap();
         match parsed.params {
             ElicitRequestParams::Url(p) => {
                 assert_eq!(p.mode, UrlModeMarker::Url);
-                assert_eq!(p.elicitation_id, "id-1");
+                assert_eq!(p.url, "https://x");
             }
             ElicitRequestParams::Form(_) => panic!("must parse as URL mode"),
         }
@@ -892,7 +893,7 @@ mod elicitation_modes {
 
     #[test]
     fn url_mode_marker_serializes_lowercase() {
-        let p = ElicitRequestURLParams::new("m", "id", "https://x");
+        let p = ElicitRequestURLParams::new("m", "https://x");
         let v = serde_json::to_value(&p).unwrap();
         assert_eq!(v["mode"], "url");
     }
@@ -1751,7 +1752,6 @@ mod method_strings {
         "completion/complete",
         "elicitation/create",
         "notifications/cancelled",
-        "notifications/elicitation/complete",
         "notifications/message",
         "notifications/progress",
         "notifications/prompts/list_changed",
@@ -1954,7 +1954,6 @@ mod method_strings {
     // Currently delegated to module tests:
     // - notifications/cancelled (CancelledNotification, needs RequestId)
     // - notifications/message (LoggingMessageNotification, needs Level + Value)
-    // - notifications/elicitation/complete (ElicitationCompleteNotification)
     // - sampling/createMessage (CreateMessageRequest, needs SamplingMessage list)
     // - completion/complete (CompleteRequest, needs CompletionReference + arg)
     // - elicitation/create (ElicitRequest, needs schema)
@@ -2023,6 +2022,14 @@ mod removed_methods {
     #[test]
     fn roots_list_changed_notification_is_gone() {
         assert_method_absent("notifications/roots/list_changed");
+    }
+
+    #[test]
+    fn elicitation_complete_notification_is_gone() {
+        // Removed in the 2026-07-02 re-pin — completion is now learned by
+        // retrying the original MRTR request; correlation belongs in
+        // `requestState`, not a dedicated notification.
+        assert_method_absent("notifications/elicitation/complete");
     }
 
     #[test]
@@ -2763,7 +2770,7 @@ mod error_codes {
     }
 
     #[test]
-    fn missing_required_client_capability_emits_minus_32003_with_data() {
+    fn missing_required_client_capability_emits_minus_32021_with_data() {
         // `MissingRequiredClientCapabilityError` carries
         // `data: { requiredCapabilities: ClientCapabilities }`.
         let required_caps = serde_json::json!({
@@ -2774,7 +2781,7 @@ mod error_codes {
         };
         let v = serde_json::to_value(err.to_error_object()).unwrap();
         assert_eq!(
-            v["code"], -32003,
+            v["code"], -32021,
             "MissingRequiredClientCapability wire code"
         );
         assert!(
@@ -2789,7 +2796,7 @@ mod error_codes {
     }
 
     #[test]
-    fn unsupported_protocol_version_emits_minus_32004_with_data() {
+    fn unsupported_protocol_version_emits_minus_32022_with_data() {
         // `UnsupportedProtocolVersionError` carries
         // `data: { supported: string[], requested: string }`.
         let err = McpError::UnsupportedProtocolVersion {
@@ -2797,7 +2804,7 @@ mod error_codes {
             requested: "1999-01-01".to_string(),
         };
         let v = serde_json::to_value(err.to_error_object()).unwrap();
-        assert_eq!(v["code"], -32004, "UnsupportedProtocolVersion wire code");
+        assert_eq!(v["code"], -32022, "UnsupportedProtocolVersion wire code");
         let supported = v["data"]["supported"].as_array().unwrap();
         assert_eq!(supported.len(), 2);
         assert_eq!(supported[0], "DRAFT-2026-v1");
@@ -2838,9 +2845,9 @@ mod error_codes {
     /// Drift detector: this test pins the set of wire error codes that the
     /// `to_error_object()` mapping is allowed to emit. If a future change adds a
     /// new code without updating this set, the test fails. Whitelists exactly
-    /// what the draft schema defines plus the framework-internal server-error
-    /// range that the spec leaves for implementation use (-32000..=-32099,
-    /// excluding the spec-reserved -32003 and -32004).
+    /// what the draft schema defines (spec-reserved `-32020..-32099`, allocated
+    /// sequentially) plus the framework-internal server-error range that the
+    /// spec leaves for implementation use (`-32000..-32019`).
     #[test]
     fn no_unauthorised_error_codes_emitted() {
         use std::collections::HashSet;
@@ -2848,13 +2855,14 @@ mod error_codes {
         let allowed: HashSet<i64> = [
             // Standard JSON-RPC error codes:
             -32700, -32600, -32601, -32602, -32603,
-            // MCP-specific structured codes (`MissingRequiredClientCapabilityError`,
-            // `UnsupportedProtocolVersionError`):
-            -32003, -32004,
-            // Framework-internal server-error codes still in use (not in spec,
-            // but in the JSON-RPC-reserved server-error range; replaced area-by-area
-            // as bindings adopt typed errors):
-            -32010, -32011, -32012, -32013, -32020, -32021, -32022, -32030, -32031, -32040, -32041,
+            // MCP-specific structured codes (`HeaderMismatchError`,
+            // `MissingRequiredClientCapabilityError`, `UnsupportedProtocolVersionError`)
+            // — allocated sequentially from the schema's spec-reserved range:
+            -32020, -32021, -32022,
+            // Framework-internal server-error codes (implementation-defined
+            // range the spec leaves for implementation use; must stay below
+            // -32020 now that the schema claims -32020..-32099):
+            -32000, -32010, -32011, -32012, -32013, -32014, -32015, -32016, -32017, -32018, -32019,
             // Sample passthrough code for the `JsonRpcError` test variant above.
             -32050,
         ]

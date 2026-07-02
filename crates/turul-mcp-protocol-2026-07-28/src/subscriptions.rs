@@ -176,6 +176,84 @@ impl SubscriptionsAcknowledgedNotification {
     }
 }
 
+/// `_meta` for [`SubscriptionsListenResult`]. Schema:
+/// `SubscriptionsListenResultMeta extends MetaObject` with a REQUIRED
+/// `io.modelcontextprotocol/subscriptionId: RequestId` — the id of the
+/// `subscriptions/listen` request this result closes (equals the result's
+/// own `id` in the JSON-RPC envelope).
+///
+/// `Serialize` is hand-written rather than `#[derive]` + `#[serde(flatten)]`:
+/// `extra` is public and caller-writable, so a caller could otherwise insert
+/// the reserved `io.modelcontextprotocol/subscriptionId` key into it and
+/// produce the same key twice on the wire. The typed `subscription_id` field
+/// always wins; a colliding `extra` entry is dropped rather than emitted.
+#[derive(Debug, Clone, Deserialize)]
+pub struct SubscriptionsListenResultMeta {
+    #[serde(rename = "io.modelcontextprotocol/subscriptionId")]
+    pub subscription_id: turul_rpc::RequestId,
+
+    /// Additional caller-supplied meta keys per the `MetaObject` extension rules.
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+impl serde::Serialize for SubscriptionsListenResultMeta {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+
+        let extra_len = self
+            .extra
+            .keys()
+            .filter(|k| k.as_str() != crate::meta::META_KEY_SUBSCRIPTION_ID)
+            .count();
+        let mut map = serializer.serialize_map(Some(1 + extra_len))?;
+        map.serialize_entry(crate::meta::META_KEY_SUBSCRIPTION_ID, &self.subscription_id)?;
+        for (k, v) in &self.extra {
+            if k != crate::meta::META_KEY_SUBSCRIPTION_ID {
+                map.serialize_entry(k, v)?;
+            }
+        }
+        map.end()
+    }
+}
+
+impl SubscriptionsListenResultMeta {
+    pub fn new(subscription_id: turul_rpc::RequestId) -> Self {
+        Self {
+            subscription_id,
+            extra: HashMap::new(),
+        }
+    }
+}
+
+/// The response to a `subscriptions/listen` request, signalling that the
+/// subscription ended gracefully (e.g. server shutdown). The listen stream is
+/// long-lived, so this result is sent only when the server tears the
+/// subscription down deliberately — an abrupt transport close carries no
+/// response. The result body is otherwise empty; `_meta.subscriptionId` is
+/// the only substantive field.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscriptionsListenResult {
+    #[serde(default)]
+    pub result_type: crate::result_type::ResultType,
+
+    #[serde(rename = "_meta")]
+    pub meta: SubscriptionsListenResultMeta,
+}
+
+impl SubscriptionsListenResult {
+    pub fn new(subscription_id: turul_rpc::RequestId) -> Self {
+        Self {
+            result_type: crate::result_type::ResultType::Complete,
+            meta: SubscriptionsListenResultMeta::new(subscription_id),
+        }
+    }
+}
+
 // Trait impls: `SubscriptionsListenRequest` satisfies
 // `RpcRequest + SubscriptionsListenRequestTrait`.
 impl crate::traits::Params for SubscriptionsListenRequestParams {}
@@ -352,7 +430,7 @@ mod tests {
 
     #[test]
     fn listen_request_satisfies_new_rpc_trait() {
-        // Generic function over the trait abstraction (A8).
+        // Generic function over the trait abstraction.
         fn method_via_trait<R: crate::traits::SubscriptionsListenRequestTrait>(r: &R) -> &str {
             r.method_string()
         }
@@ -370,7 +448,8 @@ mod tests {
 
     #[test]
     fn listen_request_rejects_missing_meta() {
-        // Pre-fix shape (no `_meta`) must now fail to deserialize.
+        // `_meta` is required per `RequestParams` — payloads without it must
+        // fail to deserialize.
         let wire = json!({
             "method": "subscriptions/listen",
             "params": {
@@ -378,5 +457,60 @@ mod tests {
             }
         });
         assert!(serde_json::from_value::<SubscriptionsListenRequest>(wire).is_err());
+    }
+
+    #[test]
+    fn listen_result_emits_required_subscription_id_meta() {
+        let result = SubscriptionsListenResult::new(turul_rpc::RequestId::Number(7));
+        let v = serde_json::to_value(&result).unwrap();
+        assert_eq!(v["resultType"], "complete");
+        assert_eq!(
+            v["_meta"]["io.modelcontextprotocol/subscriptionId"], 7,
+            "subscriptionId must equal the id of the listen request being closed"
+        );
+    }
+
+    #[test]
+    fn listen_result_meta_extra_cannot_shadow_subscription_id() {
+        // `SubscriptionsListenResultMeta.extra` is a public, caller-writable
+        // `#[serde(flatten)]` map. If a caller populates it with the reserved
+        // `io.modelcontextprotocol/subscriptionId` key, the typed field and
+        // the flattened map must not both emit it on the wire. Checked
+        // against the raw serialized text: `to_value()` cannot observe a
+        // duplicate key (a `Map` silently overwrites on the second insert).
+        let mut meta = SubscriptionsListenResultMeta::new(turul_rpc::RequestId::Number(7));
+        meta.extra.insert(
+            crate::meta::META_KEY_SUBSCRIPTION_ID.to_string(),
+            serde_json::json!("attacker-controlled"),
+        );
+        let result = SubscriptionsListenResult {
+            result_type: crate::result_type::ResultType::Complete,
+            meta,
+        };
+
+        let json_str = serde_json::to_string(&result).unwrap();
+        assert_eq!(
+            json_str.matches("io.modelcontextprotocol/subscriptionId").count(),
+            1,
+            "must emit the subscriptionId key exactly once on the wire: {json_str}"
+        );
+        // The typed field wins — the value is the real request id, not the
+        // attacker-controlled `extra` entry.
+        let v: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(v["_meta"]["io.modelcontextprotocol/subscriptionId"], 7);
+    }
+
+    #[test]
+    fn listen_result_rejects_missing_meta() {
+        // Schema: `SubscriptionsListenResult._meta: SubscriptionsListenResultMeta`
+        // is required (overrides the base `Result._meta?`).
+        let wire = json!({ "resultType": "complete" });
+        assert!(serde_json::from_value::<SubscriptionsListenResult>(wire).is_err());
+    }
+
+    #[test]
+    fn listen_result_rejects_missing_subscription_id() {
+        let wire = json!({ "resultType": "complete", "_meta": {} });
+        assert!(serde_json::from_value::<SubscriptionsListenResult>(wire).is_err());
     }
 }
