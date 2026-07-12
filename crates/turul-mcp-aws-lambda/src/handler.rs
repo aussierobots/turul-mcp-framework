@@ -344,7 +344,18 @@ impl LambdaMcpHandler {
             }
         }
 
-        // 🚀 DELEGATION: Use SessionMcpHandler for all business logic
+        // A protocol-2026-07-28 build serves a single spec: every request goes
+        // to the streamable handler, which mints the stateless core's
+        // per-request session (so middleware-injected state reaches tool
+        // handlers) and enforces Server Validation. SessionMcpHandler would
+        // dispatch without a session and bypass both contracts.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let hyper_resp = self.streamable_handler.handle_request(hyper_req).await;
+
+        // protocol-2025-11-25 buffered lane: SessionMcpHandler owns the
+        // Mcp-Session-Id lifecycle and returns buffered JSON bodies suited to
+        // non-streaming Lambda responses.
+        #[cfg(feature = "protocol-2025-11-25")]
         let hyper_resp = self
             .session_handler
             .handle_mcp_request(hyper_req)
@@ -459,8 +470,18 @@ impl LambdaMcpHandler {
             .and_then(McpProtocolVersion::parse_version)
             .unwrap_or(McpProtocolVersion::V2025_06_18);
 
+        // A protocol-2026-07-28 build serves a single spec: route everything
+        // to the streamable handler, whose Server Validation rejects
+        // unsupported MCP-Protocol-Version values. Routing legacy version
+        // headers to SessionMcpHandler would bypass that contract and dispatch
+        // without a per-request session.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let route_streamable = true;
+        #[cfg(feature = "protocol-2025-11-25")]
+        let route_streamable = protocol_version.supports_streamable_http();
+
         // Route based on protocol version
-        let hyper_resp = if protocol_version.supports_streamable_http() {
+        let hyper_resp = if route_streamable {
             // Use StreamableHttpHandler for MCP 2025-11-25 (proper headers, chunked SSE)
             debug!(
                 "Using StreamableHttpHandler for protocol {}",

@@ -1,8 +1,13 @@
-//! Lambda middleware parity test
+//! Lambda middleware parity test (2025-11-25 lane)
 //!
 //! Verifies that middleware works identically in Lambda transport as it does in HTTP transport.
 //! This ensures the LambdaMcpHandler correctly uses middleware through StreamableHttpHandler
 //! and SessionMcpHandler.
+//!
+//! These tests drive the 2025-11-25 session lifecycle (`initialize` handshake,
+//! `Mcp-Session-Id` header), which the 2026-07-28 stateless core removes.
+//! The 2026-lane equivalents live in `stateless_session_2026_07_28.rs`.
+#![cfg(feature = "protocol-2025-11-25")]
 
 use async_trait::async_trait;
 use serde_json::json;
