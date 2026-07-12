@@ -1,25 +1,12 @@
-> # 🚧 Work In Progress — MCP 2026-07-28 adoption
->
-> **This branch (`feat/turul-mcp-protocol-2026-07-28`) is migrating the framework to the
-> [MCP 2026-07-28 release candidate](https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/)
-> (stateless core: `server/discover` instead of `initialize`, per-request `_meta`, no
-> `Mcp-Session-Id`; tasks moved to an extension; Roots/Sampling/Logging deprecated).**
-> It is **not** merged to `main`, which continues to track the stable 2025-11-25 line.
->
-> - **`cargo build` / `cargo test` default to the 2026-07-28 spec.**
-> - **2025-11-25 is still supported** as an opt-in:
->   `--no-default-features --features protocol-2025-11-25`.
-> - Servers are single-spec per build; the client (`turul-mcp-client`) is bilingual.
-> - Expect churn: examples, docs, and E2E tests are still being migrated to 2026 semantics.
-
 # Turul MCP Framework
 
-A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. On this branch the default build targets the **MCP 2026-07-28 specification** (stateless core: `server/discover`, per-request `_meta`, no `Mcp-Session-Id`); **MCP 2025-11-25 remains available** as an opt-in (`--no-default-features --features protocol-2025-11-25`).
+Build [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers and clients in Rust — from a five-line tool server to serverless AWS Lambda deployments.
 
-**Pre-1.0 (0.4.x).** The framework is production-shaped — comprehensive test coverage, zero-warning gates — but public APIs may still change before 1.0.0. The default build is MCP 2026-07-28 (stateless); 2025-11-25 is opt-in.
+Turul gives you the full MCP surface (tools, resources, prompts, completion, notifications, extensions) behind a zero-configuration builder API: annotate a function or derive on a struct, add it to the builder, run. The framework generates the schemas, wires the transport, and keeps you spec-compliant.
 
-## 🧪 Comprehensive Test Coverage
-**Broad test coverage across the workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
+The default build targets **MCP 2026-07-28**, the current specification. The previous spec, **2025-11-25**, stays fully supported as an opt-in build (`--no-default-features --features protocol-2025-11-25`). Servers are single-spec per build; the client speaks both and negotiates per connection.
+
+> **Pre-1.0 (0.4.x):** production-shaped — comprehensive test coverage, zero-warning gates — but public APIs may still change before 1.0.0.
 
 ## ✨ Key Highlights
 
@@ -30,75 +17,6 @@ A comprehensive Rust framework for building Model Context Protocol (MCP) servers
 - **🌐 Transport Flexibility**: Streamable HTTP via StreamableHttpHandler with SSE streaming (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
 - **🔧 Development Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
-
-## 🆕 MCP 2026-07-28
-
-The default build targets the 2026-07-28 release candidate. This is a **stateless
-rewrite** of the protocol with several core methods removed — if you're coming from
-2025-11-25, read this section first.
-
-### What's new (and implemented here)
-
-- **Stateless core** — `server/discover` advertises versions/capabilities/identity;
-  every request carries `protocolVersion` + `clientInfo` + `clientCapabilities` in
-  `_meta` under `io.modelcontextprotocol/*`. Any server instance serves any request.
-- **MRTR (Multi-Round-Trip Requests, SEP-2322)** — a tool/resource/prompt returns an
-  `InputRequiredResult` to ask for elicitation/sampling/roots input; the client
-  answers and retries the original call. This replaces all server-initiated requests.
-  → `examples/mrtr-elicitation-server`
-- **`subscriptions/listen`** — the ack-first, filtered, long-lived POST SSE stream that
-  replaces 2025's GET-SSE resumability and the `resources/subscribe` RPC.
-- **Tasks extension** (`io.modelcontextprotocol/tasks`, SEP-2663) — durable poll handles
-  via `turul-mcp-ext-tasks` (opt-in `ext-tasks` feature): `.with_ext_tasks()` +
-  `.ext_task_tool()` server-side, `call_tool_or_task` / `task_*` client-side.
-  → `examples/ext-tasks-server`
-- **MCP Apps extension** (`io.modelcontextprotocol/ui`, SEP-1865) — MCP-side bindings
-  (`turul-mcp-ext-apps`).
-- **SEP-2243 request-metadata headers** — `Mcp-Method` / `Mcp-Name` / `Mcp-Param-*` let
-  infrastructure route on method/tool/arguments without parsing JSON bodies.
-  → `examples/header-bound-tools-server`
-- **Origin validation / DNS-rebinding protection** — on by default (ADR-031).
-  → `examples/origin-policy-server`
-- **JSON Schema 2020-12**, **caching headers** (`ttlMs` / `cacheScope` on list/read
-  results), and OAuth 2.1 Resource Server hardening (RFC 9207/9728).
-
-### What changed from 2025-11-25
-
-- **No handshake** — `initialize` → `notifications/initialized` → `Mcp-Session-Id` is
-  gone; capabilities ride per-request `_meta` instead.
-- **Error codes** — resource-not-found moved from `-32002` to `-32602`; new
-  `-32001` (header mismatch), `-32003` (missing required client capability),
-  `-32004` (unsupported protocol version).
-- **Per-request logging** — log level is set per-request via `io.modelcontextprotocol/logLevel`
-  in `_meta`; servers must not emit `notifications/message` for requests that didn't opt in.
-- **Deprecations (SEP-2577)** — Roots, Sampling, and Logging are deprecated (earliest
-  removal 2027-07-28). Still implemented; on 2026 the server-initiated forms ride MRTR.
-
-### What's removed from the core (2026 default → these 404 / 405)
-
-| Removed | SEP | Replacement on 2026 |
-|---|---|---|
-| `initialize` / `notifications/initialized` | 2575 | `server/discover` + per-request `_meta` |
-| Protocol sessions / `Mcp-Session-Id` | 2567 | stateless; server-minted handles as tool args |
-| `ping` | 2575 | — (use `server/discover` for liveness) |
-| `logging/setLevel` | 2575 | per-request `_meta.logLevel` |
-| `notifications/roots/list_changed` | 2575 | — |
-| GET SSE endpoint / `resources/subscribe` | 2575 | `subscriptions/listen` |
-| Core `tasks/*` (incl. `tasks/list`, blocking `tasks/result`) | 2663 | the Tasks **extension** (`tasks/get` polling + `tasks/update`) |
-
-**2025-11-25 stays fully supported** as the opt-in stateful lane
-(`--no-default-features --features protocol-2025-11-25`) — the handshake, sessions,
-GET SSE, and core tasks all work there. Per-requirement compliance status:
-[`docs/plans/2026-07-28-spec-compliance.md`](docs/plans/2026-07-28-spec-compliance.md).
-
-## Turul MCP vs Turul RPC
-
-This project ships two layered surfaces. Most users only need the MCP layer.
-
-- **`turul-mcp`** (this framework) — the Model Context Protocol implementation. Tools, resources, prompts, sampling, elicitation, tasks, sessions, Streamable HTTP/SSE transport, the macro suite, storage backends.
-- **[`turul-rpc`](https://github.com/aussierobots/turul-rpc)** — generic, transport-agnostic typed JSON-RPC 2.0 framework: dispatch, domain/protocol error separation, optional session context, async handler trait, batch processing, notifications. No MCP knowledge. Useful as a foundation for any non-MCP request/response service that wants the same handler-returns-domain-error contract Turul uses internally.
-
-Turul MCP is built on top of Turul RPC. The `turul-mcp-json-rpc-server` crate, which historically carried the JSON-RPC implementation, is a thin re-export shim over `turul-rpc` since v0.3.39. **Existing 0.3.x users do not need to change anything** — `turul_mcp_json_rpc_server::*` imports continue to compile and behave identically. New code (and new tools/agents reading this README) should depend on `turul-rpc` directly. See [ADR-025](docs/adr/025-extract-turul-rpc.md).
 
 ## 🚀 Quick Start
 
@@ -248,6 +166,66 @@ The framework automatically:
 - Extracts template variables from requests
 - Maps them to function parameters
 - Registers appropriate resource handlers
+
+## The MCP 2026-07-28 specification
+
+The default build targets MCP 2026-07-28, the current specification — a **stateless
+rewrite** of the protocol with several core methods removed. New to MCP? You can skim
+this section and come back later. Migrating from 2025-11-25? Read it first.
+
+### What's new (and implemented here)
+
+- **Stateless core** — `server/discover` advertises versions/capabilities/identity;
+  every request carries `protocolVersion` + `clientInfo` + `clientCapabilities` in
+  `_meta` under `io.modelcontextprotocol/*`. Any server instance serves any request.
+- **MRTR (Multi-Round-Trip Requests, SEP-2322)** — a tool/resource/prompt returns an
+  `InputRequiredResult` to ask for elicitation/sampling/roots input; the client
+  answers and retries the original call. This replaces all server-initiated requests.
+  → `examples/mrtr-elicitation-server`
+- **`subscriptions/listen`** — the ack-first, filtered, long-lived POST SSE stream that
+  replaces 2025's GET-SSE resumability and the `resources/subscribe` RPC.
+- **Tasks extension** (`io.modelcontextprotocol/tasks`, SEP-2663) — durable poll handles
+  via `turul-mcp-ext-tasks` (opt-in `ext-tasks` feature): `.with_ext_tasks()` +
+  `.ext_task_tool()` server-side, `call_tool_or_task` / `task_*` client-side.
+  → `examples/ext-tasks-server`
+- **MCP Apps extension** (`io.modelcontextprotocol/ui`, SEP-1865) — MCP-side bindings
+  (`turul-mcp-ext-apps`).
+- **SEP-2243 request-metadata headers** — `Mcp-Method` / `Mcp-Name` / `Mcp-Param-*` let
+  infrastructure route on method/tool/arguments without parsing JSON bodies.
+  → `examples/header-bound-tools-server`
+- **Origin validation / DNS-rebinding protection** — on by default (ADR-031).
+  → `examples/origin-policy-server`
+- **JSON Schema 2020-12**, **caching headers** (`ttlMs` / `cacheScope` on list/read
+  results), and OAuth 2.1 Resource Server hardening (RFC 9207/9728).
+
+### What changed from 2025-11-25
+
+- **No handshake** — `initialize` → `notifications/initialized` → `Mcp-Session-Id` is
+  gone; capabilities ride per-request `_meta` instead.
+- **Error codes** — resource-not-found moved from `-32002` to `-32602`; new
+  `-32020` (header mismatch), `-32021` (missing required client capability),
+  `-32022` (unsupported protocol version).
+- **Per-request logging** — log level is set per-request via `io.modelcontextprotocol/logLevel`
+  in `_meta`; servers must not emit `notifications/message` for requests that didn't opt in.
+- **Deprecations (SEP-2577)** — Roots, Sampling, and Logging are deprecated (earliest
+  removal 2027-07-28). Still implemented; on 2026 the server-initiated forms ride MRTR.
+
+### What's removed from the core (2026 default → these 404 / 405)
+
+| Removed | SEP | Replacement on 2026 |
+|---|---|---|
+| `initialize` / `notifications/initialized` | 2575 | `server/discover` + per-request `_meta` |
+| Protocol sessions / `Mcp-Session-Id` | 2567 | stateless; server-minted handles as tool args |
+| `ping` | 2575 | — (use `server/discover` for liveness) |
+| `logging/setLevel` | 2575 | per-request `_meta.logLevel` |
+| `notifications/roots/list_changed` | 2575 | — |
+| GET SSE endpoint / `resources/subscribe` | 2575 | `subscriptions/listen` |
+| Core `tasks/*` (incl. `tasks/list`, blocking `tasks/result`) | 2663 | the Tasks **extension** (`tasks/get` polling + `tasks/update`) |
+
+**2025-11-25 stays fully supported** as the opt-in stateful lane
+(`--no-default-features --features protocol-2025-11-25`) — the handshake, sessions,
+GET SSE, and core tasks all work there. Per-requirement compliance status:
+[`docs/plans/2026-07-28-spec-compliance.md`](docs/plans/2026-07-28-spec-compliance.md).
 
 ## 🚀 Running & Testing the Framework
 
@@ -399,6 +377,15 @@ chmod +x quick_check.sh
 cargo run -p minimal-server &
 ./quick_check.sh 8641
 ```
+
+## Turul MCP vs Turul RPC
+
+This project ships two layered surfaces. Most users only need the MCP layer.
+
+- **`turul-mcp`** (this framework) — the Model Context Protocol implementation. Tools, resources, prompts, sampling, elicitation, tasks, sessions, Streamable HTTP/SSE transport, the macro suite, storage backends.
+- **[`turul-rpc`](https://github.com/aussierobots/turul-rpc)** — generic, transport-agnostic typed JSON-RPC 2.0 framework: dispatch, domain/protocol error separation, optional session context, async handler trait, batch processing, notifications. No MCP knowledge. Useful as a foundation for any non-MCP request/response service that wants the same handler-returns-domain-error contract Turul uses internally.
+
+Turul MCP is built on top of Turul RPC. The `turul-mcp-json-rpc-server` crate, which historically carried the JSON-RPC implementation, is a thin re-export shim over `turul-rpc` since v0.3.39. **Existing 0.3.x users do not need to change anything** — `turul_mcp_json_rpc_server::*` imports continue to compile and behave identically. New code (and new tools/agents reading this README) should depend on `turul-rpc` directly. See [ADR-025](docs/adr/025-extract-turul-rpc.md).
 
 ## 🏛️ Architecture Overview
 
@@ -1180,7 +1167,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 ## 📋 Development Status & Current Limitations
 
 ### 🎯 Current Framework State
-- **MCP 2026-07-28 adoption (this branch)**: default build targets the 2026-07-28 stateless core; 2025-11-25 remains fully supported as the opt-in stateful line
+- **MCP 2026-07-28**: default build targets the current stateless spec; 2025-11-25 remains fully supported as the opt-in stateful line
 - **Examples Validated**: 54 active examples compile under their lane's CI gates (2026-07-28 default lane plus the pinned 2025-11-25 regression set — see EXAMPLES.md)
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
 - **Pre-1.0 (0.4.x)**: production-shaped with comprehensive test coverage; public APIs may still change before 1.0.0
