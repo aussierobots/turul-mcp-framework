@@ -18,7 +18,7 @@ pub use crate::traits::*;
 // Re-export all builders
 #[cfg(feature = "protocol-2025-11-25")]
 pub use crate::completion::CompletionBuilder;
-pub use crate::elicitation::ElicitationBuilder;
+pub use crate::elicitation::{ElicitResultBuilder, ElicitationBuilder};
 #[cfg(feature = "protocol-2025-11-25")]
 pub use crate::logging::LoggingBuilder;
 #[cfg(feature = "protocol-2025-11-25")]

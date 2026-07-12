@@ -205,7 +205,7 @@ mod tests {
 
     fn fixture_meta() -> crate::meta::RequestMetaObject {
         crate::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             Implementation::new("test-client", "1.0.0"),
             ClientCapabilities::default(),
         )
@@ -252,14 +252,14 @@ mod tests {
     #[test]
     fn discover_result_serializes_required_fields() {
         let r = DiscoverResult::new(
-            vec!["DRAFT-2026-v1".to_string(), "2025-11-25".to_string()],
+            vec!["2026-07-28".to_string(), "2025-11-25".to_string()],
             fixture_caps(),
             fixture_impl(),
         );
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["resultType"], "complete");
         assert!(v["supportedVersions"].is_array());
-        assert_eq!(v["supportedVersions"][0], "DRAFT-2026-v1");
+        assert_eq!(v["supportedVersions"][0], "2026-07-28");
         assert_eq!(v["supportedVersions"][1], "2025-11-25");
         assert!(v["capabilities"].is_object());
         assert!(v["serverInfo"].is_object());
@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn discover_result_omits_optional_fields_when_none() {
         let r = DiscoverResult::new(
-            vec!["DRAFT-2026-v1".to_string()],
+            vec!["2026-07-28".to_string()],
             fixture_caps(),
             fixture_impl(),
         );
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn discover_result_serializes_instructions_when_present() {
         let r = DiscoverResult::new(
-            vec!["DRAFT-2026-v1".to_string()],
+            vec!["2026-07-28".to_string()],
             fixture_caps(),
             fixture_impl(),
         )
@@ -299,7 +299,7 @@ mod tests {
     #[test]
     fn discover_result_round_trips() {
         let r = DiscoverResult::new(
-            vec!["DRAFT-2026-v1".to_string()],
+            vec!["2026-07-28".to_string()],
             fixture_caps(),
             fixture_impl(),
         )
@@ -311,7 +311,7 @@ mod tests {
         assert_eq!(v["cacheScope"], "public");
         let parsed: DiscoverResult = serde_json::from_value(v).unwrap();
         assert_eq!(parsed.result_type, ResultType::Complete);
-        assert_eq!(parsed.supported_versions, vec!["DRAFT-2026-v1".to_string()]);
+        assert_eq!(parsed.supported_versions, vec!["2026-07-28".to_string()]);
         assert_eq!(parsed.instructions.as_deref(), Some("hi"));
         assert_eq!(parsed.cache_scope, crate::caching::CacheScope::Public);
     }
@@ -336,7 +336,7 @@ mod tests {
     #[test]
     fn discover_result_response_wire_shape() {
         let r = DiscoverResult::new(
-            vec!["DRAFT-2026-v1".to_string()],
+            vec!["2026-07-28".to_string()],
             fixture_caps(),
             fixture_impl(),
         );

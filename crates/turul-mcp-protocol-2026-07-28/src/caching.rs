@@ -11,8 +11,9 @@
 //!
 //! ## Embedding pattern
 //!
-//! The schema's `extends CacheableResult` becomes `#[serde(flatten)] cache:
-//! CacheableResult` in Rust. See `ListToolsResult`, `ReadResourceResult`, etc.
+//! Result structs carry `ttl_ms` and `cache_scope` as explicit struct fields,
+//! paired with a `with_cache()` builder method that populates them from a
+//! `CacheableResult` value. See `ListToolsResult`, `ReadResourceResult`, etc.
 
 use serde::{Deserialize, Serialize};
 

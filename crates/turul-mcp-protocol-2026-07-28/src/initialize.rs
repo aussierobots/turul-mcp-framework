@@ -68,6 +68,10 @@ impl Implementation {
 
 /// Capabilities related to root listing support.
 ///
+/// Schema: `ClientCapabilities.roots?: {}` — an empty object; presence alone
+/// means the client supports listing roots. `notifications/roots/list_changed`
+/// was removed in this revision, so there is no `listChanged` sub-field.
+///
 /// **Deprecated** per SEP-2577 alongside the Roots feature.
 #[deprecated(
     since = "0.4.0",
@@ -77,13 +81,7 @@ impl Implementation {
 )]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
-pub struct RootsCapabilities {
-    /// Whether the client supports notifications for root list changes.
-    /// Note: `notifications/roots/list_changed` was REMOVED in DRAFT-2026-v1;
-    /// declaring `listChanged: true` has no effect.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub list_changed: Option<bool>,
-}
+pub struct RootsCapabilities {}
 
 /// Capabilities related to sampling support.
 ///
@@ -296,5 +294,27 @@ mod tests {
         assert_eq!(impl_info.name, "test-client");
         assert_eq!(impl_info.version, "1.0.0");
         assert_eq!(impl_info.title, Some("Test Client".to_string()));
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn roots_capabilities_matches_schema_empty_object() {
+        // Schema: `ClientCapabilities.roots?: {}` — no `listChanged` sub-field.
+        let v = serde_json::to_value(RootsCapabilities::default()).unwrap();
+        assert_eq!(
+            v,
+            serde_json::json!({}),
+            "RootsCapabilities must serialize as an empty object, not carry `listChanged`"
+        );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn roots_capabilities_ignores_unknown_fields_on_deserialize() {
+        // Forward-compat: extra keys (including the removed `listChanged`) must not
+        // reject deserialization.
+        let wire = serde_json::json!({"listChanged": true});
+        let parsed: Result<RootsCapabilities, _> = serde_json::from_value(wire);
+        assert!(parsed.is_ok());
     }
 }

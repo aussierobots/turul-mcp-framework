@@ -18,7 +18,7 @@ pub struct TextResourceContents {
     /// The MIME type of this resource, if known
     #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
-    /// Meta information (REQUIRED by MCP spec)
+    /// Meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
     /// The text content
@@ -34,7 +34,7 @@ pub struct BlobResourceContents {
     /// The MIME type of this resource, if known
     #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
-    /// Meta information (REQUIRED by MCP spec)
+    /// Meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
     /// Base64-encoded binary data

@@ -182,10 +182,19 @@ impl McpServerBuilder {
 
         // Add all notification handlers (except notifications/initialized which is handled specially)
         let notifications_handler = Arc::new(NotificationsHandler);
+        // `ClientNotification` (DRAFT-2026-v1 schema) dropped `ProgressNotification`
+        // from the client→server union, and `notifications/message` was never a
+        // member of that union on any pin — both are inbound-accepted only on the
+        // 2025-11-25 lane. The 2026 dispatch table simply has no entry for either
+        // method; an unmatched inbound notification is a silent no-op (the
+        // Streamable HTTP POST path still returns 202 regardless of a dispatch
+        // match — see StreamableHttpHandler's notification branch).
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/message".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/progress".to_string(),
             notifications_handler.clone(),
@@ -2064,15 +2073,23 @@ mod tests {
         {
             assert_eq!(builder.handlers.len(), 21); // spec + legacy compat
             assert!(builder.handlers.contains_key("ping"));
+            assert!(builder.handlers.contains_key("notifications/message"));
+            assert!(builder.handlers.contains_key("notifications/progress"));
         }
         #[cfg(feature = "protocol-2026-07-28")]
         {
             // The stateless core drops ping/initialize, the task methods,
             // and the inbound roots surface (roots/list + its notifications
-            // — roots is requested via MRTR on 2026, never hosted).
-            assert_eq!(builder.handlers.len(), 14);
+            // — roots is requested via MRTR on 2026, never hosted). It also
+            // drops `notifications/message` and `notifications/progress`:
+            // the DRAFT-2026-v1 `ClientNotification` union has no
+            // `ProgressNotification` member, and `notifications/message` was
+            // never a member on any pin — 12, not 14.
+            assert_eq!(builder.handlers.len(), 12);
             assert!(!builder.handlers.contains_key("ping"));
             assert!(!builder.handlers.contains_key("roots/list"));
+            assert!(!builder.handlers.contains_key("notifications/message"));
+            assert!(!builder.handlers.contains_key("notifications/progress"));
             assert!(
                 !builder
                     .handlers

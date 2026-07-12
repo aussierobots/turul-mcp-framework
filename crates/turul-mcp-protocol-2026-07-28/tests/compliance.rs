@@ -434,6 +434,7 @@ mod json_schema_2020_12 {
 #[cfg(test)]
 mod remaining_shapes {
     use serde_json::json;
+    use std::collections::HashMap;
     use turul_mcp_protocol_2026_07_28::icons::Icon;
     use turul_mcp_protocol_2026_07_28::initialize::Implementation;
     use turul_mcp_protocol_2026_07_28::meta::Annotations;
@@ -478,20 +479,68 @@ mod remaining_shapes {
 
     #[test]
     fn prompt_shape_matches_schema() {
-        // `Prompt extends BaseMetadata, Icons`
-        // with description?, arguments?, _meta?.
-        let p = Prompt::new("code_review");
-        let v = serde_json::to_value(&p).unwrap();
+        // `Prompt extends BaseMetadata, Icons` — BaseMetadata: name (required),
+        // title?; Icons: icons?; own fields: description?, arguments?, _meta?.
+        let minimal = Prompt::new("code_review");
+        let v = serde_json::to_value(&minimal).unwrap();
         assert_eq!(v["name"], "code_review");
+        for absent in [
+            "title",
+            "description",
+            "arguments",
+            "icons",
+            "_meta",
+        ] {
+            assert!(
+                !v.as_object().unwrap().contains_key(absent),
+                "{absent} omitted when None"
+            );
+        }
+
+        let mut meta = HashMap::new();
+        meta.insert("custom".to_string(), json!("value"));
+        let full = Prompt::new("code_review")
+            .with_title("Code Review")
+            .with_description("Reviews a diff for issues")
+            .with_arguments(vec![PromptArgument::new("language").required()])
+            .with_icons(vec![Icon::new("https://example.com/icon.png")])
+            .with_meta(meta);
+        let v = serde_json::to_value(&full).unwrap();
+        assert_eq!(v["name"], "code_review");
+        assert_eq!(v["title"], "Code Review");
+        assert_eq!(v["description"], "Reviews a diff for issues");
+        assert_eq!(v["arguments"][0]["name"], "language");
+        assert!(v["icons"].is_array());
+        assert_eq!(v["_meta"]["custom"], "value");
     }
 
     #[test]
     fn prompt_argument_shape_matches_schema() {
-        // `PromptArgument extends BaseMetadata` with
-        // description?, required?.
-        let a = PromptArgument::new("language");
-        let v = serde_json::to_value(&a).unwrap();
+        // `PromptArgument extends BaseMetadata` — name (required), title?,
+        // plus own fields description?, required?.
+        let minimal = PromptArgument::new("language");
+        let v = serde_json::to_value(&minimal).unwrap();
         assert_eq!(v["name"], "language");
+        for absent in ["title", "description", "required"] {
+            assert!(
+                !v.as_object().unwrap().contains_key(absent),
+                "{absent} omitted when None"
+            );
+        }
+
+        let full = PromptArgument::new("language")
+            .with_title("Language")
+            .with_description("Programming language of the diff")
+            .required();
+        let v = serde_json::to_value(&full).unwrap();
+        assert_eq!(v["name"], "language");
+        assert_eq!(v["title"], "Language");
+        assert_eq!(v["description"], "Programming language of the diff");
+        assert_eq!(v["required"], true);
+
+        let optional = PromptArgument::new("language").optional();
+        let v = serde_json::to_value(&optional).unwrap();
+        assert_eq!(v["required"], false);
     }
 
     #[test]
@@ -617,12 +666,12 @@ mod completion_alignment {
     fn completion_inner_field_shape() {
         // `CompleteResult.completion: {values: string[] (max 100), total?, hasMore?}`.
         let inner = CompletionResult::new(vec!["a".to_string(), "b".to_string()])
-            .with_total(10)
+            .with_total(10.0)
             .with_has_more(true);
         let v = serde_json::to_value(&inner).unwrap();
         assert_eq!(v["values"][0], "a");
         assert_eq!(v["values"][1], "b");
-        assert_eq!(v["total"], 10);
+        assert_eq!(v["total"], 10.0);
         assert_eq!(v["hasMore"], true);
     }
 

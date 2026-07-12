@@ -373,7 +373,7 @@ pub trait HasCreateMessageRequestParams: Params {
     fn temperature(&self) -> Option<&f64>;
     fn max_tokens(&self) -> u32;
     fn stop_sequences(&self) -> Option<&Vec<String>>;
-    fn metadata(&self) -> Option<&Value>;
+    fn metadata(&self) -> Option<&HashMap<String, Value>>;
 }
 
 #[allow(deprecated)]

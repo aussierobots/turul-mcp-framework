@@ -558,6 +558,86 @@ pub enum ElicitAction {
     Cancel,
 }
 
+/// A single value inside [`ElicitResult`]'s `content` map.
+///
+/// Schema: `ElicitResult.content?: { [key: string]: string | number | boolean | string[] }`.
+/// Untagged — each JSON primitive kind (string, number, bool, array) is
+/// structurally distinct, so dispatch is unambiguous: unlike
+/// [`PrimitiveSchemaDefinition`], no variant here can structurally accept
+/// another variant's wire shape.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ElicitResultValue {
+    String(String),
+    Number(f64),
+    Boolean(bool),
+    StringArray(Vec<String>),
+}
+
+impl From<String> for ElicitResultValue {
+    fn from(s: String) -> Self {
+        Self::String(s)
+    }
+}
+
+impl From<&str> for ElicitResultValue {
+    fn from(s: &str) -> Self {
+        Self::String(s.to_string())
+    }
+}
+
+impl From<f64> for ElicitResultValue {
+    fn from(n: f64) -> Self {
+        Self::Number(n)
+    }
+}
+
+impl From<bool> for ElicitResultValue {
+    fn from(b: bool) -> Self {
+        Self::Boolean(b)
+    }
+}
+
+impl From<Vec<String>> for ElicitResultValue {
+    fn from(values: Vec<String>) -> Self {
+        Self::StringArray(values)
+    }
+}
+
+impl ElicitResultValue {
+    /// Return the string body if this is a string-form value; `None` otherwise.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(s) => Some(s.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Return the numeric body if this is a number-form value; `None` otherwise.
+    pub fn as_f64(&self) -> Option<f64> {
+        match self {
+            Self::Number(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    /// Return the boolean body if this is a boolean-form value; `None` otherwise.
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Boolean(b) => Some(*b),
+            _ => None,
+        }
+    }
+
+    /// Return the string-array body if this is an array-form value; `None` otherwise.
+    pub fn as_string_array(&self) -> Option<&[String]> {
+        match self {
+            Self::StringArray(values) => Some(values.as_slice()),
+            _ => None,
+        }
+    }
+}
+
 /// The client's response to an elicitation request:
 /// `{ action: "accept"|"decline"|"cancel", content?: {[k]: string|number|boolean|string[]} }`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -567,11 +647,11 @@ pub struct ElicitResult {
     pub action: ElicitAction,
     /// The submitted form data, only present when action is `"accept"` and mode was `"form"`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub content: Option<HashMap<String, Value>>,
+    pub content: Option<HashMap<String, ElicitResultValue>>,
 }
 
 impl ElicitResult {
-    pub fn accept(content: HashMap<String, Value>) -> Self {
+    pub fn accept(content: HashMap<String, ElicitResultValue>) -> Self {
         Self {
             action: ElicitAction::Accept,
             content: Some(content),
@@ -922,7 +1002,6 @@ impl ElicitationBuilder {
 #[allow(deprecated)]
 mod tests {
     use super::*;
-    use serde_json::json;
 
     #[test]
     fn test_primitive_schema_creation() {
@@ -1005,7 +1084,7 @@ mod tests {
     #[test]
     fn test_elicit_result() {
         let mut content = HashMap::new();
-        content.insert("name".to_string(), json!("John"));
+        content.insert("name".to_string(), ElicitResultValue::from("John"));
 
         let accept_result = ElicitResult::accept(content);
         let decline_result = ElicitResult::decline();
@@ -1100,8 +1179,8 @@ mod tests {
     fn test_elicit_result_matches_typescript_spec() {
         // `ElicitResult { action, content? }`. No _meta, no extends Result.
         let mut content = HashMap::new();
-        content.insert("name".to_string(), json!("John Doe"));
-        content.insert("age".to_string(), json!(30));
+        content.insert("name".to_string(), ElicitResultValue::from("John Doe"));
+        content.insert("age".to_string(), ElicitResultValue::from(30.0));
 
         let result = ElicitResult::accept(content.clone());
         let json_value = serde_json::to_value(&result).unwrap();
@@ -1109,7 +1188,7 @@ mod tests {
         assert_eq!(json_value["action"], "accept");
         assert!(json_value["content"].is_object());
         assert_eq!(json_value["content"]["name"], "John Doe");
-        assert_eq!(json_value["content"]["age"], 30);
+        assert_eq!(json_value["content"]["age"], 30.0);
         let obj = json_value.as_object().unwrap();
         assert!(!obj.contains_key("_meta"));
         assert!(!obj.contains_key("resultType"));
@@ -1326,5 +1405,119 @@ mod enum_union_fidelity_tests {
         let wire = json!({"type": "banana"});
         let result: Result<PrimitiveSchemaDefinition, _> = serde_json::from_value(wire);
         assert!(result.is_err(), "unknown type discriminator must be rejected");
+    }
+}
+
+#[cfg(test)]
+mod elicit_result_value_tests {
+    //! `ElicitResult.content` values: `string | number | boolean | string[]`.
+    //! Each JSON primitive kind is structurally distinct, so the untagged
+    //! union dispatches unambiguously — round-trip each arm plus a rejection
+    //! test for a shape (object) the union doesn't accept.
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn string_value_round_trips() {
+        let wire = json!("hello");
+        let parsed: ElicitResultValue = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(parsed, ElicitResultValue::String("hello".to_string()));
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn bare_integer_value_round_trips_as_number() {
+        // JSON has one numeric type; a bare integer must select the Number
+        // arm, not fall through to String or Boolean.
+        let wire = json!(42);
+        let parsed: ElicitResultValue = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(parsed, ElicitResultValue::Number(42.0));
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), json!(42.0));
+    }
+
+    #[test]
+    fn float_value_round_trips() {
+        let wire = json!(3.5);
+        let parsed: ElicitResultValue = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(parsed, ElicitResultValue::Number(3.5));
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn boolean_value_round_trips() {
+        let wire = json!(true);
+        let parsed: ElicitResultValue = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(parsed, ElicitResultValue::Boolean(true));
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn accessor_methods_only_return_some_for_their_own_variant() {
+        let s = ElicitResultValue::String("hi".to_string());
+        assert_eq!(s.as_str(), Some("hi"));
+        assert_eq!(s.as_f64(), None);
+        assert_eq!(s.as_bool(), None);
+        assert!(s.as_string_array().is_none());
+
+        let n = ElicitResultValue::Number(2.5);
+        assert_eq!(n.as_f64(), Some(2.5));
+        assert_eq!(n.as_str(), None);
+
+        let b = ElicitResultValue::Boolean(true);
+        assert_eq!(b.as_bool(), Some(true));
+        assert_eq!(b.as_str(), None);
+
+        let arr = ElicitResultValue::StringArray(vec!["a".to_string()]);
+        assert_eq!(arr.as_string_array(), Some(&["a".to_string()][..]));
+        assert_eq!(arr.as_str(), None);
+    }
+
+    #[test]
+    fn string_array_value_round_trips() {
+        let wire = json!(["red", "green", "blue"]);
+        let parsed: ElicitResultValue = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(
+            parsed,
+            ElicitResultValue::StringArray(vec![
+                "red".to_string(),
+                "green".to_string(),
+                "blue".to_string()
+            ])
+        );
+        assert_eq!(serde_json::to_value(&parsed).unwrap(), wire);
+    }
+
+    #[test]
+    fn object_value_is_rejected() {
+        // Schema restricts content values to string | number | boolean |
+        // string[] — an object shape must not silently coerce into any arm.
+        let wire = json!({"nested": "value"});
+        let result: Result<ElicitResultValue, _> = serde_json::from_value(wire);
+        assert!(result.is_err(), "object value must be rejected");
+    }
+
+    #[test]
+    fn elicit_result_content_map_round_trips_mixed_value_kinds() {
+        let mut content = HashMap::new();
+        content.insert("name".to_string(), ElicitResultValue::from("Ada"));
+        content.insert("age".to_string(), ElicitResultValue::from(36.0));
+        content.insert("subscribed".to_string(), ElicitResultValue::from(true));
+        content.insert(
+            "colors".to_string(),
+            ElicitResultValue::from(vec!["red".to_string(), "blue".to_string()]),
+        );
+
+        let result = ElicitResult::accept(content);
+        let v = serde_json::to_value(&result).unwrap();
+        assert_eq!(v["content"]["name"], "Ada");
+        assert_eq!(v["content"]["age"], 36.0);
+        assert_eq!(v["content"]["subscribed"], true);
+        assert_eq!(v["content"]["colors"], json!(["red", "blue"]));
+
+        let parsed: ElicitResult = serde_json::from_value(v).unwrap();
+        assert_eq!(
+            parsed.content.unwrap().get("subscribed"),
+            Some(&ElicitResultValue::Boolean(true))
+        );
     }
 }

@@ -597,7 +597,7 @@ async fn completion_values_are_capped_at_100() {
         "values must be capped at 100: {body}"
     );
     assert_eq!(completion["hasMore"], true, "{body}");
-    assert_eq!(completion["total"], 150, "{body}");
+    assert_eq!(completion["total"], 150.0, "{body}");
 }
 
 /// Completion §Security: "Implementations MUST validate all completion

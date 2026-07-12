@@ -616,10 +616,9 @@ impl HasMetaParam for LoggingMessageNotificationParams {
 }
 
 // ===========================================
-// === Fine-Grained Notification Traits ===
+// === Tests ===
 // ===========================================
 
-/// Trait for notification metadata (method, type info)
 #[cfg(test)]
 #[allow(deprecated)]
 mod tests {

@@ -93,7 +93,7 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
 
                 let filtered = self.filter_completions(completions, current_value);
                 let completion_result = turul_mcp_protocol::completion::CompletionResult::new(filtered)
-                    .with_total(3)
+                    .with_total(3.0)
                     .with_has_more(false);
 
                 Ok(turul_mcp_protocol::completion::CompleteResult::new(completion_result))

@@ -30,12 +30,43 @@ pub struct PromptReference {
     pub title: Option<String>,
 }
 
-/// Union type for completion references (per MCP spec)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Union type for completion references — `ref/resource` or `ref/prompt`.
+///
+/// Schema fixes a literal `type` discriminator per interface
+/// (`ResourceTemplateReference.type = "ref/resource"`,
+/// `PromptReference.type = "ref/prompt"`) — `#[serde(untagged)]` alone tries
+/// variants in declaration order and can't reject a `type` value that
+/// doesn't match either literal but is otherwise structurally compatible
+/// (e.g. `{"type":"bogus","uri":"x"}` still matches [`ResourceTemplateReference`]
+/// since `ref_type` is a bare `String`). `Deserialize` is hand-written to
+/// dispatch on `type` before trying a variant, mirroring
+/// `PrimitiveSchemaDefinition` in `elicitation.rs`.
+#[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum CompletionReference {
     ResourceTemplate(ResourceTemplateReference),
     Prompt(PromptReference),
+}
+
+impl<'de> Deserialize<'de> for CompletionReference {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = Value::deserialize(deserializer)?;
+        match value.get("type").and_then(Value::as_str) {
+            Some("ref/resource") => serde_json::from_value(value)
+                .map(CompletionReference::ResourceTemplate)
+                .map_err(serde::de::Error::custom),
+            Some("ref/prompt") => serde_json::from_value(value)
+                .map(CompletionReference::Prompt)
+                .map_err(serde::de::Error::custom),
+            other => Err(serde::de::Error::custom(format!(
+                "CompletionReference: unrecognized or missing `type` discriminator {other:?} \
+                 (expected \"ref/resource\" or \"ref/prompt\")"
+            ))),
+        }
+    }
 }
 
 /// Completion context (per MCP spec)
@@ -146,11 +177,19 @@ impl CompleteRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionResult {
-    /// The completion values
+    /// The completion values.
+    ///
+    /// Schema: `@maxItems 100` — "Must not exceed 100 items." This
+    /// constructor does not truncate: the server dispatch layer
+    /// (`CompletionHandler` in `turul-mcp-server`) is the single
+    /// authoritative enforcement point, since it truncates `values` to 100
+    /// while capturing the pre-truncation length into `total` — a
+    /// constructor-level truncation here would discard that count before
+    /// the dispatcher ever sees it.
     pub values: Vec<String>,
     /// Optional total number of possible completions
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub total: Option<u32>,
+    pub total: Option<f64>,
     /// Whether there are more completions available
     #[serde(skip_serializing_if = "Option::is_none")]
     pub has_more: Option<bool>,
@@ -185,7 +224,7 @@ impl CompletionResult {
         }
     }
 
-    pub fn with_total(mut self, total: u32) -> Self {
+    pub fn with_total(mut self, total: f64) -> Self {
         self.total = Some(total);
         self
     }
@@ -321,11 +360,6 @@ impl HasResultType for CompleteResult {
 
 impl RpcResult for CompleteResult {}
 
-// ===========================================
-// === Fine-Grained Completion Traits ===
-// ===========================================
-
-/// Trait for completion metadata (method, reference type)
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,7 +411,7 @@ mod tests {
     fn test_complete_request_matches_typescript_spec() {
         // Test CompleteRequest matches: { method: string, params: { ref: ..., argument: ..., context?: ..., _meta?: ... } }
         let meta = crate::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             crate::initialize::Implementation::new("test-client", "1.0.0"),
             crate::initialize::ClientCapabilities::default(),
         )
@@ -423,7 +457,7 @@ mod tests {
             "option2".to_string(),
             "option3".to_string(),
         ])
-        .with_total(100)
+        .with_total(100.0)
         .with_has_more(true);
 
         let result = CompleteResult::new(completion).with_meta(meta);
@@ -437,7 +471,7 @@ mod tests {
             3
         );
         assert_eq!(json_value["completion"]["values"][0], "option1");
-        assert_eq!(json_value["completion"]["total"], 100);
+        assert_eq!(json_value["completion"]["total"], 100.0);
         assert_eq!(json_value["completion"]["hasMore"], true);
         assert_eq!(json_value["_meta"]["executionTime"], 42);
     }
@@ -445,7 +479,7 @@ mod tests {
     #[test]
     fn test_serialization() {
         let meta = crate::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             crate::initialize::Implementation::new("test-client", "1.0.0"),
             crate::initialize::ClientCapabilities::default(),
         );
@@ -462,5 +496,64 @@ mod tests {
 
         let parsed: CompleteRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.method, "completion/complete");
+    }
+
+    #[test]
+    fn completion_reference_round_trips_resource_and_prompt() {
+        let resource = CompletionReference::resource("file:///a/{id}.txt");
+        let v = serde_json::to_value(&resource).unwrap();
+        let parsed: CompletionReference = serde_json::from_value(v).unwrap();
+        match parsed {
+            CompletionReference::ResourceTemplate(r) => {
+                assert_eq!(r.ref_type, "ref/resource");
+                assert_eq!(r.uri, "file:///a/{id}.txt");
+            }
+            CompletionReference::Prompt(_) => panic!("expected ResourceTemplate variant"),
+        }
+
+        let prompt = CompletionReference::Prompt(PromptReference::new("greet").with_title("Greet"));
+        let v = serde_json::to_value(&prompt).unwrap();
+        let parsed: CompletionReference = serde_json::from_value(v).unwrap();
+        match parsed {
+            CompletionReference::Prompt(p) => {
+                assert_eq!(p.ref_type, "ref/prompt");
+                assert_eq!(p.name, "greet");
+                assert_eq!(p.title, Some("Greet".to_string()));
+            }
+            CompletionReference::ResourceTemplate(_) => panic!("expected Prompt variant"),
+        }
+    }
+
+    #[test]
+    fn completion_reference_rejects_unknown_type() {
+        let wire = json!({"type": "ref/bogus", "uri": "x"});
+        let result: Result<CompletionReference, _> = serde_json::from_value(wire);
+        assert!(
+            result.is_err(),
+            "an unrecognized `type` discriminator must be rejected, not silently matched \
+             structurally against ResourceTemplateReference"
+        );
+    }
+
+    #[test]
+    fn completion_reference_rejects_missing_type() {
+        let wire = json!({"uri": "x"});
+        let result: Result<CompletionReference, _> = serde_json::from_value(wire);
+        assert!(
+            result.is_err(),
+            "a missing `type` discriminator must be rejected"
+        );
+    }
+
+    #[test]
+    fn completion_result_new_does_not_truncate() {
+        // Truncation is the server dispatch layer's job (`CompletionHandler` in
+        // turul-mcp-server), which needs the untruncated length to populate
+        // `total` before capping `values` — this constructor must not
+        // pre-empt that by truncating first.
+        let values: Vec<String> = (0..150).map(|i| format!("v{i}")).collect();
+        let result = CompletionResult::new(values);
+        assert_eq!(result.values.len(), 150);
+        assert_eq!(result.has_more, None);
     }
 }

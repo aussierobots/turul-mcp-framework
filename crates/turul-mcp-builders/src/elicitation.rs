@@ -534,12 +534,50 @@ impl ElicitationBuilder {
     }
 }
 
+/// Convert a raw JSON value into the wire-typed elicitation result content
+/// value for the active protocol version.
+///
+/// 2026-07-28 restricts `ElicitResult.content` values to
+/// `string | number | boolean | string[]` ([`ElicitResultValue`](turul_mcp_protocol::elicitation::ElicitResultValue));
+/// these callers have no fallible return path, so a shape outside that union
+/// (e.g. a nested object) is stringified via its JSON text rather than
+/// silently dropped. 2025-11-25 keeps the untyped `Value` as-is.
+#[cfg(feature = "protocol-2026-07-28")]
+fn to_elicit_result_value(value: Value) -> turul_mcp_protocol::elicitation::ElicitResultValue {
+    use turul_mcp_protocol::elicitation::ElicitResultValue;
+    match value {
+        Value::String(s) => ElicitResultValue::String(s),
+        Value::Number(n) => ElicitResultValue::Number(n.as_f64().unwrap_or(0.0)),
+        Value::Bool(b) => ElicitResultValue::Boolean(b),
+        Value::Array(items) => ElicitResultValue::StringArray(
+            items
+                .into_iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| item.to_string())
+                })
+                .collect(),
+        ),
+        other => ElicitResultValue::String(other.to_string()),
+    }
+}
+
+#[cfg(feature = "protocol-2025-11-25")]
+fn to_elicit_result_value(value: Value) -> Value {
+    value
+}
+
 /// Result builder for creating elicitation responses
 pub struct ElicitResultBuilder;
 
 impl ElicitResultBuilder {
     /// Create an accept result with content
     pub fn accept(content: HashMap<String, Value>) -> ElicitResult {
+        let content = content
+            .into_iter()
+            .map(|(k, v)| (k, to_elicit_result_value(v)))
+            .collect();
         ElicitResult::accept(content)
     }
 
@@ -556,13 +594,16 @@ impl ElicitResultBuilder {
     /// Create an accept result with a single field
     pub fn accept_single(field_name: impl Into<String>, value: Value) -> ElicitResult {
         let mut content = HashMap::new();
-        content.insert(field_name.into(), value);
+        content.insert(field_name.into(), to_elicit_result_value(value));
         ElicitResult::accept(content)
     }
 
     /// Create an accept result with multiple fields from key-value pairs
     pub fn accept_fields(fields: Vec<(String, Value)>) -> ElicitResult {
-        let content = fields.into_iter().collect();
+        let content = fields
+            .into_iter()
+            .map(|(k, v)| (k, to_elicit_result_value(v)))
+            .collect();
         ElicitResult::accept(content)
     }
 }
@@ -955,6 +996,14 @@ mod tests {
         // Accept with single field
         let single_result = ElicitResultBuilder::accept_single("name", json!("John"));
         assert!(matches!(single_result.action, ElicitAction::Accept));
+        #[cfg(feature = "protocol-2026-07-28")]
+        assert_eq!(
+            single_result.content.as_ref().unwrap().get("name"),
+            Some(&turul_mcp_protocol::elicitation::ElicitResultValue::String(
+                "John".to_string()
+            ))
+        );
+        #[cfg(feature = "protocol-2025-11-25")]
         assert_eq!(
             single_result.content.as_ref().unwrap().get("name"),
             Some(&json!("John"))

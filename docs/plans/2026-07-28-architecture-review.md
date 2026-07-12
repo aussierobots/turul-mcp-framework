@@ -20,7 +20,7 @@ This document is the **doc-form persistence** of a prior architecture review (or
 
 ## 1. Problem statement
 
-The crate `turul-mcp-protocol-2026-07-28` is spec-aligned (`crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md:1-230`, 342 tests green, 0 warnings, 20/20 modeled fixtures pass). The framework's consumer crates (`turul-mcp-server`, `turul-mcp-client`, `turul-http-mcp-server`, `turul-mcp-aws-lambda`, the derive macros, 55+ examples) still depend on the `turul-mcp-protocol` re-export alias, which today points at `turul-mcp-protocol-2025-11-25` (`crates/turul-mcp-protocol/src/lib.rs:1-21`).
+The crate `turul-mcp-protocol-2026-07-28` is spec-aligned (`crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md:1-230`, 342 tests green at review date, 0 warnings, 20/20 modeled fixtures pass; see COMPLIANCE.md for current test counts). The framework's consumer crates (`turul-mcp-server`, `turul-mcp-client`, `turul-http-mcp-server`, `turul-mcp-aws-lambda`, the derive macros, 55+ examples) still depend on the `turul-mcp-protocol` re-export alias, which today points at `turul-mcp-protocol-2025-11-25` (`crates/turul-mcp-protocol/src/lib.rs:1-21`).
 
 DRAFT-2026-v1 is **not** wire-compatible with 2025-11-25:
 

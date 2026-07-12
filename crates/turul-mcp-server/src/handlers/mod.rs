@@ -333,6 +333,11 @@ impl McpHandler for CompletionHandler {
                 if len > COMPLETION_VALUES_CAP {
                     result.completion.values.truncate(COMPLETION_VALUES_CAP);
                     result.completion.has_more = Some(true);
+                    // `CompletionResult.total` is `f64` on the 2026-07-28
+                    // protocol crate but `u32` on the frozen 2025-11-25 one.
+                    #[cfg(feature = "protocol-2026-07-28")]
+                    result.completion.total.get_or_insert(len as f64);
+                    #[cfg(feature = "protocol-2025-11-25")]
                     result.completion.total.get_or_insert(len as u32);
                 }
                 result

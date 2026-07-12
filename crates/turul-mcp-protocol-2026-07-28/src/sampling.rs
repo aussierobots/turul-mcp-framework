@@ -26,31 +26,6 @@ use crate::content::ContentBlock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Sampling request parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SamplingRequest {
-    /// The sampling method to use
-    pub method: String,
-    /// Parameters for the sampling method
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub params: Option<Value>,
-}
-
-/// Sampling response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SamplingResult {
-    /// The sampled result
-    pub result: Value,
-}
-
-impl SamplingResult {
-    pub fn new(result: Value) -> Self {
-        Self { result }
-    }
-}
-
 // The schema declares a single `Role` type ("user" | "assistant" — no
 // "system"); this module re-exports the one binding rather than duplicating it.
 pub use crate::prompts::Role;
@@ -328,9 +303,13 @@ pub struct CreateMessageRequestParams {
     /// Optional stop sequences
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_sequences: Option<Vec<String>>,
-    /// Optional metadata
+    /// Optional metadata to pass through to the LLM provider.
+    ///
+    /// Schema: `metadata?: JSONObject` — same `HashMap<String, Value>`
+    /// convention this crate uses for other `JSONObject` fields (e.g.
+    /// `ClientCapabilities.experimental`).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Value>,
+    pub metadata: Option<std::collections::HashMap<String, Value>>,
     /// Optional tools the LLM can use during sampling.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<crate::tools::Tool>>,
@@ -556,7 +535,7 @@ impl HasCreateMessageRequestParams for CreateMessageRequestParams {
         self.stop_sequences.as_ref()
     }
 
-    fn metadata(&self) -> Option<&Value> {
+    fn metadata(&self) -> Option<&std::collections::HashMap<String, Value>> {
         self.metadata.as_ref()
     }
 }
@@ -744,5 +723,44 @@ mod tests {
         let tc: ToolChoice = serde_json::from_value(serde_json::json!({})).unwrap();
         assert_eq!(tc.mode, None);
         assert_eq!(tc.effective_mode(), ToolChoiceMode::Auto);
+    }
+
+    #[test]
+    fn create_message_request_params_metadata_is_an_object() {
+        // Schema: `metadata?: JSONObject` — this crate's convention for
+        // JSONObject is `HashMap<String, Value>`, matching
+        // `ClientCapabilities.experimental` and similar fields.
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("traceId".to_string(), serde_json::json!("abc-123"));
+        let params = CreateMessageRequestParams::new(vec![SamplingMessage::user_text("hi")], 100)
+            .with_temperature(0.5);
+        let mut params = params;
+        params.metadata = Some(metadata);
+
+        let v = serde_json::to_value(&params).unwrap();
+        assert!(v["metadata"].is_object(), "metadata must serialize as a JSON object");
+        assert_eq!(v["metadata"]["traceId"], "abc-123");
+
+        let back: CreateMessageRequestParams = serde_json::from_value(v).unwrap();
+        assert_eq!(
+            back.metadata.unwrap().get("traceId"),
+            Some(&serde_json::json!("abc-123"))
+        );
+    }
+
+    #[test]
+    fn create_message_request_params_metadata_rejects_non_object_wire_value() {
+        // A scalar `metadata` value must fail to deserialize now that the
+        // field is a typed JSONObject, not an unrestricted `Value`.
+        let wire = serde_json::json!({
+            "messages": [],
+            "maxTokens": 10,
+            "metadata": "not-an-object"
+        });
+        let result: Result<CreateMessageRequestParams, _> = serde_json::from_value(wire);
+        assert!(
+            result.is_err(),
+            "scalar metadata must be rejected per the JSONObject contract"
+        );
     }
 }

@@ -277,8 +277,16 @@ pub type MetaObject = HashMap<String, Value>;
 /// [`Implementation`](crate::initialize::Implementation) and
 /// [`ClientCapabilities`](crate::initialize::ClientCapabilities) are imported
 /// from [`crate::initialize`].
+///
+/// `Serialize` is hand-written rather than `#[derive]` + `#[serde(flatten)]`:
+/// `extra` is public and caller-writable, so a caller could otherwise insert
+/// one of the reserved typed keys (`progressToken` or any
+/// `io.modelcontextprotocol/*` field) into it and produce the same key twice
+/// on the wire. The typed field always wins; a colliding `extra` entry is
+/// dropped rather than emitted. Mirrors the same guard on
+/// [`crate::subscriptions::SubscriptionsListenResultMeta`].
 #[allow(deprecated)] // carries the SEP-2577-deprecated log_level through the migration window
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RequestMetaObject {
     /// Caller-supplied progress token. Optional.
     #[serde(rename = "progressToken", skip_serializing_if = "Option::is_none")]
@@ -369,6 +377,51 @@ impl RequestMetaObject {
     pub fn with_extra(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.extra.insert(key.into(), value.into());
         self
+    }
+}
+
+#[allow(deprecated)] // log_level field access carries the SEP-2577 deprecation
+impl Serialize for RequestMetaObject {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+
+        const RESERVED_EXTRA_KEYS: [&str; 5] = [
+            "progressToken",
+            META_KEY_PROTOCOL_VERSION,
+            META_KEY_CLIENT_INFO,
+            META_KEY_CLIENT_CAPABILITIES,
+            META_KEY_LOG_LEVEL,
+        ];
+
+        let extra_len = self
+            .extra
+            .keys()
+            .filter(|k| !RESERVED_EXTRA_KEYS.contains(&k.as_str()))
+            .count();
+        let len = extra_len
+            + usize::from(self.progress_token.is_some())
+            + 3 // protocol_version, client_info, client_capabilities
+            + usize::from(self.log_level.is_some());
+
+        let mut map = serializer.serialize_map(Some(len))?;
+        if let Some(token) = &self.progress_token {
+            map.serialize_entry("progressToken", token)?;
+        }
+        map.serialize_entry(META_KEY_PROTOCOL_VERSION, &self.protocol_version)?;
+        map.serialize_entry(META_KEY_CLIENT_INFO, &self.client_info)?;
+        map.serialize_entry(META_KEY_CLIENT_CAPABILITIES, &self.client_capabilities)?;
+        if let Some(level) = &self.log_level {
+            map.serialize_entry(META_KEY_LOG_LEVEL, level)?;
+        }
+        for (k, v) in &self.extra {
+            if !RESERVED_EXTRA_KEYS.contains(&k.as_str()) {
+                map.serialize_entry(k, v)?;
+            }
+        }
+        map.end()
     }
 }
 
@@ -494,7 +547,58 @@ mod tests {
         assert_eq!(from_string.as_str(), "page-3");
     }
 
-    // `Meta` / `WithMeta` / `PaginatedResponse` / `ProgressResponse` tests
-    // removed alongside their misshapen types. New schema-aligned tests live
-    // alongside `RequestMetaObject` and `MetaObject`.
+    // Schema-aligned tests for `RequestMetaObject` and `MetaObject` live
+    // alongside those type definitions.
+
+    #[test]
+    fn request_meta_object_extra_cannot_shadow_protocol_version() {
+        // `RequestMetaObject.extra` is a public, caller-writable
+        // `#[serde(flatten)]` map. If a caller populates it with a reserved
+        // typed key, the typed field and the flattened map must not both
+        // emit it on the wire. Checked against raw serialized text:
+        // `to_value()` cannot observe a duplicate key (a `Map` silently
+        // overwrites on the second insert).
+        let mut meta = RequestMetaObject::new(
+            "2026-07-28",
+            crate::initialize::Implementation::new("test-client", "1.0.0"),
+            crate::initialize::ClientCapabilities::default(),
+        );
+        meta.extra.insert(
+            META_KEY_PROTOCOL_VERSION.to_string(),
+            Value::String("attacker-controlled".to_string()),
+        );
+
+        let json_str = serde_json::to_string(&meta).unwrap();
+        assert_eq!(
+            json_str.matches(META_KEY_PROTOCOL_VERSION).count(),
+            1,
+            "must emit protocolVersion exactly once on the wire: {json_str}"
+        );
+        let v: Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(v[META_KEY_PROTOCOL_VERSION], "2026-07-28");
+    }
+
+    #[test]
+    fn request_meta_object_extra_cannot_shadow_progress_token() {
+        // Same collision, but against the non-namespaced `progressToken` key.
+        let mut meta = RequestMetaObject::new(
+            "2026-07-28",
+            crate::initialize::Implementation::new("test-client", "1.0.0"),
+            crate::initialize::ClientCapabilities::default(),
+        )
+        .with_progress_token("real-token");
+        meta.extra.insert(
+            "progressToken".to_string(),
+            Value::String("attacker-controlled".to_string()),
+        );
+
+        let json_str = serde_json::to_string(&meta).unwrap();
+        assert_eq!(
+            json_str.matches("progressToken").count(),
+            1,
+            "must emit progressToken exactly once on the wire: {json_str}"
+        );
+        let v: Value = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(v["progressToken"], "real-token");
+    }
 }

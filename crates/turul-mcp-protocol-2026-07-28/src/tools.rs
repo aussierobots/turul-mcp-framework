@@ -436,7 +436,11 @@ impl CallToolRequestParams {
     }
 }
 
-/// Complete tools/call request (matches TypeScript CallToolRequest interface)
+/// Inner content of a tools/call request (method name and parameters).
+///
+/// This struct models the `{method, params}` payload. The JSON-RPC envelope
+/// containing `jsonrpc`, `id`, and `_meta` is wrapped by `JsonRpcRequest` from
+/// the `turul-rpc` crate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CallToolRequest {
@@ -703,8 +707,7 @@ impl crate::traits::CallToolResult for CallToolResult {
 }
 
 // `HasListToolsParams` is implemented for the shared `PaginatedRequestParams`
-// type (one impl serves all `PaginatedRequest` extenders — see ADR notes on
-// the `ListToolsParams` → `PaginatedRequestParams` collapse).
+// type (one impl serves all `PaginatedRequest` extenders that share pagination).
 impl HasListToolsParams for crate::json_rpc::PaginatedRequestParams {
     fn cursor(&self) -> Option<&Cursor> {
         self.cursor.as_ref()
