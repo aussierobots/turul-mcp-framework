@@ -1403,10 +1403,14 @@ impl McpClient {
             .into());
         }
         let extra = json!({ "name": name, "arguments": arguments });
+        // No explicit Mcp-Name: the transport's apply_request_metadata_headers
+        // derives it from params.name for tools/call and Base64-sentinel-encodes
+        // it. Passing a raw one here would emit a second, unencoded Mcp-Name
+        // header (reqwest appends rather than replaces).
         self.send_2026_07_28_with_extra_headers(
             "tools/call",
             extra,
-            &[("Mcp-Name".to_string(), name.to_string())],
+            &[],
             |result| {
                 if result.get("resultType").and_then(|v| v.as_str())
                     == Some(turul_mcp_ext_tasks::RESULT_TYPE_TASK)

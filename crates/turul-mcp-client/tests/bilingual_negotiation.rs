@@ -705,3 +705,60 @@ async fn mcp_name_header_is_base64_sentinel_encoded_when_not_plain_ascii() {
         .expect("the encoded Mcp-Name header must match the validating mock");
     assert!(!call_result.is_error.unwrap_or(false));
 }
+
+/// F3 regression (2026-07-14): a `subscriptions/listen` rejected with HTTP 400
+/// and a JSON-RPC error body must surface the error code (here -32021
+/// MissingRequiredClientCapability) via `ServerError`, not a generic transport
+/// failure. The streaming send path previously turned every non-2xx into
+/// `TransportError::HttpStatus` without parsing the envelope.
+#[tokio::test]
+async fn subscriptions_listen_400_surfaces_jsonrpc_error_not_transport_error() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0", "id": "req_0",
+                    "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"], "capabilities": {},
+                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "subscriptions/listen"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(400)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0", "id": "req_1",
+                    "error": { "code": -32021, "message": "Missing required client capability: subscriptions" }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("connect against a 2026 server must succeed");
+
+    let outcome = client
+        .subscriptions_listen(serde_json::json!({ "toolsListChanged": true }))
+        .await;
+    match outcome {
+        Err(turul_mcp_client::McpClientError::ServerError { code: -32021, .. }) => {}
+        Err(other) => panic!(
+            "subscriptions/listen 400 must surface as ServerError(-32021), got: {other:?}"
+        ),
+        Ok(_) => panic!("subscriptions/listen 400 must be an error, got a live stream"),
+    }
+}

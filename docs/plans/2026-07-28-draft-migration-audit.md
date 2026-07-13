@@ -237,3 +237,34 @@ legend): UTF-8 body rejection (~345), SSE colon-comment handling (~392), x-mcp-h
 static-reachability (~407), sampling capability declaration (~532), progress unknown-ID
 tolerance (~572), per-connection tool-set stability (~696), request-ID uniqueness/echo
 (~184/185).
+
+## 8. F-slice round 2 (2026-07-14, external-review round 3)
+
+Codex round-3 findings, each verified against code before acting:
+
+- **F1 (fixed) — real.** `call_tool_or_task` (client.rs) passed a raw `Mcp-Name`
+  extra-header while `apply_request_metadata_headers` also adds the encoded one;
+  reqwest appends → two conflicting `Mcp-Name` headers. Removed the explicit one.
+  Wire test inspects `received_requests` (a `.get()`-reading server hides the
+  duplicate); revert-and-fail shows `["=?base64?…", "padded"]` on the wire.
+- **F3 (fixed) — real.** `send_request_streaming` (both `subscriptions/listen`
+  entry points) returned `HttpStatus` for any non-2xx without parsing the body.
+  `classify_non_2xx` now applies the same status-400-only JSON-RPC-envelope
+  rescue; a `400` + `-32021` surfaces as `ServerError(-32021)`. Revert-and-fail
+  recorded.
+- **F2 (fixed, and larger than codex's line numbers) — substantively right.**
+  Codex's cited line 232 was wrong (that row is about `_meta`), but the matrix
+  was materially stale on the pre-renumbering HeaderMismatch code: ~11 live rows
+  cited `-32001` for the 2026 header/body-mismatch and missing-header paths, which
+  the server now emits as `-32020` (verified: `header_body_protocol_version_mismatch_is_rejected_with_32020`
+  asserts `-32020`; the only surviving legitimate `-32001` is the 2025 legacy
+  "Missing Mcp-Session-Id" path). Corrected in the live rows; dated gap-register
+  headlines (`VER-4`, `TX/GAP-4`) kept as history. The line-237 "ext-tasks/ext-apps
+  crates are unscaffolded" claim was false — both crates exist — corrected. Line
+  243's stale "no wire-level test for the 400-body fallback" self-note refreshed
+  (F2 added it).
+- **F2 line-243 grade — pushed back.** The row is a SHOULD graded ✅ with a
+  prominent, ADR-030-recorded deliberate deviation (abort-on-unrecognized-400
+  downgrade-resistance). RFC 2119 permits documented SHOULD deviation with weighed
+  rationale, so ✅-with-inline-DEVIATION is defensible; not downgraded. Evidence
+  refreshed to current codes/tests.

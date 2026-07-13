@@ -295,3 +295,84 @@ async fn task_cancel_reaches_cancelled() {
         .expect("wait");
     assert_eq!(done.status(), TaskStatus::Cancelled);
 }
+
+/// F1 regression (2026-07-14): `call_tool_or_task` must NOT pass an explicit
+/// raw `Mcp-Name` header — the transport already derives and Base64-sentinel-
+/// encodes it from `params.name`. A raw extra-header produced a SECOND,
+/// unencoded `Mcp-Name` on the wire (reqwest appends). This inspects the wire
+/// directly (a real server reads `Mcp-Name` via `.get()` and would silently
+/// take the first, hiding the duplicate).
+#[tokio::test]
+async fn call_tool_or_task_emits_exactly_one_encoded_mcp_name_header() {
+    use wiremock::matchers::{body_partial_json, method};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(json!({"method": "server/discover"})))
+        .respond_with(ResponseTemplate::new(200).insert_header("Content-Type", "application/json").set_body_json(json!({
+            "jsonrpc": "2.0", "id": "req_0",
+            "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+                "supportedVersions": ["2026-07-28"], "capabilities": {},
+                "serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
+        })))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(json!({"method": "tools/call"})))
+        .respond_with(ResponseTemplate::new(200).insert_header("Content-Type", "application/json").set_body_json(json!({
+            "jsonrpc": "2.0", "id": "req_1",
+            "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+                "content": [{ "type": "text", "text": "ok" }], "isError": false }
+        })))
+        .mount(&server)
+        .await;
+
+    let url = format!("{}/mcp", server.uri());
+    let mut config = ClientConfig::default();
+    config.declared_capabilities.ext_tasks = true;
+    let transport = Box::new(HttpTransport::new(&url).unwrap());
+    let client = McpClient::new(transport, config);
+    client.connect().await.expect("connect against a 2026 server");
+
+    // A padded name: raw " padded " vs encoded "=?base64?IHBhZGRlZCA=?=" differ,
+    // so a duplicate is detectable on the wire.
+    client
+        .call_tool_or_task(" padded ", json!({}))
+        .await
+        .expect("call_tool_or_task");
+
+    let reqs = server
+        .received_requests()
+        .await
+        .expect("wiremock records requests");
+    let tools_call: Vec<_> = reqs
+        .iter()
+        .filter(|r| {
+            serde_json::from_slice::<Value>(&r.body)
+                .ok()
+                .and_then(|b| b.get("method").and_then(|m| m.as_str()).map(|s| s == "tools/call"))
+                .unwrap_or(false)
+        })
+        .collect();
+    assert_eq!(tools_call.len(), 1, "expected exactly one tools/call request");
+    let names: Vec<_> = tools_call[0]
+        .headers
+        .get_all("mcp-name")
+        .iter()
+        .map(|v| v.to_str().unwrap().to_string())
+        .collect();
+    assert_eq!(
+        names.len(),
+        1,
+        "exactly one Mcp-Name header (no raw+encoded duplicate), got {names:?}"
+    );
+    assert_eq!(
+        names[0], "=?base64?IHBhZGRlZCA=?=",
+        "the single Mcp-Name must be the Base64-sentinel-encoded form"
+    );
+}

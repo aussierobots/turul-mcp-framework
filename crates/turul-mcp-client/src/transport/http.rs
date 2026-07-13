@@ -368,6 +368,28 @@ impl HttpTransport {
         }
     }
 
+    /// Map a non-2xx `(status, body)` to a client error, applying the same
+    /// 400-envelope rescue as [`rescue_400_jsonrpc_envelope`] but for callers
+    /// (e.g. the streaming path) that return an error directly rather than a
+    /// `Value`. A status-400 body carrying a JSON-RPC `error.code` becomes a
+    /// `ServerError` so the code reaches normal classification; every other
+    /// status stays a transport `HttpStatus` error.
+    fn classify_non_2xx(status: u16, message: String) -> crate::error::McpClientError {
+        if status == 400
+            && let Ok(body) = serde_json::from_str::<Value>(&message)
+            && let Some(code) = body.pointer("/error/code").and_then(|c| c.as_i64())
+        {
+            let msg = body
+                .pointer("/error/message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("server error")
+                .to_string();
+            let data = body.pointer("/error/data").cloned();
+            return crate::error::McpClientError::server_error(code as i32, msg, data);
+        }
+        TransportError::HttpStatus { status, message }.into()
+    }
+
     /// Handle HTTP response
     async fn handle_response(&self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
@@ -757,7 +779,7 @@ impl Transport for HttpTransport {
         if !response.status().is_success() {
             let status = response.status().as_u16();
             let message = response.text().await.unwrap_or_default();
-            return Err(TransportError::HttpStatus { status, message }.into());
+            return Err(Self::classify_non_2xx(status, message));
         }
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
