@@ -2,12 +2,14 @@
 
 **Status: AUDITED — unresolved MUST gaps recorded.** Implemented-and-verified fixes landed
 in commits `87430c17` / `4690e007` / `a14d9f91` / `fdfcc2a9` / `509a3552` plus the
-2026-07-14 F1/F2 slice (§7). The compliance matrix retains recorded MUST-level ❌ gaps —
-notably BP-3 (JSON Schema dialect validation), GAP-CF-9 (sampling message-shape
-enforcement), and the
-server-sent cancellation/subscription-close obligation (row ~332) — a documented
-limitation does not satisfy a MUST, and this branch must not be described as fully
-latest-draft compliant until they are implemented. This document is the reviewable record
+2026-07-14 F1/F2 slice (§7). The compliance matrix retains **two** recorded MUST-level ❌ gaps —
+BP-3 (JSON Schema dialect validation) and GAP-CF-9 (sampling message-shape
+enforcement) — a documented limitation does not satisfy a MUST, and this branch
+must not be described as fully latest-draft compliant until they are implemented.
+(The earlier-listed "server-sent cancellation" row 332 was a **misread** and has
+been regraded — see §9: the spec's server-sent `notifications/cancelled` is
+stdio-only, and this framework ships no stdio server; HTTP teardown is stream-close
+plus a SHOULD graceful-closure, not a MUST.) This document is the reviewable record
 for the migration of `feat/turul-mcp-protocol-2026-07-28` onto the latest live MCP draft;
 grades and dispositions follow the conventions of `2026-07-28-spec-compliance.md`
 (the 541-row matrix), which this audit updates rather than replaces.
@@ -268,3 +270,37 @@ Codex round-3 findings, each verified against code before acting:
   downgrade-resistance). RFC 2119 permits documented SHOULD deviation with weighed
   rationale, so ✅-with-inline-DEVIATION is defensible; not downgraded. Evidence
   refreshed to current codes/tests.
+
+## 9. Matrix reconciliation + cancellation regrade (2026-07-14, review round 4)
+
+- **Accept-header MUST (codex F1)** fixed: `send_request_streaming` (subscriptions/listen
+  POST) now uses `MCP_POST_ACCEPT` (both `application/json` + `text/event-stream`); a
+  scan confirmed it was the only offending POST (sse.rs single-Accept is the deprecated
+  2024-11-05 transport). Wire test + revert-and-fail.
+- **Comment-policy cleanup**: this session's F#/slice-tags, dev-log dates, and "previously"
+  narratives removed (commit `f12bf76e`). A git-blame-verified scan found the remaining
+  ~30 comment-policy hits (20 ADR-refs in `.rs`, older tombstones) all PRE-DATE this
+  session — left for a dedicated cleanup slice, not this one.
+- **Matrix reconciliation**: rows 91/189 corrected (the `turul-mcp-ext-tasks`/`-ext-apps`
+  crates ship — the gap is the missing core negotiation/dispatch path, not "unscaffolded
+  crates"); live-table stale `-32004`/`-32001` mechanism descriptions updated to the
+  canonical `-32022`/`-32020`; closed-gap-register entries carry an error-code note
+  (codes cited reflect their fix date; canonical post-2026-07-02 codes are -32022/-32020).
+- **Cancellation regrade (rows 326/332/333)** — the load-bearing correction. The live
+  Subscriptions §Cancellation is explicit: a subscription ends when (a) the **client**
+  cancels — close the SSE stream (HTTP) or send `notifications/cancelled` (stdio); (b) the
+  **server** tears down — **SHOULD** send the empty `subscriptions/listen` response
+  (graceful closure), then close the stream; (c) the transport closes. There is **no**
+  server-MUST to emit `notifications/cancelled` on HTTP teardown; the server-sent form is
+  **stdio-only**, and this framework ships no stdio server. So: row 332 regraded ❌→🟡
+  (SHOULD graceful-closure; `SubscriptionsListenResult` bound+wire-tested, server-shutdown
+  emission unwired = the OUTSTANDING "sole survivor" SHOULD item); rows 326/333 kept 🟡
+  with the misread "server-sent teardown MUST" reasoning removed. **No shutdown-signal
+  infrastructure is warranted.** OUTSTANDING.md was already accurate (it never claimed a
+  `notifications/cancelled` MUST) — no change needed there. Tally: ❌ 13→12, 🟡 71→72.
+- **Remaining MUST-❌: exactly two** — BP-3 (row 207) and GAP-CF-9 (row 537). Everything
+  else ❌ is SHOULD/MAY-level. BP-3 scope (per codex): JSON Schema 2020-12 only; absent
+  `$schema` = 2020-12; reject unsupported explicit dialects; real validator (compile +
+  meta-validate) not string comparison; bounded `$ref`/composition depth + schema size —
+  its own ADR-backed slice. Sampling (GAP-CF-9) enforced after BP-3 while the deprecated
+  capability remains supported.
