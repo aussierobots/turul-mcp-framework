@@ -328,6 +328,30 @@ impl HttpTransport {
         .await
     }
 
+    /// Streamable HTTP servers answer protocol-level rejections with
+    /// `400 Bad Request` and a JSON-RPC error body (UnsupportedProtocolVersion,
+    /// HeaderMismatch, MissingRequiredClientCapability). Surface that envelope
+    /// to the caller's normal JSON-RPC error classification instead of a
+    /// transport failure. Only status 400 with a parseable `error.code`
+    /// envelope is rescued — every other status (404 session recovery,
+    /// 401/403 auth) keeps transport-error semantics.
+    fn rescue_400_jsonrpc_envelope(result: McpClientResult<Value>) -> McpClientResult<Value> {
+        match result {
+            Err(crate::error::McpClientError::Transport(TransportError::HttpStatus {
+                status: 400,
+                message,
+            })) => match serde_json::from_str::<Value>(&message) {
+                Ok(body) if body.pointer("/error/code").is_some() => Ok(body),
+                _ => Err(TransportError::HttpStatus {
+                    status: 400,
+                    message,
+                }
+                .into()),
+            },
+            other => other,
+        }
+    }
+
     /// Handle HTTP response
     async fn handle_response(&self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
@@ -669,7 +693,7 @@ impl Transport for HttpTransport {
             .await
             .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
 
-        let result = self.handle_response(response).await?;
+        let result = Self::rescue_400_jsonrpc_envelope(self.handle_response(response).await)?;
 
         let elapsed = start_time.elapsed();
         self.update_stats(|stats| {
@@ -779,7 +803,7 @@ impl Transport for HttpTransport {
             .send()
             .await
             .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
-        self.handle_response(response).await
+        Self::rescue_400_jsonrpc_envelope(self.handle_response(response).await)
     }
 
     async fn send_request_with_headers(

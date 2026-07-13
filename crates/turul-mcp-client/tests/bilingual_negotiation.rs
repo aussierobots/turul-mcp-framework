@@ -466,3 +466,177 @@ async fn call_tool_recovers_from_header_mismatch_with_one_refresh_and_retry() {
     // wiremock verifies exactly one tools/list refresh and exactly one retry
     // via the `.expect(1)` on each mock, checked when `server` drops.
 }
+
+/// Streamable HTTP servers answer protocol-level rejections with HTTP 400
+/// and a JSON-RPC error body. The transport must surface that envelope to
+/// the same JSON-RPC error classification a 200-body error takes — here the
+/// HeaderMismatch refresh-retry — instead of burying it as a generic
+/// transport failure. Same flow as the 200-body test above, but the
+/// rejection arrives as a plain-JSON 400.
+#[tokio::test]
+async fn call_tool_recovers_from_plain_json_400_header_mismatch() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"],
+                        "capabilities": {},
+                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "tools/list"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_1",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "tools": [{
+                            "name": "echo",
+                            "description": "Echo a message",
+                            "inputSchema": { "type": "object", "properties": { "msg": { "type": "string" } } }
+                        }]
+                    }
+                })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // First tools/call: HTTP 400 whose body carries the HeaderMismatch
+    // envelope — the shape a validating server uses when the caller does
+    // not negotiate an SSE response.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .respond_with(
+            ResponseTemplate::new(400)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_2",
+                    "error": {
+                        "code": -32020,
+                        "message": "Header mismatch: Mcp-Param-Msg header omitted but the parameter is present in the request body"
+                    }
+                })),
+        )
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_3",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "content": [{ "type": "text", "text": "echoed" }],
+                        "isError": false
+                    }
+                })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("connect against a 2026 server must succeed");
+
+    let call_result = client
+        .call_tool("echo", serde_json::json!({ "msg": "hi" }))
+        .await
+        .expect("a plain-JSON 400 HeaderMismatch must reach the refresh-retry path and succeed");
+    assert!(!call_result.is_error.unwrap_or(false));
+}
+
+/// Only status 400 is rescued into JSON-RPC error classification. A 404 —
+/// even with a JSON body — must stay a transport-level HttpStatus error:
+/// session-expiry recovery keys on it.
+#[tokio::test]
+async fn http_404_with_json_body_stays_a_transport_error() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"],
+                        "capabilities": {},
+                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .respond_with(
+            ResponseTemplate::new(404)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_1",
+                    "error": { "code": -32601, "message": "Method 'tools/call' not found" }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("connect against a 2026 server must succeed");
+
+    let err = client
+        .call_tool("echo", serde_json::json!({ "msg": "hi" }))
+        .await
+        .expect_err("a 404 must surface as an error");
+    assert!(
+        matches!(
+            &err,
+            turul_mcp_client::McpClientError::Transport(
+                turul_mcp_client::error::TransportError::HttpStatus { status: 404, .. }
+            )
+        ),
+        "404 must remain a transport HttpStatus error, got: {err:?}"
+    );
+}

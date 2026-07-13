@@ -1,10 +1,16 @@
 # Draft-migration audit — live MCP draft vs vendored pin (2026-07-13)
 
-**Status: IN PROGRESS.** This document is the reviewable record for the migration of
-`feat/turul-mcp-protocol-2026-07-28` onto the latest live MCP draft. It supersedes the
-session-scratchpad impact plan. Grades and dispositions here follow the conventions of
-`2026-07-28-spec-compliance.md` (the 490-row matrix), which this audit updates rather than
-replaces.
+**Status: AUDITED — unresolved MUST gaps recorded.** Implemented-and-verified fixes landed
+in commits `87430c17` / `4690e007` / `a14d9f91` / `fdfcc2a9` / `509a3552` plus the
+2026-07-14 F1/F2 slice (§7). The compliance matrix retains recorded MUST-level ❌ gaps —
+notably BP-3 (JSON Schema dialect validation), GAP-CF-9 (sampling message-shape
+enforcement), the client-side `Mcp-Name` encode obligation (matrix row ~410), and the
+server-sent cancellation/subscription-close obligation (row ~332) — a documented
+limitation does not satisfy a MUST, and this branch must not be described as fully
+latest-draft compliant until they are implemented. This document is the reviewable record
+for the migration of `feat/turul-mcp-protocol-2026-07-28` onto the latest live MCP draft;
+grades and dispositions follow the conventions of `2026-07-28-spec-compliance.md`
+(the 541-row matrix), which this audit updates rather than replaces.
 
 ## 1. Immutable upstream basis
 
@@ -185,3 +191,49 @@ full notes in workflow `wf_36f39e2c-9a4` journal. The load-bearing ones:
   guidance, noted here for future re-audits.
 - Trailing-slash issuer SHOULD graded ❌ on "nothing implements it" — arguably ➖
   (operator-supplied URI); revisit if an issuer-normalization slice lands.
+
+## 7. F-slice (2026-07-14, external-review round 2)
+
+Codex review findings verified and dispositioned:
+
+- **F1 (fixed)** — `version.rs` sent a bare `-32022` (no `data.supported` list) to
+  `FallbackTo2025`. A recognized modern error identifies a modern server; with no
+  server-named list there is no "mutually supported version from the supported list" to
+  select, so falling back to `initialize` was inference — now Aborts. The
+  `Some(list)`-naming-2025-11-25 sub-case is UNCHANGED and compliant (the spec's own
+  error example carries `"2025-11-25"` inside `data.supported`; the reviewer's
+  "retry another mutually supported **modern** version" inserted a word the spec does
+  not contain). Test: `unsupported_protocol_version_with_no_list_aborts_without_downgrade`
+  (revert-and-fail recorded).
+- **F2 (fixed)** — closes §6.3a: `transport/http.rs` now rescues HTTP-400 responses whose
+  body is a JSON-RPC error envelope into normal error classification
+  (`rescue_400_jsonrpc_envelope`, applied ONLY to the two JSON-RPC request senders;
+  404/auth statuses keep transport semantics — session-expiry recovery keys on 404).
+  The discover probe uses a separate transport path and is untouched. Tests:
+  `call_tool_recovers_from_plain_json_400_header_mismatch` (revert-and-fail recorded —
+  the failure shows the exact buried envelope), `http_404_with_json_body_stays_a_transport_error`.
+- **F3 (accepted)** — status header above corrected: "audited with unresolved MUST gaps",
+  never "fully compliant" while ❌ MUST rows remain.
+- **F4 (fixed)** — matrix reconciliation: 19 stale `-32004` literals in live rows →
+  `-32022`; 10 dead test-name citations renamed; row 234's rotted "data.supported is
+  never read" claim corrected; three stale provenance sites updated to the current pin
+  (historical gap-register bullets and quoted superseded row text deliberately preserved).
+- **F5 (half-accepted)** — the new `mcp_headers_2026.rs` comment's upstream commit hash
+  removed (spec-name anchor kept). The reviewer's second citation
+  (`builder.rs` "previously masqueraded" comment) is PRE-EXISTING (v0.3.41, verified via
+  `git log -L`) — not new, left untouched per touch-only-what-you-must.
+
+### MUST-gap worklist for full compliance (from the 541-row matrix, ❌ + MUST)
+
+| Row | Gap | Scope |
+|---|---|---|
+| ~207 | JSON Schema dialect validation ($schema inspection + unsupported-dialect error) — BP-3 | server + client, own slice |
+| ~332 | Server-sent `notifications/cancelled` / subscription-close emission (ties to the OUTSTANDING.md graceful-close item) | server, needs shutdown-signal infra |
+| ~410 | Client MUST Base64-sentinel-encode `Mcp-Name` values that are not safely ASCII (mirror of the fixed server-side B4) | client transport, small |
+| ~537 | Sampling message-shape enforcement (tool-result-only user messages, toolUseId pairing) — GAP-CF-9 | protocol validation helper + reject path |
+
+MUST-level 🧪 rows (implemented, untested — need named tests to reach ✅ per the matrix
+legend): UTF-8 body rejection (~345), SSE colon-comment handling (~392), x-mcp-header
+static-reachability (~407), sampling capability declaration (~532), progress unknown-ID
+tolerance (~572), per-connection tool-set stability (~696), request-ID uniqueness/echo
+(~184/185).

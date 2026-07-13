@@ -202,10 +202,10 @@ async fn mismatched_mcp_name_is_rejected() {
     assert_header_mismatch(resp, "Mcp-Name header/body mismatch").await;
 }
 
-/// SEP-2243 §Value Encoding, extended to `Mcp-Name` by upstream commit
-/// `71d924e2`: servers MUST decode a Base64-sentinel-encoded `Mcp-Name`
-/// before comparing it to the body value. `=?base64?IHBhZGRlZCA=?=` is the
-/// spec's own encoding example for `" padded "`.
+/// SEP-2243 §Value Encoding: servers MUST decode a Base64-sentinel-encoded
+/// `Mcp-Name` before comparing it to the body value.
+/// `=?base64?IHBhZGRlZCA=?=` is the spec's own encoding example for
+/// `" padded "`.
 #[tokio::test]
 async fn base64_encoded_mcp_name_decodes_and_matches() {
     let url = start_server().await;

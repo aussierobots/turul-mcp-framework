@@ -111,14 +111,21 @@ pub(crate) fn classify_probe(
         // requested 2026-07-28 and declined it — the spec's structured
         // negotiation signal. "The client SHOULD select a mutually supported
         // version from the supported list": fall back to 2025-11-25 when the
-        // server's data.supported includes it (or sent no list); surface the
-        // list when no mutual version exists.
+        // server's data.supported names it; surface the list when no mutual
+        // version exists. With no list at all there is no server-named
+        // mutual version to select — that is not license to guess, so this
+        // aborts rather than falling back on inference.
         DiscoverProbe::JsonRpcError(UNSUPPORTED_PROTOCOL_VERSION, supported) => match supported {
-            Some(list) if !list.iter().any(|v| v == "2025-11-25") => ProbeDecision::Abort(format!(
+            Some(list) if list.iter().any(|v| v == "2025-11-25") => ProbeDecision::FallbackTo2025,
+            Some(list) => ProbeDecision::Abort(format!(
                 "server declined 2026-07-28 and its supported versions {list:?} \
                          include no version this client speaks (2026-07-28, 2025-11-25)"
             )),
-            _ => ProbeDecision::FallbackTo2025,
+            None => ProbeDecision::Abort(
+                "server declined 2026-07-28 (UnsupportedProtocolVersionError) but named no \
+                 supported-version list to select from — not a downgrade trigger"
+                    .to_string(),
+            ),
         },
 
         // HeaderMismatch / MissingRequiredClientCapability: the server
@@ -178,14 +185,6 @@ mod tests {
 
     #[test]
     fn unsupported_protocol_version_falls_back_to_2025() {
-        // -32022 in response to the 2026-07-28 probe = the server's
-        // structured "I don't speak 2026" — the spec's negotiation signal to
-        // retry lower.
-        assert_eq!(
-            classify_probe(DiscoverProbe::JsonRpcError(-32022, None), false),
-            ProbeDecision::FallbackTo2025,
-            "JSON-RPC error -32022 must be recognized as UnsupportedProtocolVersionError"
-        );
         // "The client SHOULD select a mutually supported version from the
         // supported list": 2025-11-25 in data.supported → fall back to it.
         assert_eq!(
@@ -206,6 +205,20 @@ mod tests {
             ),
             ProbeDecision::Abort(msg) if msg.contains("2099-01-01")
         ));
+    }
+
+    #[test]
+    fn unsupported_protocol_version_with_no_list_aborts_without_downgrade() {
+        // -32022 with no data.supported list at all: there is no server-named
+        // mutual version to select from, so falling back to 2025-11-25 would
+        // be an inference, not a spec-directed choice. Abort instead.
+        assert!(
+            matches!(
+                classify_probe(DiscoverProbe::JsonRpcError(-32022, None), false),
+                ProbeDecision::Abort(_)
+            ),
+            "-32022 with no supported list must abort, not silently fall back to 2025-11-25"
+        );
     }
 
     #[test]
