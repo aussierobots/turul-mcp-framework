@@ -4,7 +4,7 @@
 in commits `87430c17` / `4690e007` / `a14d9f91` / `fdfcc2a9` / `509a3552` plus the
 2026-07-14 F1/F2 slice (§7). The compliance matrix retains recorded MUST-level ❌ gaps —
 notably BP-3 (JSON Schema dialect validation), GAP-CF-9 (sampling message-shape
-enforcement), the client-side `Mcp-Name` encode obligation (matrix row ~410), and the
+enforcement), and the
 server-sent cancellation/subscription-close obligation (row ~332) — a documented
 limitation does not satisfy a MUST, and this branch must not be described as fully
 latest-draft compliant until they are implemented. This document is the reviewable record
@@ -229,7 +229,7 @@ Codex review findings verified and dispositioned:
 |---|---|---|
 | ~207 | JSON Schema dialect validation ($schema inspection + unsupported-dialect error) — BP-3 | server + client, own slice |
 | ~332 | Server-sent `notifications/cancelled` / subscription-close emission (ties to the OUTSTANDING.md graceful-close item) | server, needs shutdown-signal infra |
-| ~410 | Client MUST Base64-sentinel-encode `Mcp-Name` values that are not safely ASCII (mirror of the fixed server-side B4) | client transport, small |
+| ~410 | ~~Client MUST Base64-sentinel-encode `Mcp-Name` values~~ **FIXED 2026-07-14** — `apply_request_metadata_headers` routes through `encode_param_value`; wire test `mcp_name_header_is_base64_sentinel_encoded_when_not_plain_ascii`, revert-and-fail recorded; matrix row re-graded ✅ | done |
 | ~537 | Sampling message-shape enforcement (tool-result-only user messages, toolUseId pairing) — GAP-CF-9 | protocol validation helper + reject path |
 
 MUST-level 🧪 rows (implemented, untested — need named tests to reach ✅ per the matrix

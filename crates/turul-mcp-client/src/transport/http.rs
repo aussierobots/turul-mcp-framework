@@ -235,7 +235,23 @@ impl HttpTransport {
                 _ => None,
             };
             if let Some(name) = name {
-                builder = builder.header("Mcp-Name", name);
+                // SEP-2243 §Value Encoding: an `Mcp-Name` value that cannot
+                // ride as a plain ASCII header value MUST be Base64-sentinel
+                // encoded; plain values pass through verbatim.
+                #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+                let header_value = turul_mcp_protocol_2026_07_28::headers::encode_param_value(
+                    &Value::String(name.to_string()),
+                )
+                .unwrap_or_else(|| name.to_string());
+                // A 2025-11-25-only build never reaches this 2026 header path
+                // at runtime (the protocol-version gate above), so the raw
+                // value stands in where the 2026 crate is not linked.
+                #[cfg(not(any(
+                    feature = "client-bilingual",
+                    feature = "client-2026-07-28-only"
+                )))]
+                let header_value = name.to_string();
+                builder = builder.header("Mcp-Name", header_value);
             }
         }
         builder

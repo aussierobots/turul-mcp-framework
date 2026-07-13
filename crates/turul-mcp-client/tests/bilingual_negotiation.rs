@@ -9,7 +9,7 @@
 use turul_mcp_client::config::ClientConfig;
 use turul_mcp_client::transport::http::HttpTransport;
 use turul_mcp_client::{McpClient, McpVersion};
-use wiremock::matchers::{body_partial_json, method};
+use wiremock::matchers::{body_partial_json, header, method};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 /// The SSE GET listener fires on connect; return 404 so it exits cleanly
@@ -639,4 +639,69 @@ async fn http_404_with_json_body_stays_a_transport_error() {
         ),
         "404 must remain a transport HttpStatus error, got: {err:?}"
     );
+}
+
+/// SEP-2243 §Value Encoding, client side: an `Mcp-Name` value that cannot
+/// ride as a plain ASCII header value MUST be Base64-sentinel-encoded.
+/// `" padded "` (leading/trailing whitespace) is the spec's own encoding
+/// example — the mock matches ONLY the encoded header form
+/// `=?base64?IHBhZGRlZCA=?=`, so a raw-value regression cannot satisfy it.
+#[tokio::test]
+async fn mcp_name_header_is_base64_sentinel_encoded_when_not_plain_ascii() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"],
+                        "capabilities": {},
+                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .and(header("Mcp-Name", "=?base64?IHBhZGRlZCA=?="))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_1",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "content": [{ "type": "text", "text": "ok" }],
+                        "isError": false
+                    }
+                })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("connect against a 2026 server must succeed");
+
+    let call_result = client
+        .call_tool(" padded ", serde_json::json!({}))
+        .await
+        .expect("the encoded Mcp-Name header must match the validating mock");
+    assert!(!call_result.is_error.unwrap_or(false));
 }
