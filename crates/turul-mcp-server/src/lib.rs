@@ -198,6 +198,9 @@ pub use server::SessionAwareInitializeHandler;
 pub use server::{
     ListToolsHandler, McpServer, SessionAwareMcpHandlerBridge, SessionAwareToolHandler,
 };
+/// Handler for the 2026-07-28 `server/discover` method
+#[cfg(feature = "protocol-2026-07-28")]
+pub use server::DiscoverHandler;
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionEventDispatcher, SessionManager};
 /// Task executor abstraction for pluggable execution backends

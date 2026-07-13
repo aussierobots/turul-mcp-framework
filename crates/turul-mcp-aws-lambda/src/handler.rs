@@ -45,6 +45,11 @@ pub struct LambdaMcpHandler {
     /// Custom route registry (e.g., .well-known endpoints)
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
+    /// Same dispatcher Arc held by session_handler/streamable_handler, kept
+    /// for method-registration introspection. Only read by in-crate tests.
+    #[cfg_attr(not(test), allow(dead_code))]
+    dispatcher: Arc<JsonRpcDispatcher<McpError>>,
+
     /// Dynamic tool registry for request-time change detection
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<turul_mcp_server::ToolRegistry>>,
@@ -99,6 +104,7 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            dispatcher,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
             #[cfg(feature = "cors")]
@@ -131,6 +137,8 @@ impl LambdaMcpHandler {
             middleware_stack.clone(),
         );
 
+        let dispatcher_for_introspection = dispatcher.clone();
+
         // Create StreamableHttpHandler for MCP 2025-11-25 support
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config),
@@ -147,6 +155,7 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            dispatcher: dispatcher_for_introspection,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
             #[cfg(feature = "cors")]
@@ -206,6 +215,8 @@ impl LambdaMcpHandler {
         )
         .with_tool_fingerprint(tool_fingerprint.clone());
 
+        let dispatcher_for_introspection = dispatcher.clone();
+
         // Create StreamableHttpHandler with custom middleware and fingerprint
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config),
@@ -222,6 +233,7 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry,
+            dispatcher: dispatcher_for_introspection,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
             #[cfg(feature = "cors")]
@@ -253,6 +265,12 @@ impl LambdaMcpHandler {
     pub fn with_cors(mut self, cors_config: CorsConfig) -> Self {
         self.cors_config = Some(cors_config);
         self
+    }
+
+    /// JSON-RPC methods registered on the dispatcher, for parity testing.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn registered_methods(&self) -> Vec<String> {
+        self.dispatcher.registered_methods()
     }
 
     /// Get access to the underlying stream manager for notifications

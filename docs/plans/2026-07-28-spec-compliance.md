@@ -1128,6 +1128,14 @@ the prior release-readiness review for history — deleted in the 0.4 docs purge
   API Gateway authorizers remain supported via `x-authorizer-*` extraction.
 - Task support (2025 lane / future SEP-2663 extension crate) still requires
   `.with_task_storage()` with a durable backend (DynamoDB).
+- Dispatcher method-registration parity (2026-07-13): `turul-mcp-aws-lambda`'s registered
+  method set now mirrors the non-Lambda `McpServerBuilder` authority per feature lane —
+  `server/discover` (2026 lane) and `notifications/cancelled` (both lanes) added; `ping`,
+  `roots/list`, `notifications/message`, `notifications/progress`, `notifications/roots/*`
+  gated to `protocol-2025-11-25`; the unconditional `completion/complete` mock removed. A
+  crate-private `registered_methods()` parity probe plus wire tests pin the registered set
+  per lane against an explicit spec-derived expectation. See ADR-001 / ADR-029 revision logs
+  (2026-07-13).
 
 **EC2 / containers (long-lived servers)**
 - Same binary serves both: default build = 2026 stateless; `--no-default-features

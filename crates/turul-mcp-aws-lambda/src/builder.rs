@@ -173,11 +173,14 @@ impl LambdaMcpServerBuilder {
 
         // Initialize handlers with defaults (same as McpServerBuilder)
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
+        // ping (no PingRequest in the schema) was removed from the 2026-07-28
+        // core, so it is 2025-only.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
-        handlers.insert(
-            "completion/complete".to_string(),
-            Arc::new(CompletionHandler::new()),
-        );
+        // completion/complete is NOT a default handler: "Servers SHOULD
+        // return -32601 when completion is unsupported" — it is registered
+        // by build() when providers exist, so an unconfigured server answers
+        // 404 + -32601 like any unknown method.
         handlers.insert(
             "resources/list".to_string(),
             Arc::new(ResourcesHandler::new()),
@@ -196,6 +199,9 @@ impl LambdaMcpServerBuilder {
         );
         #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
+        // roots/list is a server→client request on 2026 (carried inside MRTR
+        // input requests) — only the 2025 stateful lane hosts it inbound.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
         #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
@@ -212,13 +218,30 @@ impl LambdaMcpServerBuilder {
 
         // Add notification handlers
         let notifications_handler = Arc::new(NotificationsHandler);
+        // `ClientNotification` (DRAFT-2026-v1 schema) dropped `ProgressNotification`
+        // from the client→server union, and `notifications/message` was never a
+        // member of that union on any pin — both are inbound-accepted only on the
+        // 2025-11-25 lane.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/message".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/progress".to_string(),
             notifications_handler.clone(),
+        );
+        // CancelledNotification has a schema binding on both lanes. On
+        // Streamable HTTP the cancellation MECHANISM is closing the request's
+        // response stream; an inbound notifications/cancelled is accepted and
+        // ignored — request ids are per-client on the stateless lane and
+        // cannot be correlated across connections ("Invalid cancellation
+        // notifications SHOULD be ignored"). The dedicated handler logs
+        // requestId + reason.
+        handlers.insert(
+            "notifications/cancelled".to_string(),
+            Arc::new(CancelledNotificationHandler),
         );
         // MCP 2025-11-25 spec-correct underscore form
         handlers.insert(
@@ -237,6 +260,7 @@ impl LambdaMcpServerBuilder {
             "notifications/prompts/list_changed".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/roots/list_changed".to_string(),
             notifications_handler.clone(),
@@ -254,10 +278,12 @@ impl LambdaMcpServerBuilder {
             "notifications/prompts/listChanged".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/roots/listChanged".to_string(),
-            notifications_handler,
+            notifications_handler.clone(),
         );
+        let _ = notifications_handler;
 
         Self {
             name: "turul-mcp-aws-lambda".to_string(),
@@ -1124,7 +1150,6 @@ impl LambdaMcpServerBuilder {
             });
         }
 
-        // Add RootsHandler if roots were configured (same pattern as MCP server)
         let mut handlers = self.handlers;
 
         // Route completion/complete through the registered providers.
@@ -1134,6 +1159,10 @@ impl LambdaMcpServerBuilder {
                 Arc::new(CompletionHandler::new().with_providers(self.completions.clone())),
             );
         }
+        // Add RootsHandler if roots were configured. 2025 lane only: on 2026
+        // the server REQUESTS roots from the client via MRTR; it never hosts
+        // an inbound roots/list.
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.roots.is_empty() {
             let mut roots_handler = RootsHandler::new();
             for root in &self.roots {
@@ -1431,6 +1460,105 @@ mod tests {
             handler.get_stream_manager().as_ref() as *const _ as usize > 0,
             "Stream manager must be initialized"
         );
+    }
+
+    // ── Registered-method parity with the non-Lambda McpServerBuilder gates ──
+    //
+    // Builds a server through the production path (builder → build() →
+    // handler()) and asserts the dispatcher's registered method set matches
+    // an explicit, spec-derived literal — not a diff against the non-Lambda
+    // builder, which could share a bug.
+
+    #[cfg(feature = "protocol-2026-07-28")]
+    #[tokio::test]
+    async fn test_registered_methods_parity_2026_07_28() {
+        use std::collections::BTreeSet;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("parity-test")
+            .version("1.0.0")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+        let handler = server.handler().await.unwrap();
+
+        let expected: BTreeSet<String> = [
+            "tools/list",
+            "tools/call",
+            "server/discover",
+            "resources/list",
+            "resources/read",
+            "prompts/list",
+            "prompts/get",
+            "notifications/cancelled",
+            "notifications/resources/list_changed",
+            "notifications/resources/updated",
+            "notifications/tools/list_changed",
+            "notifications/prompts/list_changed",
+            "notifications/resources/listChanged",
+            "notifications/tools/listChanged",
+            "notifications/prompts/listChanged",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+        let actual: BTreeSet<String> = handler.registered_methods().into_iter().collect();
+        assert_eq!(actual, expected);
+    }
+
+    #[cfg(feature = "protocol-2025-11-25")]
+    #[tokio::test]
+    async fn test_registered_methods_parity_2025_11_25() {
+        use std::collections::BTreeSet;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("parity-test")
+            .version("1.0.0")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+        let handler = server.handler().await.unwrap();
+
+        let expected: BTreeSet<String> = [
+            "initialize",
+            "tools/list",
+            "tools/call",
+            "ping",
+            "resources/list",
+            "resources/read",
+            "prompts/list",
+            "prompts/get",
+            "logging/setLevel",
+            "roots/list",
+            "sampling/createMessage",
+            "elicitation/create",
+            "notifications/message",
+            "notifications/progress",
+            "notifications/cancelled",
+            "notifications/resources/list_changed",
+            "notifications/resources/updated",
+            "notifications/tools/list_changed",
+            "notifications/prompts/list_changed",
+            "notifications/roots/list_changed",
+            "notifications/resources/listChanged",
+            "notifications/tools/listChanged",
+            "notifications/prompts/listChanged",
+            "notifications/roots/listChanged",
+            "notifications/initialized",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+        let actual: BTreeSet<String> = handler.registered_methods().into_iter().collect();
+        assert_eq!(actual, expected);
     }
 
     #[cfg(feature = "cors")]

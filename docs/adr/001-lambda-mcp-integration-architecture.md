@@ -226,3 +226,7 @@ This is simpler than the 2025-11-25 sequence (which carries `validate_session_ex
 - ADR-023 §"DRAFT-2026-v1: per-request fingerprint persistence" — tool change detection.
 - ADR-027 §"Status update (2026-05-31)" — feature flag mechanics, publication gate.
 - ADR-028 — tasks/apps as separate extension crates.
+
+## Revision log
+
+- **2026-07-13 (Lambda registration-parity sync)** — Synced `turul-mcp-aws-lambda`'s dispatcher method-registration table to the non-Lambda `McpServerBuilder` authority (`crates/turul-mcp-server/src/builder.rs`, `server.rs`), per feature lane. The modern-only, single-spec-per-build posture (ADR-029) is unchanged — this is a registration-set correction, not an architecture change. Added: `server/discover` (`protocol-2026-07-28` lane) and `notifications/cancelled` (both lanes, accept-and-ignore parity). Gated to `protocol-2025-11-25` only: `ping`, `roots/list`, `notifications/message`, `notifications/progress`, `notifications/roots/list_changed` (+ legacy `notifications/roots/listChanged`), and the `notifications/initialized` dispatcher registration. Removed the unconditional `completion/complete` mock registered in `new()` — an unconfigured server now answers `-32601`, matching the build()-time provider-backed registration and the non-Lambda contract. Added a crate-private `registered_methods()` parity probe plus wire tests asserting the registered method set against an explicit spec-derived expectation per lane.

@@ -12,6 +12,7 @@ This directory vendors the upstream MCP specification TypeScript schema **for of
 - **Content sha256**: `6e4cba2d17f7156877357762b6b4b63cd790d8973f61ec35ab73cd61ad67017d` (was `1bf94a601817ab07fc04058a9ff2e031227f9b9384e198ea7f187e75eb4b9ec6`)
 - **Wire protocol version declared in vendored file**: `"2026-07-28"` (line 37, `LATEST_PROTOCOL_VERSION`)
 - **License**: MIT (matches turul-mcp-framework dual MIT-or-Apache-2.0 licensing)
+- **Upstream commit pin**: `93671a3f2bac3bc11b0eb6327c2d029e272b2871` (`schema/draft/schema.ts`) — verified byte-identical (sha256 unchanged: `6e4cba2d17f7156877357762b6b4b63cd790d8973f61ec35ab73cd61ad67017d`) to the vendored file on 2026-07-13.
 
 ## ⚠ DRAFT-PATH WARNING
 

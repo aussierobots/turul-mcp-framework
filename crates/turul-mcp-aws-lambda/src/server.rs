@@ -418,6 +418,20 @@ impl LambdaMcpServer {
         }
         dispatcher.register_method("tools/call".to_string(), tool_handler);
 
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            use turul_mcp_protocol::SERVER_DISCOVER_METHOD;
+            use turul_mcp_server::DiscoverHandler;
+            dispatcher.register_method(
+                SERVER_DISCOVER_METHOD.to_string(),
+                DiscoverHandler::new(
+                    self.implementation.clone(),
+                    self.capabilities.clone(),
+                    self.instructions.clone(),
+                ),
+            );
+        }
+
         // Register all MCP handlers with session awareness (reuse MCP server bridge)
         use turul_mcp_server::SessionAwareMcpHandlerBridge;
         for (method, handler) in &self.handlers {
@@ -429,16 +443,23 @@ impl LambdaMcpServer {
             dispatcher.register_method(method.clone(), bridge_handler);
         }
 
-        // Register notifications/initialized handler — required for strict lifecycle.
-        // Without this, clients can never complete the MCP handshake.
-        use turul_mcp_server::handlers::InitializedNotificationHandler;
-        let initialized_handler = InitializedNotificationHandler::new(self.session_manager.clone());
-        let initialized_bridge = SessionAwareMcpHandlerBridge::new(
-            Arc::new(initialized_handler),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        dispatcher.register_method("notifications/initialized".to_string(), initialized_bridge);
+        // notifications/initialized exists only in the 2025-11-25 lifecycle; the
+        // 2026-07-28 stateless core has no initialize/initialized handshake.
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            use turul_mcp_server::handlers::InitializedNotificationHandler;
+            let initialized_handler =
+                InitializedNotificationHandler::new(self.session_manager.clone());
+            let initialized_bridge = SessionAwareMcpHandlerBridge::new(
+                Arc::new(initialized_handler),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+            );
+            dispatcher.register_method(
+                "notifications/initialized".to_string(),
+                initialized_bridge,
+            );
+        }
 
         // Create the Lambda handler with all components and middleware
         let middleware_stack = Arc::new(self.middleware_stack.clone());
