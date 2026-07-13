@@ -148,8 +148,36 @@ spec-compliant server answering a plain-JSON 400 for a post-lock request would b
 every `ServerError`-keyed client path (including the B1 retry). Needs its own slice:
 generalize 400-body JSON-RPC reparse beyond the discover probe, with wiremock coverage.
 
-### 6.4 Remaining work to close task success-criterion (b) "all normative MUST/SHOULD dispositioned"
+### 6.4 Row-authoring outcome (completed 2026-07-13)
 
-Row-author the 131 NEW + refresh the 4 CHANGED in `2026-07-28-spec-compliance.md`,
-each mapped to code, test, or explicit n-a/deviation — sized as its own agent slice
-after the B1/B2 fix passes QA.
+Applied: ~52 net new matrix rows + 19 changed-row edits + the M1 code-literal
+corrections (13× `-32003`→`-32021`, 4× `-32001`→`-32020`, rows 395/664 and the gap
+register refreshed against commit `4690e007`). Summary counts re-tallied two independent
+ways: 541 total = 310 ✅ / 72 🟡 / 14 ❌ / 20 🧪 / 125 ➖. The sweep INCREASED the
+recorded gap count (❌ 5→14, 🧪 12→20) — the matrix got more truthful, not greener.
+Remaining `-32003` literals in the matrix are historical gap-register narration only
+(lines ~523/534/563/864/868/1012), each dispositioned; the two live-row strays (ext-tasks
+row, sampling row 818) were corrected during QA (`-32021`, verified against
+`ext_tasks.rs` and `handlers/mod.rs` emission sites).
+
+### 6.5 Grading judgment-call register
+
+The row-authoring agents flagged 18 items as judgment calls rather than force-grading;
+full notes in workflow `wf_36f39e2c-9a4` journal. The load-bearing ones:
+
+- **B4 (real defect, confirmed during QA)** — `streamable_http.rs:1480` compares the
+  `Mcp-Name` header to the body value with plain `!=`; the live draft (upstream commit
+  `71d924e2`) requires servers to DECODE Base64-sentinel-encoded `Mcp-Name`/`Mcp-Param`
+  values before comparing (`decode_param_value` exists in `headers.rs:221` and is used
+  on the Mcp-Param path only). An encoded `Mcp-Name` is falsely rejected as a mismatch.
+  Matrix row graded 🟡 with citations; fix slice queued. Also stale source comment at
+  `handlers/mod.rs:51` (says `-32003`; the code emits `-32021`).
+- allOf-merge / statically-reachable `x-mcp-header` scope: grader's own reading of
+  `walk()` recursion (headers.rs:159-181) — needs a follow-up verification test.
+- MAY-permission rows (custom transports, 403 id-less body, ttlMs authoring freedoms)
+  graded ➖ n/a as unexercised permissions; alternative graders might prefer INFO.
+- Folded multi-quote rows (CIMD client-registration, elicitation §Understanding the
+  Distinction) diverge from one-quote-per-row granularity — deliberate, per cluster
+  guidance, noted here for future re-audits.
+- Trailing-slash issuer SHOULD graded ❌ on "nothing implements it" — arguably ➖
+  (operator-supplied URI); revisit if an issuer-normalization slice lands.
