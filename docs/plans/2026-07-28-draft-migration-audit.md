@@ -304,3 +304,31 @@ Codex round-3 findings, each verified against code before acting:
   meta-validate) not string comparison; bounded `$ref`/composition depth + schema size —
   its own ADR-backed slice. Sampling (GAP-CF-9) enforced after BP-3 while the deprecated
   capability remains supported.
+
+## 10. MUST-test round + row-407 split (2026-07-14, review round 5)
+
+Eight MUST-🧪 rows given named tests (all QA'd against the code; revert-and-fail where
+structurally possible):
+- 184 request-id uniqueness (concurrent), 345 UTF-8 rejection, 392 SSE colon-comment,
+  532 sampling-declared-on-each-request (wire, 2 requests + negative), 623 prompts
+  capability in DiscoverResult (revert-and-fail: flipping list_changed fails the wire
+  assertion), 696 tool-set invariance (two independent clients + intervening request):
+  all → ✅.
+- 185 response-id echo → ✅ as real-wire verification (the echo lives in the external
+  turul-rpc crate, so an in-repo revert is structurally impossible — not a faked revert).
+- **Row 407 SPLIT** (codex round-5): the static-reachable EMISSION side → ✅
+  (`x_mcp_header_emits_only_statically_reachable_properties`); the **invalid-annotation
+  detection + tool-exclusion MUST** ("client MUST exclude the invalid tool from
+  tools/list") is a NEW ❌ gap — `scan_x_mcp_headers::walk` only descends `properties`,
+  so it can't even detect a mis-placed annotation to reject on. The agent's test was
+  reframed to claim only the emission behavior, not the reject MUST.
+
+**Obsolete elicitation cluster** (codex round-5 #2): rows 570/571/572 + gap CF-7 referenced
+`notifications/elicitation/complete` / `elicitationId`, removed from the draft (upstream
+0b7f2e4c / 380f1aff, before our pin); code verified clean; regraded ➖ obsolete (commit
+dabbb3ba).
+
+**MUST-❌ backlog is now THREE**, all client-ingestion/validation features, each its own
+scoped slice: BP-3 (`$schema` dialect validation), GAP-CF-9 (sampling message-shape),
+and x-mcp-header invalid-tool rejection/exclusion. Tally after this round:
+319 ✅ / 70 🟡 / 13 ❌ / 12 🧪 / 127 ➖ (541).

@@ -667,3 +667,38 @@ async fn discover_advertises_registered_feature_capabilities() {
         "registered completion providers must be advertised: {body}"
     );
 }
+
+/// "Servers that support prompts MUST declare the `prompts` capability (with
+/// `listChanged`) in their `DiscoverResult`" (server/prompts). Unlike the
+/// completion-provider server above, `start_server()` is built with
+/// `.with_prompts()`, so this is a genuine "prompts are wired" case. The
+/// framework has no dynamic prompt source on this build, so `listChanged`
+/// must be truthfully `false`, not merely present.
+#[tokio::test]
+async fn discover_advertises_the_prompts_capability_with_truthful_list_changed() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 51, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("discover POST");
+    let body: serde_json::Value = resp.json().await.expect("json");
+    let prompts_caps = &body["result"]["capabilities"]["prompts"];
+    assert!(
+        prompts_caps.is_object(),
+        "a server with prompts wired must advertise capabilities.prompts: {body}"
+    );
+    assert_eq!(
+        prompts_caps["listChanged"],
+        serde_json::json!(false),
+        "static prompt registry must truthfully advertise listChanged=false: {body}"
+    );
+}

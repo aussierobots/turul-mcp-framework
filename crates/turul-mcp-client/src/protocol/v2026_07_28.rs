@@ -341,6 +341,39 @@ mod tests {
         assert!(v["io.modelcontextprotocol/clientCapabilities"]["elicitation"]["url"].is_object());
     }
 
+    /// "Clients that support sampling MUST declare the sampling capability in
+    /// `_meta.io.modelcontextprotocol/clientCapabilities` on each request"
+    /// (client/sampling). `sub_capabilities_map_into_request_meta` above only
+    /// exercises `sampling: true` combined with `sampling_tools: true`, so the
+    /// bare declaration (no sub-capabilities) was never asserted on its own —
+    /// this proves declaring plain `sampling` alone still emits the object.
+    #[test]
+    fn bare_sampling_capability_alone_is_declared_in_request_meta() {
+        let declared = crate::config::DeclaredCapabilities {
+            sampling: true,
+            ..Default::default()
+        };
+        let meta = request_meta("t", "1", &declared);
+        let v = serde_json::to_value(&meta).unwrap();
+        let caps = &v["io.modelcontextprotocol/clientCapabilities"];
+        assert!(
+            caps["sampling"].is_object(),
+            "declaring bare `sampling: true` must still emit a sampling capability object: {caps}"
+        );
+        assert!(caps["sampling"].get("tools").is_none(), "{caps}");
+        assert!(caps["sampling"].get("context").is_none(), "{caps}");
+
+        // Without the declaration, no sampling capability rides at all.
+        let none = request_meta("t", "1", &Default::default());
+        let v = serde_json::to_value(&none).unwrap();
+        assert!(
+            v["io.modelcontextprotocol/clientCapabilities"]
+                .get("sampling")
+                .is_none(),
+            "no declaration without the opt-in: {v}"
+        );
+    }
+
     #[test]
     fn input_required_surfaces_requests_and_state() {
         match check_result_type(&json!({

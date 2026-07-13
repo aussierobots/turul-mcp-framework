@@ -317,4 +317,66 @@ mod param_tests {
         let bindings = scan_x_mcp_headers(&nested).unwrap();
         assert_eq!(bindings[0].argument_pointer, "/outer/inner");
     }
+
+    /// Scoped claim only: `scan_x_mcp_headers` never EMITS an `Mcp-Param-*`
+    /// header binding for an `x-mcp-header` annotation nested under `items`,
+    /// composition keywords (`oneOf`/`anyOf`/`allOf`), or `$ref` — `walk` only
+    /// recurses via a property's own `properties` map, so these are silently
+    /// skipped (not an error) while a genuinely top-level property is found.
+    ///
+    /// This does NOT prove the separate SEP-2243 MUST — "a Streamable HTTP
+    /// client MUST reject/exclude the WHOLE tool definition" when such a
+    /// misplaced annotation is present. That requires first *detecting* the
+    /// annotation to reject on, which `walk` cannot do (it never inspects
+    /// `items`/composition/`$ref` at all, so it has no way to see a violation
+    /// there to act on). That MUST is unimplemented in this workspace; do not
+    /// read this test as covering it.
+    #[test]
+    fn x_mcp_header_emits_only_statically_reachable_properties() {
+        // Array items — not statically reachable (any array element could
+        // carry it, not a single named property).
+        let via_items = json!({"properties": {
+            "tags": {"type": "array", "items": {"type": "string", "x-mcp-header": "Tag"}}
+        }});
+        assert!(
+            scan_x_mcp_headers(&via_items).unwrap().is_empty(),
+            "x-mcp-header under `items` must not be found"
+        );
+
+        // allOf composition.
+        let via_all_of = json!({"properties": {
+            "region": {"allOf": [{"type": "string", "x-mcp-header": "Region"}]}
+        }});
+        assert!(
+            scan_x_mcp_headers(&via_all_of).unwrap().is_empty(),
+            "x-mcp-header under `allOf` must not be found"
+        );
+
+        // anyOf composition.
+        let via_any_of = json!({"properties": {
+            "region": {"anyOf": [{"type": "string", "x-mcp-header": "Region"}]}
+        }});
+        assert!(
+            scan_x_mcp_headers(&via_any_of).unwrap().is_empty(),
+            "x-mcp-header under `anyOf` must not be found"
+        );
+
+        // $ref indirection.
+        let via_ref = json!({
+            "properties": { "region": {"$ref": "#/$defs/Region"} },
+            "$defs": { "Region": {"type": "string", "x-mcp-header": "Region"} }
+        });
+        assert!(
+            scan_x_mcp_headers(&via_ref).unwrap().is_empty(),
+            "x-mcp-header reached only via $ref must not be found"
+        );
+
+        // Control: a genuinely top-level property IS found.
+        let top_level = json!({"properties": {
+            "region": {"type": "string", "x-mcp-header": "Region"}
+        }});
+        let bindings = scan_x_mcp_headers(&top_level).unwrap();
+        assert_eq!(bindings.len(), 1);
+        assert_eq!(bindings[0].header_name, "Region");
+    }
 }

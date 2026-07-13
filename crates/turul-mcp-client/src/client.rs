@@ -4151,4 +4151,34 @@ mod tests {
             "build_request envelope must be semantically equivalent to the prior hand-rolled form"
         );
     }
+
+    /// "The request ID MUST NOT match the ID of any other request the sender
+    /// has issued and not yet received a response for" (basic §Requests).
+    /// Concurrent callers on a shared client must never observe the same id —
+    /// this is the actual guarantee the atomic counter provides, distinct from
+    /// the sequential-call case already covered by
+    /// `test_build_request_id_increments_per_call`.
+    #[tokio::test]
+    async fn test_concurrent_build_request_ids_are_unique() {
+        let (mock, _notifications) = MockTransport::new();
+        let client = Arc::new(McpClient::new(Box::new(mock), ClientConfig::default()));
+
+        let mut handles = Vec::new();
+        for _ in 0..64 {
+            let client = Arc::clone(&client);
+            handles.push(tokio::spawn(async move {
+                client.build_request("ping", json!({}))["id"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            }));
+        }
+
+        let mut ids = std::collections::HashSet::new();
+        for handle in handles {
+            let id = handle.await.unwrap();
+            assert!(ids.insert(id.clone()), "duplicate request id observed: {id}");
+        }
+        assert_eq!(ids.len(), 64, "every concurrent request must get a distinct id");
+    }
 }

@@ -1849,6 +1849,46 @@ mod tests {
         );
     }
 
+    /// "Per the SSE specification, any line beginning with a colon is a
+    /// comment that carries no event data; clients must ignore such lines and
+    /// must not treat them as malformed input" (basic/transports/streamable-http).
+    /// A `:`-prefixed line matches neither the `data:` nor `data: ` prefix
+    /// `parse_sse_lines` checks for, so it falls into the `continue` branch —
+    /// this proves a comment line surrounded by real frames neither breaks
+    /// parsing nor is misrouted as a notification/response.
+    #[tokio::test]
+    async fn test_sse_colon_comment_line_is_ignored() {
+        let sse_data = b": this is a comment, ignore me\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progress\":50}}\n: another comment\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_data.to_vec())]);
+
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+
+        assert!(
+            result.is_ok(),
+            "comment lines must not be treated as malformed input: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap()["id"],
+            "req_0",
+            "final result frame must still be parsed past the comment lines"
+        );
+
+        let events = transport.queued_events.lock();
+        assert_eq!(
+            events.len(),
+            1,
+            "exactly one notification event, comment lines produce none"
+        );
+        match &events[0] {
+            ServerEvent::Notification(val) => {
+                assert_eq!(val["method"], "notifications/progress");
+            }
+            other => panic!("Expected ServerEvent::Notification, got {:?}", other),
+        }
+    }
+
     #[tokio::test]
     async fn test_sse_post_no_duplicate_event_delivery() {
         use tokio::io::AsyncBufReadExt;

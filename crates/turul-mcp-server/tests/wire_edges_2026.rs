@@ -355,6 +355,141 @@ async fn tools_list_is_deterministic_paginated_and_cacheable() {
     assert_eq!(body["error"]["code"], -32602, "{body}");
 }
 
+/// "Result responses MUST include the same ID as the request they correspond
+/// to" (basic §Requests). Prior evidence only traced the *error*-response
+/// echo path (`JsonRpcError::new(Some(req.id.clone()), ...)`); this drives a
+/// genuinely successful `tools/list` and asserts the success-response id
+/// matches a distinctive, non-default request id on the real wire.
+#[tokio::test]
+async fn success_response_echoes_the_request_id() {
+    let url = start_server().await;
+    let (status, body) = post_raw(
+        &url,
+        "tools/list",
+        None,
+        serde_json::json!({
+            "jsonrpc": "2.0", "id": 987654, "method": "tools/list",
+            "params": { "_meta": meta() }
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert!(body.get("error").is_none(), "{body}");
+    assert_eq!(
+        body["id"], 987654,
+        "success response id must echo the request id: {body}"
+    );
+}
+
+/// "JSON-RPC messages MUST be UTF-8 encoded" (basic/transports). The server
+/// must reject a POST body containing invalid UTF-8 bytes with HTTP 400
+/// rather than attempting to parse it as JSON-RPC.
+#[tokio::test]
+async fn non_utf8_post_body_is_rejected_with_400() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    // 0xFF is not a valid UTF-8 continuation/lead byte in this position.
+    let invalid_utf8: &[u8] = b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{\"x\":\"\xff\xfe\"}}";
+
+    let resp = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/list")
+        .body(invalid_utf8.to_vec())
+        .send()
+        .await
+        .expect("POST with invalid UTF-8 body");
+
+    assert_eq!(
+        resp.status(),
+        400,
+        "a non-UTF-8 POST body must be rejected with 400"
+    );
+    let body: serde_json::Value = resp.json().await.expect("json error body");
+    let message = body["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.to_ascii_lowercase().contains("utf-8"),
+        "error message should name the UTF-8 violation: {body}"
+    );
+}
+
+async fn list_tools_on(client: &reqwest::Client, url: &str) -> serde_json::Value {
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/list")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("tools/list POST");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("json body");
+    body["result"]["tools"].clone()
+}
+
+/// "Tool set MUST NOT vary per-connection" (server/tools) — two entirely
+/// independent `reqwest::Client` instances (separate connection pools, so
+/// genuinely separate TCP connections, not just separate logical calls) must
+/// see the identical tool set from the same running server.
+#[tokio::test]
+async fn tools_list_is_invariant_across_independent_connections() {
+    let url = start_server().await;
+
+    let client_a = reqwest::Client::new();
+    let client_b = reqwest::Client::new();
+
+    let from_a = list_tools_on(&client_a, &url).await;
+    let from_b = list_tools_on(&client_b, &url).await;
+
+    assert_eq!(
+        from_a, from_b,
+        "tools/list must not vary across independent client connections"
+    );
+}
+
+/// "Tool set MUST NOT vary ... as a side effect of other requests" (server/tools).
+/// Two `tools/list` snapshots on one client bracket an intervening, unrelated
+/// `tools/call` — proving that request has no side effect on the advertised
+/// tool set. (This does not by itself prove per-connection invariance, since
+/// `reqwest::Client` pools rather than guarantees one fixed TCP connection —
+/// that half of the requirement is covered separately, above.)
+#[tokio::test]
+async fn tools_list_is_unchanged_by_an_intervening_unrelated_request() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let before = list_tools_on(&client, &url).await;
+
+    let call_resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "alpha_tool")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+            "params": { "_meta": meta(), "name": "alpha_tool", "arguments": {} }
+        }))
+        .send()
+        .await
+        .expect("tools/call POST");
+    assert_eq!(call_resp.status(), 200);
+
+    let after = list_tools_on(&client, &url).await;
+
+    assert_eq!(
+        before, after,
+        "tools/list must not vary as a side effect of an intervening tools/call"
+    );
+}
+
 /// resources/read for a nonexistent URI → -32602 on the real wire (MUST).
 #[tokio::test]
 async fn nonexistent_resource_is_invalid_params_on_the_wire() {
