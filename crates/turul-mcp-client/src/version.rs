@@ -42,8 +42,9 @@ pub(crate) enum DiscoverProbe {
     /// Server returned a valid `DiscoverResult` — it speaks 2026-07-28.
     Discovered,
     /// Server returned a JSON-RPC error response carrying this `error.code`.
-    /// For `-32004` the structured `error.data.supported` list rides along
-    /// (None when the server sent no data).
+    /// For the UnsupportedProtocolVersionError code (`-32022`) the structured
+    /// `error.data.supported` list rides along (None when the server sent no
+    /// data).
     JsonRpcError(i64, Option<Vec<String>>),
     /// The HTTP request itself failed with this non-2xx status.
     HttpStatus(u16),
@@ -68,8 +69,20 @@ const METHOD_NOT_FOUND: i64 = -32601;
 /// JSON-RPC `UnsupportedProtocolVersionError` — a modern server's structured
 /// refusal of the probe's requested version (HTTP 400 body). The probe always
 /// requests 2026-07-28, so this code means "this server does not speak 2026".
-const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32004;
+/// Mirrors `turul_mcp_protocol_2026_07_28::McpError::UnsupportedProtocolVersion`.
+const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32022;
 const INVALID_PARAMS: i64 = -32602;
+
+/// JSON-RPC `HeaderMismatchError` — mirrors
+/// `turul_mcp_protocol_2026_07_28::headers::ERROR_CODE_HEADER_MISMATCH`. A
+/// probe rejected with this code proves the server validated `server/discover`
+/// against the 2026-07-28 header contract — a modern-server signal, not a
+/// downgrade trigger.
+const HEADER_MISMATCH: i64 = -32020;
+/// JSON-RPC `MissingRequiredClientCapabilityError` — mirrors
+/// `turul_mcp_protocol_2026_07_28::McpError::MissingRequiredClientCapability`.
+/// Same modern-server signal as `HEADER_MISMATCH`.
+const MISSING_REQUIRED_CLIENT_CAPABILITY: i64 = -32021;
 
 /// Decide the negotiation action from a `server/discover` probe outcome.
 ///
@@ -107,6 +120,19 @@ pub(crate) fn classify_probe(
             )),
             _ => ProbeDecision::FallbackTo2025,
         },
+
+        // HeaderMismatch / MissingRequiredClientCapability: the server
+        // understood `server/discover` and validated it against the
+        // 2026-07-28 wire contract before rejecting it — this itself proves
+        // the server speaks 2026-07-28. Recognized modern-server signal,
+        // never a downgrade trigger.
+        DiscoverProbe::JsonRpcError(code @ HEADER_MISMATCH, _)
+        | DiscoverProbe::JsonRpcError(code @ MISSING_REQUIRED_CLIENT_CAPABILITY, _) => {
+            ProbeDecision::Abort(format!(
+                "server/discover rejected with a recognized modern-server error {code}; \
+                 the server speaks 2026-07-28 — not a downgrade trigger"
+            ))
+        }
 
         // Any other JSON-RPC error means the server UNDERSTOOD `server/discover`
         // and rejected it for an unrelated reason — not a version signal.
@@ -152,18 +178,20 @@ mod tests {
 
     #[test]
     fn unsupported_protocol_version_falls_back_to_2025() {
-        // -32004 in response to the 2026-07-28 probe = the server's structured
-        // "I don't speak 2026" — the spec's negotiation signal to retry lower.
+        // -32022 in response to the 2026-07-28 probe = the server's
+        // structured "I don't speak 2026" — the spec's negotiation signal to
+        // retry lower.
         assert_eq!(
-            classify_probe(DiscoverProbe::JsonRpcError(-32004, None), false),
-            ProbeDecision::FallbackTo2025
+            classify_probe(DiscoverProbe::JsonRpcError(-32022, None), false),
+            ProbeDecision::FallbackTo2025,
+            "JSON-RPC error -32022 must be recognized as UnsupportedProtocolVersionError"
         );
         // "The client SHOULD select a mutually supported version from the
         // supported list": 2025-11-25 in data.supported → fall back to it.
         assert_eq!(
             classify_probe(
                 DiscoverProbe::JsonRpcError(
-                    -32004,
+                    -32022,
                     Some(vec!["2025-11-25".to_string(), "2025-06-18".to_string()])
                 ),
                 false
@@ -173,11 +201,45 @@ mod tests {
         // No mutually supported version → surface the list, do not guess.
         assert!(matches!(
             classify_probe(
-                DiscoverProbe::JsonRpcError(-32004, Some(vec!["2099-01-01".to_string()])),
+                DiscoverProbe::JsonRpcError(-32022, Some(vec!["2099-01-01".to_string()])),
                 false
             ),
             ProbeDecision::Abort(msg) if msg.contains("2099-01-01")
         ));
+    }
+
+    #[test]
+    fn pre_renumbering_32004_is_unrecognized_and_aborts() {
+        // -32004 was the pre-2026-07-02 UnsupportedProtocolVersionError
+        // allocation; it is now implementation-defined (-32000..-32019 range)
+        // and unrelated to this client. No alias — an unrecognized code
+        // aborts (deliberate downgrade-resistance deviation), it does not
+        // fall back to 2025-11-25.
+        assert!(
+            matches!(
+                classify_probe(DiscoverProbe::JsonRpcError(-32004, None), false),
+                ProbeDecision::Abort(_)
+            ),
+            "-32004 must be treated as an unrecognized error, not the UnsupportedProtocolVersionError signal"
+        );
+    }
+
+    #[test]
+    fn recognized_modern_server_errors_abort_without_downgrade() {
+        // HeaderMismatch (-32020) and MissingRequiredClientCapability
+        // (-32021): the server understood and validated `server/discover`
+        // against the 2026-07-28 wire contract before rejecting it — this
+        // itself proves the server speaks 2026-07-28. Recognized
+        // modern-server signals, never a downgrade trigger.
+        for code in [-32020, -32021] {
+            assert!(
+                matches!(
+                    classify_probe(DiscoverProbe::JsonRpcError(code, None), false),
+                    ProbeDecision::Abort(_)
+                ),
+                "JSON-RPC error {code} is a recognized modern-server signal and must abort, not downgrade"
+            );
+        }
     }
 
     #[test]

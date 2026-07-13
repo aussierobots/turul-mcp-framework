@@ -275,7 +275,7 @@ impl turul_mcp_server::McpTool for ExecuteSqlTool {
 #[tokio::test]
 async fn client_mirrors_mcp_param_headers_from_x_mcp_header_annotations() {
     // The server VALIDATES Mcp-Param-* (an annotated argument without its
-    // header is rejected -32001), so a green call below proves the client
+    // header is rejected -32020), so a green call below proves the client
     // actually emitted the mirror header.
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()

@@ -435,7 +435,7 @@ impl McpClient {
             Ok(Err(McpClientError::Transport(TransportError::HttpStatus { status, message }))) => {
                 // A 400 whose body is a recognized modern JSON-RPC error is a
                 // negotiation signal, not a transport failure — surface the code
-                // (e.g. -32004 UnsupportedProtocolVersionError) to the classifier.
+                // (e.g. -32022 UnsupportedProtocolVersionError) to the classifier.
                 if let Ok(body) = serde_json::from_str::<serde_json::Value>(&message)
                     && let Some(code) = body.pointer("/error/code").and_then(|c| c.as_i64())
                 {
@@ -1059,8 +1059,14 @@ impl McpClient {
             // SEP-2243 §Client Behavior: on a header-mismatch rejection "the
             // client SHOULD call tools/list to obtain the current inputSchema,
             // then retry the original request with the appropriate headers."
-            // One refresh + one retry; a second -32001 surfaces to the caller.
-            if let Err(McpClientError::ServerError { code: -32001, .. }) = &first {
+            // One refresh + one retry; a second mismatch error surfaces to
+            // the caller.
+            let is_header_mismatch = matches!(
+                &first,
+                Err(McpClientError::ServerError { code, .. })
+                    if *code == turul_mcp_protocol_2026_07_28::headers::ERROR_CODE_HEADER_MISMATCH as i32
+            );
+            if is_header_mismatch {
                 debug!(
                     tool = name,
                     "Mcp-Param mismatch — refreshing tools/list and retrying once"

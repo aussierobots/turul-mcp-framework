@@ -1,0 +1,155 @@
+# Draft-migration audit — live MCP draft vs vendored pin (2026-07-13)
+
+**Status: IN PROGRESS.** This document is the reviewable record for the migration of
+`feat/turul-mcp-protocol-2026-07-28` onto the latest live MCP draft. It supersedes the
+session-scratchpad impact plan. Grades and dispositions here follow the conventions of
+`2026-07-28-spec-compliance.md` (the 490-row matrix), which this audit updates rather than
+replaces.
+
+## 1. Immutable upstream basis
+
+| What | Value | Verified |
+|---|---|---|
+| Live repo HEAD | `62811256f1aa73417c00a3c6dca262cde4ed09c5` (2026-07-13T08:22Z) | 2026-07-13 |
+| Prior audit basis this session | `2807f9d6d8ae2012e09377908f47cff16a2b9489` (2026-07-11T19:41Z) | 2026-07-13 |
+| Delta `2807f9d6..62811256` | 4 commits; `package.json` + `package-lock.json` only (dependabot). **No spec-surface change.** | 2026-07-13 |
+| `schema/draft/schema.ts` | byte-identical to vendored pin, sha256 `6e4cba2d17f7156877357762b6b4b63cd790d8973f61ec35ab73cd61ad67017d`; last-touched upstream commit `93671a3f2bac3bc11b0eb6327c2d029e272b2871` | 2026-07-13 (full `diff` = 0 lines) |
+| `LATEST_PROTOCOL_VERSION` | `"2026-07-28"` (stable) | 2026-07-13 |
+
+**Stop-condition check:** stable canonical version identifier — PASS. No frozen-crate
+(2025-06-18 / 2025-11-25) change required by any item below — PASS.
+
+## 2. Normative prose deltas
+
+### D1 — pin-commit → HEAD window (`93671a3f..2807f9d6`, verified via per-file patches)
+
+Only one substantive normative change (both `draft/basic/transports/streamable-http.mdx`
+and `docs/seps/2243-http-standardization.mdx`, same note):
+
+> Clients **MUST** construct `Mcp-Param-*` headers using the most recently obtained
+> `inputSchema` for the tool. A client that has never obtained the tool's `inputSchema`
+> **SHOULD** send the request without `Mcp-Param-*` headers. If the server rejects the
+> request because required `Mcp-Param-*` headers are missing **or do not match the body**,
+> the client **SHOULD** call `tools/list` … then retry …
+
+`draft/schema.mdx` (+237/−237) verified as TypeDoc HTML reformatting only (hunk-sampled).
+
+### D2 — matrix-basis → pin-commit window (2026-06-12 → 2026-07-02, 30 commits enumerated by date)
+
+Schema-side items were actioned in the 2026-07-02 re-vendor + OUTSTANDING.md burn-down.
+Prose items requiring implementation-level disposition (codex review P2; §5 below):
+
+| Upstream commit | Change | Disposition status |
+|---|---|---|
+| `f505a6c7`/`73ab7d2c`/`6bdff797`/`0bce6bce` | Error-code allocation policy + renumbering; `-32002` carve-out | Schema side done; **client regressions found — B1/B2 below**; matrix rows stale — M1 |
+| `26dd54c0`/`c87328cc` | Mcp-Param emission decoupled from schema TTL | OPEN — audit client binding-cache behavior vs new wording |
+| `b8809f54` | SSE comment-line keep-alive recommended for listen streams | OPEN — server `subscriptions/listen` stream: implement or explicit-deviation row |
+| `201ee148` | `x-mcp-header` restricted to statically-reachable properties | OPEN — audit header-scan in `turul-mcp-protocol-2026-07-28/src/headers.rs` |
+| `71d924e2` | Base64 sentinel extended to `Mcp-Name` header | OPEN — audit server validation + client emission |
+| `9ede89ed` | `server/discover` version-selection bullet reframed | OPEN — prose-only? confirm no behavior delta |
+| `fe74ef99` | Core client notifications do not occur over Streamable HTTP | Reflected in 2026-07-13 Lambda parity slice (T4 framing); matrix row check pending |
+| `0b7f2e4c`/`380f1aff`/`43f8ea51` | Elicitation removals/filter changes | Believed covered by 2026-07-02 re-vendor; confirm rows |
+
+### Full 31-page RFC-2119 re-extraction
+
+In progress (resumed workflow `wf_451c493a-f7a`; 6 page-groups × extract+compare against the
+490-row matrix). Results will be appended as §6 with every NEW/CHANGED requirement mapped to
+code, test, or an explicit deviation row. Until §6 lands, D1/D2 above bound the
+commit-verified change surface for the two windows.
+
+## 3. Confirmed wire-contract defects (fixes in flight, no aliases)
+
+**B1** — `crates/turul-mcp-client/src/client.rs:1063`: Mcp-Param mismatch auto-retry keys on
+`-32001`; servers emit `-32020` (`ERROR_CODE_HEADER_MISMATCH`) since the renumbering. The
+matrix's GAP-7 "FIXED 2026-06-11" silently regressed. Fix: match **only** `-32020`.
+`-32001` is now implementation-defined and this framework itself emits `-32001` for
+middleware `Unauthenticated` — an alias would turn auth failures into refresh-retries.
+No backward alias (review decision, 2026-07-13).
+
+**B2** — `crates/turul-mcp-client/src/version.rs:71`: era-classifier recognizes `-32004` as
+UnsupportedProtocolVersionError; canonical is `-32022`. A current 2026 server's version
+rejection is unrecognized → abort path instead of retry-with-supported-version.
+Undetected because `tests/bilingual_negotiation.rs:154` mocked the stale code. Fix:
+recognize **only** `-32022`; update mocks to current codes; no `-32004` alias; a stale-code
+body may be asserted as *unrecognized* (negative case) only.
+
+**B3** — `error.rs` `-32002` pre-2026 resource-not-found classification: upstream carved
+`-32002` out of the legacy sub-range deliberately; classification is version-scoped compat,
+not a draft alias. Audit wording; expected no behavior change.
+
+## 4. HTTP era-decision table (codex review P1-3)
+
+To audit and test as a complete table against the live Versioning + Streamable HTTP pages
+(each row: implemented / tested / deviation):
+
+| Rule (live prose) | Current state (matrix) | Action |
+|---|---|---|
+| `-32022` + `data.supported` → stay modern, retry mutually supported version | Broken until B2 | B2 + wire test mocking current code |
+| Any recognized modern error → stay modern | Row 240 ✅ (but code set stale) | Re-verify recognized-set after B1/B2 |
+| Unrecognized 400/4xx → identifies legacy, fall back | **Recorded deliberate deviation** — abort-by-default, opt-in `allow_legacy_gateway_fallback` (ADR-030 downgrade-resistance) | Keep deviation; re-affirm in ADR-030 revision log against current prose; maintainer may direct otherwise |
+| Era cached per origin (HTTP) / process (stdio), re-probe on failure | Row 241 🟡 partial (per-instance lock only) | Keep 🟡 with rationale, or implement per-origin cache — maintainer call; SHOULD-level |
+| Modern-only server names supported versions on any `initialize` error | ✅ both rejection paths (`-32020` header path, `-32601`+`data.supported` dispatch path); Lambda wire tests added 2026-07-13 | Done |
+
+## 5. Matrix/doc corrections (M-items)
+
+- M1: rows 395/664/926/928 — stale `-32001`/`-32004` literals and stale "retry NOT
+  implemented" claims (contradicting row 926); re-disposition D1's new MUST (client binding
+  cache = "most recently obtained inputSchema"; satisfied once B1/B2 land).
+- M2: `crates/turul-mcp-protocol-2026-07-28/schema/README.md` — add re-verified-at HEAD
+  `62811256` (2026-07-13).
+- M3: CHANGELOG (0.4.0 Unreleased) + ADR-030 revision-log entry for the recognized-error-set
+  change (B1/B2, no aliases).
+- M4: disposition each OPEN row of §2-D2 with code/test/deviation mapping (feeds from §6).
+
+## 6. Full requirement re-extraction results (completed 2026-07-13)
+
+All 31 draft pages at commit `2807f9d6` (spec-surface-identical to HEAD `62811256`) were
+swept for RFC-2119 requirements and compared against the 490-row matrix by six
+extract+compare agent pairs. **Totals: 131 NEW (no matrix row), 4 CHANGED (row quotes
+outdated text), 497 covered.** Full per-requirement detail: workflow `wf_451c493a-f7a`
+journal (session records). Triage:
+
+### 6.1 CHANGED rows (matrix-text staleness; code verified separately)
+
+- Capability-gate error code: live prose says `-32021`; **13 matrix rows still quote
+  `-32003`** (215, 143, 286, 474, 485, 507, 510, 574, 587, 606, 644, 748, 954). Server
+  code and wire tests are CURRENT (`-32021`, `mrtr_2026.rs`); the middleware's
+  `RATE_LIMIT_EXCEEDED = -32003` is a range-legal implementation-defined code, unrelated.
+  → M1 scope extended to these rows.
+- `x-mcp-header` statically-reachable restriction (row ~659) and HeaderMismatch `-32020`
+  (row ~398), cancellation direction (row ~321): text refresh needed; behavior already
+  current on the server side.
+
+### 6.2 NEW-requirement clusters and their likely dispositions (to be row-authored)
+
+| Cluster | Count | Likely disposition |
+|---|---|---|
+| Authorization sub-pages (discovery, client-registration, security-considerations; pages created 2026-06-04/05, before the audit but evidently swept thinly) | 62 | Server-role items (PRM issuer identity, discovery mechanisms, WWW-Authenticate content): mostly implemented in `turul-mcp-oauth` — author rows citing tests. Client-role items (WWW-Authenticate parsing, CIMD hosting/validation, issuer-identity checks): framework ships no OAuth *client* flow — author ➖ n/a rows with the role rationale, or record as roadmap. |
+| `server/utilities/caching.mdx` TTL/cacheScope semantics | ~23 | Client-side caching heuristics (ttlMs default-0, stale handling, jitter/backoff MUST-if-polling): client implements no result caching — n/a-or-gap rows per item. Server-side (same `cacheScope` across pages MUST; MUST NOT rely on cacheScope for auth): audit `CacheableResult` producers, likely small fixes or n/a. |
+| Transports (intermediary MUST/SHOULDs, SSE colon-comment MUST, Mcp-Name Base64 MUST, statically-reachable MUST, D1 Mcp-Param MUST) | 13 | Intermediary-role: n/a (framework ships no intermediary). SSE colon-comment: verify client SSE parser ignores comment lines (ties to D2 keep-alive item). Mcp-Name Base64 + statically-reachable: audit `headers.rs` (D2 rows). Mcp-Param MUST: satisfied by binding cache once B1 lands. |
+| Cancellation/subscriptions patterns | 9 | stdio-server-only items (server-sent `notifications/cancelled` closing a listen stream): framework ships no stdio server binding — n/a rows. Subscription teardown SHOULDs: ties to the OUTSTANDING.md surviving graceful-close item. |
+| Architecture/index meta-principles, elicitation/roots/sampling additions | rest | Mostly INFO/SHOULD design-principle rows; author with brief dispositions. |
+
+### 6.3 Defect status after sweep
+
+No additional CODE defects beyond B1/B2 (client) were confirmed by the sweep; the
+`-32003` scare resolved as matrix-text-only (server verified current). The client's
+recognized-modern-error set must include all three codes `-32022`/`-32021`/`-32020`
+(folded into the B2 fix in flight).
+
+### 6.3a Follow-up defect candidate (found during B1 test construction, deliberately out of slice-scope)
+
+`HttpTransport::handle_response` (`crates/turul-mcp-client/src/transport/http.rs:332-351`)
+treats any non-2xx as `TransportError::HttpStatus` without parsing a JSON-RPC error body;
+only `probe_discover` has bespoke reparse-on-400 logic (`client.rs:435-444`). turul's own
+server SSE-frames `tools/call` errors at HTTP 200 (client always sends
+`Accept: text/event-stream`), so this is invisible against our stack — but a
+spec-compliant server answering a plain-JSON 400 for a post-lock request would bypass
+every `ServerError`-keyed client path (including the B1 retry). Needs its own slice:
+generalize 400-body JSON-RPC reparse beyond the discover probe, with wiremock coverage.
+
+### 6.4 Remaining work to close task success-criterion (b) "all normative MUST/SHOULD dispositioned"
+
+Row-author the 131 NEW + refresh the 4 CHANGED in `2026-07-28-spec-compliance.md`,
+each mapped to code, test, or explicit n-a/deviation — sized as its own agent slice
+after the B1/B2 fix passes QA.

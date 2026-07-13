@@ -132,14 +132,15 @@ async fn bilingual_client_locks_2025_when_server_lacks_discover() {
 /// Versioning §Backward Compatibility: "a recognized modern JSON-RPC error
 /// (such as UnsupportedProtocolVersionError) identifies a modern server: the
 /// client retries with a supported version rather than falling back" — an
-/// HTTP 400 whose body carries -32004 with data.supported must fall back to
+/// HTTP 400 whose body carries -32022 (the canonical code since the
+/// 2026-07-02 error-code renumbering) with data.supported must fall back to
 /// 2025-11-25 through the real probe path (not abort like a bare 4xx).
 #[tokio::test]
-async fn bilingual_client_falls_back_on_400_with_32004_body() {
+async fn bilingual_client_falls_back_on_400_with_32022_body() {
     let server = MockServer::start().await;
     mount_sse_404(&server).await;
 
-    // A validating modern-but-2025-only server: 400 + structured -32004.
+    // A validating modern-but-2025-only server: 400 + structured -32022.
     Mock::given(method("POST"))
         .and(body_partial_json(
             serde_json::json!({"method": "server/discover"}),
@@ -151,7 +152,7 @@ async fn bilingual_client_falls_back_on_400_with_32004_body() {
                     "jsonrpc": "2.0",
                     "id": "req_0",
                     "error": {
-                        "code": -32004,
+                        "code": -32022,
                         "message": "Unsupported protocol version",
                         "data": { "supported": ["2025-11-25"], "requested": "2026-07-28" }
                     }
@@ -167,7 +168,7 @@ async fn bilingual_client_falls_back_on_400_with_32004_body() {
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
-                .insert_header("Mcp-Session-Id", "sess-32004")
+                .insert_header("Mcp-Session-Id", "sess-32022")
                 .set_body_json(serde_json::json!({
                     "jsonrpc": "2.0",
                     "id": "req_0",
@@ -190,11 +191,53 @@ async fn bilingual_client_falls_back_on_400_with_32004_body() {
         .await;
 
     let (client, result) = connect_client(&server).await;
-    result.expect("-32004 in a 400 body must trigger 2025 fallback, not abort");
+    result.expect("-32022 in a 400 body must trigger 2025 fallback, not abort");
     assert_eq!(
         client.negotiated_version().await,
         Some(McpVersion::V2025_11_25),
-        "a structured -32004 must fall back to and lock 2025-11-25"
+        "a structured -32022 must fall back to and lock 2025-11-25"
+    );
+}
+
+/// Negative case: `-32004` was the pre-2026-07-02-renumbering
+/// UnsupportedProtocolVersionError allocation. It is now implementation-defined
+/// and unrelated to this client (no alias, no backward-compat recognition) —
+/// a 400 body carrying it must be treated as an unrecognized JSON-RPC error
+/// and abort the connect, not silently fall back to 2025-11-25.
+#[tokio::test]
+async fn bilingual_client_treats_pre_renumbering_32004_as_unrecognized_and_aborts() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(400)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "error": {
+                        "code": -32004,
+                        "message": "Unsupported protocol version",
+                        "data": { "supported": ["2025-11-25"], "requested": "2026-07-28" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    assert!(
+        result.is_err(),
+        "an unrecognized -32004 body must abort the connect, not fall back to 2025-11-25"
+    );
+    assert_eq!(
+        client.negotiated_version().await,
+        None,
+        "no wire version may be locked when negotiation aborts"
     );
 }
 
@@ -300,4 +343,126 @@ async fn bilingual_client_round_trips_tools_list_against_2026_server() {
         "expected the one tool the 2026 server returned"
     );
     assert_eq!(tools[0].name, "echo");
+}
+
+/// TX/GAP-7 (matrix: "FIXED 2026-06-11", silently regressed at the
+/// 2026-07-02 error-code renumbering): SEP-2243 §Client Behavior — on a
+/// HeaderMismatch rejection "the client SHOULD call tools/list to obtain the
+/// current inputSchema, then retry the original request with the appropriate
+/// headers." `call_tool` must recognize the current HeaderMismatch code
+/// (`-32020`) and perform exactly one `tools/list` refresh + one retry.
+#[tokio::test]
+async fn call_tool_recovers_from_header_mismatch_with_one_refresh_and_retry() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    // server/discover => 2026 server; the connection locks to 2026-07-28.
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"],
+                        "capabilities": {},
+                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    // The refresh_tools() call after the mismatch. No x-mcp-header
+    // annotations needed here — this test proves the retry fires, not the
+    // SEP-2243 header-mirroring itself (covered by e2e_2026_real_server.rs).
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "tools/list"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_1",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "tools": [{
+                            "name": "echo",
+                            "description": "Echo a message",
+                            "inputSchema": { "type": "object", "properties": { "msg": { "type": "string" } } }
+                        }]
+                    }
+                })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // First tools/call: rejected with the current HeaderMismatch code.
+    // Matched first (equal default priority, earlier mount wins) and
+    // exhausts itself after one use, so the second call below falls through
+    // to the success mock.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_2",
+                    "error": {
+                        "code": -32020,
+                        "message": "Header mismatch: Mcp-Param-Msg header omitted but the parameter is present in the request body"
+                    }
+                })),
+        )
+        .up_to_n_times(1)
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    // The retry after refresh_tools(): succeeds.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_3",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "content": [{ "type": "text", "text": "echoed" }],
+                        "isError": false
+                    }
+                })),
+        )
+        .expect(1)
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("connect against a 2026 server must succeed");
+
+    let call_result = client
+        .call_tool("echo", serde_json::json!({ "msg": "hi" }))
+        .await
+        .expect("the retry, after the tools/list refresh, must succeed");
+    assert!(!call_result.is_error.unwrap_or(false));
+    let text = serde_json::to_string(&call_result).unwrap_or_default();
+    assert!(text.contains("echoed"), "{text}");
+
+    // wiremock verifies exactly one tools/list refresh and exactly one retry
+    // via the `.expect(1)` on each mock, checked when `server` drops.
 }
