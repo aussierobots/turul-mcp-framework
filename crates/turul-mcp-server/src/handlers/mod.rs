@@ -48,7 +48,7 @@ fn extract_cursor_from_params(params: &Option<Value>) -> Option<turul_mcp_protoc
 /// MRTR (SEP-2322): convert a provider's `McpError::InputRequired` outcome
 /// into a successful `InputRequiredResult` value, after enforcing that every
 /// input request targets a capability the client declared in the request's
-/// `_meta` `clientCapabilities` (undeclared → `-32003`, HTTP 400). Gating is
+/// `_meta` `clientCapabilities` (undeclared → `-32021`, HTTP 400). Gating is
 /// mode-aware: URL-mode elicitation needs `elicitation.url`, form mode rides
 /// the empty object ("an empty capabilities object is equivalent to declaring
 /// support for form mode only"), and tool-enabled sampling (`tools` /

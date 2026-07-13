@@ -76,6 +76,16 @@ fn tools_call_body() -> serde_json::Value {
     })
 }
 
+/// Same shape as `tools_call_body()` but with an arbitrary `params.name` — the
+/// tool need not exist to test the header-validation layer, which runs before
+/// dispatch.
+fn tools_call_body_with_name(name: &str) -> serde_json::Value {
+    serde_json::json!({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+        "params": { "name": name, "arguments": { "message": "hi" }, "_meta": meta() }
+    })
+}
+
 async fn assert_header_mismatch(resp: reqwest::Response, case: &str) {
     assert_eq!(resp.status(), 400, "{case}: must be HTTP 400 Bad Request");
     let body: serde_json::Value = resp.json().await.expect("error body");
@@ -190,6 +200,54 @@ async fn mismatched_mcp_name_is_rejected() {
         .await
         .expect("mismatched Mcp-Name");
     assert_header_mismatch(resp, "Mcp-Name header/body mismatch").await;
+}
+
+/// SEP-2243 §Value Encoding, extended to `Mcp-Name` by upstream commit
+/// `71d924e2`: servers MUST decode a Base64-sentinel-encoded `Mcp-Name`
+/// before comparing it to the body value. `=?base64?IHBhZGRlZCA=?=` is the
+/// spec's own encoding example for `" padded "`.
+#[tokio::test]
+async fn base64_encoded_mcp_name_decodes_and_matches() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "=?base64?IHBhZGRlZCA=?=")
+        .json(&tools_call_body_with_name(" padded "))
+        .send()
+        .await
+        .expect("Base64-sentinel Mcp-Name");
+    assert_ne!(
+        resp.status(),
+        400,
+        "a correctly-encoded Mcp-Name matching the body value must pass header validation"
+    );
+}
+
+/// An encoded `Mcp-Name` that decodes to a value different from the body
+/// must still be rejected as a HeaderMismatch — decoding must not weaken the
+/// comparison into an always-pass.
+#[tokio::test]
+async fn base64_encoded_mcp_name_mismatch_is_rejected() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        // Decodes to "Hello, 世界" — does not match the body's " padded ".
+        .header("Mcp-Name", "=?base64?SGVsbG8sIOS4lueVjA==?=")
+        .json(&tools_call_body_with_name(" padded "))
+        .send()
+        .await
+        .expect("mismatched Base64-encoded Mcp-Name");
+    assert_header_mismatch(resp, "decoded Mcp-Name does not match body value").await;
 }
 
 #[tokio::test]

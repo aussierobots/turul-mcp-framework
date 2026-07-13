@@ -1477,12 +1477,21 @@ impl StreamableHttpHandler {
                                         "missing required Mcp-Name header for {body_method}"
                                     ));
                                 }
-                                Some(name_header) if name_header != expected => {
-                                    failure = Some(format!(
-                                        "Mcp-Name header value '{name_header}' does not match body value '{expected}'"
-                                    ));
+                                Some(name_header) => {
+                                    match turul_mcp_protocol::headers::decode_param_value(
+                                        name_header,
+                                    ) {
+                                        Err(e) => {
+                                            failure = Some(format!("Mcp-Name: {e}"));
+                                        }
+                                        Ok(decoded) if decoded != expected => {
+                                            failure = Some(format!(
+                                                "Mcp-Name header value '{decoded}' does not match body value '{expected}'"
+                                            ));
+                                        }
+                                        Ok(_) => {}
+                                    }
                                 }
-                                Some(_) => {}
                             }
                         }
                     }

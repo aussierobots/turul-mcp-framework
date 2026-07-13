@@ -165,13 +165,17 @@ row, sampling row 818) were corrected during QA (`-32021`, verified against
 The row-authoring agents flagged 18 items as judgment calls rather than force-grading;
 full notes in workflow `wf_36f39e2c-9a4` journal. The load-bearing ones:
 
-- **B4 (real defect, confirmed during QA)** — `streamable_http.rs:1480` compares the
-  `Mcp-Name` header to the body value with plain `!=`; the live draft (upstream commit
-  `71d924e2`) requires servers to DECODE Base64-sentinel-encoded `Mcp-Name`/`Mcp-Param`
-  values before comparing (`decode_param_value` exists in `headers.rs:221` and is used
-  on the Mcp-Param path only). An encoded `Mcp-Name` is falsely rejected as a mismatch.
-  Matrix row graded 🟡 with citations; fix slice queued. Also stale source comment at
-  `handlers/mod.rs:51` (says `-32003`; the code emits `-32021`).
+- **B4 (real defect, confirmed during QA) — FIXED 2026-07-13.** `streamable_http.rs:1480`
+  compared the `Mcp-Name` header to the body value with plain `!=`; the live draft
+  (upstream commit `71d924e2`) requires servers to DECODE Base64-sentinel-encoded
+  `Mcp-Name`/`Mcp-Param` values before comparing (`decode_param_value` exists in
+  `headers.rs:221` and was used on the Mcp-Param path only). An encoded `Mcp-Name` was
+  falsely rejected as a mismatch. `Mcp-Name` now routes through `decode_param_value`
+  (streamable_http.rs:1474-1494), mirroring the Mcp-Param path including its
+  decode-failure semantics. Tests: `mcp_headers_2026.rs::base64_encoded_mcp_name_decodes_and_matches`
+  (revert-and-fail leg recorded), `::base64_encoded_mcp_name_mismatch_is_rejected` (-32020).
+  Matrix row re-graded ✅ compliant (spec-compliance plan, 2026-07-13). Also corrected the
+  stale source comment at `handlers/mod.rs:51` (said `-32003`; the code emits `-32021`).
 - allOf-merge / statically-reachable `x-mcp-header` scope: grader's own reading of
   `walk()` recursion (headers.rs:159-181) — needs a follow-up verification test.
 - MAY-permission rows (custom transports, 403 id-less body, ttlMs authoring freedoms)
