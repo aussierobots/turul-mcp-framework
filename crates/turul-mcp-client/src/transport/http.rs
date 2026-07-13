@@ -765,8 +765,9 @@ impl Transport for HttpTransport {
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            // The response IS an SSE stream.
-            .header("Accept", "text/event-stream")
+            // Every POST to the MCP endpoint MUST advertise both content types,
+            // even when the client expects the SSE stream back.
+            .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", self.protocol_version.read().clone());
         req_builder = self.apply_request_metadata_headers(req_builder, &request);
         req_builder = self.apply_auth_override(req_builder);

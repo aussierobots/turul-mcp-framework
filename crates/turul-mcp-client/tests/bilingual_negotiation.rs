@@ -762,3 +762,73 @@ async fn subscriptions_listen_400_surfaces_jsonrpc_error_not_transport_error() {
         Ok(_) => panic!("subscriptions/listen 400 must be an error, got a live stream"),
     }
 }
+
+/// Streamable HTTP §Sending Messages: every POST to the MCP endpoint MUST
+/// advertise both `application/json` and `text/event-stream` in Accept — even
+/// the `subscriptions/listen` POST, whose response is an SSE stream.
+#[tokio::test]
+async fn subscriptions_listen_post_advertises_both_accept_types() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0", "id": "req_0",
+                    "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"], "capabilities": {},
+                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    // The response shape does not matter for this test — we only observe the
+    // request the client sent — so reject it and move on.
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "subscriptions/listen"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(400)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0", "id": "req_1",
+                    "error": { "code": -32021, "message": "no" }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("connect against a 2026 server must succeed");
+    let _ = client
+        .subscriptions_listen(serde_json::json!({ "toolsListChanged": true }))
+        .await;
+
+    let reqs = server.received_requests().await.expect("recorded");
+    let listen = reqs
+        .iter()
+        .find(|r| {
+            serde_json::from_slice::<serde_json::Value>(&r.body)
+                .ok()
+                .and_then(|b| b.get("method").and_then(|m| m.as_str()).map(|s| s == "subscriptions/listen"))
+                .unwrap_or(false)
+        })
+        .expect("a subscriptions/listen POST was sent");
+    let accept = listen
+        .headers
+        .get("accept")
+        .expect("Accept header present")
+        .to_str()
+        .unwrap();
+    assert!(
+        accept.contains("application/json") && accept.contains("text/event-stream"),
+        "subscriptions/listen POST Accept must advertise both types, got: {accept:?}"
+    );
+}
