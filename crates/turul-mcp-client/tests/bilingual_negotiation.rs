@@ -132,8 +132,8 @@ async fn bilingual_client_locks_2025_when_server_lacks_discover() {
 /// Versioning §Backward Compatibility: "a recognized modern JSON-RPC error
 /// (such as UnsupportedProtocolVersionError) identifies a modern server: the
 /// client retries with a supported version rather than falling back" — an
-/// HTTP 400 whose body carries -32022 (the canonical code since the
-/// 2026-07-02 error-code renumbering) with data.supported must fall back to
+/// HTTP 400 whose body carries -32022 (the canonical
+/// UnsupportedProtocolVersionError code) with data.supported must fall back to
 /// 2025-11-25 through the real probe path (not abort like a bare 4xx).
 #[tokio::test]
 async fn bilingual_client_falls_back_on_400_with_32022_body() {
@@ -199,11 +199,12 @@ async fn bilingual_client_falls_back_on_400_with_32022_body() {
     );
 }
 
-/// Negative case: `-32004` was the pre-2026-07-02-renumbering
-/// UnsupportedProtocolVersionError allocation. It is now implementation-defined
-/// and unrelated to this client (no alias, no backward-compat recognition) —
-/// a 400 body carrying it must be treated as an unrecognized JSON-RPC error
-/// and abort the connect, not silently fall back to 2025-11-25.
+/// Negative case: `-32004` is not a recognized modern error code (the
+/// canonical UnsupportedProtocolVersionError code is -32022). It falls in the
+/// implementation-defined range (-32000..-32019) and is unrelated to this client (no alias, no
+/// backward-compat recognition) — a 400 body carrying it must be treated as an
+/// unrecognized JSON-RPC error and abort the connect, not silently fall back to
+/// 2025-11-25.
 #[tokio::test]
 async fn bilingual_client_treats_pre_renumbering_32004_as_unrecognized_and_aborts() {
     let server = MockServer::start().await;
@@ -345,12 +346,11 @@ async fn bilingual_client_round_trips_tools_list_against_2026_server() {
     assert_eq!(tools[0].name, "echo");
 }
 
-/// TX/GAP-7 (matrix: "FIXED 2026-06-11", silently regressed at the
-/// 2026-07-02 error-code renumbering): SEP-2243 §Client Behavior — on a
-/// HeaderMismatch rejection "the client SHOULD call tools/list to obtain the
-/// current inputSchema, then retry the original request with the appropriate
-/// headers." `call_tool` must recognize the current HeaderMismatch code
-/// (`-32020`) and perform exactly one `tools/list` refresh + one retry.
+/// SEP-2243 §Client Behavior — on a HeaderMismatch rejection "the client
+/// SHOULD call tools/list to obtain the current inputSchema, then retry the
+/// original request with the appropriate headers." `call_tool` must recognize
+/// the current HeaderMismatch code (`-32020`) and perform exactly one
+/// `tools/list` refresh + one retry.
 #[tokio::test]
 async fn call_tool_recovers_from_header_mismatch_with_one_refresh_and_retry() {
     let server = MockServer::start().await;
@@ -706,11 +706,11 @@ async fn mcp_name_header_is_base64_sentinel_encoded_when_not_plain_ascii() {
     assert!(!call_result.is_error.unwrap_or(false));
 }
 
-/// F3 regression (2026-07-14): a `subscriptions/listen` rejected with HTTP 400
-/// and a JSON-RPC error body must surface the error code (here -32021
-/// MissingRequiredClientCapability) via `ServerError`, not a generic transport
-/// failure. The streaming send path previously turned every non-2xx into
-/// `TransportError::HttpStatus` without parsing the envelope.
+/// A `subscriptions/listen` rejected with HTTP 400 and a JSON-RPC error body
+/// must surface the error code (here -32021 MissingRequiredClientCapability) via
+/// `ServerError`, not a generic transport failure. The streaming send path must
+/// parse non-2xx error bodies as JSON-RPC envelopes, not emit a raw `HttpStatus`
+/// transport error.
 #[tokio::test]
 async fn subscriptions_listen_400_surfaces_jsonrpc_error_not_transport_error() {
     let server = MockServer::start().await;

@@ -223,11 +223,11 @@ mod tests {
 
     #[test]
     fn pre_renumbering_32004_is_unrecognized_and_aborts() {
-        // -32004 was the pre-2026-07-02 UnsupportedProtocolVersionError
-        // allocation; it is now implementation-defined (-32000..-32019 range)
-        // and unrelated to this client. No alias — an unrecognized code
-        // aborts (deliberate downgrade-resistance deviation), it does not
-        // fall back to 2025-11-25.
+        // -32004 is not the UnsupportedProtocolVersionError code (that is -32022);
+        // it falls in the implementation-defined (-32000..-32019) range and is
+        // unrelated to this client. No alias — an
+        // unrecognized code aborts (deliberate downgrade-resistance deviation), it
+        // does not fall back to 2025-11-25.
         assert!(
             matches!(
                 classify_probe(DiscoverProbe::JsonRpcError(-32004, None), false),

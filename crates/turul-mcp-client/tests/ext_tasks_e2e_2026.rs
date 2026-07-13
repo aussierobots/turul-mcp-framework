@@ -296,12 +296,12 @@ async fn task_cancel_reaches_cancelled() {
     assert_eq!(done.status(), TaskStatus::Cancelled);
 }
 
-/// F1 regression (2026-07-14): `call_tool_or_task` must NOT pass an explicit
-/// raw `Mcp-Name` header — the transport already derives and Base64-sentinel-
-/// encodes it from `params.name`. A raw extra-header produced a SECOND,
-/// unencoded `Mcp-Name` on the wire (reqwest appends). This inspects the wire
-/// directly (a real server reads `Mcp-Name` via `.get()` and would silently
-/// take the first, hiding the duplicate).
+/// `call_tool_or_task` must NOT pass an explicit raw `Mcp-Name` header — the
+/// transport already derives and Base64-sentinel-encodes it from `params.name`.
+/// A raw extra-header would produce a SECOND, unencoded `Mcp-Name` on the wire
+/// (reqwest appends). This inspects the wire directly (a real server reads
+/// `Mcp-Name` via `.get()` and would silently take the first, hiding the
+/// duplicate).
 #[tokio::test]
 async fn call_tool_or_task_emits_exactly_one_encoded_mcp_name_header() {
     use wiremock::matchers::{body_partial_json, method};
