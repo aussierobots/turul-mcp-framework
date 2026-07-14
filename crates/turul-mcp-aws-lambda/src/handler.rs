@@ -267,9 +267,10 @@ impl LambdaMcpHandler {
         self
     }
 
-    /// JSON-RPC methods registered on the dispatcher, for parity testing.
-    #[cfg_attr(not(test), allow(dead_code))]
-    pub(crate) fn registered_methods(&self) -> Vec<String> {
+    /// JSON-RPC method names registered on this handler's dispatcher. Mirrors
+    /// `McpServer::registered_methods` so a cross-builder parity test can assert
+    /// the Lambda and local builders register an identical set per protocol lane.
+    pub fn registered_methods(&self) -> Vec<String> {
         self.dispatcher.registered_methods()
     }
 

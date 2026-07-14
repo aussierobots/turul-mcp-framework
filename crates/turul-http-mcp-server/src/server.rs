@@ -363,6 +363,14 @@ impl HttpMcpServer {
         Arc::clone(&self.stream_manager)
     }
 
+    /// The JSON-RPC method names registered on this server's dispatcher.
+    /// Enables cross-builder parity assertions (e.g. the local server vs the
+    /// AWS Lambda builder) so the two transports cannot silently register
+    /// divergent method sets for a given protocol lane.
+    pub fn registered_methods(&self) -> Vec<String> {
+        self.dispatcher.registered_methods()
+    }
+
     /// Run the server with session management
     pub async fn run(&self) -> Result<()> {
         // Start session cleanup task

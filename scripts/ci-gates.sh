@@ -53,7 +53,7 @@ gate_opt_in_2025() {
   run "builders 2025-11-25"      cargo build  -p turul-mcp-builders    --no-default-features --features protocol-2025-11-25
   run "http-server 2025-11-25"   cargo build  -p turul-http-mcp-server --no-default-features --features sse,protocol-2025-11-25
   run "derive 2025-11-25"        cargo build  -p turul-mcp-derive      --no-default-features --features protocol-2025-11-25
-  run "lambda 2025-11-25"        cargo build  -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
+  run "lambda 2025-11-25"        cargo test   -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
   run "client 2025-11-25-only"   cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
   run "client 2026-07-28-only"   cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
   run "client-initialise-server" cargo build  -p client-initialise-server --no-default-features

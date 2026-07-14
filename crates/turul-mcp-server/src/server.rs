@@ -376,74 +376,13 @@ impl McpServer {
         }
     }
 
-    /// Run the server with HTTP transport (requires "http" feature)
+    /// Build the HTTP server builder with every MCP method handler
+    /// registered for the active protocol lane, WITHOUT binding or running.
+    /// Single source of method registration shared by `run_http` and
+    /// `run_with_sse_access` so the two entry points cannot register divergent
+    /// method sets, and reused by [`registered_methods`](Self::registered_methods).
     #[cfg(feature = "http")]
-    pub async fn run_http(&self) -> Result<()> {
-        info!(
-            "Starting MCP server: {} v{}",
-            self.implementation.name, self.implementation.version
-        );
-        info!("Session management: enabled with automatic cleanup");
-
-        if self.enable_sse {
-            info!("SSE notifications: enabled at GET {}", self.mcp_path);
-        }
-
-        // Start session cleanup task
-        let _cleanup_task = self.session_manager.clone().start_cleanup_task();
-
-        // Recover stuck tasks on startup (tasks stuck in Working/InputRequired after unclean shutdown)
-        #[cfg(feature = "protocol-2025-11-25")]
-        if let Some(ref runtime) = self.task_runtime {
-            match runtime.recover_stuck_tasks().await {
-                Ok(recovered) if !recovered.is_empty() => {
-                    info!(
-                        count = recovered.len(),
-                        "Recovered stuck tasks from previous session"
-                    );
-                }
-                Err(e) => {
-                    warn!(error = %e, "Failed to recover stuck tasks on startup");
-                }
-                _ => {}
-            }
-        }
-
-        // Sync tool registry with shared storage on startup (coordination mode only)
-        #[cfg(feature = "dynamic-tools")]
-        if self.coordination_enabled
-            && let Some(ref registry) = self.tool_registry
-        {
-            match registry.sync_from_storage().await {
-                Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
-                    info!("Dynamic: initialized shared storage with local tool state");
-                }
-                Ok(crate::tool_registry::SyncResult::InSync) => {
-                    info!("Dynamic: local tools match shared storage");
-                }
-                Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
-                    warn!(
-                        "Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.",
-                        old_fingerprint
-                    );
-                }
-                Err(e) => {
-                    error!(
-                        "Dynamic: failed to sync with shared storage: {}. Continuing with local state.",
-                        e
-                    );
-                }
-            }
-
-            // Start background polling for cross-instance changes
-            let poll_interval = registry.check_ttl();
-            let _poll_handle = registry.start_polling(poll_interval);
-            debug!(
-                "Dynamic: started background polling (interval: {:?})",
-                poll_interval
-            );
-        }
-
+    fn build_configured_http_builder(&self) -> turul_http_mcp_server::HttpMcpServerBuilder {
         // Create session-aware tool handler (with optional task runtime for async execution)
         #[cfg_attr(
             not(any(feature = "protocol-2025-11-25", feature = "dynamic-tools")),
@@ -572,7 +511,88 @@ impl McpServer {
             );
         }
 
-        let http_server = builder.build();
+        builder
+    }
+
+    /// The JSON-RPC method names this server registers for the active protocol
+    /// lane. Mirrors `LambdaMcpServerBuilder`'s handler accessor of the same
+    /// name so a cross-builder parity test can assert both register an identical
+    /// set — catching the class of bug where one transport silently omits a
+    /// method (e.g. `server/discover`).
+    #[cfg(feature = "http")]
+    pub fn registered_methods(&self) -> Vec<String> {
+        self.build_configured_http_builder().build().registered_methods()
+    }
+
+    /// Run the server with HTTP transport (requires "http" feature)
+    #[cfg(feature = "http")]
+    pub async fn run_http(&self) -> Result<()> {
+        info!(
+            "Starting MCP server: {} v{}",
+            self.implementation.name, self.implementation.version
+        );
+        info!("Session management: enabled with automatic cleanup");
+
+        if self.enable_sse {
+            info!("SSE notifications: enabled at GET {}", self.mcp_path);
+        }
+
+        // Start session cleanup task
+        let _cleanup_task = self.session_manager.clone().start_cleanup_task();
+
+        // Recover stuck tasks on startup (tasks stuck in Working/InputRequired after unclean shutdown)
+        #[cfg(feature = "protocol-2025-11-25")]
+        if let Some(ref runtime) = self.task_runtime {
+            match runtime.recover_stuck_tasks().await {
+                Ok(recovered) if !recovered.is_empty() => {
+                    info!(
+                        count = recovered.len(),
+                        "Recovered stuck tasks from previous session"
+                    );
+                }
+                Err(e) => {
+                    warn!(error = %e, "Failed to recover stuck tasks on startup");
+                }
+                _ => {}
+            }
+        }
+
+        // Sync tool registry with shared storage on startup (coordination mode only)
+        #[cfg(feature = "dynamic-tools")]
+        if self.coordination_enabled
+            && let Some(ref registry) = self.tool_registry
+        {
+            match registry.sync_from_storage().await {
+                Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
+                    info!("Dynamic: initialized shared storage with local tool state");
+                }
+                Ok(crate::tool_registry::SyncResult::InSync) => {
+                    info!("Dynamic: local tools match shared storage");
+                }
+                Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
+                    warn!(
+                        "Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.",
+                        old_fingerprint
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Dynamic: failed to sync with shared storage: {}. Continuing with local state.",
+                        e
+                    );
+                }
+            }
+
+            // Start background polling for cross-instance changes
+            let poll_interval = registry.check_ttl();
+            let _poll_handle = registry.start_polling(poll_interval);
+            debug!(
+                "Dynamic: started background polling (interval: {:?})",
+                poll_interval
+            );
+        }
+
+        let http_server = self.build_configured_http_builder().build();
 
         // SSE is now integrated directly into the session management
         if self.enable_sse {
@@ -727,136 +747,7 @@ impl McpServer {
             );
         }
 
-        // Create session-aware tool handler (with optional task runtime for async execution)
-        #[cfg_attr(
-            not(any(feature = "protocol-2025-11-25", feature = "dynamic-tools")),
-            allow(unused_mut)
-        )]
-        let mut tool_handler = SessionAwareToolHandler::new(
-            self.tools.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        #[cfg(feature = "protocol-2025-11-25")]
-        if let Some(ref runtime) = self.task_runtime {
-            tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
-        }
-        #[cfg(feature = "ext-tasks")]
-        if let Some(ref runtime) = self.ext_tasks_runtime {
-            tool_handler =
-                tool_handler.with_ext_tasks(Arc::clone(runtime), Arc::clone(&self.ext_task_tools));
-        }
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry {
-            tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
-        }
-
-        // Create session-aware initialize handler (2025-11-25 stateful handshake;
-        // the DRAFT-2026-v1 stateless core has no `initialize` method).
-        #[cfg(feature = "protocol-2025-11-25")]
-        #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-        let mut init_handler = SessionAwareInitializeHandler::new(
-            self.implementation.clone(),
-            self.capabilities.clone(),
-            self.instructions.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-            self.tool_fingerprint.clone(),
-        );
-        #[cfg(all(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
-        if let Some(ref registry) = self.tool_registry {
-            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
-        }
-
-        // Build HTTP server with shared session storage from SessionManager
-        let session_storage = self.session_manager.get_storage();
-        debug!("Configuring HTTP MCP server with session storage backend");
-        #[allow(deprecated)] // get_sse: 2026-lane-deprecated; pass-through stays for the 2025 lane
-        let mut builder =
-            turul_http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
-                .bind_address(self.bind_address)
-                .mcp_path(&self.mcp_path)
-                .cors(self.enable_cors)
-                .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
-                // POST SSE remains at default (false) for compatibility
-                .server_capabilities(self.capabilities.clone()) // Pass server capabilities
-                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
-                .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
-                .tool_fingerprint(self.tool_fingerprint.clone())
-                .tool_notifier(Arc::new(SessionManagerToolNotifier {
-                    session_manager: Arc::clone(&self.session_manager),
-                }))
-                .register_handler(vec!["tools/list".to_string()], {
-                    #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-                    let mut lth = ListToolsHandler::new_with_session_manager(
-                        self.tools.clone(),
-                        self.session_manager.clone(),
-                        self.strict_lifecycle,
-                        self.has_task_runtime(),
-                    );
-                    #[cfg(feature = "dynamic-tools")]
-                    if let Some(ref registry) = self.tool_registry {
-                        lth = lth.with_tool_registry(Arc::clone(registry));
-                    }
-                    lth
-                })
-                .register_handler(vec!["tools/call".to_string()], tool_handler);
-
-        #[cfg(feature = "protocol-2025-11-25")]
-        {
-            builder = builder.register_handler(vec!["initialize".to_string()], init_handler);
-        }
-
-        #[cfg(feature = "protocol-2026-07-28")]
-        {
-            builder = builder.register_handler(
-                vec![SERVER_DISCOVER_METHOD.to_string()],
-                DiscoverHandler::new(
-                    self.implementation.clone(),
-                    self.capabilities.clone(),
-                    self.instructions.clone(),
-                ),
-            );
-        }
-
-        // Pass allow_unauthenticated_ping config to HTTP layer
-        if let Some(allow) = self.allow_unauthenticated_ping {
-            builder = builder.allow_unauthenticated_ping(allow);
-        }
-        if let Some(policy) = self.origin_policy.clone() {
-            builder = builder.origin_policy(policy);
-        }
-
-        // TODO investigate if this also adds the tools/list and tools/call handlers
-        // Register all MCP handlers with session awareness
-        for (method, handler) in &self.handlers {
-            let bridge_handler = SessionAwareMcpHandlerBridge::new(
-                handler.clone(),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-            );
-            builder = builder.register_handler(vec![method.clone()], bridge_handler);
-        }
-
-        // notifications/initialized exists only in the 2025-11-25 lifecycle; the
-        // 2026-07-28 stateless core has no initialize/initialized handshake.
-        #[cfg(feature = "protocol-2025-11-25")]
-        {
-            use crate::handlers::InitializedNotificationHandler;
-            let initialized_handler =
-                InitializedNotificationHandler::new(self.session_manager.clone());
-            let initialized_bridge = SessionAwareMcpHandlerBridge::new(
-                Arc::new(initialized_handler),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-            );
-            builder = builder.register_handler(
-                vec!["notifications/initialized".to_string()],
-                initialized_bridge,
-            );
-        }
-
-        let http_server = builder.build();
+        let http_server = self.build_configured_http_builder().build();
 
         // Run server in background task
         let server_task = {
