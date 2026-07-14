@@ -179,6 +179,129 @@ pub fn scan_x_mcp_headers(
     Ok(out)
 }
 
+/// Scan a tool `inputSchema` for an `x-mcp-header` annotation that
+/// [`scan_x_mcp_headers`] cannot see: one reachable only through `items`,
+/// a composition keyword (`oneOf`/`anyOf`/`allOf`/`not`), a conditional
+/// (`if`/`then`/`else`), or `$ref` indirection — rather than a plain
+/// `properties` chain. `scan_x_mcp_headers` silently skips these (it only
+/// recurses via a property's own `properties` map), so a schema author who
+/// puts `x-mcp-header` in one of these positions gets neither the mirrored
+/// header NOR an error from that scan. Per SEP-2243, such a misplaced
+/// annotation makes the whole tool definition invalid, and a Streamable HTTP
+/// client MUST exclude it from `tools/list`.
+///
+/// Returns a JSON-pointer-style description of the first violation found
+/// (relative to `inputSchema`), or `None` if no misplaced annotation exists.
+pub fn find_misplaced_x_mcp_header(input_schema: &serde_json::Value) -> Option<String> {
+    fn has_annotation(schema: &serde_json::Value) -> bool {
+        schema.get(X_MCP_HEADER_SCHEMA_KEY).is_some()
+    }
+
+    fn escape(name: &str) -> String {
+        name.replace('~', "~0").replace('/', "~1")
+    }
+
+    /// Allowlist for the CHAIN: an `x-mcp-header` is valid only when every
+    /// step from the schema root to it is a `properties/<name>` step
+    /// (`on_properties_chain`) — anything ELSE that is schema-shaped is
+    /// traversed too (chain-breaking), because the positional rule is "any
+    /// x-mcp-header outside a pure properties chain makes the tool
+    /// invalid" — including one sitting in a `$defs` entry nothing
+    /// references. Only two carve-outs exist:
+    /// - `$ref`/`$dynamicRef`: resolved by pointer (below) rather than
+    ///   generically, and chain-breaking.
+    /// - `const`/`default`/`enum`/`examples`: these hold literal INSTANCE
+    ///   DATA, never subschemas — the complete 2020-12 set of keywords whose
+    ///   value can be an arbitrary object carrying a coincidental
+    ///   "x-mcp-header" key. Recursing into them would misread user data as
+    ///   an annotation. Every other keyword is either schema-valued (and
+    ///   must be traversed for completeness, including `$defs`/
+    ///   `definitions`) or bails out harmlessly via `node.as_object()?` on a
+    ///   non-object value.
+    ///
+    /// `ref_depth` bounds `$ref`/`$dynamicRef` resolution so a local ref
+    /// cycle terminates instead of overflowing the stack.
+    fn walk(
+        node: &serde_json::Value,
+        root: &serde_json::Value,
+        pointer: &str,
+        on_properties_chain: bool,
+        ref_depth: usize,
+    ) -> Option<String> {
+        let obj = node.as_object()?;
+
+        if !on_properties_chain && has_annotation(node) {
+            return Some(pointer.to_string());
+        }
+
+        for (key, value) in obj {
+            match key.as_str() {
+                "properties" => {
+                    if let Some(props) = value.as_object() {
+                        for (name, sub) in props {
+                            let sub_pointer = format!("{pointer}/properties/{}", escape(name));
+                            if let Some(found) =
+                                walk(sub, root, &sub_pointer, on_properties_chain, ref_depth)
+                            {
+                                return Some(found);
+                            }
+                        }
+                    }
+                }
+                "$ref" | "$dynamicRef" => {
+                    if ref_depth < 64
+                        && let Some(r) = value.as_str()
+                        && let Some(local_pointer) = r.strip_prefix('#')
+                    {
+                        let target = if local_pointer.is_empty() {
+                            Some(root)
+                        } else {
+                            root.pointer(local_pointer)
+                        };
+                        if let Some(target) = target {
+                            let sub_pointer = format!("{pointer}/{key}");
+                            if let Some(found) =
+                                walk(target, root, &sub_pointer, false, ref_depth + 1)
+                            {
+                                return Some(found);
+                            }
+                        }
+                    }
+                }
+                // Instance data, never subschemas — see the doc comment.
+                "const" | "default" | "enum" | "examples" => {}
+                _ => {
+                    // Every other keyword: recurse as a single subschema
+                    // object and/or an array of subschema objects (covers
+                    // every SCHEMA-shaped location uniformly, including
+                    // `$defs`/`definitions` — an x-mcp-header there is still
+                    // "outside a pure properties chain" per the positional
+                    // rule, referenced or not). `walk` bails immediately via
+                    // `node.as_object()?` for a value that isn't
+                    // schema-shaped, so this is safe to call unconditionally.
+                    let sub_pointer = format!("{pointer}/{}", escape(key));
+                    if let Some(found) = walk(value, root, &sub_pointer, false, ref_depth) {
+                        return Some(found);
+                    }
+                    if let Some(arr) = value.as_array() {
+                        for (i, sub) in arr.iter().enumerate() {
+                            if let Some(found) =
+                                walk(sub, root, &format!("{sub_pointer}/{i}"), false, ref_depth)
+                            {
+                                return Some(found);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
+    }
+
+    walk(input_schema, input_schema, "", true, 0)
+}
+
 /// Encode a parameter value for an `Mcp-Param-*` header per SEP-2243.
 ///
 /// `string` is used as-is, `integer` as its decimal representation (must be
@@ -378,5 +501,208 @@ mod param_tests {
         let bindings = scan_x_mcp_headers(&top_level).unwrap();
         assert_eq!(bindings.len(), 1);
         assert_eq!(bindings[0].header_name, "Region");
+    }
+}
+
+#[cfg(test)]
+mod misplaced_x_mcp_header_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn top_level_property_annotation_is_not_flagged() {
+        let schema = json!({"properties": {
+            "region": {"type": "string", "x-mcp-header": "Region"}
+        }});
+        assert_eq!(find_misplaced_x_mcp_header(&schema), None);
+    }
+
+    #[test]
+    fn nested_property_annotation_is_not_flagged() {
+        let schema = json!({"properties": {
+            "outer": {"type": "object", "properties": {
+                "inner": {"type": "boolean", "x-mcp-header": "Inner"}
+            }}
+        }});
+        assert_eq!(find_misplaced_x_mcp_header(&schema), None);
+    }
+
+    #[test]
+    fn annotation_under_items_is_flagged() {
+        let schema = json!({"properties": {
+            "tags": {"type": "array", "items": {"type": "string", "x-mcp-header": "Tag"}}
+        }});
+        let found = find_misplaced_x_mcp_header(&schema);
+        assert_eq!(found.as_deref(), Some("/properties/tags/items"));
+    }
+
+    #[test]
+    fn annotation_under_all_of_is_flagged() {
+        let schema = json!({"properties": {
+            "region": {"allOf": [{"type": "string", "x-mcp-header": "Region"}]}
+        }});
+        let found = find_misplaced_x_mcp_header(&schema);
+        assert_eq!(found.as_deref(), Some("/properties/region/allOf/0"));
+    }
+
+    #[test]
+    fn annotation_under_any_of_is_flagged() {
+        let schema = json!({"properties": {
+            "region": {"anyOf": [{"type": "string", "x-mcp-header": "Region"}]}
+        }});
+        assert!(find_misplaced_x_mcp_header(&schema).is_some());
+    }
+
+    #[test]
+    fn annotation_under_one_of_is_flagged() {
+        let schema = json!({"properties": {
+            "region": {"oneOf": [{"type": "string", "x-mcp-header": "Region"}]}
+        }});
+        assert!(find_misplaced_x_mcp_header(&schema).is_some());
+    }
+
+    #[test]
+    fn annotation_under_not_if_then_else_is_flagged() {
+        for key in ["not", "if", "then", "else"] {
+            let schema = json!({"properties": {
+                "region": {key: {"type": "string", "x-mcp-header": "Region"}}
+            }});
+            assert!(
+                find_misplaced_x_mcp_header(&schema).is_some(),
+                "x-mcp-header under `{key}` must be flagged"
+            );
+        }
+    }
+
+    #[test]
+    fn annotation_reached_only_via_ref_is_flagged() {
+        let schema = json!({
+            "properties": { "region": {"$ref": "#/$defs/Region"} },
+            "$defs": { "Region": {"type": "string", "x-mcp-header": "Region"} }
+        });
+        // With `$defs` now traversed generically (see the positional-rule
+        // doc comment on `walk`), the annotation may be reported either at
+        // `/$defs/Region` or `/properties/region/$ref` depending on object
+        // key iteration order — both are valid "tool is invalid" signals.
+        // The contract is "is the tool invalid", not the exact pointer.
+        assert!(find_misplaced_x_mcp_header(&schema).is_some());
+    }
+
+    #[test]
+    fn schema_with_no_annotations_is_not_flagged() {
+        let schema = json!({"properties": {"q": {"type": "string"}}});
+        assert_eq!(find_misplaced_x_mcp_header(&schema), None);
+    }
+
+    /// R4: the allowlist walk must catch applicators beyond the original
+    /// enumerated set — these are the keywords an earlier enumerate-the-bad-
+    /// keywords version missed entirely (confirmed by independent wire tests).
+    #[test]
+    fn annotation_under_pattern_properties_is_flagged() {
+        let schema = json!({"properties": {
+            "region": {"patternProperties": {
+                "^S_": {"type": "string", "x-mcp-header": "Region"}
+            }}
+        }});
+        assert!(
+            find_misplaced_x_mcp_header(&schema).is_some(),
+            "x-mcp-header under `patternProperties` must be flagged"
+        );
+    }
+
+    #[test]
+    fn annotation_under_prefix_items_is_flagged() {
+        let schema = json!({"properties": {
+            "coords": {"type": "array", "prefixItems": [
+                {"type": "number", "x-mcp-header": "Lat"}
+            ]}
+        }});
+        assert!(
+            find_misplaced_x_mcp_header(&schema).is_some(),
+            "x-mcp-header under `prefixItems` must be flagged"
+        );
+    }
+
+    #[test]
+    fn annotation_under_additional_properties_is_flagged() {
+        let schema = json!({"properties": {
+            "region": {"type": "object", "additionalProperties": {
+                "type": "string", "x-mcp-header": "Region"
+            }}
+        }});
+        assert!(
+            find_misplaced_x_mcp_header(&schema).is_some(),
+            "x-mcp-header under `additionalProperties` must be flagged"
+        );
+    }
+
+    #[test]
+    fn annotation_under_contains_is_flagged() {
+        let schema = json!({"properties": {
+            "tags": {"type": "array", "contains": {
+                "type": "string", "x-mcp-header": "Tag"
+            }}
+        }});
+        assert!(
+            find_misplaced_x_mcp_header(&schema).is_some(),
+            "x-mcp-header under `contains` must be flagged"
+        );
+    }
+
+    #[test]
+    fn annotation_under_property_names_is_flagged() {
+        let schema = json!({"properties": {
+            "region": {"type": "object", "propertyNames": {
+                "type": "string", "x-mcp-header": "Region"
+            }}
+        }});
+        assert!(
+            find_misplaced_x_mcp_header(&schema).is_some(),
+            "x-mcp-header under `propertyNames` must be flagged"
+        );
+    }
+
+    /// Positional rule: an x-mcp-header ANYWHERE outside a pure `properties`
+    /// chain makes the tool invalid — including an UNREFERENCED `$defs`/
+    /// `definitions` entry. Referenced or not makes no difference.
+    #[test]
+    fn unreferenced_defs_annotation_is_flagged() {
+        for defs_key in ["$defs", "definitions"] {
+            let schema = json!({
+                "properties": {"region": {"type": "string"}},
+                defs_key: {"Unused": {"type": "string", "x-mcp-header": "Region"}}
+            });
+            assert!(
+                find_misplaced_x_mcp_header(&schema).is_some(),
+                "an x-mcp-header under `{defs_key}` must be flagged even if unreferenced"
+            );
+        }
+    }
+
+    /// Precision: a literal data value (not a subschema) that happens to
+    /// contain a key spelled "x-mcp-header" must NOT be misread as an
+    /// annotation. `const`/`default`/`enum`/`examples` are the complete
+    /// 2020-12 set of keywords whose value is instance data capable of
+    /// holding an arbitrary object key — never subschemas.
+    #[test]
+    fn annotation_in_const_default_enum_examples_is_not_flagged() {
+        for data_key in ["const", "default", "enum", "examples"] {
+            let data_value = if data_key == "enum" || data_key == "examples" {
+                json!([{"x-mcp-header": "not-an-annotation"}])
+            } else {
+                json!({"x-mcp-header": "not-an-annotation"})
+            };
+            let schema = json!({"properties": {
+                "region": {
+                    "type": "object",
+                    data_key: data_value
+                }
+            }});
+            assert_eq!(
+                find_misplaced_x_mcp_header(&schema),
+                None,
+                "a literal value under `{data_key}` must not be treated as a schema annotation"
+            );
+        }
     }
 }

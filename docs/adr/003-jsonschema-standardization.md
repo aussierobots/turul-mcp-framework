@@ -210,6 +210,102 @@ The `JsonSchema` enum serializes to identical JSON as before:
 - Original Issue: `FUNCTION_MACRO_DEBUG_NOTES.md`
 - Implementation: PR fixing `#[mcp_tool]` compilation
 
----
+## Revision log
+
+### 2026-07-14 — BP-3 dialect validation for `inputSchema` (DRAFT-2026-v1)
+
+DRAFT-2026-v1 (SEP-2106) opens `Tool.inputSchema` to the full JSON Schema
+2020-12 vocabulary (`oneOf`/`anyOf`/`allOf`/`$ref`/`$defs`/conditionals),
+superseding this ADR's original structural `JsonSchema` enum for the 2026
+wire type (`turul-mcp-protocol-2026-07-28::tools::ToolSchema` models
+`properties` as `HashMap<String, serde_json::Value>` precisely so arbitrary
+2020-12 shapes pass through unconverted — see that type's doc comment). An
+unrestricted schema surface needs a real validator at the two trust
+boundaries: a server MUST NOT advertise an invalid `inputSchema`, and a
+client MUST exclude a tool whose `inputSchema` is invalid from `tools/list`.
+
+**Two distinct categories of requirement — do not conflate them.** The spec's
+basic protocol row 207 states a MUST: "Clients and servers MUST validate
+schemas according to their declared or default dialect and MUST handle
+unsupported dialects gracefully by returning an appropriate error." The
+dialect check (absent `$schema` → 2020-12; present and not the canonical
+2020-12 URI → `UnsupportedDialect`) and the 2020-12 meta-validation compile
+step are that MUST. Separately, **as a matter of framework security policy,
+not a JSON Schema spec requirement**, this validator also rejects a remote
+`$ref` (prevents SSRF — fetching attacker-controlled schema content over the
+network) and enforces size/nesting/composition-depth bounds (prevents
+resource-exhaustion DoS from an oversized or pathologically nested schema).
+Both are deliberate hardening choices layered on top of the spec MUST; a
+minimal spec-compliant implementation would not need either.
+
+**Validator choice**: `jsonschema` 0.47 (crates.io), `default-features =
+false`. That drops `reqwest`/`resolve-http`/`resolve-file`/`tls-*` entirely —
+2020-12 compilation still works with zero features enabled (spiked and
+confirmed runnable before adoption). A `Retrieve` implementation that errors
+on every lookup is installed in addition, so remote `$ref` resolution is
+refused at two independent layers: it cannot compile in (feature-absent) and
+it would refuse at runtime if it somehow could.
+
+**Bounds** (framework security policy, checked before the compile step):
+`MAX_SCHEMA_BYTES = 256 KiB`; `MAX_COMPOSITION_DEPTH = 32` (nesting through
+`allOf`/`anyOf`/`oneOf`/`not`/`if`/`then`/`else`/`items`/`properties`). Any
+`$ref` whose string value has a scheme+authority (`http://`, `https://`, or
+generally `://`) is rejected outright as `RemoteRef`, ahead of the compile
+step. **Cycle safety**: the bounds walk traverses only the literal JSON
+document tree — it never resolves or follows a `$ref` target. A legitimate
+cyclic local `$ref` (e.g. a recursive tree-node schema referencing itself
+through `$defs`) MUST pass the bounds check and does; `jsonschema` resolves
+and validates such recursion safely at compile time in the step that
+follows. `MAX_REF_DEPTH` remains defined for API stability but is not
+currently exercised by the walk: since `$ref` targets are never resolved,
+there is no "chain" to measure without reintroducing the cycle risk this
+bound would otherwise guard against. An earlier draft of this slice did
+follow local `$ref` chains (with a depth cap to avoid an unbounded loop) and
+was corrected during review: a genuinely cyclic local `$ref` — the same
+target re-resolved on every hop — would exceed that cap and be rejected as
+`TooDeep` after `MAX_REF_DEPTH` hops, which is exactly the "MUST pass"
+recursive-schema case this bound would have wrongly rejected.
+
+**Diagnostics**: every error variant's message names the specific value that
+failed — the offending `$ref` URI and the word "policy" (distinguishing a
+framework hardening rejection from a spec-mandated one) for `RemoteRef`; the
+exceeded byte count and limit for `TooLarge`; the nesting kind and limit for
+`TooDeep`. Asserted in tests via `.to_string()` content, not merely the error
+variant.
+
+**Placement**: the validator (`validate_tool_input_schema`,
+`SchemaValidationError`, `SchemaValidationError` derived via `thiserror`)
+lives in a new dedicated leaf crate, `turul-mcp-schema-validation` (deps:
+`serde_json`, `jsonschema`, `thiserror` — all normal, no cargo-feature
+plumbing). It was NOT placed in `turul-mcp-builders` — an earlier draft of
+this slice did that and was corrected during review, because `turul-mcp-
+client`'s `src/` uses `turul_mcp_builders` zero times (piggybacking would
+have strengthened an unused coupling), and `turul-mcp-builders` uncondi-
+tionally depends on the `turul-mcp-protocol` alias crate, so linking it from
+`turul-mcp-client` would reintroduce the alias's `protocol-2025-11-25` /
+`protocol-2026-07-28` feature mutex into the client's dependency graph
+(confirmed by spiking the dependency: it fails to compile with neither
+feature selected) — exactly the coupling ADR-030 removed the alias from this
+crate to avoid. The new crate has zero dependency on any protocol crate, so
+both `turul-mcp-server` and `turul-mcp-client` link it as a plain, uncondi-
+tional dependency with no risk and no feature gate. `jsonschema` stays out of
+`turul-mcp-protocol-2026-07-28` (Protocol Crate Purity) and out of the
+*compiled* `turul-mcp-derive` proc-macro artifact — confirmed via `cargo tree
+-p turul-mcp-derive -e normal,build -i jsonschema` (empty). The derive
+crate's own `[dev-dependencies]` on `turul-mcp-server` does surface
+`jsonschema` in the default, dev-edges-included `cargo tree -i` output, but
+that dev-only edge (used only by the derive crate's own test suite) never
+reaches the published proc-macro artifact.
+
+**SEP-2243 x-mcp-header, same client trust boundary**: a new detector,
+`turul-mcp-protocol-2026-07-28::headers::find_misplaced_x_mcp_header`, closes
+a gap the existing `scan_x_mcp_headers` walk could not see — an `x-mcp-header`
+annotation reachable only through `items`/composition (`oneOf`/`anyOf`/`allOf`/
+`not`/`if`/`then`/`else`)/`$ref` rather than a plain `properties` chain.
+`scan_x_mcp_headers` silently skips these positions (by design, for the
+positive binding scan); the new function is pure detection so the client can
+exclude the whole tool, per the spec's "reject the whole tool definition"
+rule. This is a small, dependency-free helper and stays in the protocol
+crate (spec-shape logic, not a validator).
 
 **Conclusion**: JsonSchema standardization successfully resolved the function macro issue while improving the overall architecture with better type safety, performance, and maintainability. This decision aligns with the framework's goal of providing a type-safe, developer-friendly MCP implementation.

@@ -409,6 +409,85 @@ impl CreateMessageRequestParams {
         self.stop_sequences = Some(sequences);
         self
     }
+
+    /// Sampling message-shape MUSTs:
+    ///
+    /// - A user-role message whose content contains a `ToolResult` block MUST
+    ///   contain ONLY `ToolResult` blocks (no mixing with text/image/etc.).
+    /// - Every assistant-role message containing a `ToolUse` block MUST be
+    ///   immediately followed by a user-role message consisting entirely of
+    ///   `ToolResult` blocks whose `tool_use_id`s match the preceding
+    ///   `ToolUse` ids.
+    pub fn validate_message_shape(&self) -> Result<(), String> {
+        fn blocks(content: &SamplingMessageContent) -> Vec<&SamplingMessageContentBlock> {
+            match content {
+                SamplingMessageContent::Single(b) => vec![b],
+                SamplingMessageContent::Multiple(bs) => bs.iter().collect(),
+            }
+        }
+
+        fn is_tool_result(block: &SamplingMessageContentBlock) -> bool {
+            matches!(block, SamplingMessageContentBlock::ToolResult { .. })
+        }
+
+        for (i, message) in self.messages.iter().enumerate() {
+            let content_blocks = blocks(&message.content);
+
+            if message.role == Role::User {
+                let any_tool_result = content_blocks.iter().any(|b| is_tool_result(b));
+                let all_tool_result = content_blocks.iter().all(|b| is_tool_result(b));
+                if any_tool_result && !all_tool_result {
+                    return Err(format!(
+                        "message {i}: a user message containing a ToolResult block must contain ONLY ToolResult blocks"
+                    ));
+                }
+            }
+
+            if message.role == Role::Assistant {
+                let tool_use_ids: Vec<&str> = content_blocks
+                    .iter()
+                    .filter_map(|b| match b {
+                        SamplingMessageContentBlock::ToolUse { id, .. } => Some(id.as_str()),
+                        _ => None,
+                    })
+                    .collect();
+                if tool_use_ids.is_empty() {
+                    continue;
+                }
+
+                let next = self.messages.get(i + 1).filter(|m| m.role == Role::User);
+                let Some(next) = next else {
+                    return Err(format!(
+                        "message {i}: assistant ToolUse must be immediately followed by a user message of ToolResult blocks"
+                    ));
+                };
+                let next_blocks = blocks(&next.content);
+                if next_blocks.is_empty() || !next_blocks.iter().all(|b| is_tool_result(b)) {
+                    return Err(format!(
+                        "message {i}: assistant ToolUse must be immediately followed by a user message consisting entirely of ToolResult blocks"
+                    ));
+                }
+                let next_ids: std::collections::HashSet<&str> = next_blocks
+                    .iter()
+                    .filter_map(|b| match b {
+                        SamplingMessageContentBlock::ToolResult { tool_use_id, .. } => {
+                            Some(tool_use_id.as_str())
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                for id in tool_use_ids {
+                    if !next_ids.contains(id) {
+                        return Err(format!(
+                            "message {i}: ToolUse id '{id}' has no matching ToolResult in the following message"
+                        ));
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[allow(deprecated)]
@@ -738,7 +817,10 @@ mod tests {
         params.metadata = Some(metadata);
 
         let v = serde_json::to_value(&params).unwrap();
-        assert!(v["metadata"].is_object(), "metadata must serialize as a JSON object");
+        assert!(
+            v["metadata"].is_object(),
+            "metadata must serialize as a JSON object"
+        );
         assert_eq!(v["metadata"]["traceId"], "abc-123");
 
         let back: CreateMessageRequestParams = serde_json::from_value(v).unwrap();
@@ -762,5 +844,112 @@ mod tests {
             result.is_err(),
             "scalar metadata must be rejected per the JSONObject contract"
         );
+    }
+
+    fn tool_use(id: &str) -> SamplingMessageContentBlock {
+        SamplingMessageContentBlock::ToolUse {
+            id: id.to_string(),
+            name: "get_weather".to_string(),
+            input: std::collections::HashMap::new(),
+            meta: None,
+        }
+    }
+
+    fn tool_result(id: &str) -> SamplingMessageContentBlock {
+        SamplingMessageContentBlock::ToolResult {
+            tool_use_id: id.to_string(),
+            content: vec![],
+            structured_content: None,
+            is_error: None,
+            meta: None,
+        }
+    }
+
+    #[test]
+    fn valid_tool_use_tool_result_pairing_passes() {
+        let params = CreateMessageRequestParams::new(
+            vec![
+                SamplingMessage::user_text("what's the weather?"),
+                SamplingMessage::new(
+                    Role::Assistant,
+                    SamplingMessageContent::Single(tool_use("call-1")),
+                ),
+                SamplingMessage::new(
+                    Role::User,
+                    SamplingMessageContent::Single(tool_result("call-1")),
+                ),
+            ],
+            100,
+        );
+        assert_eq!(params.validate_message_shape(), Ok(()));
+    }
+
+    #[test]
+    fn user_message_mixing_text_and_tool_result_fails() {
+        let params = CreateMessageRequestParams::new(
+            vec![
+                SamplingMessage::new(
+                    Role::Assistant,
+                    SamplingMessageContent::Single(tool_use("call-1")),
+                ),
+                SamplingMessage::new(
+                    Role::User,
+                    SamplingMessageContent::Multiple(vec![
+                        SamplingMessageContentBlock::text("also here's some text"),
+                        tool_result("call-1"),
+                    ]),
+                ),
+            ],
+            100,
+        );
+        assert!(
+            params.validate_message_shape().is_err(),
+            "a user message mixing text with a ToolResult block must be rejected"
+        );
+    }
+
+    #[test]
+    fn assistant_tool_use_not_followed_by_matching_tool_result_fails() {
+        // No following message at all.
+        let params = CreateMessageRequestParams::new(
+            vec![SamplingMessage::new(
+                Role::Assistant,
+                SamplingMessageContent::Single(tool_use("call-1")),
+            )],
+            100,
+        );
+        assert!(params.validate_message_shape().is_err());
+
+        // Following message is user but the ToolResult id doesn't match.
+        let params = CreateMessageRequestParams::new(
+            vec![
+                SamplingMessage::new(
+                    Role::Assistant,
+                    SamplingMessageContent::Single(tool_use("call-1")),
+                ),
+                SamplingMessage::new(
+                    Role::User,
+                    SamplingMessageContent::Single(tool_result("call-DIFFERENT")),
+                ),
+            ],
+            100,
+        );
+        assert!(
+            params.validate_message_shape().is_err(),
+            "a mismatched tool_use_id must be rejected"
+        );
+
+        // Following message is assistant, not user.
+        let params = CreateMessageRequestParams::new(
+            vec![
+                SamplingMessage::new(
+                    Role::Assistant,
+                    SamplingMessageContent::Single(tool_use("call-1")),
+                ),
+                SamplingMessage::assistant_text("no tool result here"),
+            ],
+            100,
+        );
+        assert!(params.validate_message_shape().is_err());
     }
 }

@@ -63,6 +63,23 @@ pub(crate) fn input_required_to_result(
 ) -> McpResult<Value> {
     use turul_mcp_protocol::input_required::{InputRequest, InputRequiredResult};
 
+    // A CreateMessage input request's message history must satisfy the
+    // sampling message-shape MUSTs (ToolResult-only user messages, ToolUse
+    // immediately paired with a matching ToolResult) before it is packaged up
+    // and sent to the client.
+    if let Some(ref requests) = input_requests {
+        for request in requests.values() {
+            #[allow(deprecated)]
+            if let InputRequest::CreateMessage(create) = request
+                && let Err(reason) = create.params.validate_message_shape()
+            {
+                return Err(McpError::InvalidParameters(format!(
+                    "sampling/createMessage input request has an invalid message shape: {reason}"
+                )));
+            }
+        }
+    }
+
     if let Some(ref requests) = input_requests {
         for request in requests.values() {
             #[allow(deprecated)]

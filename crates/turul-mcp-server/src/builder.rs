@@ -1666,6 +1666,21 @@ impl McpServerBuilder {
             }
         }
 
+        // A server MUST NOT advertise an invalid tool inputSchema: validate
+        // every registered tool's inputSchema against the JSON Schema 2020-12
+        // dialect/bounds before it can reach `tools/list`.
+        #[cfg(feature = "protocol-2026-07-28")]
+        for (name, tool) in &self.tools {
+            let descriptor = crate::tool::tool_to_descriptor(tool.as_ref());
+            let schema_value = serde_json::to_value(&descriptor.input_schema)
+                .map_err(|e| McpError::configuration(&e.to_string()))?;
+            if let Err(e) = turul_mcp_schema_validation::validate_tool_input_schema(&schema_value) {
+                return Err(McpError::configuration(&format!(
+                    "Tool '{name}' advertises an invalid inputSchema: {e}"
+                )));
+            }
+        }
+
         // Auto-register resource handlers if resources were registered
         // This eliminates the need for manual .with_resources() calls
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();

@@ -280,3 +280,90 @@ async fn invalid_x_mcp_header_tools_are_excluded_from_tools_list() {
         "a tool with an invalid x-mcp-header value MUST be excluded: {names:?}"
     );
 }
+
+/// SEP-2243: an `x-mcp-header` annotation reachable only through `items`
+/// (not a plain `properties` chain) is a misplaced annotation that
+/// `scan_x_mcp_headers` cannot see on its own — `find_misplaced_x_mcp_header`
+/// is the detector that catches it, and the whole tool must be excluded.
+#[tokio::test]
+async fn misplaced_x_mcp_header_under_items_excludes_the_tool_from_tools_list() {
+    let server = start_2026_server().await;
+    mount_2026_result(
+        &server,
+        "tools/list",
+        serde_json::json!({
+            "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+            "tools": [
+                {
+                    "name": "good_tool",
+                    "inputSchema": { "type": "object", "properties": {
+                        "region": { "type": "string", "x-mcp-header": "Region" }
+                    }}
+                },
+                {
+                    "name": "misplaced_header_tool",
+                    "inputSchema": { "type": "object", "properties": {
+                        "tags": { "type": "array", "items": {
+                            "type": "string", "x-mcp-header": "Tag"
+                        }}
+                    }}
+                }
+            ]
+        }),
+    )
+    .await;
+
+    let client = connect_2026(&server).await;
+    let tools = client.list_tools().await.expect("tools/list");
+    let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        names.contains(&"good_tool"),
+        "a valid top-level x-mcp-header must survive: {names:?}"
+    );
+    assert!(
+        !names.contains(&"misplaced_header_tool"),
+        "x-mcp-header nested under `items` MUST exclude the tool: {names:?}"
+    );
+}
+
+/// A tool advertising an `inputSchema` that fails JSON Schema 2020-12
+/// meta-validation must be excluded from `tools/list`.
+#[tokio::test]
+async fn invalid_input_schema_tool_is_excluded_from_tools_list() {
+    let server = start_2026_server().await;
+    mount_2026_result(
+        &server,
+        "tools/list",
+        serde_json::json!({
+            "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+            "tools": [
+                {
+                    "name": "good_tool",
+                    "inputSchema": { "type": "object", "properties": {
+                        "name": { "type": "string" }
+                    }}
+                },
+                {
+                    "name": "bad_schema_tool",
+                    // "type": 123 fails 2020-12 meta-validation.
+                    "inputSchema": { "type": "object", "properties": {
+                        "bad": { "type": 123 }
+                    }}
+                }
+            ]
+        }),
+    )
+    .await;
+
+    let client = connect_2026(&server).await;
+    let tools = client.list_tools().await.expect("tools/list");
+    let names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
+    assert!(
+        names.contains(&"good_tool"),
+        "a well-formed inputSchema must survive: {names:?}"
+    );
+    assert!(
+        !names.contains(&"bad_schema_tool"),
+        "an invalid inputSchema MUST exclude the tool: {names:?}"
+    );
+}

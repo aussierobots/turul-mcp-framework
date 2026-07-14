@@ -100,29 +100,57 @@ where
     Ok(serde_json::from_value(serde_json::to_value(v)?)?)
 }
 
+/// A tool whose `inputSchema` fails JSON Schema 2020-12 dialect validation is
+/// excluded from `tools/list`.
+fn schema_is_valid(schema: &Value) -> Result<(), String> {
+    turul_mcp_schema_validation::validate_tool_input_schema(schema).map_err(|e| e.to_string())
+}
+
 pub(crate) fn parse_list_tools(
     result: &Value,
 ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Tool>> {
     check_result_type(result)?;
     let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
-    // SEP-2243: clients on Streamable HTTP MUST reject tool definitions whose
-    // x-mcp-header annotations violate the constraints — exclude the tool and
-    // log a warning, so one malformed definition doesn't block the rest.
     r.tools
         .iter()
         .filter(|tool| {
             let schema = serde_json::to_value(&tool.input_schema).unwrap_or_default();
-            match p::headers::scan_x_mcp_headers(&schema) {
-                Ok(_) => true,
-                Err(reason) => {
-                    tracing::warn!(
-                        tool = %tool.name,
-                        %reason,
-                        "excluding tool from tools/list: invalid x-mcp-header annotation"
-                    );
-                    false
-                }
+
+            // SEP-2243: clients on Streamable HTTP MUST reject tool
+            // definitions whose x-mcp-header annotations violate the
+            // constraints, INCLUDING an annotation reachable only through
+            // `items`/composition/`$ref` rather than a plain `properties`
+            // chain — exclude the tool and log a warning so one malformed
+            // definition doesn't block the rest.
+            if let Err(reason) = p::headers::scan_x_mcp_headers(&schema) {
+                tracing::warn!(
+                    tool = %tool.name,
+                    %reason,
+                    "excluding tool from tools/list: invalid x-mcp-header annotation"
+                );
+                return false;
             }
+            if let Some(pointer) = p::headers::find_misplaced_x_mcp_header(&schema) {
+                tracing::warn!(
+                    tool = %tool.name,
+                    %pointer,
+                    "excluding tool from tools/list: x-mcp-header annotation not reachable via a properties chain"
+                );
+                return false;
+            }
+
+            // Reject an invalid advertised inputSchema (JSON Schema 2020-12
+            // dialect/bounds).
+            if let Err(reason) = schema_is_valid(&schema) {
+                tracing::warn!(
+                    tool = %tool.name,
+                    %reason,
+                    "excluding tool from tools/list: invalid inputSchema"
+                );
+                return false;
+            }
+
+            true
         })
         .map(remap)
         .collect()

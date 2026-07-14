@@ -23,6 +23,10 @@ turul-mcp-protocol-2025-11-25 = { workspace = true }
 turul-mcp-ext-tasks = { workspace = true, optional = true }
 turul-mcp-protocol-2026-07-28 = { workspace = true, optional = true }
 turul-rpc = { workspace = true }
+# BP-3 (JSON Schema 2020-12 dialect validation, client-side trust boundary).
+# A dedicated leaf crate with no dependency on any protocol crate (normal or
+# alias) — safe to link unconditionally without any alias-mutex risk.
+turul-mcp-schema-validation = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }

@@ -30,6 +30,7 @@ turul-rpc = { workspace = true, features = ["async"] }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.0", default-features = false }
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0", default-features = false }
+turul-mcp-schema-validation = { workspace = true }
 turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4.0", default-features = false }
 turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4.0", default-features = false, optional = true }
 turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.0", default-features = false, optional = true }
