@@ -36,7 +36,7 @@ chrono.workspace = true
 async-trait.workspace = true
 
 # Use sqlx instead of rusqlite to avoid conflicts
-sqlx = { workspace = true, features = ["sqlite", "runtime-tokio-rustls"] }
+sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
 
 [features]
 default = []

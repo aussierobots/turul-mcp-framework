@@ -157,7 +157,7 @@ impl PostgresTaskStorage {
             "CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks (status)",
         ];
 
-        for index_sql in &indexes {
+        for index_sql in indexes {
             sqlx::query(index_sql).execute(&self.pool).await?;
         }
 
