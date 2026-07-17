@@ -201,32 +201,37 @@ impl SearchAuditTrailTool {
         let limit = self.limit.unwrap_or(50).min(1000) as i32;
         let offset = self.offset.unwrap_or(0) as i32;
 
-        // Build dynamic query
+        // Build dynamic query, binding all user-supplied values as parameters
         let mut query = "SELECT * FROM audit_logs WHERE 1=1".to_string();
-        let mut conditions = Vec::new();
+        let mut binds: Vec<&str> = Vec::new();
 
         if let Some(ref start_time) = self.start_time {
-            conditions.push(format!(" AND timestamp >= '{}'", start_time));
+            query.push_str(" AND timestamp >= ?");
+            binds.push(start_time);
         }
         if let Some(ref end_time) = self.end_time {
-            conditions.push(format!(" AND timestamp <= '{}'", end_time));
+            query.push_str(" AND timestamp <= ?");
+            binds.push(end_time);
         }
         if let Some(ref event_type) = self.event_type {
-            conditions.push(format!(" AND event_type = '{}'", event_type));
+            query.push_str(" AND event_type = ?");
+            binds.push(event_type);
         }
         if let Some(ref actor) = self.actor {
-            conditions.push(format!(" AND actor = '{}'", actor));
+            query.push_str(" AND actor = ?");
+            binds.push(actor);
         }
         if let Some(ref resource) = self.resource {
-            conditions.push(format!(" AND resource = '{}'", resource));
-        }
-
-        for condition in conditions {
-            query.push_str(&condition);
+            query.push_str(" AND resource = ?");
+            binds.push(resource);
         }
         query.push_str(" ORDER BY timestamp DESC LIMIT ? OFFSET ?");
 
-        let rows = sqlx::query(&query)
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(query));
+        for b in binds {
+            q = q.bind(b);
+        }
+        let rows = q
             .bind(limit)
             .bind(offset)
             .fetch_all(&**db_pool)
@@ -254,8 +259,7 @@ impl SearchAuditTrailTool {
             .collect();
 
         // Get total count for pagination
-        let count_query = "SELECT COUNT(*) as total FROM audit_logs WHERE 1=1".to_string();
-        let total_row = sqlx::query(&count_query)
+        let total_row = sqlx::query("SELECT COUNT(*) as total FROM audit_logs WHERE 1=1")
             .fetch_one(&**db_pool)
             .await
             .map_err(|e| McpError::tool_execution(&format!("Count query failed: {}", e)))?;
@@ -303,13 +307,16 @@ impl GenerateComplianceReportTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
         let db_pool = get_db_pool()?;
 
-        // Build time filter
+        // Build time filter as bind placeholders (values never interpolated into SQL)
         let mut time_filter = String::new();
+        let mut time_binds: Vec<&str> = Vec::new();
         if let Some(ref start_date) = self.start_date {
-            time_filter.push_str(&format!(" AND timestamp >= '{}'", start_date));
+            time_filter.push_str(" AND timestamp >= ?");
+            time_binds.push(start_date);
         }
         if let Some(ref end_date) = self.end_date {
-            time_filter.push_str(&format!(" AND timestamp <= '{}'", end_date));
+            time_filter.push_str(" AND timestamp <= ?");
+            time_binds.push(end_date);
         }
 
         // Get total event counts by type
@@ -317,7 +324,11 @@ impl GenerateComplianceReportTool {
             "SELECT event_type, COUNT(*) as count FROM audit_logs WHERE 1=1 {} GROUP BY event_type",
             time_filter
         );
-        let event_rows = sqlx::query(&event_counts_query)
+        let mut event_q = sqlx::query(sqlx::AssertSqlSafe(event_counts_query));
+        for b in &time_binds {
+            event_q = event_q.bind(*b);
+        }
+        let event_rows = event_q
             .fetch_all(&**db_pool)
             .await
             .map_err(|e| McpError::tool_execution(&format!("Event counts query failed: {}", e)))?;
@@ -337,7 +348,11 @@ impl GenerateComplianceReportTool {
             "SELECT result, COUNT(*) as count FROM audit_logs WHERE 1=1 {} GROUP BY result",
             time_filter
         );
-        let result_rows = sqlx::query(&result_counts_query)
+        let mut result_q = sqlx::query(sqlx::AssertSqlSafe(result_counts_query));
+        for b in &time_binds {
+            result_q = result_q.bind(*b);
+        }
+        let result_rows = result_q
             .fetch_all(&**db_pool)
             .await
             .map_err(|e| McpError::tool_execution(&format!("Result counts query failed: {}", e)))?;
@@ -352,7 +367,11 @@ impl GenerateComplianceReportTool {
             "SELECT COUNT(DISTINCT actor) as unique_actors, COUNT(*) as total_events FROM audit_logs WHERE 1=1 {}",
             time_filter
         );
-        let stats_row = sqlx::query(&actor_stats_query)
+        let mut stats_q = sqlx::query(sqlx::AssertSqlSafe(actor_stats_query));
+        for b in &time_binds {
+            stats_q = stats_q.bind(*b);
+        }
+        let stats_row = stats_q
             .fetch_one(&**db_pool)
             .await
             .map_err(|e| McpError::tool_execution(&format!("Actor stats query failed: {}", e)))?;

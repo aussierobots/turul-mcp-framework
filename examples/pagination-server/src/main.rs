@@ -240,20 +240,20 @@ impl DatabaseManager {
         department: Option<&str>,
         active_only: bool,
     ) -> Result<(Vec<User>, Option<String>, i64), sqlx::Error> {
-        // Build dynamic query without lifetime issues
+        // Build dynamic query; user-supplied values are always bound as parameters
         let mut where_conditions = Vec::new();
+        let mut binds: Vec<String> = Vec::new();
 
         if let Some(filter_text) = filter {
-            let escaped_filter = filter_text.replace("'", "''"); // Basic SQL injection prevention
-            where_conditions.push(format!(
-                "(name LIKE '%{}%' OR email LIKE '%{}%')",
-                escaped_filter, escaped_filter
-            ));
+            where_conditions.push("(name LIKE ? OR email LIKE ?)".to_string());
+            let pattern = format!("%{}%", filter_text);
+            binds.push(pattern.clone());
+            binds.push(pattern);
         }
 
         if let Some(dept) = department {
-            let escaped_dept = dept.replace("'", "''");
-            where_conditions.push(format!("department = '{}'", escaped_dept));
+            where_conditions.push("department = ?".to_string());
+            binds.push(dept.to_string());
         }
 
         if active_only {
@@ -268,7 +268,11 @@ impl DatabaseManager {
 
         // Get total count
         let count_query = format!("SELECT COUNT(*) FROM users {}", where_clause);
-        let total: (i64,) = sqlx::query_as(&count_query).fetch_one(&self.pool).await?;
+        let mut count_q = sqlx::query_as(sqlx::AssertSqlSafe(count_query));
+        for b in &binds {
+            count_q = count_q.bind(b);
+        }
+        let total: (i64,) = count_q.fetch_one(&self.pool).await?;
 
         // Parse cursor for offset
         let offset = cursor.and_then(|c| c.parse::<i64>().ok()).unwrap_or(0);
@@ -282,11 +286,11 @@ impl DatabaseManager {
             where_clause
         );
 
-        let rows = sqlx::query(&users_query)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?;
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(users_query));
+        for b in &binds {
+            q = q.bind(b);
+        }
+        let rows = q.bind(limit).bind(offset).fetch_all(&self.pool).await?;
 
         let users: Vec<User> = rows
             .into_iter()
