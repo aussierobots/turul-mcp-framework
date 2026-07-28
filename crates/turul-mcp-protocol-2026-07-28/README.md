@@ -3,10 +3,10 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-protocol-2026-07-28.svg)](https://crates.io/crates/turul-mcp-protocol-2026-07-28)
 [![Documentation](https://docs.rs/turul-mcp-protocol-2026-07-28/badge.svg)](https://docs.rs/turul-mcp-protocol-2026-07-28)
 
-Model Context Protocol (MCP) specification implementation for the **DRAFT-2026-v1** schema.
+Model Context Protocol (MCP) specification implementation for the **2026-07-28** schema.
 
-- Wire-version string: **`DRAFT-2026-v1`** (the `LATEST_PROTOCOL_VERSION` value in upstream `schema.ts`).
-- Vendored upstream schema: [`schema/draft-schema.ts`](schema/draft-schema.ts) (ETag-pinned; see [`schema/README.md`](schema/README.md)).
+- Wire-version string: **`2026-07-28`** (the `LATEST_PROTOCOL_VERSION` value in upstream `schema.ts`). The pre-finalization `DRAFT-2026-v1` literal is still accepted on deserialize for back-compat, but is never emitted.
+- Vendored upstream schema: [`schema/draft-schema.ts`](schema/draft-schema.ts) (pinned by commit SHA, shared with the example fixtures; see [`schema/README.md`](schema/README.md)).
 - Draft spec on the web: <https://modelcontextprotocol.io/specification/draft>.
 
 ## What's in this crate
@@ -35,9 +35,9 @@ A faithful 1:1 mapping of `schema/draft-schema.ts`. Every TS interface, type, an
 
 ## Status
 
-**322 tests passing** (139 lib + 179 compliance integration + 3 upstream-fixture + 1 doctest). The schema-drift detector in `tests/compliance.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
+**420 tests passing** (227 lib + 189 compliance integration + 3 upstream-fixture + 1 doctest). The schema-drift detector in `tests/compliance.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
 
-⚠ **DRAFT spec.** The upstream `schema.ts` is still in draft. When the final 2026-07-28 specification publishes, the wire-version string is expected to change from `"DRAFT-2026-v1"` to a stable date form. Regeneration trigger and process: [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
+⚠ **Still a moving target.** The wire-version string has finalized to `"2026-07-28"`, but the file still lives under the upstream `schema/draft/` path and continues to receive field-level revisions — check the pins before starting any slice. Regeneration trigger and process: [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
 
 ## Crate layout
 
@@ -79,7 +79,7 @@ tests/
   compliance.rs      — 19+ named test modules (integration tests via public API)
   upstream_fixtures.rs — Pinned upstream-example roundtrip harness
 schema/
-  draft-schema.ts    — Vendored upstream schema (ETag-pinned)
+  draft-schema.ts    — Vendored upstream schema (commit-pinned)
   README.md          — Provenance + regeneration instructions
 ```
 

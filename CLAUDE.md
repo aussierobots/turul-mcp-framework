@@ -22,6 +22,26 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 - **DO NOT delete the branch, force-push it, or treat it as "complete"** without express authority. "Tests pass" / "all SEPs implemented" is not sufficient — final disposition is the maintainer's call.
 - All work for the 2026-07-28 spec lands on this branch. `main` continues to hold 2025-11-25 (current) until the maintainer chooses to cut over.
 
+### Check the schema pins BEFORE any 2026-07-28 work
+
+**The draft is still moving and is about to finalize as the current spec.** Upstream keeps revising `schema/draft/schema.ts` in place, so a crate that was compliant last week can be non-compliant today with no local change. Start every 2026-07-28 slice by checking drift — before writing code, and before trusting a green suite:
+
+```bash
+# 1. Which commit last changed the fixtures, and does the harness still pass there?
+cargo run -p turul-mcp-protocol-2026-07-28 --bin mcp-compliance-2026-07-28 \
+    --features compliance -- refresh          # dry-run; --write only once green
+
+# 2. Has the vendored schema itself drifted from its pinned commit?
+shasum -a 256 crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts
+#    compare against the Content sha256 in schema/README.md, then diff that
+#    commit against upstream main
+```
+
+Governing rules — including the one-immutable-commit requirement and the
+`modeled=N` caveat — live in **AGENTS.md §Branch Lock → "Schema pin governance"**,
+which wins on conflict. Do not restate them here; this section is the runnable
+check only.
+
 ## Critical Rules
 
 ### Protocol Crate Purity

@@ -167,7 +167,7 @@ pub(crate) fn extract_request_meta_extra(params: &Option<Value>) -> HashMap<Stri
 /// caller's echoed `_meta` extras.
 ///
 /// On 2025-11-25 the cursor/total/hasMore travel in a `PaginatedResponse`
-/// `_meta` envelope. On DRAFT-2026-v1 the result carries `nextCursor` directly
+/// `_meta` envelope. On 2026-07-28 the result carries `nextCursor` directly
 /// and `_meta` holds only the echoed caller extras (the schema `Result` has no
 /// total/hasMore fields).
 fn paginate_list_response<T: serde::Serialize>(

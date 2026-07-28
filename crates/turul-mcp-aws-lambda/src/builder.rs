@@ -218,7 +218,7 @@ impl LambdaMcpServerBuilder {
 
         // Add notification handlers
         let notifications_handler = Arc::new(NotificationsHandler);
-        // `ClientNotification` (DRAFT-2026-v1 schema) dropped `ProgressNotification`
+        // `ClientNotification` (2026-07-28 schema) dropped `ProgressNotification`
         // from the client→server union, and `notifications/message` was never a
         // member of that union on any pin — both are inbound-accepted only on the
         // 2025-11-25 lane.

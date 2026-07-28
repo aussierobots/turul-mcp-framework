@@ -223,6 +223,13 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply �
 - `main` remains on MCP 2025-11-25 throughout this work. Do not back-port 2026-07-28-only changes to `main` without explicit instruction.
 - Side-branches off `2026-07-28-MCP-Specification` may merge back into it freely; only the branch → `main` direction is locked.
 
+**Schema pin governance — MANDATORY:**
+- The 2026-07-28 schema is revised in place upstream and is about to finalize as the current spec. A crate that was compliant last week can be non-compliant today with no local change. **Check pin drift at the START of every 2026-07-28 slice** — before writing code, and before trusting a green suite.
+- **Two artifacts are pinned and MUST name the same immutable upstream commit:** `PIN` in `crates/turul-mcp-protocol-2026-07-28/src/compliance/fetch.rs` (the example fixtures) and the provenance block in `schema/README.md` (the vendored `draft-schema.ts`). Re-vendor **by commit SHA, never `main`** — a `main`-sourced copy cannot be reproduced later. Leaving the two on different commits is a provenance defect, not a cosmetic mismatch.
+- **A green compliance run is only as strong as its `modeled=N` count.** Most upstream example directories are `Kind::NotModeled`, so the harness reports `failed=0` for changes it never looked at. Read the modeled count on every run. If a slice changes a type whose fixture directory is unmodeled, model it **in the same slice** — otherwise the fix ships with no fixture-level proof.
+- **Pin parity is a claim about a moment, not a standing property.** Any document asserting "no re-pin trigger exists" is dated the instant it is written; re-verify rather than citing it.
+- Operator commands for the drift check: see CLAUDE.md §"Check the schema pins BEFORE any 2026-07-28 work".
+
 ## Agent-Specific Instructions
 - Scope: this file applies to the entire repository.
 - Role: act as a strict critic for the **active branch's spec target** — MCP 2025-11-25 on `main`, MCP DRAFT-2026-v1 on the `2026-07-28-MCP-Specification` branch (see §"Branch-Conditional Spec Guidance") — within the Turul MCP Framework; flag deviations and propose compliant fixes.

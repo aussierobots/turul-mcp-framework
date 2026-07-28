@@ -58,10 +58,10 @@ upstream path; finalized wire string `"2026-07-28"`).
 | `tests/compliance.rs` integration | 187 | ✅ pass |
 | `tests/upstream_fixtures.rs` harness | 3 | ✅ pass |
 | Doctests | 1 (+ 2 ignored) | ✅ pass |
-| **Total (`--features compliance`)** | **376** | ✅ all green, `clippy -D warnings` clean |
-| Total (default features) | 366 | ✅ — `compliance` feature adds the 7 lib + 3 fixture wire-gate tests |
-| `mcp-compliance-2026-07-28` binary | 20/20 fixtures | ✅ all pass |
-| Modeled fixtures | 8 of 87 (9.2%) | ⚠ partial — see §Coverage below |
+| **Total (`--features compliance`)** | **420** | ✅ all green, `clippy -D warnings` clean |
+| Total (default features) | 409 | ✅ — `compliance` feature adds the 7 lib + 3 fixture wire-gate tests |
+| `mcp-compliance-2026-07-28` binary | 22/22 fixtures | ✅ all pass |
+| Modeled fixtures | 10 of 87 (11.5%) | ⚠ partial — see §Coverage below |
 
 Verified on `turul-rpc 0.2.2` (with `turul-rpc-jsonrpc 0.2.2` for the `frame` module fix).
 
@@ -89,9 +89,9 @@ Wire types re-exported from `turul-rpc` 0.2.2:
 | `RequestMetaObject extends MetaObject` (5 named fields, 3 required namespaced) | `meta::RequestMetaObject` typed struct + `extra: HashMap` flatten | ✅ |
 | `RequestParams._meta: RequestMetaObject` (REQUIRED) | `json_rpc::RequestParams.meta: RequestMetaObject` (not `Option`) | ✅ |
 | `extends RequestParams` (per-RPC) — every extender carries the same typed required `_meta` | `CallToolRequestParams`, `PaginatedRequestParams`, `ReadResourceRequestParams`, `GetPromptRequestParams`, `CompleteRequestParams`, `SubscriptionsListenRequestParams` — all `meta: RequestMetaObject` | ✅ |
-| `NotificationParams._meta?: MetaObject` | `notifications::NotificationParams.meta: Option<MetaObject>` | ✅ |
-| `Result._meta?: MetaObject` | per-result struct: `meta: Option<MetaObject>` | ✅ |
-| Required keys: `io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities` | typed named fields with `#[serde(rename = "io.modelcontextprotocol/…")]` | ✅ |
+| `NotificationParams._meta?: NotificationMetaObject` | `notifications::NotificationParams.meta: Option<MetaObject>` via `HasNotificationMeta`; the `subscriptionId` key is stamped at the transport | ⚠ structural-only — see §Intentional deviations |
+| `Result._meta?: ResultMetaObject` | per-result struct: `meta: Option<ResultMetaObject>` (all 12 result types); `HasMeta::meta()` returns `Option<&ResultMetaObject>` | ✅ |
+| Required keys: `io.modelcontextprotocol/protocolVersion`, `clientCapabilities` (`clientInfo` is OPTIONAL) | typed named fields with `#[serde(rename = "io.modelcontextprotocol/…")]`; `client_info: Option<Implementation>` | ✅ |
 | Optional keys: `progressToken?`, `io.modelcontextprotocol/logLevel?` | typed `Option<ProgressToken>` / `Option<LoggingLevel>` | ✅ |
 
 ## Method-string conformance (22 schema methods)
@@ -135,7 +135,7 @@ No method strings outside the canonical 22 are declared anywhere in the crate. E
 | Primitive JSON Schema (Boolean/Number/String/Enum) | 4 | 4 | 0 |
 | Constants (`JSONRPC_VERSION`, `LATEST_PROTOCOL_VERSION`, error codes ×7) | 9 | 9 | n/a |
 | Schema-author types (`Request`, `Notification`, `Result`, `ClientRequest`, `ServerRequest`, etc. — TS-only unions) | ~10 | not bound (Rust traits cover this) | n/a |
-| **Total** | ~150 | ~150 | 20 file-level wire tests (8 modeled cases) |
+| **Total** | ~150 | ~150 | 22 file-level wire tests (10 modeled cases) |
 
 ## Wire-field name conformance (camelCase via serde)
 
@@ -194,7 +194,7 @@ Bidirectional wire-format gate against the upstream's canonical example JSON fix
   | `ElicitResult` | 3 | ✅ |
   | **Total** | **20/20** | **✅** |
 
-- **78 remaining cases** marked `Kind::NotModeled` — wave-by-wave migration to be raised by deliberate PR.
+- **77 remaining cases** marked `Kind::NotModeled` — wave-by-wave migration to be raised by deliberate PR. A green run means only "the modeled subset matches": `DiscoverResult`/`DiscoverResultResponse` were unmodeled when upstream #3002 changed them, so the harness reported `failed=0` across the whole 12-day drift window. Read the `modeled=N` line on every run.
 
 ## Schema-fidelity corrections (Slice A' follow-up, 2026-05-31)
 
@@ -264,6 +264,7 @@ SHOULD asks implementations to publish.
 2. **`ContentBlock` modeled as an `enum` with inline struct-variants** — schema models the same union as separate `TextContent | ImageContent | …` interfaces. Wire-equivalent (same `type` tag discrimination); structural-only deviation. Slated for extraction to standalone structs in a separate slice.
 3. **`*ResultResponse` envelope unions** (e.g. `CallToolResultResponse.result: CallToolResult | InputRequiredResult`) — only `DiscoverResultResponse` is bound. Others handled via `JsonRpcSuccessResponse.result: Value` + caller-side discrimination on `resultType`. Functional but untyped at the dispatcher layer.
 4. **Pagination `cursor` lives on `PaginatedRequestParams`, not on a separate `PaginatedRequest` extender struct** — wire shape identical; Rust uses field composition instead of interface extension.
+5. **`NotificationParams._meta` typed as the loose `MetaObject`, not `NotificationMetaObject`** — the schema retypes it to `NotificationMetaObject` (`MetaObject` plus optional `io.modelcontextprotocol/subscriptionId`). The result side of this deviation was closed on 2026-07-28: all 12 result types now carry `Option<ResultMetaObject>` and `HasMeta` was split from the notification carrier (`HasNotificationMeta`), because one trait returning one type cannot model two different schema carriers. The notification side is the same shape of work — add the type, retype the field, move the transport's `subscriptionId` stamp onto it — and is a named follow-up, not a permanent exemption. Wire-equivalent meanwhile: `NotificationMetaObject` extends `MetaObject`, and a loose map round-trips the namespaced key verbatim.
 
 ## Verifying the report
 

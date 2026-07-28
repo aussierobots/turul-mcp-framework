@@ -1,5 +1,8 @@
 # OUTSTANDING — MCP 2026-07-28 draft-spec compliance & release-docs review
 
+> **SUPERSEDED IN PART (2026-07-28).** Every schema-pin statement below describes the `6e4cba2d…` / `93671a3f` pin and the 2026-07-13 parity check. Upstream #3002 landed 2026-07-16 and the crate is now pinned to `71e30695` (sha256 `c56f0ad2…`). Treat the pin claims here as a dated record, not current state; `crates/turul-mcp-protocol-2026-07-28/schema/README.md` is authoritative. The one open item — `SubscriptionsListenResult` graceful-close emission — is still open.
+
+
 **Status: BURNED DOWN (2026-07-13) — one open item remains.** Snapshot date: 2026-07-02; resumed 2026-07-13. This file is a temporary 0.4 punch list, not a permanent record (see §6) — fold the surviving open item into `docs/plans/2026-07-28-spec-compliance.md` and delete this file during final release preparation.
 
 ## Addendum 2026-07-13 — resume + burn-down

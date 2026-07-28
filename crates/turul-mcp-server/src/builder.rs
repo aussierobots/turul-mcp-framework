@@ -182,7 +182,7 @@ impl McpServerBuilder {
 
         // Add all notification handlers (except notifications/initialized which is handled specially)
         let notifications_handler = Arc::new(NotificationsHandler);
-        // `ClientNotification` (DRAFT-2026-v1 schema) dropped `ProgressNotification`
+        // `ClientNotification` (2026-07-28 schema) dropped `ProgressNotification`
         // from the client→server union, and `notifications/message` was never a
         // member of that union on any pin — both are inbound-accepted only on the
         // 2025-11-25 lane. The 2026 dispatch table simply has no entry for either
@@ -2097,7 +2097,7 @@ mod tests {
             // and the inbound roots surface (roots/list + its notifications
             // — roots is requested via MRTR on 2026, never hosted). It also
             // drops `notifications/message` and `notifications/progress`:
-            // the DRAFT-2026-v1 `ClientNotification` union has no
+            // the 2026-07-28 `ClientNotification` union has no
             // `ProgressNotification` member, and `notifications/message` was
             // never a member on any pin — 12, not 14.
             assert_eq!(builder.handlers.len(), 12);

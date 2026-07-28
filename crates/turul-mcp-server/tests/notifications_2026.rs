@@ -74,7 +74,7 @@ async fn post_notification(url: &str, method: &str, params: serde_json::Value) -
 }
 
 /// `notifications/progress` is no longer a `ClientNotification` member on
-/// DRAFT-2026-v1 — the dispatch table has no entry for it, but the POST
+/// 2026-07-28 — the dispatch table has no entry for it, but the POST
 /// still gets 202 per the notification-acknowledgment contract.
 #[tokio::test]
 async fn inbound_progress_notification_still_gets_202_with_no_dispatch_entry() {

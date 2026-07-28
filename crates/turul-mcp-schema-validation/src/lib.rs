@@ -1,6 +1,6 @@
 //! JSON Schema 2020-12 dialect validation for MCP tool `inputSchema`.
 //!
-//! DRAFT-2026-v1 (SEP-2106) opens `Tool.inputSchema` to the full JSON Schema
+//! 2026-07-28 (SEP-2106) opens `Tool.inputSchema` to the full JSON Schema
 //! 2020-12 vocabulary (`oneOf`/`anyOf`/`allOf`/`$ref`/`$defs`/conditionals).
 //! The spec states the MUST this crate satisfies:
 //! "Clients and servers MUST validate schemas according to their declared or

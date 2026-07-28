@@ -1,5 +1,8 @@
 # Draft-migration audit — live MCP draft vs vendored pin (2026-07-13)
 
+> **SUPERSEDED (2026-07-28).** The pin parity recorded here is as of 2026-07-13 against `6e4cba2d…` / `93671a3f`. Upstream #3002 landed 2026-07-16; the current pin is `71e30695` (sha256 `c56f0ad2…`). See `schema/README.md` provenance and the ADR-027 revision log.
+
+
 **Status: AUDITED — unresolved MUST gaps recorded.** Implemented-and-verified fixes landed
 in commits `87430c17` / `4690e007` / `a14d9f91` / `fdfcc2a9` / `509a3552` plus the
 2026-07-14 F1/F2 slice (§7). The compliance matrix retains **two** recorded MUST-level ❌ gaps —
