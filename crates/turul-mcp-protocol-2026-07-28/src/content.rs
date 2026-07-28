@@ -1,4 +1,4 @@
-//! Content block types for MCP DRAFT-2026-v1.
+//! Content block types for MCP 2026-07-28.
 //!
 //! This module contains the exact content type definitions from the MCP spec,
 //! ensuring perfect compliance with the TypeScript schema definitions.
@@ -156,7 +156,7 @@ pub enum ContentBlock {
     /// Tool use content block.
     #[deprecated(
         since = "0.4.0",
-        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+        note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface. \
                 Earliest removal: first release on/after 2027-07-28."
     )]
     #[serde(rename = "tool_use")]
@@ -173,7 +173,7 @@ pub enum ContentBlock {
     /// Tool result content block.
     #[deprecated(
         since = "0.4.0",
-        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+        note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface. \
                 Earliest removal: first release on/after 2027-07-28."
     )]
     #[serde(rename = "tool_result")]
@@ -251,7 +251,7 @@ impl ContentBlock {
     #[allow(deprecated)]
     #[deprecated(
         since = "0.4.0",
-        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface."
+        note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface."
     )]
     pub fn tool_use(
         id: impl Into<String>,
@@ -270,7 +270,7 @@ impl ContentBlock {
     #[allow(deprecated)]
     #[deprecated(
         since = "0.4.0",
-        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface."
+        note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface."
     )]
     pub fn tool_result(tool_use_id: impl Into<String>, content: Vec<ContentBlock>) -> Self {
         Self::ToolResult {
@@ -286,7 +286,7 @@ impl ContentBlock {
     #[allow(deprecated)]
     #[deprecated(
         since = "0.4.0",
-        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface."
+        note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface."
     )]
     pub fn tool_result_error(tool_use_id: impl Into<String>, content: Vec<ContentBlock>) -> Self {
         Self::ToolResult {

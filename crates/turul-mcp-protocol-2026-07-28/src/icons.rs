@@ -4,12 +4,12 @@
 //! Most implementations do not need icons — they are optional visual enhancements.
 //!
 //! Carried as `Vec<Icon>` on `Tool`, `Resource`, `Prompt`, `ResourceTemplate`,
-//! and `Implementation` per the DRAFT-2026-v1 schema.
+//! and `Implementation` per the 2026-07-28 schema.
 
 use serde::{Deserialize, Serialize};
 
 /// Theme preference for an icon (light or dark mode).
-/// Defined on tool/resource/prompt/implementation interfaces in the DRAFT-2026-v1 schema.
+/// Defined on tool/resource/prompt/implementation interfaces in the 2026-07-28 schema.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum IconTheme {
@@ -19,7 +19,7 @@ pub enum IconTheme {
 
 /// Icon for tools, resources, prompts, and implementations.
 /// Icons are display hints — most implementations do not need icons.
-/// Defined on tool/resource/prompt/implementation interfaces in the DRAFT-2026-v1 schema.
+/// Defined on tool/resource/prompt/implementation interfaces in the 2026-07-28 schema.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Icon {

@@ -1,6 +1,6 @@
 //! MCP Logging Protocol Types
 //!
-//! # Deprecation status (DRAFT-2026-v1)
+//! # Deprecation status (2026-07-28)
 //!
 //! Per SEP-2577, the Logging RPC surface (`notifications/message`) is
 //! **deprecated** in this revision. New implementations SHOULD NOT adopt it.
@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 /// Maps to syslog message severities as specified in RFC-5424.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface, \
+    note = "Deprecated per SEP-2577 (2026-07-28) along with the whole Logging surface, \
             including the per-request _meta logLevel opt-in this enum values. \
             Replacement: stderr (stdio) or OpenTelemetry. \
             Earliest removal: first release on/after 2027-07-28."
@@ -53,7 +53,7 @@ pub enum LoggingLevel {
 #[allow(deprecated)]
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) — see LoggingLevel."
+    note = "Deprecated per SEP-2577 (2026-07-28) — see LoggingLevel."
 )]
 pub type LogLevel = LoggingLevel;
 

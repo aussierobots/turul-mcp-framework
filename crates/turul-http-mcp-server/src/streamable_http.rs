@@ -446,6 +446,9 @@ pub struct StreamableHttpHandler {
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     tool_fingerprint: Option<String>,
     tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
+    /// Identity stamped into every successful result's
+    /// `_meta.io.modelcontextprotocol/serverInfo`. `None` leaves the key off.
+    server_info: Option<turul_mcp_protocol::Implementation>,
 }
 
 impl StreamableHttpHandler {
@@ -467,10 +470,17 @@ impl StreamableHttpHandler {
             middleware_stack,
             tool_fingerprint,
             tool_notifier: None,
+            server_info: None,
         }
     }
 
     /// Set the tool change notifier for restart/redeploy fingerprint mismatch notifications.
+    /// Set the identity reported in each result's `_meta.serverInfo`.
+    pub fn with_server_info(mut self, info: turul_mcp_protocol::Implementation) -> Self {
+        self.server_info = Some(info);
+        self
+    }
+
     pub fn with_tool_notifier(mut self, notifier: Arc<dyn crate::ToolChangeNotifier>) -> Self {
         self.tool_notifier = Some(notifier);
         self
@@ -1661,11 +1671,17 @@ impl StreamableHttpHandler {
             }
         };
 
-        // 2026-07-28: every request MUST carry a per-request `_meta` (RequestMetaObject)
-        // with protocolVersion/clientInfo/clientCapabilities (schema: RequestParams._meta
-        // is required). Missing/incomplete `_meta` → -32602 (HTTP 400); a `_meta`
-        // protocolVersion that disagrees with the (already validated) header is a
-        // header-validation failure → -32020 HeaderMismatch (HTTP 400).
+        // 2026-07-28: every request MUST carry a per-request `_meta`
+        // (RequestMetaObject) with protocolVersion and clientCapabilities
+        // (schema: RequestParams._meta is required). Missing/incomplete `_meta`
+        // → -32602 (HTTP 400); a `_meta` protocolVersion that disagrees with the
+        // (already validated) header is a header-validation failure → -32020
+        // HeaderMismatch (HTTP 400).
+        //
+        // `clientInfo` is deliberately NOT checked: the schema marks it optional
+        // and tells servers not to key behavior or security decisions on it, so a
+        // client configured not to report itself MUST still be served. A present
+        // but malformed value is rejected later, when the params deserialize.
         #[cfg(feature = "protocol-2026-07-28")]
         if let JsonRpcMessage::Request(req) = &message {
             let v = serde_json::to_value(req).unwrap_or(serde_json::Value::Null);
@@ -1680,11 +1696,6 @@ impl StreamableHttpHandler {
                         Some((
                             "missing required _meta.io.modelcontextprotocol/protocolVersion"
                                 .to_string(),
-                            false,
-                        ))
-                    } else if meta.get("io.modelcontextprotocol/clientInfo").is_none() {
-                        Some((
-                            "missing required _meta.io.modelcontextprotocol/clientInfo".to_string(),
                             false,
                         ))
                     } else if meta
@@ -2684,7 +2695,69 @@ impl StreamableHttpHandler {
     /// Returns (JsonRpcMessage, Option<SessionInjection>) where the injection
     /// is Some when session was None (initialize case) and needs to be applied
     /// after session creation.
+    ///
+    /// Every successful result leaving this handler is stamped with the server's
+    /// identity here — the one place it happens, so the JSON, SSE and
+    /// subscription-close paths cannot drift apart. The inner function has
+    /// several tails; wrapping it keeps the stamp from being duplicated per-tail.
     async fn run_middleware_and_dispatch(
+        &self,
+        request: turul_rpc::JsonRpcRequest,
+        headers: HashMap<String, String>,
+        session: Option<turul_rpc::SessionContext>,
+        pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
+    ) -> (
+        turul_rpc::JsonRpcResponse,
+        Option<crate::middleware::SessionInjection>,
+    ) {
+        let (response, injection) = self
+            .run_middleware_and_dispatch_inner(request, headers, session, pre_session_extensions)
+            .await;
+        #[cfg(feature = "protocol-2026-07-28")]
+        let response = self.stamp_server_info(response);
+        (response, injection)
+    }
+
+    /// Add `_meta.io.modelcontextprotocol/serverInfo` to a successful result.
+    ///
+    /// Scope is deliberately narrow: only the top-level object result of a
+    /// success response. Nested `_meta` objects are plain `MetaObject`s in the
+    /// schema, error responses carry no result at all, and results produced by
+    /// the *client* (sampling, elicitation, roots) never pass through here. A
+    /// handler that already set the key keeps its value.
+    #[cfg(feature = "protocol-2026-07-28")]
+    fn stamp_server_info(
+        &self,
+        response: turul_rpc::JsonRpcResponse,
+    ) -> turul_rpc::JsonRpcResponse {
+        let Some(info) = self.server_info.as_ref() else {
+            return response;
+        };
+        let turul_rpc::JsonRpcResponse::Success(mut resp) = response else {
+            return response;
+        };
+
+        if let turul_rpc::response::ResponseResult::Success(serde_json::Value::Object(
+            ref mut result,
+        )) = resp.result
+        {
+            let meta = result
+                .entry("_meta")
+                .or_insert_with(|| serde_json::Value::Object(Default::default()));
+            if let Some(meta) = meta.as_object_mut()
+                && !meta.contains_key(turul_mcp_protocol::meta::META_KEY_SERVER_INFO)
+                && let Ok(value) = serde_json::to_value(info)
+            {
+                meta.insert(
+                    turul_mcp_protocol::meta::META_KEY_SERVER_INFO.to_string(),
+                    value,
+                );
+            }
+        }
+        turul_rpc::JsonRpcResponse::Success(resp)
+    }
+
+    async fn run_middleware_and_dispatch_inner(
         &self,
         request: turul_rpc::JsonRpcRequest,
         headers: HashMap<String, String>,

@@ -93,6 +93,7 @@ pub struct HttpMcpServerBuilder {
     route_registry: Arc<crate::routes::RouteRegistry>,
     tool_fingerprint: Option<String>,
     tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
+    server_info: Option<turul_mcp_protocol::Implementation>,
 }
 
 impl HttpMcpServerBuilder {
@@ -107,6 +108,7 @@ impl HttpMcpServerBuilder {
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
             tool_fingerprint: None,
+            server_info: None,
             tool_notifier: None,
         }
     }
@@ -126,6 +128,7 @@ impl HttpMcpServerBuilder {
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
             tool_fingerprint: None,
+            server_info: None,
             tool_notifier: None,
         }
     }
@@ -146,6 +149,12 @@ impl HttpMcpServerBuilder {
     }
 
     /// Set tool fingerprint for session versioning across server restarts
+    /// Identity reported in each 2026-07-28 result's `_meta.serverInfo`.
+    pub fn server_info(mut self, info: turul_mcp_protocol::Implementation) -> Self {
+        self.server_info = Some(info);
+        self
+    }
+
     pub fn tool_fingerprint(mut self, fingerprint: String) -> Self {
         if fingerprint.is_empty() {
             self.tool_fingerprint = None; // Static mode: no fingerprint check
@@ -301,6 +310,9 @@ impl HttpMcpServerBuilder {
         );
         if let Some(ref notifier) = self.tool_notifier {
             streamable_handler = streamable_handler.with_tool_notifier(Arc::clone(notifier));
+        }
+        if let Some(ref info) = self.server_info {
+            streamable_handler = streamable_handler.with_server_info(info.clone());
         }
 
         HttpMcpServer {

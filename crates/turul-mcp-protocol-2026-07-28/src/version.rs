@@ -31,11 +31,7 @@ pub enum McpVersion {
     #[serde(rename = "2025-11-25")]
     V2025_11_25,
     /// Protocol with stateless core, extensions framework, JSON Schema 2020-12 (introduced 2026-07-28)
-    ///
-    /// The pre-finalization draft emitted `"DRAFT-2026-v1"`; the finalized schema
-    /// emits `"2026-07-28"`. We serialize the finalized literal and accept the
-    /// draft literal on deserialize for back-compat.
-    #[serde(rename = "2026-07-28", alias = "DRAFT-2026-v1")]
+    #[serde(rename = "2026-07-28")]
     V2026_07_28,
 }
 
@@ -88,7 +84,7 @@ impl McpVersion {
 
     /// Returns whether this version supports the task system *in the core protocol*.
     ///
-    /// In 2025-11-25 tasks were experimental in the core spec. In DRAFT-2026-v1
+    /// In 2025-11-25 tasks were experimental in the core spec. In 2026-07-28
     /// tasks graduated to an official extension (SEP-2663) and are NO LONGER in
     /// the core schema. Servers that want tasks must advertise the extension via
     /// `ServerCapabilities.extensions`; this flag therefore reads `false` for
@@ -175,7 +171,7 @@ impl std::str::FromStr for McpVersion {
             "2025-03-26" => Ok(McpVersion::V2025_03_26),
             "2025-06-18" => Ok(McpVersion::V2025_06_18),
             "2025-11-25" => Ok(McpVersion::V2025_11_25),
-            "2026-07-28" | "DRAFT-2026-v1" => Ok(McpVersion::V2026_07_28),
+            "2026-07-28" => Ok(McpVersion::V2026_07_28),
             _ => Err(crate::McpError::VersionMismatch {
                 expected: Self::CURRENT.as_str().to_string(),
                 actual: s.to_string(),
@@ -216,11 +212,8 @@ mod tests {
             "2026-07-28".parse::<McpVersion>().unwrap(),
             McpVersion::V2026_07_28
         );
-        // Draft literal still parses for back-compat (deserialize-only alias).
-        assert_eq!(
-            "DRAFT-2026-v1".parse::<McpVersion>().unwrap(),
-            McpVersion::V2026_07_28
-        );
+        // The pre-finalization draft literal is not a version this build speaks.
+        assert!("DRAFT-2026-v1".parse::<McpVersion>().is_err());
         assert!("invalid".parse::<McpVersion>().is_err());
     }
 
@@ -280,7 +273,7 @@ mod tests {
         assert!(v2026_07.supports_meta_fields());
         assert!(v2026_07.supports_progress_and_cursor());
         assert!(v2026_07.supports_elicitation());
-        // Tasks moved to extension in DRAFT-2026-v1 (SEP-2663); core no longer supports.
+        // Tasks moved to extension in 2026-07-28 (SEP-2663); core no longer supports.
         assert!(!v2026_07.supports_tasks());
         assert!(v2026_07.supports_icons());
         assert!(v2026_07.supports_url_elicitation());
@@ -296,7 +289,7 @@ mod tests {
         assert!(features.contains(&"progress-token"));
         assert!(features.contains(&"cursor"));
         assert!(features.contains(&"elicitation"));
-        // Tasks moved to extension in DRAFT-2026-v1; not in core feature list.
+        // Tasks moved to extension in 2026-07-28; not in core feature list.
         assert!(!features.contains(&"tasks"));
         assert!(features.contains(&"icons"));
         assert!(features.contains(&"url-elicitation"));

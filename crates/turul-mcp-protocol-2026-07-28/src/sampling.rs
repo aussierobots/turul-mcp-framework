@@ -1,6 +1,6 @@
 //! MCP Sampling Protocol Types
 //!
-//! # Deprecation status (DRAFT-2026-v1)
+//! # Deprecation status (2026-07-28)
 //!
 //! Per SEP-2577, the entire Sampling client capability (`sampling/createMessage`
 //! RPC, `SamplingMessage` shape, `SamplingCapabilities`) is **deprecated** in
@@ -32,7 +32,7 @@ pub use crate::prompts::Role;
 
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -59,7 +59,7 @@ impl ModelHint {
 
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -98,7 +98,7 @@ pub enum ToolChoiceMode {
 
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -157,7 +157,7 @@ impl ToolChoice {
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -234,7 +234,7 @@ impl SamplingMessageContentBlock {
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -253,7 +253,7 @@ pub enum SamplingMessageContent {
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -276,7 +276,7 @@ pub struct SamplingMessage {
 /// `ClientCapabilities.sampling.context`. Omit the field or use `"none"`.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -326,7 +326,7 @@ pub struct CreateMessageRequestParams {
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -346,7 +346,7 @@ pub struct CreateMessageRequest {
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -360,7 +360,7 @@ pub struct CreateMessageResult {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub stop_reason: Option<String>,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<std::collections::HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 #[allow(deprecated)]
@@ -562,8 +562,8 @@ impl CreateMessageResult {
         self
     }
 
-    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 }
@@ -661,7 +661,7 @@ impl HasData for CreateMessageResult {
 
 #[allow(deprecated)]
 impl HasMeta for CreateMessageResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }

@@ -408,7 +408,7 @@ impl McpServer {
         }
 
         // Create session-aware initialize handler (2025-11-25 stateful handshake;
-        // the DRAFT-2026-v1 stateless core has no `initialize` method).
+        // the 2026-07-28 stateless core has no `initialize` method).
         #[cfg(feature = "protocol-2025-11-25")]
         #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
         let mut init_handler = SessionAwareInitializeHandler::new(
@@ -436,6 +436,7 @@ impl McpServer {
                 .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
                 // POST SSE remains at default (false) for compatibility
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
+                .server_info(self.implementation.clone())
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
                 .tool_fingerprint(self.tool_fingerprint.clone())
@@ -467,11 +468,7 @@ impl McpServer {
         {
             builder = builder.register_handler(
                 vec![SERVER_DISCOVER_METHOD.to_string()],
-                DiscoverHandler::new(
-                    self.implementation.clone(),
-                    self.capabilities.clone(),
-                    self.instructions.clone(),
-                ),
+                DiscoverHandler::new(self.capabilities.clone(), self.instructions.clone()),
             );
         }
 
@@ -831,7 +828,7 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
         };
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled).
-        // The DRAFT-2026-v1 stateless core has no initialize/initialized handshake, so there is no
+        // The 2026-07-28 stateless core has no initialize/initialized handshake, so there is no
         // "uninitialized" state to guard against — the check applies only to the 2025-11-25 lifecycle.
         if cfg!(feature = "protocol-2025-11-25")
             && self.strict_lifecycle
@@ -1330,14 +1327,13 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
 
 /// Stateless handler for the `server/discover` method.
 ///
-/// The DRAFT-2026-v1 core has no `initialize`/`initialized` handshake: a client
+/// The 2026-07-28 core has no `initialize`/`initialized` handshake: a client
 /// discovers server capabilities on demand via `server/discover` and negotiates
 /// the protocol version per request through `_meta`. This handler creates no
 /// session and reads no session state — it answers from the server's static
 /// implementation info and capabilities.
 #[cfg(feature = "protocol-2026-07-28")]
 pub struct DiscoverHandler {
-    implementation: Implementation,
     capabilities: ServerCapabilities,
     instructions: Option<String>,
     supported_versions: Vec<String>,
@@ -1345,13 +1341,8 @@ pub struct DiscoverHandler {
 
 #[cfg(feature = "protocol-2026-07-28")]
 impl DiscoverHandler {
-    pub fn new(
-        implementation: Implementation,
-        capabilities: ServerCapabilities,
-        instructions: Option<String>,
-    ) -> Self {
+    pub fn new(capabilities: ServerCapabilities, instructions: Option<String>) -> Self {
         Self {
-            implementation,
             capabilities,
             instructions,
             supported_versions: vec![McpVersion::V2026_07_28.as_str().to_string()],
@@ -1377,11 +1368,11 @@ impl JsonRpcHandler for DiscoverHandler {
             )));
         }
 
-        let mut result = DiscoverResult::new(
-            self.supported_versions.clone(),
-            self.capabilities.clone(),
-            self.implementation.clone(),
-        );
+        // `serverInfo` is not set here: the transport stamps it into every
+        // successful result's `_meta`, so setting it per-handler would give the
+        // key two producers.
+        let mut result =
+            DiscoverResult::new(self.supported_versions.clone(), self.capabilities.clone());
         if let Some(instructions) = &self.instructions {
             result = result.with_instructions(instructions.clone());
         }

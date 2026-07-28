@@ -362,7 +362,7 @@ impl LambdaMcpServer {
         let mut dispatcher = JsonRpcDispatcher::new();
 
         // Create session-aware initialize handler (2025-11-25 stateful handshake;
-        // the DRAFT-2026-v1 stateless core has no `initialize` method).
+        // the 2026-07-28 stateless core has no `initialize` method).
         #[cfg(feature = "protocol-2025-11-25")]
         {
             use turul_mcp_server::SessionAwareInitializeHandler;
@@ -424,11 +424,7 @@ impl LambdaMcpServer {
             use turul_mcp_server::DiscoverHandler;
             dispatcher.register_method(
                 SERVER_DISCOVER_METHOD.to_string(),
-                DiscoverHandler::new(
-                    self.implementation.clone(),
-                    self.capabilities.clone(),
-                    self.instructions.clone(),
-                ),
+                DiscoverHandler::new(self.capabilities.clone(), self.instructions.clone()),
             );
         }
 
@@ -475,7 +471,8 @@ impl LambdaMcpServer {
             self.enable_sse,
             Arc::clone(&self.route_registry),
             Some(self.tool_fingerprint.clone()),
-        );
+        )
+        .with_server_info(self.implementation.clone());
 
         // Wire tool change notifier for restart/redeploy fingerprint mismatch.
         // Uses SessionManager → dispatch_custom_event() → dispatcher → guaranteed persistence.

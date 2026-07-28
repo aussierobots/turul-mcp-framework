@@ -1,6 +1,6 @@
 //! MCP Roots Protocol Types
 //!
-//! # Deprecation status (DRAFT-2026-v1)
+//! # Deprecation status (2026-07-28)
 //!
 //! Per SEP-2577, the entire Roots client capability (`roots/list` RPC, `Root`
 //! type, `RootsCapabilities`) is **deprecated** in this revision. New
@@ -26,7 +26,7 @@ use std::collections::HashMap;
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: pass directories or files via tool parameters, resource URIs, or server configuration. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -88,7 +88,7 @@ pub struct ListRootsRequestParams {
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: pass directories or files via tool parameters, resource URIs, or server configuration. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -107,7 +107,7 @@ pub struct ListRootsRequest {
 /// **Deprecated** per SEP-2577 — see module-level docs.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: pass directories or files via tool parameters, resource URIs, or server configuration. \
             Earliest removal: first release on/after 2027-07-28."
 )]

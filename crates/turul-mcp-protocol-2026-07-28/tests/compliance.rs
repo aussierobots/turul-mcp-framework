@@ -12,13 +12,13 @@
 #![allow(deprecated)]
 
 /// Shared test fixture — minimal `RequestMetaObject` satisfying the
-/// DRAFT-2026-v1 stateless-core required `_meta` contract. Tests that don't
+/// 2026-07-28 stateless-core required `_meta` contract. Tests that don't
 /// care about meta contents use this; tests that DO care construct their own.
 #[allow(dead_code)]
 fn fixture_meta() -> turul_mcp_protocol_2026_07_28::meta::RequestMetaObject {
     use turul_mcp_protocol_2026_07_28::initialize::{ClientCapabilities, Implementation};
     turul_mcp_protocol_2026_07_28::meta::RequestMetaObject::new(
-        "DRAFT-2026-v1",
+        "2026-07-28",
         Implementation::new("test-client", "1.0.0"),
         ClientCapabilities::default(),
     )
@@ -40,7 +40,7 @@ mod tests {
         // RequestMetaObject carries the required spec fields + arbitrary
         // namespaced keys (`clientId`) via the flatten `extra` catch-all.
         let meta = turul_mcp_protocol_2026_07_28::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             turul_mcp_protocol_2026_07_28::initialize::Implementation::new("test-client", "1.0.0"),
             turul_mcp_protocol_2026_07_28::initialize::ClientCapabilities::default(),
         )
@@ -66,7 +66,7 @@ mod tests {
         // RequestMetaObject with required namespaced fields + arbitrary
         // namespaced keys (e.g. `sessionId`) via the flatten `extra` catch-all.
         let meta = turul_mcp_protocol_2026_07_28::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             turul_mcp_protocol_2026_07_28::initialize::Implementation::new("test-client", "1.0.0"),
             turul_mcp_protocol_2026_07_28::initialize::ClientCapabilities::default(),
         )
@@ -83,7 +83,7 @@ mod tests {
         assert_eq!(json_value["params"]["cursor"], "cursor-456");
         assert_eq!(
             json_value["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"],
-            "DRAFT-2026-v1"
+            "2026-07-28"
         );
         assert_eq!(json_value["params"]["_meta"]["sessionId"], "session-123");
     }
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn test_meta_always_serialized() {
         // Schema compliance: `CallToolRequestParams._meta` is REQUIRED in
-        // DRAFT-2026-v1 stateless core. Every `tools/call` request MUST
+        // 2026-07-28 stateless core. Every `tools/call` request MUST
         // serialize a `_meta` carrying per-request capability negotiation.
         let request = CallToolRequest::new("test", super::fixture_meta());
         let json_value = serde_json::to_value(&request).unwrap();
@@ -193,7 +193,7 @@ mod tests {
         // Required namespaced fields on the wire:
         assert_eq!(
             json_value["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"],
-            "DRAFT-2026-v1"
+            "2026-07-28"
         );
     }
 }
@@ -430,7 +430,7 @@ mod json_schema_2020_12 {
 /// coverage closure: shape tests for remaining schema types
 /// (Resource, ResourceTemplate, Prompt, PromptArgument, PromptMessage,
 /// Implementation, Annotations, Icon). Most of these were carried unchanged
-/// from 2025-11-25; the tests prove their wire shapes still match DRAFT-2026-v1.
+/// from 2025-11-25; the tests prove their wire shapes still match 2026-07-28.
 #[cfg(test)]
 mod remaining_shapes {
     use serde_json::json;
@@ -484,13 +484,7 @@ mod remaining_shapes {
         let minimal = Prompt::new("code_review");
         let v = serde_json::to_value(&minimal).unwrap();
         assert_eq!(v["name"], "code_review");
-        for absent in [
-            "title",
-            "description",
-            "arguments",
-            "icons",
-            "_meta",
-        ] {
+        for absent in ["title", "description", "arguments", "icons", "_meta"] {
             assert!(
                 !v.as_object().unwrap().contains_key(absent),
                 "{absent} omitted when None"
@@ -713,7 +707,7 @@ mod completion_alignment {
 
 /// Schema-driven assertion that `EmptyResult` carries `resultType`.
 ///
-/// `EmptyResult = Result`. DRAFT-2026-v1 inherits the required `resultType`
+/// `EmptyResult = Result`. 2026-07-28 inherits the required `resultType`
 /// field from `Result`. Also confirms `ping` is gone (already proven in
 /// `removed_methods::ping_method_is_gone`); `PingRequest` remains transitionally
 /// in code with `#[deprecated]`.
@@ -735,7 +729,7 @@ mod empty_result_alignment {
 
     #[test]
     fn empty_result_back_compat_accepts_missing_result_type() {
-        // 2025-11-25 wire shape: `{}`. DRAFT-2026-v1 backward-compat allows
+        // 2025-11-25 wire shape: `{}`. 2026-07-28 backward-compat allows
         // missing resultType, defaults to Complete.
         let wire = json!({});
         let r: EmptyResult = serde_json::from_value(wire).unwrap();
@@ -898,7 +892,10 @@ mod elicitation_modes {
         assert_eq!(v["params"]["message"], "Please authorize");
         assert_eq!(v["params"]["url"], "https://auth.example/login");
         assert!(
-            !v["params"].as_object().unwrap().contains_key("elicitationId"),
+            !v["params"]
+                .as_object()
+                .unwrap()
+                .contains_key("elicitationId"),
             "elicitationId was removed from ElicitRequestURLParams upstream"
         );
     }
@@ -1466,7 +1463,7 @@ mod resources_alignment {
 /// - `ListToolsResult.resultType` likewise
 /// - `ListToolsResult.with_cache()` produces wire-compliant ttlMs/cacheScope
 /// - `CallToolRequestParams.with_input_responses()` produces InputResponseRequestParams mixin shape
-/// - `structuredContent` accepts any JSON value (DRAFT-2026-v1 widening from object-only)
+/// - `structuredContent` accepts any JSON value (2026-07-28 widening from object-only)
 #[cfg(test)]
 mod tools_alignment {
     use serde_json::json;
@@ -1634,7 +1631,7 @@ mod tools_alignment {
 
 /// `ClientCapabilities`/`ServerCapabilities` shape compliance.
 ///
-/// Verifies the DRAFT-2026-v1-specific fields (`sampling.context`, `sampling.tools`,
+/// Verifies the 2026-07-28-specific fields (`sampling.context`, `sampling.tools`,
 /// `elicitation.form`, `elicitation.url`, `extensions` on both client and server)
 /// serialize with the correct wire names per `ClientCapabilities`/`ServerCapabilities`.
 #[cfg(test)]
@@ -1780,7 +1777,7 @@ mod capabilities_shape {
 
 /// Exhaustive method-string coverage against the vendored schema.
 ///
-/// Maintains a single source of truth list of all 22 method strings DRAFT-2026-v1
+/// Maintains a single source of truth list of all 22 method strings 2026-07-28
 /// declares (cross-checked against the `removed_methods` module and the
 /// positive list from `docs/plans/2026-07-28-migration-diff.md`). Three guarantees:
 ///
@@ -1795,7 +1792,7 @@ mod method_strings {
 
     const SCHEMA_TS: &str = include_str!("../schema/draft-schema.ts");
 
-    /// The canonical list of method strings DRAFT-2026-v1 declares.
+    /// The canonical list of method strings 2026-07-28 declares.
     /// Sorted alphabetically for stability.
     const DRAFT_METHODS: &[&str] = &[
         "completion/complete",
@@ -1934,7 +1931,7 @@ mod method_strings {
             SubscriptionFilter, SubscriptionsListenRequest,
         };
         let meta = RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             Implementation::new("c", "1"),
             ClientCapabilities::default(),
         );
@@ -2011,7 +2008,7 @@ mod method_strings {
 /// Schema-drift detector for removed methods.
 ///
 /// Reads the vendored `schema/draft-schema.ts` at compile time and asserts that
-/// the methods removed from DRAFT-2026-v1 (per the migration diff) do NOT
+/// the methods removed from 2026-07-28 (per the migration diff) do NOT
 /// appear in the schema's method-string declarations. This is the test that
 /// proves "these methods are gone" against the actual upstream contract.
 ///
@@ -2029,7 +2026,7 @@ mod removed_methods {
         let pattern = format!("method: \"{}\"", needle);
         assert!(
             !SCHEMA_TS.contains(&pattern),
-            "DRAFT-2026-v1 schema unexpectedly contains `{}` — the migration diff \
+            "2026-07-28 schema unexpectedly contains `{}` — the migration diff \
              and removed-method assumptions need revisiting. Re-vendor + re-audit.",
             pattern
         );
@@ -2088,7 +2085,7 @@ mod removed_methods {
             let pattern = format!("method: \"{}\"", m);
             assert!(
                 !SCHEMA_TS.contains(&pattern),
-                "DRAFT-2026-v1 core schema unexpectedly contains `{}` — \
+                "2026-07-28 core schema unexpectedly contains `{}` — \
                  tasks should live only in the extension repo per SEP-2663.",
                 pattern
             );
@@ -2150,7 +2147,7 @@ mod convention_meta_keys {
         use turul_mcp_protocol_2026_07_28::meta::RequestMetaObject;
 
         let m = RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             Implementation::new("c", "1"),
             ClientCapabilities::default(),
         )
@@ -2212,11 +2209,11 @@ mod request_meta {
     #[test]
     fn required_fields_serialize_with_namespaced_keys() {
         // `RequestMetaObject` required keys use full `io.modelcontextprotocol/<name>` prefix.
-        let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps());
+        let m = RequestMetaObject::new("2026-07-28", fixture_impl(), fixture_caps());
         let v = serde_json::to_value(&m).unwrap();
 
         assert_eq!(
-            v["io.modelcontextprotocol/protocolVersion"], "DRAFT-2026-v1",
+            v["io.modelcontextprotocol/protocolVersion"], "2026-07-28",
             "protocolVersion key must use full reverse-DNS prefix per `RequestMetaObject`"
         );
         assert!(
@@ -2231,7 +2228,7 @@ mod request_meta {
 
     #[test]
     fn optional_fields_absent_when_none() {
-        let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps());
+        let m = RequestMetaObject::new("2026-07-28", fixture_impl(), fixture_caps());
         let v = serde_json::to_value(&m).unwrap();
         assert!(
             !v.as_object().unwrap().contains_key("progressToken"),
@@ -2248,7 +2245,7 @@ mod request_meta {
     #[test]
     fn progress_token_serializes_under_short_camelcase_key() {
         // `RequestMetaObject.progressToken?: ProgressToken` — NOT namespaced.
-        let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps())
+        let m = RequestMetaObject::new("2026-07-28", fixture_impl(), fixture_caps())
             .with_progress_token("tok-1");
         let v = serde_json::to_value(&m).unwrap();
         assert_eq!(v["progressToken"], "tok-1");
@@ -2257,7 +2254,7 @@ mod request_meta {
     #[test]
     fn log_level_serializes_under_namespaced_key() {
         // `RequestMetaObject` field: `"io.modelcontextprotocol/logLevel"?: LoggingLevel`.
-        let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps())
+        let m = RequestMetaObject::new("2026-07-28", fixture_impl(), fixture_caps())
             .with_log_level(LoggingLevel::Warning);
         let v = serde_json::to_value(&m).unwrap();
         assert_eq!(
@@ -2278,19 +2275,54 @@ mod request_meta {
     }
 
     #[test]
-    fn rejects_missing_required_client_info() {
+    fn accepts_absent_client_info() {
+        // `clientInfo` is optional: clients SHOULD send it but may be configured
+        // not to, and such a request is well-formed.
         let json = json!({
-            "io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {}
+        });
+        let m: RequestMetaObject =
+            serde_json::from_value(json).expect("absent clientInfo must parse");
+        assert!(m.client_info.is_none());
+    }
+
+    #[test]
+    fn omits_client_info_from_the_wire_when_absent() {
+        let m = RequestMetaObject::new(
+            "2026-07-28",
+            Implementation::new("c", "1"),
+            ClientCapabilities::default(),
+        )
+        .without_client_info();
+        let raw = serde_json::to_string(&m).unwrap();
+        assert!(
+            !raw.contains("clientInfo"),
+            "absent clientInfo must not be emitted: {raw}"
+        );
+        assert!(raw.contains("io.modelcontextprotocol/clientCapabilities"));
+    }
+
+    #[test]
+    fn rejects_malformed_client_info_when_present() {
+        // Optional means "may be absent", not "may be any shape". A present
+        // value that is not an `Implementation` is still a parse failure.
+        let json = json!({
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {"version": "1"},
             "io.modelcontextprotocol/clientCapabilities": {}
         });
         let r: Result<RequestMetaObject, _> = serde_json::from_value(json);
-        assert!(r.is_err(), "missing clientInfo must fail");
+        assert!(
+            r.is_err(),
+            "clientInfo present without the required `name` must fail"
+        );
     }
 
     #[test]
     fn rejects_missing_required_client_capabilities() {
         let json = json!({
-            "io.modelcontextprotocol/protocolVersion": "DRAFT-2026-v1",
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
             "io.modelcontextprotocol/clientInfo": {"name": "c", "version": "1"}
         });
         let r: Result<RequestMetaObject, _> = serde_json::from_value(json);
@@ -2302,7 +2334,7 @@ mod request_meta {
 
     #[test]
     fn extra_keys_preserved_via_flatten() {
-        let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps())
+        let m = RequestMetaObject::new("2026-07-28", fixture_impl(), fixture_caps())
             .with_extra("com.example.app/buildId", json!("abc123"))
             .with_extra("traceparent", json!("00-trace-id-01"));
         let v = serde_json::to_value(&m).unwrap();
@@ -2320,12 +2352,12 @@ mod request_meta {
 
     #[test]
     fn round_trip_preserves_all_fields() {
-        let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps())
+        let m = RequestMetaObject::new("2026-07-28", fixture_impl(), fixture_caps())
             .with_progress_token("tok-X")
             .with_log_level(LoggingLevel::Info);
         let s = serde_json::to_string(&m).unwrap();
         let parsed: RequestMetaObject = serde_json::from_str(&s).unwrap();
-        assert_eq!(parsed.protocol_version, "DRAFT-2026-v1");
+        assert_eq!(parsed.protocol_version, "2026-07-28");
         assert_eq!(parsed.progress_token.unwrap().as_str(), Some("tok-X"));
         assert!(matches!(parsed.log_level, Some(LoggingLevel::Info)));
     }
@@ -2593,7 +2625,7 @@ mod multi_round_trip {
 ///
 /// Cross-crate integration tests: asserts that our consumption of the
 /// `turul-rpc` wire envelopes produces JSON byte shapes matching the MCP
-/// DRAFT-2026-v1 schema. The envelope types themselves are owned by
+/// 2026-07-28 schema. The envelope types themselves are owned by
 /// `turul-rpc`; these tests are calibrated to the **consumer contract**.
 #[cfg(test)]
 mod envelope {
@@ -2849,14 +2881,14 @@ mod error_codes {
         // `UnsupportedProtocolVersionError` carries
         // `data: { supported: string[], requested: string }`.
         let err = McpError::UnsupportedProtocolVersion {
-            supported: vec!["DRAFT-2026-v1".to_string(), "2025-11-25".to_string()],
+            supported: vec!["2026-07-28".to_string(), "2025-11-25".to_string()],
             requested: "1999-01-01".to_string(),
         };
         let v = serde_json::to_value(err.to_error_object()).unwrap();
         assert_eq!(v["code"], -32022, "UnsupportedProtocolVersion wire code");
         let supported = v["data"]["supported"].as_array().unwrap();
         assert_eq!(supported.len(), 2);
-        assert_eq!(supported[0], "DRAFT-2026-v1");
+        assert_eq!(supported[0], "2026-07-28");
         assert_eq!(supported[1], "2025-11-25");
         assert_eq!(v["data"]["requested"], "1999-01-01");
     }
@@ -2966,7 +2998,7 @@ mod error_codes {
                 required: serde_json::json!({}),
             },
             McpError::UnsupportedProtocolVersion {
-                supported: vec!["DRAFT-2026-v1".into()],
+                supported: vec!["2026-07-28".into()],
                 requested: "x".into(),
             },
         ];

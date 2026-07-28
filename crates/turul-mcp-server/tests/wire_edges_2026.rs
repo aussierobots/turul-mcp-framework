@@ -218,16 +218,18 @@ async fn null_request_id_is_rejected() {
     assert_eq!(body["error"]["code"], -32600, "{body}");
 }
 
-/// `_meta` present but clientInfo / protocolVersion absent → -32602.
+/// `_meta` present but a REQUIRED key absent → -32602. `clientInfo` is not in
+/// this set: it is optional, and its absence is covered by
+/// `absent_client_info_is_not_an_incomplete_meta` below.
 #[tokio::test]
 async fn incomplete_meta_branches_are_rejected() {
     let url = start_server().await;
     for (label, bad_meta) in [
         (
-            "missing clientInfo",
+            "missing clientCapabilities",
             serde_json::json!({
                 "io.modelcontextprotocol/protocolVersion": "2026-07-28",
-                "io.modelcontextprotocol/clientCapabilities": {}
+                "io.modelcontextprotocol/clientInfo": { "name": "t", "version": "1" }
             }),
         ),
         (
@@ -248,6 +250,28 @@ async fn incomplete_meta_branches_are_rejected() {
         assert_eq!(status, 400, "{label}: {body}");
         assert_eq!(body["error"]["code"], -32602, "{label}: {body}");
     }
+}
+
+/// A `_meta` without `clientInfo` is complete, not incomplete. Servers are told
+/// not to key behavior on the value, so refusing the request would deny service
+/// to a client that is merely configured not to identify itself.
+#[tokio::test]
+async fn absent_client_info_is_not_an_incomplete_meta() {
+    let url = start_server().await;
+    let (status, body) = post_method(
+        &url,
+        "tools/list",
+        None,
+        serde_json::json!({
+            "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {}
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "absent clientInfo must be served: {body}");
+    assert!(body.get("error").is_none(), "{body}");
 }
 
 /// Versioning §Backward Compatibility: errors to `initialize` SHOULD name

@@ -210,7 +210,7 @@ impl ListResourcesRequest {
 ///
 /// Cache fields (`ttl_ms`, `cache_scope`) are required by schema but
 /// transitionally optional in Rust; use [`Self::with_cache`] to produce
-/// wire-compliant DRAFT-2026-v1 responses.
+/// wire-compliant 2026-07-28 responses.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListResourcesResult {
@@ -237,7 +237,7 @@ pub struct ListResourcesResult {
         alias = "_meta",
         rename = "_meta"
     )]
-    pub meta: Option<std::collections::HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl ListResourcesResult {
@@ -258,8 +258,8 @@ impl ListResourcesResult {
         self
     }
 
-    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 
@@ -291,7 +291,7 @@ pub struct ReadResourceRequestParams {
     /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
     /// (`ReadResourceRequestParams extends ResourceRequestParams, InputResponseRequestParams`
     /// — both extend `RequestParams` whose `_meta` is required in
-    /// DRAFT-2026-v1 stateless core).
+    /// 2026-07-28 stateless core).
     #[serde(rename = "_meta")]
     pub meta: crate::meta::RequestMetaObject,
 }
@@ -494,7 +494,7 @@ pub struct ListResourceTemplatesResult {
 
     /// Meta information.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl ListResourceTemplatesResult {
@@ -515,8 +515,8 @@ impl ListResourceTemplatesResult {
         self
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 
@@ -528,7 +528,7 @@ impl ListResourceTemplatesResult {
     }
 }
 
-// Resource subscriptions in DRAFT-2026-v1 flow through the unified
+// Resource subscriptions in 2026-07-28 flow through the unified
 // `subscriptions/listen` stream — see [`crate::subscriptions::SubscriptionFilter::resource_subscriptions`].
 
 /// Result for `resources/read` — `ReadResourceResult extends CacheableResult`.
@@ -552,7 +552,7 @@ pub struct ReadResourceResult {
 
     /// Meta information (follows MCP Result interface).
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl ReadResourceResult {
@@ -585,8 +585,8 @@ impl ReadResourceResult {
         Self::new(vec![content])
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 }
@@ -604,7 +604,7 @@ impl HasData for ReadResourceResult {
 }
 
 impl HasMeta for ReadResourceResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -671,7 +671,7 @@ impl HasData for ListResourceTemplatesResult {
 }
 
 impl HasMeta for ListResourceTemplatesResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -713,7 +713,7 @@ impl HasData for ListResourcesResult {
 }
 
 impl HasMeta for ListResourcesResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -796,7 +796,7 @@ mod tests {
     #[test]
     fn test_trait_implementations() {
         let meta = crate::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             crate::initialize::Implementation::new("test", "1.0.0"),
             crate::initialize::ClientCapabilities::default(),
         );

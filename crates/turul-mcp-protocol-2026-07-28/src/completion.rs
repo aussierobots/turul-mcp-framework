@@ -102,7 +102,7 @@ pub struct CompleteRequestParams {
     pub context: Option<CompletionContext>,
     /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
     /// (`CompleteRequestParams extends RequestParams`, and `RequestParams._meta`
-    /// is required in DRAFT-2026-v1 stateless core).
+    /// is required in 2026-07-28 stateless core).
     #[serde(rename = "_meta")]
     pub meta: crate::meta::RequestMetaObject,
 }
@@ -212,7 +212,7 @@ pub struct CompleteResult {
         alias = "_meta",
         rename = "_meta"
     )]
-    pub meta: Option<HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl CompletionResult {
@@ -244,8 +244,8 @@ impl CompleteResult {
         }
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 }
@@ -347,7 +347,7 @@ impl HasData for CompleteResult {
 }
 
 impl HasMeta for CompleteResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -449,8 +449,7 @@ mod tests {
     #[test]
     fn test_complete_result_matches_typescript_spec() {
         // Test CompleteResult matches: { completion: { values: string[], total?: number, hasMore?: boolean }, _meta?: ... }
-        let mut meta = HashMap::new();
-        meta.insert("executionTime".to_string(), json!(42));
+        let meta = crate::meta::ResultMetaObject::default().with_extra("executionTime", json!(42));
 
         let completion = CompletionResult::new(vec![
             "option1".to_string(),

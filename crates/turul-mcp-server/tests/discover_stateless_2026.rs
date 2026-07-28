@@ -1,9 +1,10 @@
-//! Wire-level acceptance for the DRAFT-2026-v1 stateless server core.
+//! Wire-level acceptance for the 2026-07-28 stateless server core.
 //!
 //! Proves, against a real HTTP server built for the 2026 spec, that:
 //!   1. `server/discover` answers without any session and returns a wire-shaped
 //!      `DiscoverResult` (`resultType: "complete"`, `supportedVersions`,
-//!      `capabilities`, `serverInfo`).
+//!      `capabilities`, and server identity under
+//!      `_meta.io.modelcontextprotocol/serverInfo`).
 //!   2. `tools/call` dispatches with NO `Mcp-Session-Id` and NO prior
 //!      `initialize`/`initialized` handshake — the stateless core never answers
 //!      a sessionless request with HTTP 400.
@@ -64,8 +65,9 @@ async fn start_server() -> String {
     url
 }
 
-/// A spec-complete per-request `RequestMetaObject` — the 2026 core requires
-/// `protocolVersion`, `clientInfo`, and `clientCapabilities` on every request.
+/// A spec-complete per-request `RequestMetaObject`. The 2026 core requires
+/// `protocolVersion` and `clientCapabilities` on every request; `clientInfo` is
+/// optional and included here as the ordinary case.
 fn meta() -> serde_json::Value {
     serde_json::json!({
         "io.modelcontextprotocol/protocolVersion": "2026-07-28",
@@ -105,14 +107,130 @@ async fn server_discover_answers_without_a_session() {
         Some("2026-07-28"),
         "a 2026 server must echo MCP-Protocol-Version: 2026-07-28"
     );
-    let body: serde_json::Value = resp.json().await.expect("json body");
+    let raw = resp.text().await.expect("body text");
+    let body: serde_json::Value = serde_json::from_str(&raw).expect("json body");
     assert_eq!(body["result"]["resultType"], "complete");
     assert_eq!(
         body["result"]["supportedVersions"][0], "2026-07-28",
         "server must advertise the 2026 protocol version"
     );
     assert!(body["result"]["capabilities"].is_object());
-    assert_eq!(body["result"]["serverInfo"]["name"], "discover-2026-test");
+
+    // Server identity rides in `_meta`, and the superseded top-level field must
+    // be gone — asserted on the raw body text so a re-introduced duplicate at
+    // both levels cannot hide behind `Value`'s last-key-wins parsing.
+    assert_eq!(
+        body["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "discover-2026-test"
+    );
+    assert!(
+        !raw.contains("\"serverInfo\":"),
+        "DiscoverResult must not carry a bare top-level serverInfo: {raw}"
+    );
+}
+
+/// `clientInfo` is optional. A client configured not to report itself sends a
+/// well-formed request, and the server MUST serve it rather than answering
+/// -32602.
+#[tokio::test]
+async fn request_without_client_info_is_served() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "echo")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "name": "echo",
+                "arguments": { "message": "hi" },
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientCapabilities": {}
+                }
+            }
+        }))
+        .send()
+        .await
+        .expect("tools/call POST");
+
+    assert_eq!(resp.status(), 200, "omitting clientInfo must not be a 400");
+    let body: serde_json::Value = resp.json().await.expect("json body");
+    assert!(
+        body.get("error").is_none(),
+        "omitting clientInfo must not be a JSON-RPC error: {body}"
+    );
+    assert!(body["result"].is_object(), "{body}");
+}
+
+/// Optional means "may be absent", not "may be any shape". A present value that
+/// is not an `Implementation` is still invalid params.
+#[tokio::test]
+async fn malformed_client_info_is_rejected() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "echo")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "name": "echo",
+                "arguments": { "message": "hi" },
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    // `name` is required on `Implementation`.
+                    "io.modelcontextprotocol/clientInfo": { "version": "1.0.0" },
+                    "io.modelcontextprotocol/clientCapabilities": {}
+                }
+            }
+        }))
+        .send()
+        .await
+        .expect("tools/call POST");
+
+    let body: serde_json::Value = resp.json().await.expect("json body");
+    assert_eq!(
+        body["error"]["code"], -32602,
+        "malformed clientInfo must be invalid params: {body}"
+    );
+}
+
+/// The server stamps its identity into every successful result, not just
+/// `server/discover`.
+#[tokio::test]
+async fn tools_call_result_carries_server_info_meta() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "echo")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "echo", "arguments": { "message": "hi" }, "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("tools/call POST");
+
+    let body: serde_json::Value = resp.json().await.expect("json body");
+    assert_eq!(
+        body["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "discover-2026-test",
+        "every 2026 result carries the server identity: {body}"
+    );
 }
 
 #[tokio::test]

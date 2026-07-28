@@ -1,6 +1,6 @@
-//! Result discrimination for MCP DRAFT-2026-v1.
+//! Result discrimination for MCP 2026-07-28.
 //!
-//! Every `Result` in DRAFT-2026-v1 carries a `resultType` discriminator that allows
+//! Every `Result` in 2026-07-28 carries a `resultType` discriminator that allows
 //! the client to determine how to parse the response — `"complete"` for normal
 //! results, `"input_required"` for server-initiated multi-round-trip flows
 //! (SEP-2322).

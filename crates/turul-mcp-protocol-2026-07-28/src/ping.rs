@@ -1,6 +1,6 @@
 //! `EmptyResult` and `EmptyParams` — utility shapes for empty payloads.
 //!
-//! The DRAFT-2026-v1 schema declares `EmptyResult = Result` as a TypeScript
+//! The 2026-07-28 schema declares `EmptyResult = Result` as a TypeScript
 //! type alias. Rust has no analog for aliasing a structural interface, so
 //! `EmptyResult` is a concrete struct mirroring the `Result` shape:
 //! a required `resultType` discriminator and an optional `_meta`.
@@ -24,7 +24,7 @@ pub struct EmptyResult {
         alias = "_meta",
         rename = "_meta"
     )]
-    pub meta: Option<HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl EmptyResult {
@@ -35,8 +35,8 @@ impl EmptyResult {
         }
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 }
@@ -57,7 +57,7 @@ impl HasData for EmptyResult {
 }
 
 impl HasMeta for EmptyResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -91,9 +91,13 @@ mod tests {
         let result = EmptyResult::new();
         assert!(result.meta.is_none());
 
+        // A loose map lifts into the typed carrier: non-reserved keys land on
+        // `extra`, and `serverInfo` stays absent because none was supplied.
         let meta = HashMap::from([("test".to_string(), json!("value"))]);
-        let result_with_meta = EmptyResult::new().with_meta(meta.clone());
-        assert_eq!(result_with_meta.meta, Some(meta));
+        let result_with_meta = EmptyResult::new().with_meta(meta);
+        let carried = result_with_meta.meta.expect("with_meta sets _meta");
+        assert!(carried.server_info.is_none());
+        assert_eq!(carried.extra.get("test"), Some(&json!("value")));
     }
 
     #[test]

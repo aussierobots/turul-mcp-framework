@@ -82,11 +82,11 @@ impl ToolAnnotations {
 }
 
 // Task-aware tool invocation lives in the tasks extension crate (SEP-2663);
-// the DRAFT-2026-v1 `Tool` schema has no `execution` field.
+// the 2026-07-28 `Tool` schema has no `execution` field.
 
 // === Protocol Types ===
 
-/// JSON Schema for `Tool.inputSchema` per DRAFT-2026-v1:
+/// JSON Schema for `Tool.inputSchema` per 2026-07-28:
 ///
 /// ```text
 /// inputSchema: { $schema?: string; type: "object"; [key: string]: unknown }
@@ -140,7 +140,7 @@ impl ToolSchema {
     }
 }
 
-/// JSON Schema for `Tool.outputSchema` per DRAFT-2026-v1:
+/// JSON Schema for `Tool.outputSchema` per 2026-07-28:
 ///
 /// ```text
 /// outputSchema?: { $schema?: string; [key: string]: unknown }
@@ -318,7 +318,7 @@ pub struct ListToolsResult {
 
     /// Meta information.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl ListToolsResult {
@@ -340,8 +340,8 @@ impl ListToolsResult {
         self
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 
@@ -376,7 +376,7 @@ pub struct CallToolRequestParams {
 
     /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
     /// (`CallToolRequestParams extends InputResponseRequestParams extends RequestParams`,
-    /// and `RequestParams._meta` is required in DRAFT-2026-v1 stateless core).
+    /// and `RequestParams._meta` is required in 2026-07-28 stateless core).
     #[serde(rename = "_meta")]
     pub meta: crate::meta::RequestMetaObject,
 }
@@ -487,7 +487,7 @@ pub type ToolResult = crate::content::ContentBlock;
 
 /// Result for tools/call — extends `Result`.
 ///
-/// Note on `structuredContent`: DRAFT-2026-v1 widens this from `object`-only
+/// Note on `structuredContent`: 2026-07-28 widens this from `object`-only
 /// (2025-11-25) to any JSON value (`unknown`). The field is typed `Option<Value>`
 /// here — arrays, scalars, and null are now accepted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -505,7 +505,7 @@ pub struct CallToolResult {
     /// Whether the tool call resulted in an error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
-    /// Structured content (any JSON value per DRAFT-2026-v1; was object-only in 2025-11-25).
+    /// Structured content (any JSON value per 2026-07-28; was object-only in 2025-11-25).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub structured_content: Option<Value>,
     /// Meta information (follows MCP Result interface).
@@ -515,7 +515,7 @@ pub struct CallToolResult {
         alias = "_meta",
         rename = "_meta"
     )]
-    pub meta: Option<HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl CallToolResult {
@@ -559,8 +559,8 @@ impl CallToolResult {
         self
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 
@@ -679,7 +679,7 @@ impl HasData for CallToolResult {
 }
 
 impl HasMeta for CallToolResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -746,7 +746,7 @@ impl HasData for ListToolsResult {
 }
 
 impl HasMeta for ListToolsResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -808,7 +808,7 @@ mod tests {
 
     #[test]
     fn test_tool_creation() {
-        // `properties` now accepts any JSON value per DRAFT-2026-v1 spec
+        // `properties` now accepts any JSON value per 2026-07-28 spec
         // (schema's `[k]: unknown` clause); convert structured JsonSchema via to_value.
         let schema = ToolSchema::object()
             .with_properties(HashMap::from([(

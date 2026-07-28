@@ -11,9 +11,9 @@
 //!   mcp-compliance-2026-07-28 refresh --write     # also rewrite fetch.rs PIN + EXAMPLES_PIN.md
 
 use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::process::ExitCode;
 
-use turul_mcp_protocol_2026_07_28::compliance::fetch::{PIN, Pin};
+use turul_mcp_protocol_2026_07_28::compliance::fetch::{PIN, Pin, resolve_subpath_head};
 use turul_mcp_protocol_2026_07_28::compliance::roundtrip::{self, Outcome};
 
 fn cache_dir() -> PathBuf {
@@ -87,17 +87,15 @@ fn refresh(args: &[String]) -> ExitCode {
     println!("refresh (write={write})");
     println!("Current pin: {}", PIN.sha);
 
-    let new_sha = match resolve_upstream_head_for_subpath(&PIN) {
+    let resolve_dir = std::env::temp_dir().join("mcp-compliance-2026-07-28-resolve");
+    let new_sha = match resolve_subpath_head(&PIN, "main", &resolve_dir) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("refresh: failed to resolve upstream HEAD: {e}");
             return ExitCode::from(2);
         }
     };
-    println!(
-        "Upstream HEAD (last commit touching {}): {}",
-        PIN.subpath, new_sha
-    );
+    println!("Last commit touching {} on main: {}", PIN.subpath, new_sha);
 
     if new_sha == PIN.sha {
         println!("Already at HEAD — nothing to do.");
@@ -159,37 +157,6 @@ fn refresh(args: &[String]) -> ExitCode {
     }
     println!("PIN rewritten to {new_sha} in src/compliance/fetch.rs + schema/EXAMPLES_PIN.md");
     ExitCode::SUCCESS
-}
-
-/// Ask GitHub for the most-recent commit touching the pinned subpath on the
-/// repo's default branch, without cloning. Uses `git ls-remote` (refs only, no
-/// blobs) for the branch tip, then a shallow fetch to walk the path.
-///
-/// Implementation detail: we resolve `main`'s tip via `git ls-remote`, then
-/// shallow-clone just to read the commit. A more precise "last commit on this
-/// subpath" walk would require cloning history — out of scope for slice 1.
-/// We pin to `main`'s current tip; the harness validates the choice end-to-end.
-fn resolve_upstream_head_for_subpath(pin: &Pin) -> Result<String, String> {
-    let output = Command::new("git")
-        .args(["ls-remote", pin.repo, "refs/heads/main"])
-        .output()
-        .map_err(|e| format!("git ls-remote: {e}"))?;
-    if !output.status.success() {
-        return Err(format!(
-            "git ls-remote failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let sha = stdout
-        .lines()
-        .next()
-        .and_then(|l| l.split_whitespace().next())
-        .ok_or_else(|| "git ls-remote returned no refs".to_string())?;
-    if sha.len() != 40 || !sha.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(format!("malformed SHA: {sha}"));
-    }
-    Ok(sha.to_string())
 }
 
 /// `Pin` requires `&'static str`. For runtime-discovered SHAs we leak — this

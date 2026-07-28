@@ -29,6 +29,55 @@ async fn connect_client(server: &MockServer) -> (McpClient, turul_mcp_client::Mc
     (client, result)
 }
 
+/// Server identity is read from the result's `_meta`. The bare top-level
+/// `serverInfo` the client used to read no longer exists on `DiscoverResult`,
+/// so a client still looking there would silently report no server identity.
+#[tokio::test]
+async fn client_reads_server_info_from_result_meta() {
+    let server = MockServer::start().await;
+    mount_sse_404(&server).await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "server/discover"}),
+        ))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(serde_json::json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "resultType": "complete",
+                        "ttlMs": 0,
+                        "cacheScope": "public",
+                        "supportedVersions": ["2026-07-28"],
+                        "capabilities": {},
+                        "_meta": {
+                            "io.modelcontextprotocol/serverInfo": {
+                                "name": "meta-mock-2026", "version": "2.0.0"
+                            }
+                        }
+                    }
+                })),
+        )
+        .mount(&server)
+        .await;
+
+    let (client, result) = connect_client(&server).await;
+    result.expect("connect against a 2026 server must succeed");
+
+    let discovered = client
+        .discovered_server()
+        .await
+        .expect("a 2026 connection retains the discover body");
+    let info = discovered
+        .server_info
+        .expect("serverInfo must be read out of _meta");
+    assert_eq!(info["name"], "meta-mock-2026");
+    assert_eq!(info["version"], "2.0.0");
+}
+
 #[tokio::test]
 async fn bilingual_client_locks_2026_when_server_answers_discover() {
     let server = MockServer::start().await;
@@ -51,7 +100,7 @@ async fn bilingual_client_locks_2026_when_server_answers_discover() {
                         "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"],
                         "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
                     }
                 })),
         )
@@ -290,7 +339,7 @@ async fn bilingual_client_round_trips_tools_list_against_2026_server() {
                         "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"],
                         "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
                     }
                 })),
         )
@@ -373,7 +422,7 @@ async fn call_tool_recovers_from_header_mismatch_with_one_refresh_and_retry() {
                         "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"],
                         "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
                     }
                 })),
         )
@@ -494,7 +543,7 @@ async fn call_tool_recovers_from_plain_json_400_header_mismatch() {
                         "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"],
                         "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
                     }
                 })),
         )
@@ -602,7 +651,7 @@ async fn http_404_with_json_body_stays_a_transport_error() {
                         "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"],
                         "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
                     }
                 })),
         )
@@ -667,7 +716,7 @@ async fn mcp_name_header_is_base64_sentinel_encoded_when_not_plain_ascii() {
                         "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"],
                         "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
                     }
                 })),
         )
@@ -727,7 +776,7 @@ async fn subscriptions_listen_400_surfaces_jsonrpc_error_not_transport_error() {
                     "jsonrpc": "2.0", "id": "req_0",
                     "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"], "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } } }
                 })),
         )
         .mount(&server)
@@ -782,7 +831,7 @@ async fn subscriptions_listen_post_advertises_both_accept_types() {
                     "jsonrpc": "2.0", "id": "req_0",
                     "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"], "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } } }
                 })),
         )
         .mount(&server)

@@ -1,6 +1,6 @@
-//! Shared capability and implementation identity types for MCP DRAFT-2026-v1.
+//! Shared capability and implementation identity types for MCP 2026-07-28.
 //!
-//! DRAFT-2026-v1 is stateless (SEP-2567, SEP-2575) — there is no
+//! 2026-07-28 is stateless (SEP-2567, SEP-2575) — there is no
 //! `initialize`/`notifications/initialized` handshake. These types
 //! ([`Implementation`], [`ClientCapabilities`], [`ServerCapabilities`])
 //! survive because they are referenced by
@@ -75,7 +75,7 @@ impl Implementation {
 /// **Deprecated** per SEP-2577 alongside the Roots feature.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: pass directories or files via tool parameters, resource URIs, or server configuration. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -85,7 +85,7 @@ pub struct RootsCapabilities {}
 
 /// Capabilities related to sampling support.
 ///
-/// DRAFT-2026-v1 adds two named sub-capabilities:
+/// 2026-07-28 adds two named sub-capabilities:
 /// - `context` — client supports `includeContext` parameter (soft-deprecated)
 /// - `tools`   — client supports `tools` and `toolChoice` parameters
 ///
@@ -95,7 +95,7 @@ pub struct RootsCapabilities {}
 /// **Deprecated** per SEP-2577 alongside the Sampling feature.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: integrate directly with LLM provider APIs. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -121,7 +121,7 @@ pub struct SamplingCapabilities {
 
 /// Capabilities related to elicitation support.
 ///
-/// DRAFT-2026-v1 adds two named sub-capabilities:
+/// 2026-07-28 adds two named sub-capabilities:
 /// - `form` — client supports form-mode elicitation
 /// - `url`  — client supports URL-mode elicitation
 ///
@@ -145,7 +145,7 @@ pub struct ElicitationCapabilities {
 
 /// Capabilities that a client may support.
 ///
-/// DRAFT-2026-v1 shape:
+/// 2026-07-28 shape:
 /// - `experimental?: { [k]: JSONObject }`
 /// - `roots?: {}`                — presence means client supports listing roots
 /// - `sampling?: { context?, tools? }`
@@ -153,7 +153,7 @@ pub struct ElicitationCapabilities {
 /// - `extensions?: { [k]: JSONObject }`  — reverse-DNS keyed extension capability map
 ///
 /// Note: `tasks` field is NOT present — tasks moved entirely to extension
-/// in DRAFT-2026-v1 (SEP-2663). Advertise tasks support via
+/// in 2026-07-28 (SEP-2663). Advertise tasks support via
 /// `extensions["io.modelcontextprotocol/tasks"]`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -236,7 +236,7 @@ pub struct CompletionsCapabilities {
 
 /// Capabilities that a server may support.
 ///
-/// DRAFT-2026-v1 shape:
+/// 2026-07-28 shape:
 /// - `experimental?: { [k]: JSONObject }`
 /// - `logging?: JSONObject`            — opaque object; presence means server can send `notifications/message`
 /// - `completions?: JSONObject`        — opaque object; presence means `completion/complete` is supported
@@ -251,7 +251,7 @@ pub struct ServerCapabilities {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[deprecated(
         since = "0.4.0",
-        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) — the Logging capability is being \
+        note = "Deprecated per SEP-2577 (2026-07-28) — the Logging capability is being \
                 phased out. Earliest removal: first release on/after 2027-07-28."
     )]
     pub logging: Option<LoggingCapabilities>,
@@ -278,7 +278,7 @@ pub struct ServerCapabilities {
     pub extensions: Option<HashMap<String, Value>>,
 }
 
-// DRAFT-2026-v1 is stateless (SEP-2567, SEP-2575) — there is no initialize
+// 2026-07-28 is stateless (SEP-2567, SEP-2575) — there is no initialize
 // handshake. Client info and capabilities travel in `RequestMetaObject` on
 // every request; server info and capabilities come from `DiscoverResult`
 // (see [`crate::discover`]).

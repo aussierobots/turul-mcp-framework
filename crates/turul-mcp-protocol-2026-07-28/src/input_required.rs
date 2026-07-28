@@ -1,4 +1,4 @@
-//! Multi-round-trip input requests for MCP DRAFT-2026-v1 (SEP-2322).
+//! Multi-round-trip input requests for MCP 2026-07-28 (SEP-2322).
 //!
 //! In the stateless 2026 model, servers no longer hold persistent SSE streams
 //! open for elicitation/sampling/roots prompts. Instead a server returns
@@ -20,7 +20,6 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::elicitation::ElicitRequest;
-use crate::meta::MetaObject;
 use crate::result_type::ResultType;
 #[allow(deprecated)]
 use crate::roots::{ListRootsRequest, ListRootsResult};
@@ -38,7 +37,7 @@ use crate::sampling::{CreateMessageRequest, CreateMessageResult};
 /// on first-variant-wins fallback.
 ///
 /// **Note**: `CreateMessageRequest` (Sampling) and `ListRootsRequest` (Roots)
-/// are themselves deprecated per SEP-2577 in DRAFT-2026-v1. They remain valid
+/// are themselves deprecated per SEP-2577 in 2026-07-28. They remain valid
 /// variants of `InputRequest` during the 12-month migration window so servers
 /// can continue to ask clients for sampling/roots input via the MRTR pattern
 /// (SEP-2322). After the deprecated features are removed, the corresponding
@@ -153,7 +152,7 @@ pub struct InputRequiredResult {
 
     /// Optional `_meta` per `Result` schema.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<MetaObject>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl InputRequiredResult {
@@ -189,8 +188,8 @@ impl InputRequiredResult {
     }
 
     /// Attach `_meta`.
-    pub fn with_meta(mut self, meta: MetaObject) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 
@@ -210,7 +209,7 @@ impl crate::traits::HasResultType for InputRequiredResult {
     }
 }
 impl crate::traits::HasMeta for InputRequiredResult {
-    fn meta(&self) -> Option<&MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -221,7 +220,7 @@ impl crate::traits::HasInputRequiredResult for InputRequiredResult {
     fn request_state(&self) -> Option<&str> {
         self.request_state.as_deref()
     }
-    fn meta(&self) -> Option<&MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -241,7 +240,7 @@ impl<'de> Deserialize<'de> for InputRequiredResult {
             #[serde(default)]
             request_state: Option<String>,
             #[serde(rename = "_meta", default)]
-            meta: Option<MetaObject>,
+            meta: Option<crate::meta::ResultMetaObject>,
         }
 
         let r = Raw::deserialize(deserializer)?;
@@ -374,7 +373,8 @@ mod tests {
 
     #[test]
     fn input_required_result_round_trips() {
-        let r = InputRequiredResult::with_state("opaque").with_meta(MetaObject::new());
+        let r = InputRequiredResult::with_state("opaque")
+            .with_meta(crate::meta::ResultMetaObject::default());
         let s = serde_json::to_string(&r).unwrap();
         let parsed: InputRequiredResult = serde_json::from_str(&s).unwrap();
         assert_eq!(parsed.result_type, ResultType::InputRequired);

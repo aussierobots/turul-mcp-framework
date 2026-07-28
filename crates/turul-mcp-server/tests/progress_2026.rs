@@ -131,6 +131,36 @@ fn progress_notifications(events: &[serde_json::Value]) -> Vec<&serde_json::Valu
         .collect()
 }
 
+/// The server identity is stamped on the SSE path too, not just plain JSON —
+/// both frame types leave through the same dispatch, and this is what stops
+/// them drifting apart.
+#[tokio::test]
+async fn sse_result_frame_carries_server_info_meta() {
+    let url = start_server().await;
+    let events = call_worker(&url, Some(serde_json::json!("tok-1"))).await;
+
+    let result = events
+        .iter()
+        .find(|e| e.get("result").is_some())
+        .expect("the stream must end with a result frame");
+
+    assert_eq!(
+        result["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "progress-2026-test",
+        "SSE result frames carry the server identity: {result}"
+    );
+
+    // Progress notifications are not results and must not be stamped.
+    for n in events.iter().filter(|e| e["method"] == "notifications/progress") {
+        assert!(
+            n["params"]["_meta"]
+                .get("io.modelcontextprotocol/serverInfo")
+                .is_none(),
+            "serverInfo belongs on results, not notifications: {n}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn progress_echoes_the_request_string_token() {
     let url = start_server().await;

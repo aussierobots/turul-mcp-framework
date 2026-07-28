@@ -60,6 +60,15 @@ pub struct LambdaMcpHandler {
 }
 
 impl LambdaMcpHandler {
+    /// Set the identity reported in each 2026-07-28 result's `_meta.serverInfo`.
+    ///
+    /// Needed as a setter because the production path builds through
+    /// `with_middleware_and_fingerprint`, which takes no `Implementation`.
+    pub fn with_server_info(mut self, info: turul_mcp_protocol::Implementation) -> Self {
+        self.streamable_handler = self.streamable_handler.with_server_info(info);
+        self
+    }
+
     /// Create a new Lambda MCP handler with the framework components
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -68,7 +77,7 @@ impl LambdaMcpHandler {
         stream_manager: Arc<StreamManager>,
         config: ServerConfig,
         stream_config: StreamConfig,
-        _implementation: turul_mcp_protocol::Implementation,
+        implementation: turul_mcp_protocol::Implementation,
         capabilities: ServerCapabilities,
         sse_enabled: bool,
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
@@ -97,7 +106,8 @@ impl LambdaMcpHandler {
             capabilities.clone(),
             middleware_stack,
             None, // No fingerprint in legacy constructor
-        );
+        )
+        .with_server_info(implementation);
 
         Self {
             session_handler,
@@ -120,7 +130,7 @@ impl LambdaMcpHandler {
         session_storage: Arc<BoxedSessionStorage>,
         stream_manager: Arc<StreamManager>,
         stream_config: StreamConfig,
-        _implementation: turul_mcp_protocol::Implementation,
+        implementation: turul_mcp_protocol::Implementation,
         capabilities: ServerCapabilities,
         sse_enabled: bool,
     ) -> Self {
@@ -148,7 +158,8 @@ impl LambdaMcpHandler {
             capabilities,
             middleware_stack,
             None, // No fingerprint in legacy constructor
-        );
+        )
+        .with_server_info(implementation);
 
         Self {
             session_handler,

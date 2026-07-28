@@ -9,7 +9,7 @@
 //! `turul_rpc::JsonRpcSuccessResponse`.
 //!
 //! What lives here is MCP layer:
-//! - [`RequestParams`] — required `_meta: RequestMetaObject` per DRAFT-2026-v1.
+//! - [`RequestParams`] — required `_meta: RequestMetaObject` per 2026-07-28.
 //! - `NotificationParams` (in [`crate::notifications`]) — optional `_meta: MetaObject`.
 //! - [`PaginatedRequestParams`] — `RequestParams + cursor?`.
 //!
@@ -29,7 +29,7 @@ use crate::traits::{HasDataParam, HasMetaParam, HasProgressTokenParam, Params};
 pub const JSONRPC_VERSION: &str = "2.0";
 
 /// JSON-RPC `params` object for any request — `_meta` is **required** per
-/// DRAFT-2026-v1 stateless core (carries `protocolVersion`, `clientInfo`,
+/// 2026-07-28 stateless core (carries `protocolVersion`, `clientInfo`,
 /// `clientCapabilities` for per-request negotiation).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,7 +163,7 @@ mod tests {
         // inside `_meta` per schema — they belong on `PaginatedRequestParams`
         // (cursor) and `PaginatedResult` (total/hasMore).
         let meta = RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             crate::initialize::Implementation::new("test-client", "1.0.0"),
             crate::initialize::ClientCapabilities::default(),
         )
@@ -182,7 +182,7 @@ mod tests {
         let json_str = serde_json::to_string(&params).unwrap();
         // Required namespaced fields on the wire:
         assert!(json_str.contains("io.modelcontextprotocol/protocolVersion"));
-        assert!(json_str.contains("DRAFT-2026-v1"));
+        assert!(json_str.contains("2026-07-28"));
         assert!(json_str.contains("io.modelcontextprotocol/clientInfo"));
         // Optional `progressToken` + extra `sessionId`:
         assert!(json_str.contains("progressToken"));
@@ -196,12 +196,12 @@ mod tests {
             parsed.meta.progress_token.as_ref().unwrap().as_str(),
             Some("test-token")
         );
-        assert_eq!(parsed.meta.protocol_version, "DRAFT-2026-v1");
+        assert_eq!(parsed.meta.protocol_version, "2026-07-28");
     }
 
     #[test]
     fn test_request_params_rejects_missing_meta() {
-        // Spec compliance: `_meta` is REQUIRED on every request per DRAFT-2026-v1.
+        // Spec compliance: `_meta` is REQUIRED on every request per 2026-07-28.
         // Wire shape without `_meta` MUST fail to deserialize.
         let wire_without_meta = json!({"name": "test"});
         let r: Result<RequestParams, _> = serde_json::from_value(wire_without_meta);

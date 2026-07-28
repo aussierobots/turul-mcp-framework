@@ -120,6 +120,30 @@ async fn discover_returns_supported_versions() {
     );
 }
 
+/// Lambda builds its `StreamableHttpHandler` directly rather than through
+/// `HttpMcpServerBuilder`, so identity wiring done on the local builder does not
+/// reach it. This asserts the two transports agree that every result carries
+/// `_meta.serverInfo` — the same cross-builder divergence class as the
+/// method-registration parity gap.
+#[tokio::test]
+async fn results_carry_server_info_meta_on_the_lambda_path() {
+    let handler = build_handler().await;
+    let request = modern_request("server/discover", json!({ "_meta": request_meta() }));
+
+    let response = handler
+        .handle_streaming(request)
+        .await
+        .expect("handle_streaming");
+    let (status, body) = collect(response).await;
+
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+        "wire-compliance-test",
+        "the Lambda transport must stamp serverInfo like the local one: {body}"
+    );
+}
+
 /// T2: a request whose MCP-Protocol-Version header names a version this
 /// build does not implement is rejected with the recognized modern error
 /// (UnsupportedProtocolVersionError, -32022) rather than a generic failure —

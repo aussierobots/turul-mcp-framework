@@ -93,7 +93,7 @@ pub enum EnumSchema {
     LegacyTitled(LegacyTitledEnumSchema),
 }
 
-// --- DRAFT-2026-v1 enum schema variants -----------------------------------
+// --- 2026-07-28 enum schema variants -----------------------------------
 
 /// Single-select enum with no display titles.
 ///
@@ -354,7 +354,7 @@ pub enum StringFormat {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitationSchema {
-    /// JSON Schema dialect URI. DRAFT-2026-v1 adopts JSON Schema 2020-12;
+    /// JSON Schema dialect URI. 2026-07-28 adopts JSON Schema 2020-12;
     /// clients use this to declare which dialect validated the schema.
     #[serde(rename = "$schema", skip_serializing_if = "Option::is_none")]
     pub schema_dialect: Option<String>,

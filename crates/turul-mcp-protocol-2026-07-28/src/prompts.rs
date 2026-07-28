@@ -141,7 +141,7 @@ pub struct ListPromptsRequest {
 
 impl ListPromptsRequest {
     /// Construct with the required `_meta` (per-request capability negotiation
-    /// is mandatory in DRAFT-2026-v1 stateless core).
+    /// is mandatory in 2026-07-28 stateless core).
     pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "prompts/list".to_string(),
@@ -193,7 +193,7 @@ pub struct ListPromptsResult {
         alias = "_meta",
         rename = "_meta"
     )]
-    pub meta: Option<HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl ListPromptsResult {
@@ -221,8 +221,8 @@ impl ListPromptsResult {
         self
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 }
@@ -249,7 +249,7 @@ pub struct GetPromptRequestParams {
 
     /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
     /// (`GetPromptRequestParams extends InputResponseRequestParams extends RequestParams`,
-    /// and `RequestParams._meta` is required in DRAFT-2026-v1 stateless core).
+    /// and `RequestParams._meta` is required in 2026-07-28 stateless core).
     #[serde(rename = "_meta")]
     pub meta: crate::meta::RequestMetaObject,
 }
@@ -388,7 +388,7 @@ pub struct GetPromptResult {
         alias = "_meta",
         rename = "_meta"
     )]
-    pub meta: Option<HashMap<String, Value>>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl GetPromptResult {
@@ -406,8 +406,8 @@ impl GetPromptResult {
         self
     }
 
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
+        self.meta = Some(meta.into());
         self
     }
 }
@@ -455,7 +455,7 @@ impl HasData for ListPromptsResult {
 }
 
 impl HasMeta for ListPromptsResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -529,7 +529,7 @@ impl HasData for GetPromptResult {
 }
 
 impl HasMeta for GetPromptResult {
-    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -597,7 +597,7 @@ mod tests {
         args.insert("topic".to_string(), "AI Safety".to_string()); // Now uses String instead of Value
 
         let meta = crate::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             crate::initialize::Implementation::new("test-client", "1.0.0"),
             crate::initialize::ClientCapabilities::default(),
         );

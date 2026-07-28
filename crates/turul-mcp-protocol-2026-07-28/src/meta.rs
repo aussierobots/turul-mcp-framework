@@ -1,4 +1,4 @@
-//! `_meta` Field Support for MCP DRAFT-2026-v1.
+//! `_meta` Field Support for MCP 2026-07-28.
 //!
 //! Two distinct meta carriers per the schema:
 //! - [`RequestMetaObject`] — strictly-typed shape for every `Request.params._meta`.
@@ -224,7 +224,7 @@ pub const META_KEY_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscription
 /// into a generic `MetaObject` and want the spelling pinned.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface. \
+    note = "Deprecated per SEP-2577 (2026-07-28) along with the whole Logging surface. \
             Replacement: stderr (stdio) or OpenTelemetry. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -239,8 +239,11 @@ pub const META_KEY_CLIENT_INFO: &str = "io.modelcontextprotocol/clientInfo";
 /// Schema-declared `_meta` key for the request client capabilities.
 pub const META_KEY_CLIENT_CAPABILITIES: &str = "io.modelcontextprotocol/clientCapabilities";
 
+/// Schema-declared `_meta` key for the responding server's implementation info.
+pub const META_KEY_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
+
 // ---------------------------------------------------------------------------
-// DRAFT-2026-v1 _meta types.
+// 2026-07-28 _meta types.
 // ---------------------------------------------------------------------------
 
 /// Loose `_meta` carrier — `Record<string, unknown>` in the schema.
@@ -252,23 +255,125 @@ pub const META_KEY_CLIENT_CAPABILITIES: &str = "io.modelcontextprotocol/clientCa
 /// See [General fields: _meta](https://modelcontextprotocol.io/specification/draft/basic/index#meta).
 pub type MetaObject = HashMap<String, Value>;
 
+/// `_meta` for results — [`MetaObject`] plus the responding server's identity.
+///
+/// `Result._meta?` is typed as this across every result in the schema, so any
+/// result may carry `io.modelcontextprotocol/serverInfo`. Servers SHOULD send
+/// it unless configured otherwise. Like `clientInfo` on the request side the
+/// value is self-reported and unverified: clients MUST NOT key behavior on it
+/// and MUST NOT treat it as a security identity.
+///
+/// See [General fields: _meta](https://modelcontextprotocol.io/specification/draft/basic/index#meta).
+///
+/// `Serialize` is hand-written for the same reason as [`RequestMetaObject`]:
+/// `extra` is public and caller-writable, so a caller could otherwise insert
+/// the reserved `io.modelcontextprotocol/serverInfo` key into it and emit the
+/// same key twice. The typed field wins; a colliding `extra` entry is dropped.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ResultMetaObject {
+    /// Identifies the responding server. Optional.
+    #[serde(rename = "io.modelcontextprotocol/serverInfo")]
+    pub server_info: Option<crate::initialize::Implementation>,
+
+    /// Additional keys per the [`MetaObject`] extension rules.
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+impl ResultMetaObject {
+    /// Carry the responding server's identity.
+    pub fn with_server_info(mut self, info: crate::initialize::Implementation) -> Self {
+        self.server_info = Some(info);
+        self
+    }
+
+    /// Add an extra meta key. Key must follow [`MetaObject`] naming rules
+    /// (no validation performed here; keep keys spec-conformant).
+    pub fn with_extra(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
+        self.extra.insert(key.into(), value.into());
+        self
+    }
+
+    /// True when nothing would be emitted — lets callers skip an empty `_meta`.
+    pub fn is_empty(&self) -> bool {
+        self.server_info.is_none()
+            && self
+                .extra
+                .keys()
+                .all(|k| k.as_str() == META_KEY_SERVER_INFO)
+    }
+}
+
+impl From<MetaObject> for ResultMetaObject {
+    /// Lift a loose `_meta` map into the typed carrier. A
+    /// `io.modelcontextprotocol/serverInfo` entry that parses as an
+    /// `Implementation` moves to the typed field so it cannot also be emitted
+    /// from `extra`; anything else rides along untouched.
+    fn from(mut map: MetaObject) -> Self {
+        let server_info = match map.remove(META_KEY_SERVER_INFO) {
+            Some(v) => match serde_json::from_value(v.clone()) {
+                Ok(info) => Some(info),
+                Err(_) => {
+                    map.insert(META_KEY_SERVER_INFO.to_string(), v);
+                    None
+                }
+            },
+            None => None,
+        };
+        Self {
+            server_info,
+            extra: map,
+        }
+    }
+}
+
+impl Serialize for ResultMetaObject {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeMap;
+
+        let extra_len = self
+            .extra
+            .keys()
+            .filter(|k| k.as_str() != META_KEY_SERVER_INFO)
+            .count();
+        let len = extra_len + usize::from(self.server_info.is_some());
+
+        let mut map = serializer.serialize_map(Some(len))?;
+        if let Some(info) = &self.server_info {
+            map.serialize_entry(META_KEY_SERVER_INFO, info)?;
+        }
+        for (k, v) in &self.extra {
+            if k.as_str() != META_KEY_SERVER_INFO {
+                map.serialize_entry(k, v)?;
+            }
+        }
+        map.end()
+    }
+}
+
 /// Strictly-typed request `_meta` carrying the per-request capability
 /// negotiation. See also [`MetaObject`] for key naming rules and reserved
 /// prefixes, and [General fields: _meta](https://modelcontextprotocol.io/specification/draft/basic/index#meta)
 /// for the full spec section.
 ///
-/// Replaces the 2025-11-25 `initialize` handshake: every DRAFT-2026-v1 request's
+/// Replaces the 2025-11-25 `initialize` handshake: every 2026-07-28 request's
 /// `params._meta` is REQUIRED and carries the per-request protocol version,
 /// client info, and client capabilities. The server cannot infer these from
 /// prior requests in the stateless model (SEP-2567, SEP-2575).
 ///
 /// Required fields (schema: not marked `?`):
 /// - `io.modelcontextprotocol/protocolVersion: string`
-/// - `io.modelcontextprotocol/clientInfo: Implementation`
 /// - `io.modelcontextprotocol/clientCapabilities: ClientCapabilities`
 ///
 /// Optional fields:
 /// - `progressToken?: ProgressToken` — caller opts in to `notifications/progress`
+/// - `io.modelcontextprotocol/clientInfo?: Implementation` — clients SHOULD send
+///   it unless configured otherwise. It is self-reported and unverified: servers
+///   MUST NOT key behavior on it and MUST NOT treat it as a security identity.
+///   A request that omits it is well-formed and MUST be served.
 /// - `io.modelcontextprotocol/logLevel?: LoggingLevel` — replaces the removed
 ///   `logging/setLevel` RPC; client opts in to log notifications per-request
 ///
@@ -300,9 +405,10 @@ pub struct RequestMetaObject {
     #[serde(rename = "io.modelcontextprotocol/protocolVersion")]
     pub protocol_version: String,
 
-    /// Identifies the client. Required.
+    /// Identifies the client. Optional — absent is well-formed. Present but not
+    /// a valid `Implementation` is still a parse failure.
     #[serde(rename = "io.modelcontextprotocol/clientInfo")]
-    pub client_info: crate::initialize::Implementation,
+    pub client_info: Option<crate::initialize::Implementation>,
 
     /// Client capabilities for this specific request. Required.
     ///
@@ -320,7 +426,7 @@ pub struct RequestMetaObject {
     /// migration window.
     #[deprecated(
         since = "0.4.0",
-        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface. \
+        note = "Deprecated per SEP-2577 (2026-07-28) along with the whole Logging surface. \
                 Earliest removal: first release on/after 2027-07-28."
     )]
     #[serde(
@@ -336,8 +442,9 @@ pub struct RequestMetaObject {
 }
 
 impl RequestMetaObject {
-    /// Construct with the three required fields. All optionals start `None`,
-    /// `extra` empty.
+    /// Construct with the two required fields plus `client_info`, which clients
+    /// SHOULD send. Use [`Self::without_client_info`] for the configured-off
+    /// case. All other optionals start `None`, `extra` empty.
     pub fn new(
         protocol_version: impl Into<String>,
         client_info: crate::initialize::Implementation,
@@ -346,12 +453,18 @@ impl RequestMetaObject {
         Self {
             progress_token: None,
             protocol_version: protocol_version.into(),
-            client_info,
+            client_info: Some(client_info),
             client_capabilities,
             #[allow(deprecated)]
             log_level: None,
             extra: HashMap::new(),
         }
+    }
+
+    /// Drop `clientInfo`, modelling a client configured not to report itself.
+    pub fn without_client_info(mut self) -> Self {
+        self.client_info = None;
+        self
     }
 
     /// Attach a progress token.
@@ -365,7 +478,7 @@ impl RequestMetaObject {
     #[allow(deprecated)]
     #[deprecated(
         since = "0.4.0",
-        note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface."
+        note = "Deprecated per SEP-2577 (2026-07-28) along with the whole Logging surface."
     )]
     pub fn with_log_level(mut self, level: crate::logging::LoggingLevel) -> Self {
         self.log_level = Some(level);
@@ -403,7 +516,8 @@ impl Serialize for RequestMetaObject {
             .count();
         let len = extra_len
             + usize::from(self.progress_token.is_some())
-            + 3 // protocol_version, client_info, client_capabilities
+            + 2 // protocol_version, client_capabilities
+            + usize::from(self.client_info.is_some())
             + usize::from(self.log_level.is_some());
 
         let mut map = serializer.serialize_map(Some(len))?;
@@ -411,7 +525,9 @@ impl Serialize for RequestMetaObject {
             map.serialize_entry("progressToken", token)?;
         }
         map.serialize_entry(META_KEY_PROTOCOL_VERSION, &self.protocol_version)?;
-        map.serialize_entry(META_KEY_CLIENT_INFO, &self.client_info)?;
+        if let Some(info) = &self.client_info {
+            map.serialize_entry(META_KEY_CLIENT_INFO, info)?;
+        }
         map.serialize_entry(META_KEY_CLIENT_CAPABILITIES, &self.client_capabilities)?;
         if let Some(level) = &self.log_level {
             map.serialize_entry(META_KEY_LOG_LEVEL, level)?;
@@ -600,5 +716,46 @@ mod tests {
         );
         let v: Value = serde_json::from_str(&json_str).unwrap();
         assert_eq!(v["progressToken"], "real-token");
+    }
+
+    /// A loose `_meta` map carrying the reserved `serverInfo` key must land on
+    /// the TYPED field, not stay in `extra` — otherwise the hand-written
+    /// `Serialize` would emit the key from both places.
+    #[test]
+    fn loose_map_lifts_server_info_into_the_typed_field() {
+        let mut map = MetaObject::new();
+        map.insert(
+            META_KEY_SERVER_INFO.to_string(),
+            serde_json::json!({ "name": "srv", "version": "0.4.0" }),
+        );
+        map.insert("vendor.example/trace".to_string(), serde_json::json!("abc"));
+
+        let carried: ResultMetaObject = map.into();
+        assert_eq!(carried.server_info.as_ref().map(|i| i.name.as_str()), Some("srv"));
+        assert!(!carried.extra.contains_key(META_KEY_SERVER_INFO));
+
+        // Raw text: a `Value` map would collapse a duplicate and hide it.
+        let raw = serde_json::to_string(&carried).unwrap();
+        assert_eq!(
+            raw.matches(META_KEY_SERVER_INFO).count(),
+            1,
+            "serverInfo must be emitted exactly once: {raw}"
+        );
+        assert!(raw.contains("vendor.example/trace"), "{raw}");
+    }
+
+    /// A reserved key whose value is not an `Implementation` must be preserved
+    /// verbatim rather than silently dropped on the floor.
+    #[test]
+    fn loose_map_keeps_an_unparseable_server_info_entry() {
+        let mut map = MetaObject::new();
+        map.insert(META_KEY_SERVER_INFO.to_string(), serde_json::json!("not-an-object"));
+
+        let carried: ResultMetaObject = map.into();
+        assert!(carried.server_info.is_none());
+        assert_eq!(
+            carried.extra.get(META_KEY_SERVER_INFO),
+            Some(&serde_json::json!("not-an-object"))
+        );
     }
 }

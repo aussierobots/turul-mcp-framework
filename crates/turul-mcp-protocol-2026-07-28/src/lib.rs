@@ -3,7 +3,7 @@
 //! Faithful 1:1 Rust implementation of the upstream MCP schema
 //! ([`schema.ts` vendored at `schema/draft-schema.ts`](../../../schema/draft-schema.ts)).
 //! Wire-version string is [`MCP_VERSION`] = `"2026-07-28"` (the pre-finalization
-//! draft literal `"DRAFT-2026-v1"` is still accepted on deserialize for back-compat).
+//! draft literal `"2026-07-28"` is still accepted on deserialize for back-compat).
 //!
 //! Every `export interface`/`export type`/`export const` in the vendored
 //! `schema/draft-schema.ts` has a corresponding Rust binding here. Every
@@ -52,7 +52,7 @@
 //!   [`HTTP_HEADER_METHOD`], [`HTTP_HEADER_NAME`], [`HTTP_HEADER_PARAM_PREFIX`].
 //!
 //! The upstream `schema.ts` has finalized the wire-version literal to
-//! `"2026-07-28"` (was `"DRAFT-2026-v1"` pre-finalization). The vendored
+//! `"2026-07-28"` (was `"2026-07-28"` pre-finalization). The vendored
 //! `schema/draft-schema.ts` still lives under the `schema/draft/` upstream path
 //! and may continue to receive field-level revisions; `schema/README.md`
 //! records the pin provenance and re-pin procedure.
@@ -185,7 +185,8 @@ pub use notifications::{LoggingMessageNotification, LoggingMessageNotificationPa
 pub use ping::{EmptyParams, EmptyResult};
 pub use schema::JsonSchema;
 pub use traits::{
-    HasData, HasDataParam, HasErrorObject, HasMeta, HasMetaParam, HasOptionalRequestId,
+    HasData, HasDataParam, HasErrorObject, HasMeta, HasMetaParam, HasNotificationMeta,
+    HasOptionalRequestId,
     HasProgressTokenParam, HasRequestId, HasResultType, JsonRpcErrorResponseTrait,
     JsonRpcNotificationTrait, JsonRpcRequestTrait, JsonRpcResultResponseTrait, Params, RpcResult,
 };
@@ -206,7 +207,7 @@ pub use turul_rpc::{
 /// on the wire in `LATEST_PROTOCOL_VERSION` of the upstream `schema.ts`.
 ///
 /// The finalized schema emits the stable date literal `"2026-07-28"` (the
-/// pre-finalization draft emitted `"DRAFT-2026-v1"`, still accepted on
+/// pre-finalization draft emitted `"2026-07-28"`, still accepted on
 /// deserialize by [`McpVersion`] for back-compat).
 pub const MCP_VERSION: &str = "2026-07-28";
 

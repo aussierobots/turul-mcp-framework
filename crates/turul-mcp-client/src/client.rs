@@ -75,7 +75,8 @@ pub struct McpClient {
 /// public client vocabulary is version-neutral.
 #[derive(Debug, Clone)]
 pub struct DiscoveredServer {
-    /// `serverInfo` (name/version/title…).
+    /// `serverInfo` (name/version/title…), read from the result's `_meta`.
+    /// Self-reported and unverified — never key behavior or trust on it.
     pub server_info: Option<Value>,
     /// The server's declared capabilities object.
     pub capabilities: Option<Value>,
@@ -87,9 +88,17 @@ pub struct DiscoveredServer {
 }
 
 impl DiscoveredServer {
+    /// Only the 2026-07-28 lane produces a `server/discover` result to parse;
+    /// the narrowed 2025-11-25 build does not link the crate this reads from.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
     fn from_result(result: &Value) -> Self {
         Self {
-            server_info: result.get("serverInfo").cloned(),
+            server_info: result
+                .get("_meta")
+                .and_then(|m| {
+                    m.get(turul_mcp_protocol_2026_07_28::meta::META_KEY_SERVER_INFO)
+                })
+                .cloned(),
             capabilities: result.get("capabilities").cloned(),
             instructions: result
                 .get("instructions")

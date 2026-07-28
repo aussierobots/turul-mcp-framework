@@ -1,4 +1,4 @@
-//! Notification payload types for MCP DRAFT-2026-v1.
+//! Notification payload types for MCP 2026-07-28.
 //!
 //! **Important**: `*ListChangedNotification`, [`ProgressNotification`], and the
 //! other types in this module carry only the MCP `method` and `params` fields —
@@ -6,7 +6,7 @@
 //! [`crate::JsonRpcNotification`] (which adds `jsonrpc: "2.0"`) before sending
 //! over any transport.
 //!
-//! Method strings use `list_changed` (underscore) per the DRAFT-2026-v1 spec.
+//! Method strings use `list_changed` (underscore) per the 2026-07-28 spec.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -63,10 +63,10 @@ impl NotificationParams {
 }
 
 // `Params` and `HasMetaParam` impls live at the bottom of this file alongside
-// the rest of the notifications trait impls. Adding the `HasMeta` and
+// the rest of the notifications trait impls. Adding the `HasNotificationMeta` and
 // `HasDataParam` impls (which the json_rpc layer needs) here for visibility
 // with the struct definition.
-impl crate::traits::HasMeta for NotificationParams {
+impl crate::traits::HasNotificationMeta for NotificationParams {
     fn meta(&self) -> Option<&crate::meta::MetaObject> {
         self.meta.as_ref()
     }
@@ -377,7 +377,7 @@ impl CancelledNotification {
 /// OpenTelemetry. Functional through the migration window.
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: log to stderr for stdio transports or use OpenTelemetry. \
             Per-request log level opt-in lives on RequestMetaObject.log_level. \
             Earliest removal: first release on/after 2027-07-28."
@@ -395,7 +395,7 @@ pub struct LoggingMessageNotification {
 /// **Deprecated** per SEP-2577 — see [`LoggingMessageNotification`].
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: log to stderr for stdio transports or use OpenTelemetry. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -569,7 +569,7 @@ impl CancelledNotificationTrait for CancelledNotification {}
 
 // LoggingMessageNotification — `notifications/message` wire payload.
 //
-// **Deprecated** per SEP-2577 in DRAFT-2026-v1; concrete `#[deprecated]`
+// **Deprecated** per SEP-2577 in 2026-07-28; concrete `#[deprecated]`
 // attributes live on the struct definitions below. The trait impls here are
 // gated with `#[allow(deprecated)]` so the unimplementable-from-outside trait
 // surface still compiles internally without forcing every reader to chase a
@@ -680,7 +680,7 @@ mod tests {
         // through the unified type at both carriers.
         use crate::meta::RequestMetaObject;
         let meta = RequestMetaObject::new(
-            "DRAFT-2026-v1",
+            "2026-07-28",
             crate::initialize::Implementation::new("c", "1"),
             crate::initialize::ClientCapabilities::default(),
         )

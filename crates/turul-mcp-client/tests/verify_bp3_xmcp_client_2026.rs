@@ -63,7 +63,7 @@ async fn start_2026_server() -> MockServer {
                     "result": {
                         "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
                         "supportedVersions": ["2026-07-28"], "capabilities": {},
-                        "serverInfo": { "name": "mock-2026", "version": "1.0.0" }
+                        "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
                     }
                 })),
         )

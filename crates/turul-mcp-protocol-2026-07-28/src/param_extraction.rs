@@ -39,7 +39,7 @@ impl_serde_extractor!(crate::resources::ReadResourceRequestParams);
 // Note: Subscribe/Unsubscribe don't have separate params types
 impl_serde_extractor!(crate::prompts::GetPromptRequestParams);
 impl_serde_extractor!(crate::completion::CompleteRequestParams);
-// `logging::SetLevelParams` removed (logging/setLevel not in DRAFT-2026-v1 schema).
+// `logging::SetLevelParams` removed (logging/setLevel not in 2026-07-28 schema).
 // `resources::SubscribeParams`/`UnsubscribeParams` removed (replaced by subscriptions/listen filter).
 impl_serde_extractor!(crate::elicitation::ElicitRequestFormParams);
 // SEP-2577-deprecated; extractor retained during the migration window.

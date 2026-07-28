@@ -318,7 +318,7 @@ async fn call_tool_or_task_emits_exactly_one_encoded_mcp_name_header() {
             "jsonrpc": "2.0", "id": "req_0",
             "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
                 "supportedVersions": ["2026-07-28"], "capabilities": {},
-                "serverInfo": { "name": "mock-2026", "version": "1.0.0" } }
+                "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "mock-2026", "version": "1.0.0" } } }
         })))
         .mount(&server)
         .await;

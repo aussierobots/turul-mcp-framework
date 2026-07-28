@@ -40,7 +40,7 @@ pub use crate::notifications::{LoggingMessageNotification, LoggingMessageNotific
 
 // Root types (spec-pure structs only). `ListRootsRequest.params?` is the
 // standard `RequestParams` (already exported above), no roots-specific params
-// struct. **Deprecated** per SEP-2577 in DRAFT-2026-v1 — re-exported for the
+// struct. **Deprecated** per SEP-2577 in 2026-07-28 — re-exported for the
 // migration window; new code should use tool parameters / resource URIs / server
 // configuration instead.
 #[allow(deprecated)]
@@ -53,7 +53,7 @@ pub use crate::sampling::{CreateMessageResult, SamplingMessage};
 // Completion types (spec-pure structs only)
 pub use crate::completion::{CompleteRequestParams, CompleteResult, CompletionReference};
 
-// Capability types (initialize handshake removed in DRAFT-2026-v1 stateless core)
+// Capability types (initialize handshake removed in 2026-07-28 stateless core)
 pub use crate::McpVersion;
 pub use crate::icons::Icon;
 pub use crate::initialize::{ClientCapabilities, Implementation};

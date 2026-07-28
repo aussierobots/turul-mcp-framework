@@ -1,4 +1,4 @@
-//! `server/discover` types for MCP DRAFT-2026-v1.
+//! `server/discover` types for MCP 2026-07-28.
 //!
 //! The stateless 2026 core replaces the 2025-11-25 `initialize`/`initialized`
 //! handshake with two mechanisms:
@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::initialize::{ClientCapabilities, Implementation, ServerCapabilities};
-use crate::meta::MetaObject;
 use crate::result_type::ResultType;
 
 /// Wire method string for the discover RPC.
@@ -41,7 +40,7 @@ pub struct DiscoverRequest {
 
 impl DiscoverRequest {
     /// Construct a discover request with the required `_meta` (per-request
-    /// capability negotiation, mandatory in DRAFT-2026-v1 stateless core).
+    /// capability negotiation, mandatory in 2026-07-28 stateless core).
     pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: SERVER_DISCOVER_METHOD.to_string(),
@@ -83,37 +82,38 @@ pub struct DiscoverResult {
     /// Server capabilities.
     pub capabilities: ServerCapabilities,
 
-    /// Server implementation info.
-    pub server_info: Implementation,
-
     /// Optional natural-language guidance for LLMs using this server.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instructions: Option<String>,
 
-    /// Optional `_meta` per `Result` schema — loose `MetaObject`.
+    /// Optional `_meta` per `Result` schema. Carries the responding server's
+    /// identity under `io.modelcontextprotocol/serverInfo` — build it with
+    /// [`crate::meta::ResultMetaObject`].
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<MetaObject>,
+    pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 impl DiscoverResult {
-    /// Construct with the three required fields. Cache hint defaults to
+    /// Construct with the two required fields. Cache hint defaults to
     /// immediately-stale public (`ttlMs=0`, `cacheScope=public`);
     /// `instructions` and `_meta` start `None`.
-    pub fn new(
-        supported_versions: Vec<String>,
-        capabilities: ServerCapabilities,
-        server_info: Implementation,
-    ) -> Self {
+    pub fn new(supported_versions: Vec<String>, capabilities: ServerCapabilities) -> Self {
         Self {
             result_type: ResultType::Complete,
             ttl_ms: 0.0,
             cache_scope: crate::caching::CacheScope::Public,
             supported_versions,
             capabilities,
-            server_info,
             instructions: None,
             meta: None,
         }
+    }
+
+    /// Attach the responding server's identity under
+    /// `_meta.io.modelcontextprotocol/serverInfo`.
+    pub fn with_server_info(mut self, info: Implementation) -> Self {
+        self.meta.get_or_insert_with(Default::default).server_info = Some(info);
+        self
     }
 
     /// Set the cache-control hint (`ttlMs` + `cacheScope`).
@@ -169,7 +169,7 @@ impl crate::traits::DiscoverRequestTrait for DiscoverRequest {}
 
 // `DiscoverResult` satisfies `RpcResult` and `HasMeta`.
 impl crate::traits::HasMeta for DiscoverResult {
-    fn meta(&self) -> Option<&MetaObject> {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject> {
         self.meta.as_ref()
     }
 }
@@ -254,7 +254,6 @@ mod tests {
         let r = DiscoverResult::new(
             vec!["2026-07-28".to_string(), "2025-11-25".to_string()],
             fixture_caps(),
-            fixture_impl(),
         );
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["resultType"], "complete");
@@ -262,17 +261,39 @@ mod tests {
         assert_eq!(v["supportedVersions"][0], "2026-07-28");
         assert_eq!(v["supportedVersions"][1], "2025-11-25");
         assert!(v["capabilities"].is_object());
-        assert!(v["serverInfo"].is_object());
-        assert_eq!(v["serverInfo"]["name"], "test-server");
+        assert!(
+            !v.as_object().unwrap().contains_key("serverInfo"),
+            "serverInfo is not a top-level DiscoverResult field"
+        );
+    }
+
+    #[test]
+    fn discover_result_carries_server_info_under_meta_not_top_level() {
+        let r = DiscoverResult::new(vec!["2026-07-28".to_string()], fixture_caps())
+            .with_server_info(fixture_impl());
+
+        // Raw text, not `Value`: a `Value` map would silently collapse a
+        // duplicate `serverInfo` emitted at both levels.
+        let raw = serde_json::to_string(&r).unwrap();
+        assert!(
+            raw.contains("\"io.modelcontextprotocol/serverInfo\""),
+            "serverInfo must be emitted under the namespaced _meta key: {raw}"
+        );
+        assert!(
+            !raw.contains("\"serverInfo\":"),
+            "the bare top-level serverInfo field was removed from DiscoverResult: {raw}"
+        );
+
+        let v = serde_json::to_value(&r).unwrap();
+        assert_eq!(
+            v["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
+            "test-server"
+        );
     }
 
     #[test]
     fn discover_result_omits_optional_fields_when_none() {
-        let r = DiscoverResult::new(
-            vec!["2026-07-28".to_string()],
-            fixture_caps(),
-            fixture_impl(),
-        );
+        let r = DiscoverResult::new(vec!["2026-07-28".to_string()], fixture_caps());
         let v = serde_json::to_value(&r).unwrap();
         assert!(
             !v.as_object().unwrap().contains_key("instructions"),
@@ -286,11 +307,7 @@ mod tests {
 
     #[test]
     fn discover_result_serializes_instructions_when_present() {
-        let r = DiscoverResult::new(
-            vec!["2026-07-28".to_string()],
-            fixture_caps(),
-            fixture_impl(),
-        )
+        let r = DiscoverResult::new(vec!["2026-07-28".to_string()], fixture_caps())
         .with_instructions("Use this server for testing only.");
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["instructions"], "Use this server for testing only.");
@@ -298,11 +315,7 @@ mod tests {
 
     #[test]
     fn discover_result_round_trips() {
-        let r = DiscoverResult::new(
-            vec!["2026-07-28".to_string()],
-            fixture_caps(),
-            fixture_impl(),
-        )
+        let r = DiscoverResult::new(vec!["2026-07-28".to_string()], fixture_caps())
         .with_instructions("hi");
         let v = serde_json::to_value(&r).unwrap();
         // CacheableResult mixin (DiscoverResult extends CacheableResult) — both
@@ -325,7 +338,7 @@ mod tests {
             "cacheScope": "public",
             "supportedVersions": ["2026-07-28"],
             "capabilities": {},
-            "serverInfo": {"name": "s", "version": "0.4.0"}
+            "_meta": {"io.modelcontextprotocol/serverInfo": {"name": "s", "version": "0.4.0"}}
         });
         let r: DiscoverResult = serde_json::from_value(v).unwrap();
         assert_eq!(r.result_type, ResultType::Complete);
@@ -335,11 +348,7 @@ mod tests {
 
     #[test]
     fn discover_result_response_wire_shape() {
-        let r = DiscoverResult::new(
-            vec!["2026-07-28".to_string()],
-            fixture_caps(),
-            fixture_impl(),
-        );
+        let r = DiscoverResult::new(vec!["2026-07-28".to_string()], fixture_caps());
         let resp = DiscoverResultResponse::new(json!(1), r);
         let v = serde_json::to_value(&resp).unwrap();
         assert_eq!(v["jsonrpc"], "2.0");

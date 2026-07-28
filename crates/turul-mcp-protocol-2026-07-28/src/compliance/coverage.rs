@@ -165,13 +165,13 @@ pub const CASES: &[Case] = &[
     },
     Case {
         dir: "DiscoverResult",
-        kind: Kind::NotModeled,
-        parse_and_reserialize: not_modeled,
+        kind: Kind::Result,
+        parse_and_reserialize: roundtrip::<crate::discover::DiscoverResult>,
     },
     Case {
         dir: "DiscoverResultResponse",
-        kind: Kind::NotModeled,
-        parse_and_reserialize: not_modeled,
+        kind: Kind::Response,
+        parse_and_reserialize: roundtrip::<crate::discover::DiscoverResultResponse>,
     },
     Case {
         dir: "ElicitRequest",

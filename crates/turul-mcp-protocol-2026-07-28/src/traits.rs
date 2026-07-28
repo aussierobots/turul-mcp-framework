@@ -1,4 +1,4 @@
-//! Framework traits for JSON-RPC types per the MCP DRAFT-2026-v1 specification.
+//! Framework traits for JSON-RPC types per the MCP 2026-07-28 specification.
 //!
 //! Trait names follow the schema's TypeScript interface names (`CallToolRequest`,
 //! `CallToolResult`, etc.). The `Has*Params` helpers expose per-interface field
@@ -69,17 +69,25 @@ pub trait HasParams {
     fn params(&self) -> Option<&dyn Params>;
 }
 
-/// Exposes the `_meta` field per the schema's `Result { _meta?: MetaObject }`
-/// and `Notification.params { _meta?: MetaObject }` shapes. Borrowed, typed —
-/// no JSON round-trip.
+/// Exposes `Result._meta?: ResultMetaObject` — the result-side carrier, which
+/// adds `io.modelcontextprotocol/serverInfo` on top of `MetaObject`. Borrowed,
+/// typed — no JSON round-trip.
 pub trait HasMeta {
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject>;
+}
+
+/// Exposes `Notification.params._meta?`. Separate from [`HasMeta`] because the
+/// schema gives the two sides different carriers: results extend `MetaObject`
+/// with `serverInfo`, notifications with `subscriptionId`. One trait returning
+/// one type cannot model both.
+pub trait HasNotificationMeta {
     fn meta(&self) -> Option<&crate::meta::MetaObject>;
 }
 
 /// Exposes the `resultType` discriminator per the schema's
 /// `Result.resultType: ResultType` field. Every spec-compliant result MUST
 /// carry this; per the schema doc-comment, absent values default to `Complete`
-/// for backward compatibility with pre-DRAFT-2026-v1 servers.
+/// for backward compatibility with pre-2026-07-28 servers.
 pub trait HasResultType {
     fn result_type(&self) -> crate::result_type::ResultType;
 }
@@ -105,7 +113,7 @@ pub trait HasErrorObject {
 
 pub trait RpcRequest: HasMethod + HasParams {}
 pub trait RpcNotification: HasMethod + HasParams {}
-/// Schema's `Result` interface: `{ _meta?: MetaObject, resultType: ResultType,
+/// Schema's `Result` interface: `{ _meta?: ResultMetaObject, resultType: ResultType,
 /// [key: string]: unknown }`. Bound to [`HasMeta`] + [`HasResultType`] —
 /// arbitrary `[key: string]: unknown` extra keys are domain-specific and
 /// expressed on the concrete struct itself.
@@ -242,7 +250,7 @@ pub trait ToolListChangedNotificationTrait: RpcNotification {
 /// **Deprecated** per SEP-2577 — see [`crate::notifications::LoggingMessageNotification`].
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1). \
+    note = "Deprecated per SEP-2577 (2026-07-28). \
             Replacement: stderr (stdio) or OpenTelemetry, plus per-request log-level opt-in. \
             Earliest removal: first release on/after 2027-07-28."
 )]
@@ -362,7 +370,7 @@ pub trait CallToolResult: RpcResult {
 #[allow(deprecated)]
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+    note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface. \
             Earliest removal: first release on/after 2027-07-28."
 )]
 pub trait HasCreateMessageRequestParams: Params {
@@ -379,7 +387,7 @@ pub trait HasCreateMessageRequestParams: Params {
 #[allow(deprecated)]
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+    note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface. \
             Earliest removal: first release on/after 2027-07-28."
 )]
 pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestParams {
@@ -394,7 +402,7 @@ pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestPar
 #[allow(deprecated)]
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) with the Sampling surface. \
+    note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface. \
             Earliest removal: first release on/after 2027-07-28."
 )]
 pub trait CreateMessageResult: HasMeta {
@@ -461,7 +469,7 @@ pub trait ListRootsRequest: JsonRpcRequestTrait + HasListRootsParams {
     }
 }
 
-// `ListRootsResult` is `{roots: Root[]}` per the DRAFT-2026-v1 schema — bare,
+// `ListRootsResult` is `{roots: Root[]}` per the 2026-07-28 schema — bare,
 // no `_meta`, no `resultType`. The `RpcResult: HasMeta + HasResultType` bound doesn't
 // fit, so the trait is plain. **Deprecated** per SEP-2577 alongside the Roots
 // surface; retained during the migration window.
@@ -472,7 +480,7 @@ pub trait ListRootsResult {
 
 // ---------------------- logging ------------------------
 
-// `logging/setLevel` RPC was removed in DRAFT-2026-v1 — per-request log level
+// `logging/setLevel` RPC was removed in 2026-07-28 — per-request log level
 // opt-in now rides on `RequestMetaObject.log_level`. The earlier
 // `HasSetLevelParams` / `SetLevelRequest` trait pair is gone.
 
@@ -481,7 +489,7 @@ pub trait ListRootsResult {
 #[allow(deprecated)]
 #[deprecated(
     since = "0.4.0",
-    note = "Deprecated per SEP-2577 (DRAFT-2026-v1) along with the whole Logging surface."
+    note = "Deprecated per SEP-2577 (2026-07-28) along with the whole Logging surface."
 )]
 pub trait HasLevelParam: Params {
     #[allow(deprecated)]
@@ -540,7 +548,7 @@ pub trait HasInputRequiredResult: HasResultType {
     /// `InputResponseRequestParams.request_state`.
     fn request_state(&self) -> Option<&str>;
     /// Optional `_meta` per the `Result` schema.
-    fn meta(&self) -> Option<&crate::meta::MetaObject>;
+    fn meta(&self) -> Option<&crate::meta::ResultMetaObject>;
 }
 
 // ---------------------- elicitation ------------------------

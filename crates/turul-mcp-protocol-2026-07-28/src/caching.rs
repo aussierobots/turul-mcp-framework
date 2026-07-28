@@ -1,6 +1,6 @@
 //! Cache-control hints for results (SEP-2549).
 //!
-//! DRAFT-2026-v1 introduces a `CacheableResult` mixin that all list and read
+//! 2026-07-28 introduces a `CacheableResult` mixin that all list and read
 //! results extend — `ttlMs` carries a client-side TTL hint (in milliseconds,
 //! HTTP-`Cache-Control: max-age` semantics) and `cacheScope` indicates whether
 //! the response is safe to share across users.

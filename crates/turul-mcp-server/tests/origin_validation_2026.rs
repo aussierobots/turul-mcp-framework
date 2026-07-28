@@ -87,7 +87,10 @@ async fn origin_absent_is_allowed() {
     let resp = discover_with_origin(&url, None).await;
     assert_eq!(resp.status(), 200);
     let body: serde_json::Value = resp.json().await.unwrap();
-    assert!(body["result"]["serverInfo"]["name"].is_string(), "{body}");
+    assert!(
+        body["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"].is_string(),
+        "{body}"
+    );
 }
 
 #[tokio::test]
