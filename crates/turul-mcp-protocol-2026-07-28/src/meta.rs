@@ -305,21 +305,24 @@ impl ResultMetaObject {
 }
 
 impl From<MetaObject> for ResultMetaObject {
-    /// Lift a loose `_meta` map into the typed carrier. A
-    /// `io.modelcontextprotocol/serverInfo` entry that parses as an
-    /// `Implementation` moves to the typed field so it cannot also be emitted
-    /// from `extra`; anything else rides along untouched.
+    /// Lift a loose `_meta` map into the typed carrier.
+    ///
+    /// `io.modelcontextprotocol/serverInfo` is reserved: the typed field owns
+    /// it, and `Serialize` never emits that key from `extra`. So a value that
+    /// does not parse as an `Implementation` is **dropped, not preserved** —
+    /// re-homing it in `extra` would only look preserved in memory while
+    /// vanishing on the wire, and emitting it as-is would put a value on the
+    /// wire under a reserved key whose declared shape it does not satisfy.
+    /// Every other key is carried through untouched.
+    ///
+    /// The drop is silent: this crate binds the schema and takes no logging
+    /// dependency, so there is nowhere here to warn from. Callers that need to
+    /// detect a malformed reserved entry must inspect the map before
+    /// converting.
     fn from(mut map: MetaObject) -> Self {
-        let server_info = match map.remove(META_KEY_SERVER_INFO) {
-            Some(v) => match serde_json::from_value(v.clone()) {
-                Ok(info) => Some(info),
-                Err(_) => {
-                    map.insert(META_KEY_SERVER_INFO.to_string(), v);
-                    None
-                }
-            },
-            None => None,
-        };
+        let server_info = map
+            .remove(META_KEY_SERVER_INFO)
+            .and_then(|v| serde_json::from_value(v).ok());
         Self {
             server_info,
             extra: map,
@@ -744,18 +747,52 @@ mod tests {
         assert!(raw.contains("vendor.example/trace"), "{raw}");
     }
 
-    /// A reserved key whose value is not an `Implementation` must be preserved
-    /// verbatim rather than silently dropped on the floor.
+    /// A reserved `serverInfo` whose value is not an `Implementation` is
+    /// dropped. Asserted on the SERIALIZED form: an earlier version re-homed it
+    /// in `extra`, which looked preserved in memory while `Serialize` filtered
+    /// it out, so an in-memory assertion could not see the loss.
     #[test]
-    fn loose_map_keeps_an_unparseable_server_info_entry() {
+    fn malformed_server_info_is_dropped_on_the_wire() {
         let mut map = MetaObject::new();
-        map.insert(META_KEY_SERVER_INFO.to_string(), serde_json::json!("not-an-object"));
+        map.insert(
+            META_KEY_SERVER_INFO.to_string(),
+            serde_json::json!("not-an-object"),
+        );
+        map.insert("vendor.example/keep".to_string(), serde_json::json!("kept"));
 
         let carried: ResultMetaObject = map.into();
         assert!(carried.server_info.is_none());
-        assert_eq!(
-            carried.extra.get(META_KEY_SERVER_INFO),
-            Some(&serde_json::json!("not-an-object"))
+        assert!(!carried.extra.contains_key(META_KEY_SERVER_INFO));
+
+        let raw = serde_json::to_string(&carried).unwrap();
+        assert!(
+            !raw.contains("not-an-object"),
+            "a malformed reserved entry must not reach the wire: {raw}"
         );
+        assert!(
+            !raw.contains(META_KEY_SERVER_INFO),
+            "the reserved key must not be emitted with no valid value: {raw}"
+        );
+        assert!(raw.contains("vendor.example/keep"), "other keys survive: {raw}");
+    }
+
+    /// A well-formed `serverInfo` survives the full loose-map -> typed ->
+    /// wire -> typed round trip.
+    #[test]
+    fn valid_server_info_round_trips_through_the_wire() {
+        let mut map = MetaObject::new();
+        map.insert(
+            META_KEY_SERVER_INFO.to_string(),
+            serde_json::json!({ "name": "srv", "version": "0.4.0" }),
+        );
+
+        let carried: ResultMetaObject = map.into();
+        let raw = serde_json::to_string(&carried).unwrap();
+        let back: ResultMetaObject = serde_json::from_str(&raw).unwrap();
+
+        let info = back.server_info.expect("serverInfo survives the round trip");
+        assert_eq!(info.name, "srv");
+        assert_eq!(info.version, "0.4.0");
+        assert!(!back.extra.contains_key(META_KEY_SERVER_INFO));
     }
 }
