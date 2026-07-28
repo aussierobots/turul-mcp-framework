@@ -91,10 +91,12 @@ jobs:
       - name: Per-crate 2025-11-25 build matrix
         run: |
           set -euxo pipefail
-          cargo build  -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25
+          cargo test   -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25
           cargo clippy -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25 -- -D warnings
-          cargo build  -p turul-mcp-builders    --no-default-features --features protocol-2025-11-25
-          cargo build  -p turul-http-mcp-server --no-default-features --features sse,protocol-2025-11-25
+          cargo test   -p turul-mcp-builders    --no-default-features --features protocol-2025-11-25
+          cargo test   -p turul-http-mcp-server --no-default-features --features sse,protocol-2025-11-25
+          # build-only: derive dev-depends on turul-mcp-server (2026 default), which
+          # unifies both protocol features and trips the alias mutex under cargo test.
           cargo build  -p turul-mcp-derive      --no-default-features --features protocol-2025-11-25
           cargo test   -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
           cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only

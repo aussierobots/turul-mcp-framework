@@ -11,7 +11,7 @@ use turul_mcp_protocol::Prompt;
 use turul_mcp_protocol::prompts::PromptArgument;
 
 /// Framework-side prompt annotations (display hints). This is a FRAMEWORK
-/// type — the wire `Prompt` carries no annotations object in DRAFT-2026-v1;
+/// type — the wire `Prompt` carries no annotations object in 2026-07-28;
 /// the schema's display affordances are `title` and `icons` on the prompt
 /// itself.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -90,6 +90,10 @@ pub trait HasPromptMeta {
 /// ```rust
 /// use turul_mcp_protocol::prompts::*;
 /// use turul_mcp_builders::prelude::*;  // Import framework traits
+/// // On the 2025-11-25 lane `turul_mcp_protocol::prompts` also exports a
+/// // (different, wire-level) `PromptAnnotations`, so name the framework one
+/// // explicitly — an explicit import wins over both globs.
+/// use turul_mcp_builders::traits::prompt_traits::PromptAnnotations;
 /// use std::collections::HashMap;
 ///
 /// // This struct will automatically implement PromptDefinition!
@@ -156,6 +160,10 @@ pub trait HasPromptMeta {
 /// // Example of manual implementation without macros
 /// use turul_mcp_protocol::prompts::*;
 /// use turul_mcp_builders::prelude::*;  // Import framework traits
+/// // On the 2025-11-25 lane `turul_mcp_protocol::prompts` also exports a
+/// // (different, wire-level) `PromptAnnotations`, so name the framework one
+/// // explicitly — an explicit import wins over both globs.
+/// use turul_mcp_builders::traits::prompt_traits::PromptAnnotations;
 /// use std::collections::HashMap;
 ///
 /// struct DocumentationPrompt;
