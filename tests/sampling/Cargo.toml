@@ -14,8 +14,7 @@ turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4.
 # Shared test utilities
 mcp-e2e-shared.workspace = true
 
-# HTTP client and JSON
-reqwest.workspace = true
+# JSON
 serde_json.workspace = true
 
 # Testing

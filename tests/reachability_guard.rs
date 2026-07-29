@@ -9,12 +9,17 @@
 //! that satisfies neither — it silently stops compiling and running while
 //! still looking like coverage.
 //!
-//! A `[[bin]]` declared in a nested crate under `tests/` is worse: it compiles
-//! on every build and looks like a test server, but nothing launches it unless
+//! A binary target in a nested crate under `tests/` is worse: it compiles on
+//! every build and looks like a test server, but nothing launches it unless
 //! `TestServerManager` names it. The harness spawns servers by binary name from
 //! `tests/shared/src/e2e_utils.rs`, so a name absent from that file is a
 //! duplicate of an `examples/` server that only drifts from the copy actually
 //! under test.
+//!
+//! Both routes to a binary target count. An explicit `[[bin]]` block is the
+//! visible one; `src/main.rs` with no such block is the autobin, named after
+//! the package, and it is the easier one to miss precisely because nothing in
+//! the manifest mentions it.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -169,9 +174,32 @@ fn declared_bin_names(manifest: &str) -> Vec<String> {
     names
 }
 
-/// Every `(crate directory, binary name)` declared by a nested crate under
-/// `tests/` — i.e. a subdirectory carrying its own `Cargo.toml`.
-fn nested_crate_bins() -> Vec<(String, String)> {
+/// The `[package] name = "..."` value, which is also the autobin's target name.
+/// Section-scoped because `[lib]` and `[[bin]]` blocks carry a `name` key too.
+fn package_name(manifest: &str) -> Option<String> {
+    let mut in_package = false;
+    for line in manifest.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') {
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if in_package
+            && let Some(rest) = trimmed.strip_prefix("name")
+            && let Some(rest) = rest.trim_start().strip_prefix('=')
+        {
+            return Some(rest.trim().trim_matches('"').to_string());
+        }
+    }
+    None
+}
+
+/// Every `(crate directory, binary name, how it is declared)` a nested crate
+/// under `tests/` builds — i.e. a subdirectory carrying its own `Cargo.toml`.
+/// Covers both explicit `[[bin]]` blocks and the `src/main.rs` autobin, which
+/// no manifest line announces. The route is carried so a failure names the
+/// declaration the reader has to go find.
+fn nested_crate_bins() -> Vec<(String, String, &'static str)> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let mut bins = Vec::new();
 
@@ -185,11 +213,22 @@ fn nested_crate_bins() -> Vec<(String, String)> {
             .unwrap_or_else(|e| panic!("failed to read {}: {e}", manifest_path.display()));
         let dir = entry.file_name().to_string_lossy().into_owned();
         for name in declared_bin_names(&manifest) {
-            bins.push((dir.clone(), name));
+            bins.push((dir.clone(), name, "[[bin]]"));
+        }
+
+        let autobins_disabled = manifest
+            .lines()
+            .any(|line| line.trim().replace(' ', "") == "autobins=false");
+        if !autobins_disabled && entry.path().join("src/main.rs").is_file() {
+            let name = package_name(&manifest).unwrap_or_else(|| {
+                panic!("{} has a src/main.rs but no package name", manifest_path.display())
+            });
+            bins.push((dir, name, "src/main.rs autobin"));
         }
     }
 
     bins.sort();
+    bins.dedup();
     bins
 }
 
@@ -202,17 +241,17 @@ fn every_nested_test_crate_bin_is_launched_by_the_harness() {
 
     let orphaned: Vec<String> = nested_crate_bins()
         .into_iter()
-        .filter(|(_, name)| !harness.contains(name.as_str()))
-        .map(|(dir, name)| format!("tests/{dir} → [[bin]] {name}"))
+        .filter(|(_, name, _)| !harness.contains(name.as_str()))
+        .map(|(dir, name, route)| format!("tests/{dir} → {name} ({route})"))
         .collect();
 
     assert!(
         orphaned.is_empty(),
-        "{} binary target(s) declared by nested crates under tests/ are never \
+        "{} binary target(s) built by nested crates under tests/ are never \
          launched: {orphaned:?}. `TestServerManager` spawns servers by binary \
          name from tests/{HARNESS_SOURCE}, and none of these appear there, so \
          they compile on every build while nothing runs them. Wire each one \
-         into the harness, or delete the [[bin]] and its source if an \
+         into the harness, or delete the target and its source if an \
          examples/ server already supersedes it.",
         orphaned.len()
     );

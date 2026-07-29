@@ -9,6 +9,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### Fixed (2026-07-30, two orphan autobins the guard could not see, and dead dependency pins)
+
+- **`tests/reachability_guard.rs` parsed `[[bin]]` blocks only, so it could not
+  see an autobin.** `tests/prompts/src/main.rs` and
+  `tests/resources/src/main.rs` are binary targets by virtue of their path —
+  nothing in either manifest names them — so the guard added to catch
+  never-launched test-crate binaries walked straight past two of them. Both
+  duplicated an `examples/` server the harness actually spawns
+  (`prompts-test-server`, `resource-test-server`, which are 947 and 1701 lines
+  against the orphans' 240 and 168), and `TestServerManager` names neither.
+  Deleted, and `nested_crate_bins()` now covers the autobin route as well as
+  `[[bin]]`, honouring `autobins = false`. Revert-and-fail: reinstating one
+  `src/main.rs` fails `every_nested_test_crate_bin_is_launched_by_the_harness`
+  with `tests/prompts → mcp-prompts-tests (src/main.rs autobin)`. The failure
+  message now names which of the two routes declared the target, since "go find
+  the `[[bin]]`" is unactionable advice for a binary no manifest mentions.
+
+- **The six deleted `bin/main.rs` targets left their dependencies behind.**
+  `tests/{elicitation,prompts,resources,roots,sampling,tools}` between them
+  declared 36 dependency entries across 16 distinct crates that no remaining
+  source referenced —
+  `clap`, `uuid`, `reqwest`, `hyper`, `hyper-util`, `http-body-util`, `tower`,
+  `futures`, `tokio-stream`, `tempfile`, `chrono`, `base64`, `serde_yml`,
+  `anyhow`, `async-trait`, `schemars`. Removed and verified by building and
+  running all six suites (221 tests pass), not by grep: a grep-only pass had
+  also flagged `serde`, which is required through the derive expansion and
+  produced `E0463: can't find crate for serde` the moment it was dropped.
+
+- **Six `[workspace.dependencies]` pins had no consumer at all.**
+  `tokio-tungstenite`, `criterion`, `lambda-web`, `pin-project`, `serde_yaml`
+  and `indicatif` were referenced by no crate manifest and no source file.
+  Pre-existing rather than a consequence of the deletions above, and removed in
+  the same pass because `serde_yaml` — abandoned upstream — sat in the pin table
+  directly alongside the `serde_yml` fork that three crates do use, which reads
+  as a choice rather than as debris.
+
+- **`interop-client-probe` reported "nothing to test" as `FAIL` on two legs and
+  `SKIP` on a third.** A peer exposing no resource and no prompt got
+  `LEG resources/read FAIL` and `LEG prompts/get FAIL`, while the adjacent
+  `completion/complete` leg called the identical condition `SKIP`. Since the
+  probe exists to be pointed at servers this project did not write, and peers
+  legitimately differ in what they expose, `FAIL` there reads as a defect in a
+  peer that has simply not implemented that surface. All three now report
+  `SKIP`, the three outcomes are defined in the module docs, and a skipped
+  `tools/call` says why it still fails the run: the core claim is unproven, and
+  `CORE ok` off an unexercised core would be a false pass.
+
 ### Fixed (2026-07-30, verification scripts and the forbidden `-32002`)
 
 - **The legacy `≤2024-11-05` handler emitted `-32002`.**

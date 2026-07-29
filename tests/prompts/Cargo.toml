@@ -18,19 +18,7 @@ serde_json.workspace = true
 async-trait.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-uuid = { workspace = true, features = ["v7", "serde"] }
-reqwest = { workspace = true, features = ["json", "stream"] }
-hyper.workspace = true
-hyper-util.workspace = true
-http-body-util.workspace = true
-tower = { workspace = true, features = ["util"] }
-futures.workspace = true
-tokio-stream.workspace = true
-tempfile.workspace = true
 mcp-e2e-shared.workspace = true
-# Additional dependencies for test server binary
-clap.workspace = true
-chrono.workspace = true
 
 [dev-dependencies]
 serial_test.workspace = true

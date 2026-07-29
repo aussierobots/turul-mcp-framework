@@ -6,12 +6,21 @@
 //! in the repo has turul code on both ends of the wire, so a contract both
 //! halves get wrong the same way looks identical to one they get right.
 //!
-//! Each leg prints a `LEG` line with its name and outcome, and no leg aborts the run — a
-//! peer that lacks prompts should show up as one failed leg, not as a probe
-//! that stopped before reaching the rest. Exit status covers the modern-core
-//! legs only (`server/discover`, `tools/list`, `tools/call`); the read surface
-//! is reported for the caller to judge, since peers legitimately differ in
-//! what they expose.
+//! Each leg prints a `LEG` line with one of three outcomes, and no leg aborts
+//! the run — a peer that lacks prompts should show up as one reported leg, not
+//! as a probe that stopped before reaching the rest.
+//!
+//! - `OK` — the leg was driven and the peer answered.
+//! - `FAIL` — the leg was driven and the exchange broke.
+//! - `SKIP` — the peer exposed nothing to drive it against, so the leg proves
+//!   nothing either way. Distinct from `FAIL`, which would read as a defect in
+//!   a peer that simply does not implement that surface.
+//!
+//! Exit status covers the modern-core legs only (`server/discover`,
+//! `tools/list`, `tools/call`); the read surface is reported for the caller to
+//! judge, since peers legitimately differ in what they expose. A skipped
+//! `tools/call` still fails the run: the core claim is then unproven, and
+//! reporting `CORE ok` off an unexercised core would be a false pass.
 //!
 //!   cargo run -p interop-client-probe -- `<url>`
 
@@ -112,7 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_err(|e| e.to_string()),
         );
     } else {
-        println!("LEG tools/call FAIL peer advertised no tools");
+        println!("LEG tools/call SKIP peer advertised no tools — core unproven, so CORE fails");
         core_ok = false;
     }
 
@@ -137,7 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_err(|e| e.to_string()),
         );
     } else {
-        println!("LEG resources/read FAIL peer exposed no resource to read");
+        println!("LEG resources/read SKIP peer exposed no resource to read");
     }
     leg(
         "resources/templates/list",
@@ -170,7 +179,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map_err(|e| e.to_string()),
         );
     } else {
-        println!("LEG prompts/get FAIL peer exposed no prompt to render");
+        println!("LEG prompts/get SKIP peer exposed no prompt to render");
     }
 
     // Completion is prompt-scoped, so it can only be driven when the peer
