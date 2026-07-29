@@ -19,6 +19,11 @@ use super::types::{DetailedTask, TaskFields, TaskStatus};
 pub struct TaskState {
     pub fields: TaskFields,
     pub status: TaskStatus,
+    /// The authenticated principal (verified token subject) this task is
+    /// bound to, or `None` when the request that created it carried no
+    /// authenticated principal — see [`TaskStore::get`], [`TaskStore::cancel`],
+    /// and [`TaskStore::provide_input`] for how this is enforced.
+    pub owner: Option<String>,
     /// Outstanding server→client requests while `input_required`.
     pub input_requests: Option<InputRequests>,
     /// Responses collected so far for the current `input_required` round
@@ -92,13 +97,32 @@ pub enum InputDelivery {
 /// Async task store. Implementations enforce the SEP-2663 state machine:
 /// `working ⇄ input_required`, both → `completed`/`failed`/`cancelled`,
 /// terminal states immutable.
+///
+/// A task id is a state handle within the meaning of the Security Best
+/// Practices "State Handle Hijacking" guidance: possession of the id MUST
+/// NOT be treated as authentication. The three client-facing entry points
+/// ([`get`](TaskStore::get), [`cancel`](TaskStore::cancel),
+/// [`provide_input`](TaskStore::provide_input)) therefore take the caller's
+/// `owner` — the authenticated principal from the current request, or
+/// `None` when the deployment has no authentication — and MUST reject
+/// (indistinguishably from "unknown task") a task bound to a different
+/// owner. `create`, `complete`, `fail`, and `require_input` are driven by
+/// the worker that owns the task, not by an inbound client request, so they
+/// carry no owner check.
 #[async_trait::async_trait]
 pub trait TaskStore: Send + Sync {
     /// Persist a new task (status `working`). The caller must not answer the
     /// originating request until this returns.
     async fn create(&self, state: TaskState) -> Result<(), TaskStoreError>;
 
-    async fn get(&self, task_id: &str) -> Result<Option<TaskState>, TaskStoreError>;
+    /// Fetch a task for `tasks/get`. Returns `Ok(None)` both when the task
+    /// does not exist and when it exists but is bound to a different
+    /// `owner` — the two cases MUST be indistinguishable to the caller.
+    async fn get(
+        &self,
+        task_id: &str,
+        owner: Option<&str>,
+    ) -> Result<Option<TaskState>, TaskStoreError>;
 
     /// `working`/`input_required` → `completed` with the final result.
     async fn complete(&self, task_id: &str, result: Value) -> Result<TaskState, TaskStoreError>;
@@ -106,9 +130,16 @@ pub trait TaskStore: Send + Sync {
     /// `working`/`input_required` → `failed` with a JSON-RPC error object.
     async fn fail(&self, task_id: &str, error: Value) -> Result<TaskState, TaskStoreError>;
 
-    /// Cooperative cancel: non-terminal → `cancelled` (returns the new
-    /// state); already-terminal returns `Ok(None)` — callers ack either way.
-    async fn cancel(&self, task_id: &str) -> Result<Option<TaskState>, TaskStoreError>;
+    /// Cooperative cancel for `tasks/cancel`: non-terminal → `cancelled`
+    /// (returns the new state); already-terminal returns `Ok(None)` —
+    /// callers ack either way. A task bound to a different `owner` yields
+    /// `Err(TaskStoreError::NotFound)`, the same error an unknown task id
+    /// produces.
+    async fn cancel(
+        &self,
+        task_id: &str,
+        owner: Option<&str>,
+    ) -> Result<Option<TaskState>, TaskStoreError>;
 
     /// `working` → `input_required` with the given outstanding requests.
     async fn require_input(
@@ -121,12 +152,26 @@ pub trait TaskStore: Send + Sync {
     /// Record `tasks/update` responses. Keys must match outstanding input
     /// requests; partial delivery keeps the task `input_required`, full
     /// delivery transitions it back to `working` and hands the responses to
-    /// the caller for worker resumption.
+    /// the caller for worker resumption. A task bound to a different
+    /// `owner` yields `Err(TaskStoreError::NotFound)`, the same error an
+    /// unknown task id produces.
     async fn provide_input(
         &self,
         task_id: &str,
+        owner: Option<&str>,
         responses: InputResponses,
     ) -> Result<InputDelivery, TaskStoreError>;
+}
+
+/// True when `state` may be accessed by `owner`: an owned task only answers
+/// to its own owner; an unowned task (created without an authenticated
+/// principal) answers to anyone, matching the deployment's own no-isolation
+/// posture rather than pretending to isolate callers it cannot identify.
+fn owner_matches(state: &TaskState, owner: Option<&str>) -> bool {
+    match state.owner.as_deref() {
+        Some(bound) => Some(bound) == owner,
+        None => true,
+    }
 }
 
 /// In-memory [`TaskStore`] — single-process; tasks do not survive restarts.
@@ -159,12 +204,17 @@ impl TaskStore for InMemoryTaskStore {
         Ok(())
     }
 
-    async fn get(&self, task_id: &str) -> Result<Option<TaskState>, TaskStoreError> {
+    async fn get(
+        &self,
+        task_id: &str,
+        owner: Option<&str>,
+    ) -> Result<Option<TaskState>, TaskStoreError> {
         Ok(self
             .tasks
             .read()
             .expect("task store lock")
             .get(task_id)
+            .filter(|state| owner_matches(state, owner))
             .cloned())
     }
 
@@ -206,11 +256,18 @@ impl TaskStore for InMemoryTaskStore {
         Ok(state.clone())
     }
 
-    async fn cancel(&self, task_id: &str) -> Result<Option<TaskState>, TaskStoreError> {
+    async fn cancel(
+        &self,
+        task_id: &str,
+        owner: Option<&str>,
+    ) -> Result<Option<TaskState>, TaskStoreError> {
         let mut tasks = self.tasks.write().expect("task store lock");
         let state = tasks
             .get_mut(task_id)
             .ok_or_else(|| TaskStoreError::NotFound(task_id.to_string()))?;
+        if !owner_matches(state, owner) {
+            return Err(TaskStoreError::NotFound(task_id.to_string()));
+        }
         if state.status.is_terminal() {
             return Ok(None);
         }
@@ -248,12 +305,16 @@ impl TaskStore for InMemoryTaskStore {
     async fn provide_input(
         &self,
         task_id: &str,
+        owner: Option<&str>,
         responses: InputResponses,
     ) -> Result<InputDelivery, TaskStoreError> {
         let mut tasks = self.tasks.write().expect("task store lock");
         let state = tasks
             .get_mut(task_id)
             .ok_or_else(|| TaskStoreError::NotFound(task_id.to_string()))?;
+        if !owner_matches(state, owner) {
+            return Err(TaskStoreError::NotFound(task_id.to_string()));
+        }
         if state.status != TaskStatus::InputRequired {
             return Err(TaskStoreError::InvalidStatus {
                 task_id: task_id.to_string(),

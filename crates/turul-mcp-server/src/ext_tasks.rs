@@ -13,6 +13,19 @@
 //! is answered, the worker resumes with the responses injected through the
 //! SAME session-extension keys the synchronous MRTR retry leg uses — tool
 //! code is identical under both execution models.
+//!
+//! Task ids are state handles (Security Best Practices "State Handle
+//! Hijacking"): a task is bound at creation to the caller's authenticated
+//! principal (the verified `sub` claim the OAuth middleware leaves at
+//! `__turul_internal.auth_claims`, read via [`owner_from_session`]), and
+//! `tasks/get`/`tasks/update`/`tasks/cancel` reject a task id presented by
+//! any other principal, indistinguishably from an unknown id. When a
+//! deployment has no authentication configured, no request carries a
+//! principal, every task is created with no owner, and no cross-caller
+//! isolation applies — this is a deliberate, documented consequence of
+//! running the extension without authentication, not a silent gap: an
+//! operator who needs isolation between mutually-untrusting callers must
+//! configure OAuth.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -40,6 +53,21 @@ use crate::tool::McpTool;
 
 /// Suggested polling interval handed to clients on every task.
 const POLL_INTERVAL_MS: f64 = 500.0;
+
+/// The caller's authenticated principal for this request, or `None` when
+/// the request carries no verified identity (no OAuth configured, or the
+/// claim is absent/empty). Reads the same `__turul_internal.auth_claims`
+/// extension `OAuthResourceMiddleware` populates from a validated Bearer
+/// token's `sub` claim.
+fn owner_from_session(session: &Option<SessionContext>) -> Option<String> {
+    session
+        .as_ref()
+        .and_then(|s| {
+            s.get_typed_extension::<turul_mcp_oauth::TokenClaims>("__turul_internal.auth_claims")
+        })
+        .map(|claims| claims.sub)
+        .filter(|sub| !sub.is_empty())
+}
 
 struct Waiter {
     sender: tokio::sync::oneshot::Sender<(InputResponses, Option<String>)>,
@@ -86,6 +114,7 @@ impl ExtTasksRuntime {
             ttl_ms: Nullable(None),
             poll_interval_ms: Some(POLL_INTERVAL_MS),
         };
+        let owner = owner_from_session(&session);
 
         // Durably created BEFORE the response is sent (upstream overview:
         // "A CreateTaskResult is not returned until the task is findable").
@@ -93,6 +122,7 @@ impl ExtTasksRuntime {
             .create(TaskState {
                 fields: fields.clone(),
                 status: TaskStatus::Working,
+                owner,
                 input_requests: None,
                 collected_responses: InputResponses::new(),
                 request_state: None,
@@ -251,13 +281,15 @@ impl ExtTasksRuntime {
     }
 
     /// Deliver `tasks/update` responses; resumes the worker when the round
-    /// completes.
+    /// completes. `owner` must match the task's bound owner (see
+    /// [`TaskStore::provide_input`]) or the store reports the task unknown.
     pub async fn deliver_input(
         &self,
         task_id: &str,
+        owner: Option<&str>,
         responses: InputResponses,
     ) -> Result<(), TaskStoreError> {
-        match self.store.provide_input(task_id, responses).await? {
+        match self.store.provide_input(task_id, owner, responses).await? {
             InputDelivery::Complete {
                 responses,
                 request_state,
@@ -276,9 +308,15 @@ impl ExtTasksRuntime {
 
     /// Cooperative cancel: flips non-terminal tasks to `cancelled`, aborts a
     /// running worker, and drops any input waiter. Terminal tasks are left
-    /// untouched (callers ack regardless).
-    pub async fn cancel(&self, task_id: &str) -> Result<Option<TaskState>, TaskStoreError> {
-        let cancelled = self.store.cancel(task_id).await?;
+    /// untouched (callers ack regardless). `owner` must match the task's
+    /// bound owner (see [`TaskStore::cancel`]) or the store reports the task
+    /// unknown.
+    pub async fn cancel(
+        &self,
+        task_id: &str,
+        owner: Option<&str>,
+    ) -> Result<Option<TaskState>, TaskStoreError> {
+        let cancelled = self.store.cancel(task_id, owner).await?;
         if cancelled.is_some() {
             if let Some(handle) = self.aborts.lock().expect("aborts lock").remove(task_id) {
                 handle.abort();
@@ -325,14 +363,13 @@ impl ExtTasksGetHandler {
     }
 }
 
-#[async_trait]
-impl McpHandler for ExtTasksGetHandler {
-    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+impl ExtTasksGetHandler {
+    async fn get(&self, params: Option<Value>, owner: Option<&str>) -> McpResult<Value> {
         let params: GetTaskParams = parse_params(params)?;
         let state = self
             .runtime
             .store()
-            .get(&params.task_id)
+            .get(&params.task_id, owner)
             .await
             .map_err(|e| McpError::ToolExecutionError(format!("task store: {e}")))?
             .ok_or_else(|| {
@@ -347,6 +384,22 @@ impl McpHandler for ExtTasksGetHandler {
             );
         }
         Ok(v)
+    }
+}
+
+#[async_trait]
+impl McpHandler for ExtTasksGetHandler {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        self.get(params, None).await
+    }
+
+    async fn handle_with_session(
+        &self,
+        params: Option<Value>,
+        session: Option<SessionContext>,
+    ) -> McpResult<Value> {
+        let owner = owner_from_session(&session);
+        self.get(params, owner.as_deref()).await
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -365,12 +418,11 @@ impl ExtTasksUpdateHandler {
     }
 }
 
-#[async_trait]
-impl McpHandler for ExtTasksUpdateHandler {
-    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+impl ExtTasksUpdateHandler {
+    async fn update(&self, params: Option<Value>, owner: Option<&str>) -> McpResult<Value> {
         let params: UpdateTaskParams = parse_params(params)?;
         self.runtime
-            .deliver_input(&params.task_id, params.input_responses)
+            .deliver_input(&params.task_id, owner, params.input_responses)
             .await
             .map_err(|e| match e {
                 TaskStoreError::NotFound(id) => {
@@ -386,6 +438,22 @@ impl McpHandler for ExtTasksUpdateHandler {
             })?;
         // Empty ack, resultType "complete".
         Ok(serde_json::json!({ "resultType": "complete" }))
+    }
+}
+
+#[async_trait]
+impl McpHandler for ExtTasksUpdateHandler {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        self.update(params, None).await
+    }
+
+    async fn handle_with_session(
+        &self,
+        params: Option<Value>,
+        session: Option<SessionContext>,
+    ) -> McpResult<Value> {
+        let owner = owner_from_session(&session);
+        self.update(params, owner.as_deref()).await
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -404,17 +472,32 @@ impl ExtTasksCancelHandler {
     }
 }
 
-#[async_trait]
-impl McpHandler for ExtTasksCancelHandler {
-    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+impl ExtTasksCancelHandler {
+    async fn cancel(&self, params: Option<Value>, owner: Option<&str>) -> McpResult<Value> {
         let params: CancelTaskParams = parse_params(params)?;
-        match self.runtime.cancel(&params.task_id).await {
+        match self.runtime.cancel(&params.task_id, owner).await {
             Ok(_) => Ok(serde_json::json!({ "resultType": "complete" })),
             Err(TaskStoreError::NotFound(id)) => {
                 Err(McpError::InvalidParameters(format!("unknown task {id:?}")))
             }
             Err(e) => Err(McpError::ToolExecutionError(format!("task store: {e}"))),
         }
+    }
+}
+
+#[async_trait]
+impl McpHandler for ExtTasksCancelHandler {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        self.cancel(params, None).await
+    }
+
+    async fn handle_with_session(
+        &self,
+        params: Option<Value>,
+        session: Option<SessionContext>,
+    ) -> McpResult<Value> {
+        let owner = owner_from_session(&session);
+        self.cancel(params, owner.as_deref()).await
     }
 
     fn supported_methods(&self) -> Vec<String> {

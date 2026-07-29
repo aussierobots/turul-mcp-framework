@@ -15,8 +15,11 @@ use serde_json::{Value, json};
 use turul_mcp_ext_tasks::InMemoryTaskStore;
 use turul_mcp_protocol::ToolSchema;
 use turul_mcp_protocol::tools::{CallToolResult, ToolResult};
+use turul_mcp_server::middleware::{
+    McpMiddleware, MiddlewareError, RequestContext, SessionInjection,
+};
 use turul_mcp_server::prelude::*;
-use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_server::{McpServer, McpTool, SessionContext, SessionView};
 
 /// Slow tool — long enough that the create response races ahead of completion.
 struct SlowDoubleTool {
@@ -180,6 +183,68 @@ async fn start_server() -> String {
     url
 }
 
+/// Stand-in for `OAuthResourceMiddleware`: reads a plain `x-test-principal`
+/// header instead of verifying a Bearer JWT, but writes the exact same
+/// `__turul_internal.auth_claims` extension key a real validated token's
+/// `sub` claim would land in. This drives the real ext-tasks owner-binding
+/// code path over real HTTP without standing up a JWKS/IdP in the test.
+struct TestPrincipalMiddleware;
+
+#[async_trait]
+impl McpMiddleware for TestPrincipalMiddleware {
+    fn runs_before_session(&self) -> bool {
+        true
+    }
+
+    async fn before_dispatch(
+        &self,
+        ctx: &mut RequestContext<'_>,
+        _session: Option<&dyn SessionView>,
+        _injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError> {
+        if let Some(sub) = ctx
+            .metadata()
+            .get("x-test-principal")
+            .and_then(|v| v.as_str())
+        {
+            ctx.set_extension("__turul_internal.auth_claims", json!({ "sub": sub }));
+        }
+        Ok(())
+    }
+}
+
+/// Same server as [`start_server`] but with [`TestPrincipalMiddleware`]
+/// installed, so `tasks/*` requests carry a caller principal.
+async fn start_server_with_principals() -> String {
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
+
+    let server = McpServer::builder()
+        .name("ext-tasks-2026-owner-test")
+        .version("0.4.0")
+        .with_ext_tasks(Arc::new(InMemoryTaskStore::new()))
+        .ext_task_tool(SlowDoubleTool::new())
+        .ext_task_tool(ApprovalTool::new())
+        .middleware(Arc::new(TestPrincipalMiddleware))
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build server");
+
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let client = reqwest::Client::new();
+    for _ in 0..50 {
+        if client.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    url
+}
+
 /// Same as SlowDoubleTool but registered task-REQUIRED.
 struct SlowRequiredTool {
     input_schema: ToolSchema,
@@ -252,6 +317,114 @@ async fn post(
     let status = resp.status();
     let body: Value = resp.json().await.unwrap_or(Value::Null);
     (status, body)
+}
+
+/// Like [`post`] but attaches `x-test-principal`, which
+/// [`TestPrincipalMiddleware`] turns into the caller's bound owner.
+async fn post_as(
+    url: &str,
+    method: &str,
+    name_header: Option<&str>,
+    principal: &str,
+    body: Value,
+) -> (reqwest::StatusCode, Value) {
+    let client = reqwest::Client::new();
+    let mut req = client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", method)
+        .header("x-test-principal", principal);
+    if let Some(n) = name_header {
+        req = req.header("Mcp-Name", n);
+    }
+    let resp = req.json(&body).send().await.expect("POST");
+    let status = resp.status();
+    let body: Value = resp.json().await.unwrap_or(Value::Null);
+    (status, body)
+}
+
+async fn call_tool_as(
+    url: &str,
+    tool: &str,
+    args: Value,
+    principal: &str,
+) -> (reqwest::StatusCode, Value) {
+    post_as(
+        url,
+        "tools/call",
+        Some(tool),
+        principal,
+        json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "_meta": meta(true), "name": tool, "arguments": args }
+        }),
+    )
+    .await
+}
+
+async fn tasks_get_as(url: &str, task_id: &str, principal: &str) -> (reqwest::StatusCode, Value) {
+    post_as(
+        url,
+        "tasks/get",
+        None,
+        principal,
+        json!({
+            "jsonrpc": "2.0", "id": 2, "method": "tasks/get",
+            "params": { "_meta": meta(true), "taskId": task_id }
+        }),
+    )
+    .await
+}
+
+async fn tasks_update_as(
+    url: &str,
+    task_id: &str,
+    principal: &str,
+    input_responses: Value,
+) -> (reqwest::StatusCode, Value) {
+    post_as(
+        url,
+        "tasks/update",
+        None,
+        principal,
+        json!({
+            "jsonrpc": "2.0", "id": 3, "method": "tasks/update",
+            "params": { "_meta": meta(true), "taskId": task_id, "inputResponses": input_responses }
+        }),
+    )
+    .await
+}
+
+async fn tasks_cancel_as(
+    url: &str,
+    task_id: &str,
+    principal: &str,
+) -> (reqwest::StatusCode, Value) {
+    post_as(
+        url,
+        "tasks/cancel",
+        None,
+        principal,
+        json!({
+            "jsonrpc": "2.0", "id": 4, "method": "tasks/cancel",
+            "params": { "_meta": meta(true), "taskId": task_id }
+        }),
+    )
+    .await
+}
+
+async fn poll_until_input_required_as(url: &str, task_id: &str, principal: &str) -> Value {
+    for _ in 0..100 {
+        let (status, body) = tasks_get_as(url, task_id, principal).await;
+        assert_eq!(status, 200, "tasks/get: {body}");
+        if body["result"]["status"] == "input_required" {
+            return body;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("task {task_id} never reached input_required");
 }
 
 async fn call_tool(
@@ -585,5 +758,91 @@ async fn task_notifications_ride_listen_filtered_by_task_id() {
     assert!(
         saw_task_notification,
         "terminal notifications/tasks must arrive on the filtered stream: {buf}"
+    );
+}
+
+/// State Handle Hijacking (Security Best Practices): a task id is a state
+/// handle bound to the principal that created it. A task created by `alice`
+/// MUST NOT be readable, updatable, or cancellable by `bob` — each attempt
+/// must fail exactly like an unknown task id (masking existence), and none
+/// of bob's attempts may actually mutate alice's task.
+#[tokio::test]
+async fn task_bound_to_owner_rejects_other_principal() {
+    let url = start_server_with_principals().await;
+
+    let (status, body) = call_tool_as(&url, "needs_approval", json!({}), "alice").await;
+    assert_eq!(status, 200, "{body}");
+    let task_id = body["result"]["taskId"]
+        .as_str()
+        .expect("taskId")
+        .to_string();
+
+    // Wait for the worker to park in input_required, as alice.
+    poll_until_input_required_as(&url, &task_id, "alice").await;
+
+    // bob cannot read it.
+    let (status, body) = tasks_get_as(&url, &task_id, "bob").await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["error"]["code"], -32602,
+        "bob's tasks/get on alice's task must look exactly like an unknown task id: {body}"
+    );
+
+    // bob cannot cancel it.
+    let (status, body) = tasks_cancel_as(&url, &task_id, "bob").await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["error"]["code"], -32602,
+        "bob's tasks/cancel on alice's task must look exactly like an unknown task id: {body}"
+    );
+
+    // bob cannot deliver input responses to it.
+    let (status, body) = tasks_update_as(
+        &url,
+        &task_id,
+        "bob",
+        json!({ "approval": { "action": "accept", "content": { "approved": true } } }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["error"]["code"], -32602,
+        "bob's tasks/update on alice's task must look exactly like an unknown task id: {body}"
+    );
+
+    // None of bob's attempts moved the task: alice still sees input_required.
+    let (status, still_pending) = tasks_get_as(&url, &task_id, "alice").await;
+    assert_eq!(status, 200, "{still_pending}");
+    assert_eq!(
+        still_pending["result"]["status"], "input_required",
+        "bob's rejected calls must not have mutated alice's task: {still_pending}"
+    );
+
+    // alice still owns it end to end: she can deliver input and the task completes.
+    let (status, ack) = tasks_update_as(
+        &url,
+        &task_id,
+        "alice",
+        json!({ "approval": { "action": "accept", "content": { "approved": true } } }),
+    )
+    .await;
+    assert_eq!(status, 200, "{ack}");
+    assert_eq!(ack["result"]["resultType"], "complete", "{ack}");
+
+    let mut done = Value::Null;
+    for _ in 0..100 {
+        let (status, body) = tasks_get_as(&url, &task_id, "alice").await;
+        assert_eq!(status, 200, "{body}");
+        if ["completed", "failed", "cancelled"].contains(&body["result"]["status"].as_str().unwrap_or(""))
+        {
+            done = body;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(done["result"]["status"], "completed", "{done}");
+    assert_eq!(
+        done["result"]["result"]["content"][0]["text"], "approved",
+        "alice's own delivery must resume the worker: {done}"
     );
 }

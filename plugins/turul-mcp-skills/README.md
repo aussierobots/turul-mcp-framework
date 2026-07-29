@@ -129,7 +129,7 @@ Covers building MCP client applications with `turul-mcp-client` (bilingual by de
 - Transport selection (auto-detect, HttpTransport, SseTransport) and per-connection wire-spec negotiation (`server/discover` probe, `initialize` fallback)
 - Connection lifecycle (connect, disconnect, connection states) — no server-side session on a negotiated 2026-07-28 connection
 - Tool/resource/prompt invocation from the client side
-- Error handling (McpClientError variants, retryability, backoff; `is_resource_not_found()` accepts both -32602 and legacy -32002)
+- Error handling (McpClientError variants, retryability, backoff; `is_resource_not_found(version)` accepts legacy -32002 only on the 2025-11-25 lane)
 - Configuration (ClientConfig, timeouts, retries, connection settings)
 
 ### testing-patterns

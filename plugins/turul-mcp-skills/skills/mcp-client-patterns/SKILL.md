@@ -252,7 +252,7 @@ Use `RetryConfig::delay_for_attempt(n)` to calculate backoff delay with jitter.
 
 The 401 vs 404 distinction matters: 404 means "your session is gone, create a new one" — not an auth problem. `McpClient` handles this automatically on 2025-11-25 connections: `is_session_expired()` resets local session state, clears the stale `Mcp-Session-Id`, re-runs `initialize`, and retries the original request.
 
-**Missing-resource error code.** 2026-07-28 reuses the JSON-RPC standard `-32602` for "not found" where 2025-11-25 used `-32002`. `McpClientError::is_resource_not_found()` accepts both codes so the same client code works against either lane.
+**Missing-resource error code.** 2026-07-28 reuses the JSON-RPC standard `-32602` for "not found" where 2025-11-25 used `-32002`, and forbids a 2026 implementation from emitting `-32002` at all. `McpClientError::is_resource_not_found(version)` therefore takes the connection's negotiated version: on 2025-11-25 it accepts both codes, on 2026-07-28 only `-32602`. Accepting both unconditionally would read a 2026 permission denial as a missing resource.
 
 See [references/error-handling-guide.md](references/error-handling-guide.md) for full variant catalog and retry patterns.
 

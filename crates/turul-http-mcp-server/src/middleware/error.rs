@@ -15,22 +15,28 @@ use std::fmt;
 /// [Error Codes](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes).
 ///
 /// The three codes below predate that partition and are frozen as legacy
-/// allocations; nothing new may join them.
+/// allocations; nothing new may join them, except `UNAUTHORIZED` — relocated
+/// below to correct a `MUST NOT` violation.
 ///
-/// `UNAUTHORIZED` is a **known deviation**: 2026-07-28 names `-32002` among the
-/// codes implementations of this version MUST NOT emit (it meant "resource not
-/// found" in 2025-11-25 and earlier, and `turul-mcp-client` still classifies it
-/// as resource-not-found in `error.rs::is_resource_not_found`). Relocating it
-/// is blocked at both call sites that build these responses —
-/// `map_middleware_error_to_jsonrpc` in `session_handler.rs` and
-/// `streamable_http.rs` construct the object with
-/// `JsonRpcErrorObject::server_error`, which asserts the code lies in
-/// `-32099..=-32000` and panics otherwise.
+/// `UNAUTHORIZED` used to be `-32002`, one of the codes 2026-07-28 names as
+/// forbidden for this version to emit — it meant "resource not found" in
+/// 2025-11-25 and earlier, so a 2026 permission denial was wire-indistinguishable
+/// from a missing resource. It is now `-32005`. This trades that `MUST NOT`
+/// violation for a `SHOULD NOT`: `-32005` still sits in the legacy
+/// `-32000..-32019` sub-range the spec says new implementations should avoid
+/// entirely, rather than in the unreserved space above `-32099` the spec
+/// recommends for new codes. The spec's recommended range is unreachable here:
+/// both call sites that build these responses — `map_middleware_error_to_jsonrpc`
+/// in `session_handler.rs` and `streamable_http.rs` — construct the object with
+/// `JsonRpcErrorObject::server_error`, whose `assert!` requires the code to lie
+/// in `-32099..=-32000` (a release decision of the sibling `turul-rpc` crate,
+/// not this one) and panics otherwise.
 pub mod error_codes {
     /// Authentication required (-32001)
     pub const UNAUTHENTICATED: i64 = -32001;
-    /// Permission denied (-32002)
-    pub const UNAUTHORIZED: i64 = -32002;
+    /// Permission denied (-32005). Relocated from -32002, which 2026-07-28
+    /// forbids implementations of this version from emitting.
+    pub const UNAUTHORIZED: i64 = -32005;
     /// Rate limit exceeded (-32003)
     pub const RATE_LIMIT_EXCEEDED: i64 = -32003;
     /// Invalid request (standard JSON-RPC error)
@@ -56,7 +62,7 @@ pub mod error_codes {
 /// Each error variant maps to a specific JSON-RPC error code (see [`error_codes`]):
 ///
 /// - `Unauthenticated` → `-32001` "Authentication required"
-/// - `Unauthorized` → `-32002` "Permission denied"
+/// - `Unauthorized` → `-32005` "Permission denied"
 /// - `RateLimitExceeded` → `-32003` "Rate limit exceeded"
 /// - `InvalidRequest` → `-32600` (standard Invalid Request)
 /// - `Internal` → `-32603` (standard Internal error)
@@ -266,21 +272,29 @@ mod tests {
         assert_eq!(err.to_string(), "CUSTOM_ERROR: Something went wrong");
     }
 
-    /// The middleware codes are frozen legacy allocations, and none may enter
-    /// the spec-reserved sub-range. 2026-07-28 forbids allocating new codes in
-    /// `-32000..-32019` and forbids emitting any `-32020..-32099` code the
-    /// specification does not define; a new middleware code must therefore be
-    /// allocated outside the JSON-RPC reserved range `-32768..-32000`.
+    /// `UNAUTHENTICATED` and `RATE_LIMIT_EXCEEDED` are frozen legacy
+    /// allocations. `UNAUTHORIZED` is not frozen at its old value: `-32002` is
+    /// a code 2026-07-28 lists among those implementations of this version
+    /// MUST NOT emit, so it was relocated to `-32005`. None of the three may
+    /// enter the spec-reserved sub-range, and `UNAUTHORIZED` specifically must
+    /// never again be `-32002`.
     #[test]
     fn middleware_codes_are_frozen_legacy_allocations() {
         const FROZEN: [(&str, i64); 3] = [
             ("UNAUTHENTICATED", -32001),
-            ("UNAUTHORIZED", -32002),
+            ("UNAUTHORIZED", -32005),
             ("RATE_LIMIT_EXCEEDED", -32003),
         ];
         assert_eq!(error_codes::UNAUTHENTICATED, FROZEN[0].1);
         assert_eq!(error_codes::UNAUTHORIZED, FROZEN[1].1);
         assert_eq!(error_codes::RATE_LIMIT_EXCEEDED, FROZEN[2].1);
+        assert_ne!(
+            error_codes::UNAUTHORIZED,
+            -32002,
+            "UNAUTHORIZED must never regress to -32002 — 2026-07-28 forbids \
+             implementations of this version from emitting it, and it means \
+             resource-not-found to every conformant peer"
+        );
 
         for (name, code) in FROZEN {
             assert!(

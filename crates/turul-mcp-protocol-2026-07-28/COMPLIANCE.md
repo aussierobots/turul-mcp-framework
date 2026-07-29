@@ -27,15 +27,16 @@
   shutdown-signal infrastructure (no `CancellationToken`, no `tokio::signal`
   wiring) exists anywhere in `turul-http-mcp-server` or `turul-mcp-server` to
   hook into — this is unbuilt transport infrastructure, not a missed call site.
-- **`error_codes::UNAUTHORIZED` is `-32002`, which this spec version MUST NOT
-  emit.** The code is defined in `turul-http-mcp-server`, not here, but it
-  reaches the 2026 wire and `turul-mcp-client::is_resource_not_found` matches
-  `-32602 | -32002` — so turul-on-turul reports a permission denial as a missing
-  resource. Blocked rather than deferred: both `map_middleware_error_to_jsonrpc`
-  sites construct through `JsonRpcErrorObject::server_error`, whose `assert!`
-  requires `-32099..=-32000`, so the spec's recommended destination for a
-  replacement code is unreachable through that constructor. Full disposition in
-  `docs/compliance/base-protocol.md` §11 and `docs/adr/027` revision log.
+- **`error_codes::UNAUTHORIZED` was `-32002`, which this spec version MUST NOT
+  emit — now `-32005`.** Closed 2026-07-29. The replacement still sits in the
+  legacy `-32000..-32019` sub-range, so a `MUST NOT` violation became a
+  `SHOULD NOT` deviation rather than disappearing: the spec's recommended
+  destination above `-32099` is unreachable because both
+  `map_middleware_error_to_jsonrpc` sites construct through
+  `JsonRpcErrorObject::server_error`, whose `assert!` requires
+  `-32099..=-32000` — a release decision of the sibling `turul-rpc` crate.
+  `turul-mcp-client::is_resource_not_found` now takes the negotiated version
+  and stops conflating the two codes on the 2026 lane.
 
 An earlier revision listed `RequestMetaObject.extra` here as an unguarded
 reserved-key collision risk. **That is fixed and tested** — the hand-written

@@ -233,8 +233,8 @@ reserved range (`-32768` to `-32000`)."
 | Unknown method → HTTP 404 + `-32601` | MUST | Implemented | dispatch | `error_mapping_2026.rs::unknown_method_gets_http_404_with_method_not_found`, `::methods_absent_from_the_2026_schema_get_404` | pass | pass | pass | pass |
 | Framework-internal codes stay out of the spec-reserved `-32020..-32099` | MUST | Implemented | `lib.rs:529-570` | `lib.rs::framework_internal_errors_are_legacy_allocations_or_outside_the_reserved_range`, `::no_two_framework_internal_errors_share_a_code` | pass | — | — | — |
 | No **new** code allocated in the legacy `-32000..-32019` sub-range | MUST | Implemented | frozen `LEGACY_ALLOCATIONS` set in `lib.rs`; frozen constants in `c/turul-http-mcp-server/src/middleware/error.rs:9-40` | `lib.rs::framework_internal_errors_are_legacy_allocations_or_outside_the_reserved_range` (a non-grandfathered sub-range code now fails), `error.rs::middleware_codes_are_frozen_legacy_allocations` | pass | — | — | — |
-| New implementations SHOULD NOT use `-32000..-32019` at all | SHOULD | **Deviation** | 14 pre-policy codes retained: `McpError` emits `-32000`, `-32010`..`-32019` (`lib.rs:507-570`); middleware emits `-32001`/`-32002`/`-32003` (`middleware/error.rs:28-33`) | the two guards above pin the set; no test moves them | — | — | — | — |
-| `-32002` MUST NOT be emitted by implementations of this version | MUST | **Gap** | `middleware/error.rs:31` maps `MiddlewareError::Unauthorized` → `-32002`, reachable on the 2026 path via `streamable_http.rs:2873` | NOT FOUND | — | — | — | — |
+| New implementations SHOULD NOT use `-32000..-32019` at all | SHOULD | **Deviation** | 14 pre-policy codes retained: `McpError` emits `-32000`, `-32010`..`-32019` (`lib.rs:507-570`); middleware emits `-32001`/`-32003`/`-32005` (`middleware/error.rs`). `-32005` is a *new* allocation in the closed sub-range, taken because the spec's recommended home is unreachable through `JsonRpcErrorObject::server_error`'s assert | the two guards above pin the set; no test moves them | — | — | — | — |
+| `-32002` MUST NOT be emitted by implementations of this version | MUST | Implemented | `MiddlewareError::Unauthorized` → `-32005` (`middleware/error.rs`); no framework path emits `-32002` on the 2026 lane | `error_code_wire_2026.rs::permission_denial_and_missing_resource_are_distinguishable_and_neither_is_32002`, `error.rs::middleware_codes_are_frozen_legacy_allocations` | pass | — | — | — |
 | `-32042` MUST NOT be emitted by implementations of this version | MUST | Implemented | never allocated — the only `32042` in `crates/` is the prose note in the vendored `schema/schema.ts:424` | NOT FOUND | — | — | — | — |
 
 **HTTP status is layered, and the split is a contract:** a request the transport
@@ -288,13 +288,15 @@ Ordered by consequence, not by area.
    wired cannot satisfy "MUST NOT treat possession of a state handle as
    authentication" even if the operator wants to. Unguessable v4 ids raise the
    bar but are not the requirement.
-2. **`-32002` is still emitted for middleware `Unauthorized`**, a code
-   2026-07-28 names as MUST NOT emit. `turul-mcp-client::is_resource_not_found`
-   matches `-32002`, so turul-on-turul reports a permission denial as a missing
-   resource. Blocked on the two `map_middleware_error_to_jsonrpc` sites: they
-   build the object with `JsonRpcErrorObject::server_error`, whose `assert!`
-   panics for any code outside `-32099..=-32000` — the spec's recommended home
-   for a replacement is unreachable through that constructor.
+2. **Framework-internal codes remain in a sub-range the spec closes.**
+   `UNAUTHORIZED` moved off the forbidden `-32002` to `-32005` on 2026-07-29,
+   which ends the `MUST NOT` violation, but `-32005` is still inside the legacy
+   `-32000..-32019` band that new implementations SHOULD NOT use. The spec's
+   recommended home above `-32099` is unreachable: both
+   `map_middleware_error_to_jsonrpc` sites build through
+   `JsonRpcErrorObject::server_error`, whose `assert!` demands
+   `-32099..=-32000`, so moving there panics rather than failing. Closing this
+   properly needs a change in the sibling `turul-rpc` crate.
 3. **TLS is not enforced on JWKS / issuer URIs.** `JwtValidator::new` performs
    no scheme check, so a misconfigured `http://` JWKS endpoint is accepted
    silently. ADR-021 claims the posture; no code implements it and no test
