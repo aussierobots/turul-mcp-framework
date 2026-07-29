@@ -5,7 +5,7 @@
 #   opt-in lane   = 2025-11-25 (legacy)
 #
 # Gates mirror docs/plans/2026-07-28-final-readiness-audit.md §7.
-# Usage:  scripts/ci-gates.sh [default|opt-in-2025|mutex|docs|all]   (default: all)
+# Usage:  scripts/ci-gates.sh [default|opt-in-2025|lambda|mutex|docs|all]  (default: all)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -36,6 +36,8 @@ gate_default() {
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_param_2026
   run "2026 per-request log gating (logLevel opt-in)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test log_gating_2026
+  run "2026 streaming wire grammar (SSE framing, ordering, JSON counterpart)" \
+    cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test streaming_e2e_2026
   run "2026 schema fidelity (derive/builders pipeline to the wire)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test schema_fidelity_2026
   run "protocol-2026 compliance + upstream wire fixtures" \
@@ -80,6 +82,13 @@ gate_opt_in_2025() {
   done
 }
 
+# Lambda, end to end through the real Runtime API rather than an in-process
+# handler call. Separate from the default gate because it needs cargo-lambda and
+# builds the function before it can answer.
+gate_lambda() {
+  run "2026 Lambda E2E (cargo lambda watch, real Runtime API)" ./scripts/e2e-lambda-local.sh
+}
+
 gate_mutex() {
   echo "=== spec mutex (both features must NOT compile) ==="
   if cargo build -p turul-mcp-protocol --features protocol-2025-11-25,protocol-2026-07-28 2>/dev/null; then
@@ -106,10 +115,11 @@ gate_docs() {
 case "${1:-all}" in
   default)      gate_default ;;
   opt-in-2025)  gate_opt_in_2025 ;;
+  lambda)       gate_lambda ;;
   mutex)        gate_mutex ;;
   docs)         gate_docs ;;
-  all)          gate_default; gate_opt_in_2025; gate_mutex; gate_docs ;;
-  *) echo "usage: $0 [default|opt-in-2025|mutex|docs|all]"; exit 2 ;;
+  all)          gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs ;;
+  *) echo "usage: $0 [default|opt-in-2025|lambda|mutex|docs|all]"; exit 2 ;;
 esac
 
 echo; [ "$fail" = "0" ] && echo "ALL GATES PASSED" || echo "ONE OR MORE GATES FAILED"
