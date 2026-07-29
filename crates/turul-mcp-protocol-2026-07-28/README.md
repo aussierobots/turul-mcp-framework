@@ -5,9 +5,9 @@
 
 Model Context Protocol (MCP) specification implementation for the **2026-07-28** schema.
 
-- Wire-version string: **`2026-07-28`** (the `LATEST_PROTOCOL_VERSION` value in upstream `schema.ts`). The pre-finalization `DRAFT-2026-v1` literal is still accepted on deserialize for back-compat, but is never emitted.
+- Wire-version string: **`2026-07-28`** (the `LATEST_PROTOCOL_VERSION` value in upstream `schema.ts`). This is the only version literal the crate emits or accepts; the pre-finalization `DRAFT-2026-v1` literal is rejected.
 - Vendored upstream schema: [`schema/draft-schema.ts`](schema/draft-schema.ts) (pinned by commit SHA, shared with the example fixtures; see [`schema/README.md`](schema/README.md)).
-- Draft spec on the web: <https://modelcontextprotocol.io/specification/draft>.
+- Spec on the web: <https://modelcontextprotocol.io/specification/2026-07-28>.
 
 ## What's in this crate
 
@@ -37,7 +37,7 @@ A faithful 1:1 mapping of `schema/draft-schema.ts`. Every TS interface, type, an
 
 **420 tests passing** (227 lib + 189 compliance integration + 3 upstream-fixture + 1 doctest). The schema-drift detector in `tests/compliance.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
 
-⚠ **Still a moving target.** The wire-version string has finalized to `"2026-07-28"`, but the file still lives under the upstream `schema/draft/` path and continues to receive field-level revisions — check the pins before starting any slice. Regeneration trigger and process: [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
+⚠ **Re-pin outstanding.** The spec has finalized and the wire-version string is `"2026-07-28"`, but this copy is still vendored from the upstream `schema/draft/` path — now the *next* spec cycle's floating pointer rather than a snapshot of 2026-07-28. The released schema lives at the immutable `schema/2026-07-28/schema.ts`. Check the pins before starting any slice. Regeneration trigger and process: [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
 
 ## Crate layout
 

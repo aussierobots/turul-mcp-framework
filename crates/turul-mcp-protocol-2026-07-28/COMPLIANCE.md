@@ -1,22 +1,22 @@
 # MCP 2026-07-28 Compliance Report
 
-`turul-mcp-protocol-2026-07-28` against the vendored MCP schema (`schema/draft/`
-upstream path; finalized wire string `"2026-07-28"`).
+`turul-mcp-protocol-2026-07-28` against the vendored MCP schema (wire string
+`"2026-07-28"`, now the released current specification).
 
 ## Pin
 
-- **Schema source**: `modelcontextprotocol/modelcontextprotocol` @ `schema/draft/schema.ts`
+- **Schema source**: `modelcontextprotocol/modelcontextprotocol` @ `schema/2026-07-28/schema.ts`
 - **Vendored copy**: `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`
-- **Fixture pin (commit SHA)**: `60dc69e9a9723a7bab535ade6c5c5b9695d97dfc` — see `schema/EXAMPLES_PIN.md`
-- **Captured**: 2026-07-02 (re-vendored; error-code renumbering, cancellation `requestId` required, `ElicitationCompleteNotification` removal, subscription-stream metadata contracts. Prior cuts: 2026-06-10, 2026-06-07, 2026-05-24)
-- **Schema content sha256**: `6e4cba2d17f7156877357762b6b4b63cd790d8973f61ec35ab73cd61ad67017d` (was `1bf94a601817ab07fc04058a9ff2e031227f9b9384e198ea7f187e75eb4b9ec6`)
-- **Schema surface**: 126 `export interface` + 27 `export type` + 10 `export const` = 163 declarations (the 2026-07-02 re-vendor removed `ElicitationCompleteNotification`/`ElicitationCompleteNotificationParams` (2 interfaces) and added `HeaderMismatchError`, `NotificationMetaObject`, `SubscriptionsListenResultMeta`, `SubscriptionsListenResult` (4 interfaces) plus the `HEADER_MISMATCH` const; see `docs/adr/027-targeting-mcp-draft-2026-v1.md` revision log for the full diff)
-- **Upstream MCP version string**: `"2026-07-28"` (finalized; was `"DRAFT-2026-v1"` — accepted on deserialize for back-compat. See `docs/adr/027`)
+- **Fixture pin (commit SHA)**: `271ecc9accafdd9b83a3c869fa67c22953b2af80` — see `schema/EXAMPLES_PIN.md`
+- **Captured**: 2026-07-29 (re-vendored from the released `schema/2026-07-28/` path; no wire-format change. Prior cuts: 2026-07-28, 2026-07-02, 2026-06-10, 2026-06-07, 2026-05-24)
+- **Schema content sha256**: `742750af0bb8c716e7030c4977c992b55d1adc4407e9e66997db5846baedc2cd` (was `c56f0ad2395f9f7109a903a304344a61c65555cb0b2d28c1635cc32497221c87`)
+- **Schema surface**: 126 `export interface` + 27 `export type` + 10 `export const` = 163 declarations (the 2026-07-02 re-vendor removed `ElicitationCompleteNotification`/`ElicitationCompleteNotificationParams` (2 interfaces) and added `HeaderMismatchError`, `NotificationMetaObject`, `SubscriptionsListenResultMetaObject`, `SubscriptionsListenResult` (4 interfaces) plus the `HEADER_MISMATCH` const; see `docs/adr/027-targeting-mcp-draft-2026-v1.md` revision log for the full diff)
+- **Upstream MCP version string**: `"2026-07-28"` (finalized; the pre-finalization `"DRAFT-2026-v1"` literal is rejected, not accepted. See `docs/adr/027`)
 
-## Known gaps (2026-07-02 re-pin)
+## Known gaps
 
 - **`SubscriptionsListenResult` server-side emission is unwired.** The type
-  (`subscriptions::SubscriptionsListenResult` / `SubscriptionsListenResultMeta`)
+  (`subscriptions::SubscriptionsListenResult` / `SubscriptionsListenResultMetaObject`)
   is bound and wire-tested (`subscriptions::tests::listen_result_*`), but
   `turul-http-mcp-server`'s `handle_subscriptions_listen` has no graceful
   server-shutdown hook to emit it from — the schema explicitly permits this
@@ -28,26 +28,12 @@ upstream path; finalized wire string `"2026-07-28"`).
   wiring) exists anywhere in `turul-http-mcp-server` or `turul-mcp-server` to
   hook into — this is unbuilt transport infrastructure, not a missed call site.
 - **`RequestMetaObject.extra` has the same reserved-key-collision risk fixed
-  on `SubscriptionsListenResultMeta` below** (public `#[serde(flatten)]` map
+  on `SubscriptionsListenResultMetaObject` below** (public `#[serde(flatten)]` map
   alongside named typed fields — a caller can insert
   `io.modelcontextprotocol/protocolVersion` etc. into `extra` and collide with
   the typed field, producing a duplicate wire key). Pre-existing, not
   introduced by the 2026-07-02 slice; out of scope here — flagged for a
   dedicated pass across all `extra`/flatten-map fields in the crate.
-- **Server still dispatches an inbound `notifications/progress` from the
-  client.** The schema narrowed `ClientNotification` from
-  `CancelledNotification | ProgressNotification` to `CancelledNotification`
-  only — clients may no longer send progress notifications to the server.
-  `turul-mcp-server`'s dispatch table (`builder.rs` `handlers.insert("notifications/progress", ...)`)
-  routes it to a no-op logger (`NotificationsHandler::handle`) on BOTH lanes,
-  unconditionally. The handler also accepts `notifications/message`, which
-  was never a `ClientNotification` member on any pin — this looks like
-  deliberate lenient any-notification handling, not a strict binding to the
-  schema union, so a partial fix (gating only `notifications/progress`)
-  would be inconsistent with the handler's evident design intent. No wire
-  emission is affected (accept-side leniency only); flagged for a dedicated
-  slice that decides whether the dispatch table should enforce
-  `ClientNotification` at all.
 
 ## Test gate
 
@@ -60,8 +46,8 @@ upstream path; finalized wire string `"2026-07-28"`).
 | Doctests | 1 (+ 2 ignored) | ✅ pass |
 | **Total (`--features compliance`)** | **420** | ✅ all green, `clippy -D warnings` clean |
 | Total (default features) | 409 | ✅ — `compliance` feature adds the 7 lib + 3 fixture wire-gate tests |
-| `mcp-compliance-2026-07-28` binary | 22/22 fixtures | ✅ all pass |
-| Modeled fixtures | 10 of 87 (11.5%) | ⚠ partial — see §Coverage below |
+| `mcp-compliance-2026-07-28` binary | 24/24 fixtures | ✅ all pass |
+| Modeled fixtures | 12 of 88 (13.6%) | ⚠ partial — see §Coverage below |
 
 Verified on `turul-rpc 0.2.2` (with `turul-rpc-jsonrpc 0.2.2` for the `frame` module fix).
 
@@ -112,7 +98,7 @@ notifications/resources/updated        notifications/subscriptions/acknowledged
 notifications/tools/list_changed
 ```
 
-**Spec-correct underscores in `list_changed` / `list_updated` forms** (DRAFT-2026-v1 uses underscores, not camelCase `listChanged`).
+**Spec-correct underscores in `list_changed` / `list_updated` forms** (2026-07-28 uses underscores, not camelCase `listChanged`).
 
 No method strings outside the canonical 22 are declared anywhere in the crate. Earlier compat traits for the removed `initialize` handshake and `notifications/roots/list_changed` have been deleted in keeping with Protocol Crate Purity (schema-only API). The crate also has no surviving `pub const *_METHOD: &str` entries for removed methods (`initialize`, `ping`, `logging/setLevel`, `notifications/roots/list_changed`); only the canonical method strings are declared (see `grep -rn 'pub const.*METHOD' src/`).
 
@@ -135,7 +121,7 @@ No method strings outside the canonical 22 are declared anywhere in the crate. E
 | Primitive JSON Schema (Boolean/Number/String/Enum) | 4 | 4 | 0 |
 | Constants (`JSONRPC_VERSION`, `LATEST_PROTOCOL_VERSION`, error codes ×7) | 9 | 9 | n/a |
 | Schema-author types (`Request`, `Notification`, `Result`, `ClientRequest`, `ServerRequest`, etc. — TS-only unions) | ~10 | not bound (Rust traits cover this) | n/a |
-| **Total** | ~150 | ~150 | 22 file-level wire tests (10 modeled cases) |
+| **Total** | ~150 | ~150 | 24 file-level wire tests (12 modeled cases) |
 
 ## Wire-field name conformance (camelCase via serde)
 
@@ -158,7 +144,7 @@ Spot-checked high-risk fields — all serde renames match schema exactly:
 | `requestState` | `input_required::InputRequiredResult.request_state` | ✅ |
 | `inputRequests` / `inputResponses` | typed maps in `input_required` | ✅ |
 | `io.modelcontextprotocol/protocolVersion` (etc.) | `meta::RequestMetaObject.protocol_version` (rename) | ✅ |
-| `io.modelcontextprotocol/subscriptionId` | `meta::META_KEY_SUBSCRIPTION_ID` on `NotificationMetaObject` / `SubscriptionsListenResultMeta` (2026-07-02 re-pin — now schema-declared, was previously a documented convention) | ✅ |
+| `io.modelcontextprotocol/subscriptionId` | `meta::META_KEY_SUBSCRIPTION_ID` on `NotificationMetaObject` / `SubscriptionsListenResultMetaObject` (2026-07-02 re-pin — now schema-declared, was previously a documented convention) | ✅ |
 
 ## Spec `@see` anchor coverage
 
@@ -166,7 +152,7 @@ Spot-checked high-risk fields — all serde renames match schema exactly:
 
 | # | Schema anchor | Rust binding | Status |
 |---|---|---|---|
-| 1 | `[General fields: _meta](/specification/draft/basic/index#meta)` | `meta::MetaObject` | ✅ mirrored |
+| 1 | `[General fields: _meta](/specification/2026-07-28/basic/index#meta)` | `meta::MetaObject` | ✅ mirrored |
 | 2 | `[General fields: _meta]` (same) | `meta::RequestMetaObject` | ✅ mirrored |
 | 3 | TypeDoc `{@link MetaObject}` cross-ref | `meta::RequestMetaObject` | ✅ uses `[`MetaObject`]` intra-doc link |
 | 4 | `[JSON-RPC 2.0 Error Object](https://www.jsonrpc.org/specification#error_object)` (ParseError) | `json_rpc::JsonRpcError` parent doc | ✅ mirrored |
@@ -194,7 +180,7 @@ Bidirectional wire-format gate against the upstream's canonical example JSON fix
   | `ElicitResult` | 3 | ✅ |
   | **Total** | **20/20** | **✅** |
 
-- **77 remaining cases** marked `Kind::NotModeled` — wave-by-wave migration to be raised by deliberate PR. A green run means only "the modeled subset matches": `DiscoverResult`/`DiscoverResultResponse` were unmodeled when upstream #3002 changed them, so the harness reported `failed=0` across the whole 12-day drift window. Read the `modeled=N` line on every run.
+- **76 remaining cases** marked `Kind::NotModeled` — wave-by-wave migration to be raised by deliberate PR. A green run means only "the modeled subset matches": `DiscoverResult`/`DiscoverResultResponse` were unmodeled when upstream #3002 changed them, so the harness reported `failed=0` across the whole 12-day drift window. Read the `modeled=N` line on every run.
 
 ## Schema-fidelity corrections (Slice A' follow-up, 2026-05-31)
 
@@ -208,16 +194,16 @@ Defects surfaced by an internal review and verified against the pinned schema. E
 | `ContentBlock::ResourceLink` embeds `ResourceReference` which was missing `size` and `icons` — the schema says `ResourceLink extends Resource` (which has `size?: number` and `icons?` via `extends Icons`). Wire `size: 1234` round-tripped to silent drop. | Added `size: Option<u64>` and `icons: Option<Vec<Icon>>` (plus `with_size`/`with_icons` builders) to `ResourceReference`. Note: `ResourceReference` and `resources::Resource` remain parallel structs for now — collapsing onto one is queued for the trait-surface slice. | `content::tests::test_resource_link_round_trips_size_and_icons` |
 | **[2026-07-02, HIGH]** `ContentBlock::ResourceLink` carried its own `annotations`/`_meta` variant fields ALONGSIDE the flattened `ResourceReference`, which also declares `annotations`/`meta`. Schema: `ResourceLink extends Resource` — exactly ONE of each. Consequence: serializing a block with both populated emitted **duplicate wire keys**, and deserialization always routed the value to the variant level, leaving `resource.annotations`/`resource.meta` permanently `None`. Flagged as an outbound wire defect (not accept-side leniency) by external review. | Removed the variant-level `annotations`/`meta` fields entirely — `ResourceReference` (flattened) is now the single source of truth. `ContentBlock::resource_link()`, `with_annotations()`, `with_meta()` updated to route through `resource.annotations`/`resource.meta`. | `content::tests::test_resource_reference_serialization_with_annotations_and_meta` (asserts exactly one `annotations`/`_meta` key **on the raw serialized text** — see correction note below — then round-trips through the single `ResourceReference` copy) |
 | **[2026-07-02, correction]** The regression test above initially asserted duplicate-key absence against `serde_json::to_value()`. `to_value()` builds a `Map`, which cannot represent duplicate keys — a second `serialize_entry` for the same key silently overwrites the first in-memory — so the test could never have caught the defect it claimed to guard, regardless of whether the underlying `Serialize` impl emitted the key once or twice. Confirmed by isolating the exact pre-fix struct shape: `to_value()` → 1 key, `to_string()` → the literal duplicate. Caught by external re-review the same day. | Test rewritten to assert on the raw serialized text (`json_str.matches("\"annotations\":").count()`), and verified against the actual pre-fix shape to confirm it fails there and passes against the fix. | `content::tests::test_resource_reference_serialization_with_annotations_and_meta` |
-| **[2026-07-02, MEDIUM]** `SubscriptionsListenResultMeta.extra` (public, caller-writable, `#[serde(flatten)]`) could be populated with the reserved `io.modelcontextprotocol/subscriptionId` key, colliding with the typed `subscription_id` field — the identical duplicate-key defect class as the ResourceLink row above, freshly introduced by the same slice that added the type. `RequestMetaObject.extra` carries the identical structural risk (typed field + flatten map, both able to claim the same key) but predates this slice and is **not** fixed here — out of scope, flagged for a dedicated pass. | Hand-written `Serialize` for `SubscriptionsListenResultMeta`: always emits the typed field; any `extra` entry matching the reserved key name is silently dropped rather than emitted, so the typed field always wins and the wire never repeats the key. `Deserialize` is unaffected (still derived). | `subscriptions::tests::listen_result_meta_extra_cannot_shadow_subscription_id` (populates `extra` with the reserved key, asserts exactly one occurrence on the raw wire, asserts the typed value — not the `extra` value — wins) |
+| **[2026-07-02, MEDIUM]** `SubscriptionsListenResultMeta.extra` (public, caller-writable, `#[serde(flatten)]`) could be populated with the reserved `io.modelcontextprotocol/subscriptionId` key, colliding with the typed `subscription_id` field — the identical duplicate-key defect class as the ResourceLink row above, freshly introduced by the same slice that added the type. `RequestMetaObject.extra` carries the identical structural risk (typed field + flatten map, both able to claim the same key) but predates this slice and is **not** fixed here — out of scope, flagged for a dedicated pass. | Hand-written `Serialize` for `SubscriptionsListenResultMetaObject`: always emits the typed field; any `extra` entry matching the reserved key name is silently dropped rather than emitted, so the typed field always wins and the wire never repeats the key. `Deserialize` is unaffected (still derived). | `subscriptions::tests::listen_result_meta_extra_cannot_shadow_subscription_id` (populates `extra` with the reserved key, asserts exactly one occurrence on the raw wire, asserts the typed value — not the `extra` value — wins) |
 | **[2026-07-02, MEDIUM]** `PrimitiveSchemaDefinition` (`StringSchema \| NumberSchema \| BooleanSchema \| EnumSchema`) was `#[serde(untagged)]` with no discriminator enforcement — each interface fixes a literal `type` (`"string"` / `"number"\|"integer"` / `"boolean"`), but `schema_type: String` accepts any string, and untagged dispatch tries `StringSchema` first. A bare `{"type":"integer"}` or `{"type":"boolean","title":"x"}` (no numeric/boolean-only field to force a mismatch) silently parsed as `StringSchema{schema_type:"integer"/"boolean"}`. Wire-lossless (the type string round-trips), but misclassifies for any Rust consumer matching the union variant, and permits constructing invalid states (`{"type":"banana"}`). | Hand-written `Deserialize` peeks `type` (and `enum`/`oneOf` presence, to route enum-shaped payloads to the untagged `EnumSchema` sub-union) before ever trying a variant; unrecognized/missing `type` is rejected outright instead of falling through to `StringSchema`. | `elicitation::enum_union_fidelity_tests::{bare_integer_discriminator_selects_number_not_string, bare_boolean_discriminator_selects_boolean_not_string, unknown_type_discriminator_is_rejected}` |
-| `ElicitationSchema` was missing the `$schema?: string` field. JSON Schema 2020-12 (which DRAFT-2026-v1 adopts) carries this optional dialect declaration. Wire `{"$schema": "https://json-schema.org/draft/2020-12/schema"}` round-tripped to silent drop. | Added `schema_dialect: Option<String>` with `#[serde(rename = "$schema")]` plus `with_schema_dialect` builder. | `elicitation::tests::test_elicitation_schema_dialect_round_trips`, `elicitation::tests::test_elicitation_schema_omits_dialect_when_none` |
+| `ElicitationSchema` was missing the `$schema?: string` field. JSON Schema 2020-12 (which 2026-07-28 adopts) carries this optional dialect declaration. Wire `{"$schema": "https://json-schema.org/draft/2020-12/schema"}` round-tripped to silent drop. | Added `schema_dialect: Option<String>` with `#[serde(rename = "$schema")]` plus `with_schema_dialect` builder. | `elicitation::tests::test_elicitation_schema_dialect_round_trips`, `elicitation::tests::test_elicitation_schema_omits_dialect_when_none` |
 | `ListRootsRequest.params` was a bespoke `Option<ListRootsParams { meta: Option<HashMap> }>` shape instead of the schema's `params?: RequestParams`, as of the 2026-06-10 pin. **Superseded by the 2026-07-02 re-pin**: the schema retyped `params?` to a bespoke inline `{ _meta?: MetaObject }` (NOT the full `RequestParams` extension) — reverting the direction of the 2026-05-31 fix. | Reverted to a bespoke `ListRootsRequestParams { meta: Option<HashMap<String, Value>> }`; `ListRootsRequest::with_meta(HashMap<String, Value>)` takes a loose map again (not `RequestMetaObject`). `ListRootsRequest::new()` (paramsless) unchanged. | `roots::tests::test_list_roots_request_matches_typescript_spec`, `roots::tests::test_optional_params_serialization` |
 | Seven notification traits in `traits.rs` (`*ListChangedNotification`, `ProgressNotification`, etc.) were bound on `JsonRpcNotificationTrait`, requiring `HasJsonRpcVersion` — a field the inner notification structs intentionally omit (the JSON-RPC envelope is added by wrapping in `JsonRpcNotification` at transport time per the wire-format discipline). The traits were unimplementable. | Rebound on `RpcNotification` (`HasMethod + HasParams` only); renamed with a `*Trait` suffix to avoid struct-name collisions; concrete impls added in `notifications.rs`. Trait abstraction now matches the Rust struct split (inner payload only), not the schema interface (which is wire-complete) — documented in §Intentional deviations as the notification-wire-format split. | `notifications::tests::tool_list_changed_satisfies_rpc_notification_and_trait`, `notifications::tests::cancelled_params_field_getters_via_trait`, `notifications::tests::progress_params_field_getters_via_trait`, `notifications::tests::resource_updated_uri_via_trait` |
 | Missing trait coverage for new DRAFT-2026 RPCs — `server/discover`, `subscriptions/listen`, `InputRequiredResult` (SEP-2322). | Added `DiscoverRequestTrait`, `SubscriptionsListenRequestTrait` + field-getter `HasSubscriptionsListenParams`, `HasInputRequiredResult`. All bound on `RpcRequest` / `HasResultType` to match the Rust struct split. Impls added in each module. | `discover::tests::discover_request_satisfies_rpc_trait`, `subscriptions::tests::listen_request_satisfies_new_rpc_trait`, `input_required::tests::input_required_result_field_getters_via_trait` |
 
 ## SEP-2577 deprecation annotations (Slice A'' follow-up, 2026-05-31)
 
-DRAFT-2026-v1 deprecates **Roots**, **Sampling**, and **Logging** per SEP-2577 (annotation-only this revision; earliest removal in the first release on or after **2027-07-28**). The crate carries inline `#[deprecated]` attributes at every relevant type definition site so downstream consumers get compile-time migration warnings.
+2026-07-28 deprecates **Roots**, **Sampling**, and **Logging** per SEP-2577 (annotation-only this revision; earliest removal in the first release on or after **2027-07-28**). The crate carries inline `#[deprecated]` attributes at every relevant type definition site so downstream consumers get compile-time migration warnings.
 
 | Feature | Deprecated types | Migration path |
 |---|---|---|

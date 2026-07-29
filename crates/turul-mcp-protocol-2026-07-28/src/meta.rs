@@ -214,7 +214,7 @@ pub const META_KEY_BAGGAGE: &str = "baggage";
 /// notifications delivered on a `subscriptions/listen` stream. Schema-declared:
 /// `NotificationMetaObject.io.modelcontextprotocol/subscriptionId` (optional;
 /// value = the `RequestId` of the `subscriptions/listen` request that opened
-/// the stream) and `SubscriptionsListenResultMeta.io.modelcontextprotocol/subscriptionId`
+/// the stream) and `SubscriptionsListenResultMetaObject.io.modelcontextprotocol/subscriptionId`
 /// (required, on the result that closes the stream).
 pub const META_KEY_SUBSCRIPTION_ID: &str = "io.modelcontextprotocol/subscriptionId";
 
@@ -252,7 +252,7 @@ pub const META_KEY_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
 /// the reverse-DNS prefix rules; `io.modelcontextprotocol/` and `dev.mcp/`
 /// are reserved for MCP use.
 ///
-/// See [General fields: _meta](https://modelcontextprotocol.io/specification/draft/basic/index#meta).
+/// See [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta).
 pub type MetaObject = HashMap<String, Value>;
 
 /// `_meta` for results — [`MetaObject`] plus the responding server's identity.
@@ -263,7 +263,7 @@ pub type MetaObject = HashMap<String, Value>;
 /// value is self-reported and unverified: clients MUST NOT key behavior on it
 /// and MUST NOT treat it as a security identity.
 ///
-/// See [General fields: _meta](https://modelcontextprotocol.io/specification/draft/basic/index#meta).
+/// See [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta).
 ///
 /// `Serialize` is hand-written for the same reason as [`RequestMetaObject`]:
 /// `extra` is public and caller-writable, so a caller could otherwise insert
@@ -359,7 +359,7 @@ impl Serialize for ResultMetaObject {
 
 /// Strictly-typed request `_meta` carrying the per-request capability
 /// negotiation. See also [`MetaObject`] for key naming rules and reserved
-/// prefixes, and [General fields: _meta](https://modelcontextprotocol.io/specification/draft/basic/index#meta)
+/// prefixes, and [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta)
 /// for the full spec section.
 ///
 /// Replaces the 2025-11-25 `initialize` handshake: every 2026-07-28 request's
@@ -392,7 +392,7 @@ impl Serialize for ResultMetaObject {
 /// `io.modelcontextprotocol/*` field) into it and produce the same key twice
 /// on the wire. The typed field always wins; a colliding `extra` entry is
 /// dropped rather than emitted. Mirrors the same guard on
-/// [`crate::subscriptions::SubscriptionsListenResultMeta`].
+/// [`crate::subscriptions::SubscriptionsListenResultMetaObject`].
 #[allow(deprecated)] // carries the SEP-2577-deprecated log_level through the migration window
 #[derive(Debug, Clone, Deserialize)]
 pub struct RequestMetaObject {

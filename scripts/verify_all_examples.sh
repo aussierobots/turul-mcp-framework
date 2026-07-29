@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-# Master Script: Run All 8 Verification Phases
-# Executes all phase scripts and generates comprehensive report
+# Master Script: Verify All Example Servers
+# Executes all verification scripts and generates comprehensive report
 #
 
 set -e
@@ -70,15 +70,15 @@ run_phase() {
     read -r
 }
 
-# Execute all phases
-run_phase 1 "Calculator Learning Progression" "$SCRIPT_DIR/verify_phase1.sh"
-run_phase 2 "Resource Servers" "$SCRIPT_DIR/verify_phase2.sh"
-run_phase 3 "Prompts & Special Features" "$SCRIPT_DIR/verify_phase3.sh"
-run_phase 4 "Session Storage Backends" "$SCRIPT_DIR/verify_phase4.sh"
-run_phase 5 "Advanced/Composite Servers" "$SCRIPT_DIR/verify_phase5.sh"
-run_phase 6 "Clients & Test Utilities" "$SCRIPT_DIR/verify_phase6.sh"
-run_phase 7 "Lambda Examples" "$SCRIPT_DIR/verify_phase7.sh"
-run_phase 8 "Meta Examples" "$SCRIPT_DIR/verify_phase8.sh"
+# Execute all verification scripts
+run_phase 1 "Calculator Learning Progression" "$SCRIPT_DIR/verify_calculator_examples.sh"
+run_phase 2 "Resource Servers" "$SCRIPT_DIR/verify_resource_servers.sh"
+run_phase 3 "Prompts & Special Features" "$SCRIPT_DIR/verify_prompts_examples.sh"
+run_phase 4 "Session Storage Backends" "$SCRIPT_DIR/verify_storage_backends.sh"
+run_phase 5 "Advanced/Composite Servers" "$SCRIPT_DIR/verify_advanced_servers.sh"
+run_phase 6 "Clients & Test Utilities" "$SCRIPT_DIR/verify_client_examples.sh"
+run_phase 7 "Lambda Examples" "$SCRIPT_DIR/verify_lambda_examples.sh"
+run_phase 8 "Meta Examples" "$SCRIPT_DIR/verify_meta_examples.sh"
 
 # Generate final report
 echo -e "${BLUE}======================================================================"

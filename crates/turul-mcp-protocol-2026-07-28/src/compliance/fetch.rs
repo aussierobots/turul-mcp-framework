@@ -1,7 +1,7 @@
 //! Fetch + cache the upstream MCP example fixtures pinned to a known SHA.
 //!
 //! Uses `git clone --depth=1 --filter=blob:none --no-checkout` followed by
-//! sparse-checkout of just `schema/draft/examples`, then `git checkout <SHA>`.
+//! sparse-checkout of just `schema/2026-07-28/examples`, then `git checkout <SHA>`.
 //! Atomic and cheap: one clone gives us the entire pinned tree without paying
 //! for blob bandwidth until we ask. No new Cargo dependencies.
 //!
@@ -23,8 +23,8 @@ pub const PIN: Pin = Pin {
     // any capture-specific detail out of this comment — it would go stale on
     // the next bump without anyone noticing. The same commit pins
     // `schema/draft-schema.ts`; see `schema/README.md`.
-    sha: "71e306956a4959c9655e5036be215d41986596e6",
-    subpath: "schema/draft/examples",
+    sha: "271ecc9accafdd9b83a3c869fa67c22953b2af80",
+    subpath: "schema/2026-07-28/examples",
 };
 
 /// Pin record for an upstream tree fragment.

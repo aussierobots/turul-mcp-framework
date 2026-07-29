@@ -2,8 +2,9 @@
 //!
 //! Faithful 1:1 Rust implementation of the upstream MCP schema
 //! ([`schema.ts` vendored at `schema/draft-schema.ts`](../../../schema/draft-schema.ts)).
-//! Wire-version string is [`MCP_VERSION`] = `"2026-07-28"` (the pre-finalization
-//! draft literal `"2026-07-28"` is still accepted on deserialize for back-compat).
+//! Wire-version string is [`MCP_VERSION`] = `"2026-07-28"`. It is the only
+//! version literal this crate emits or accepts; the pre-finalization draft
+//! literal is rejected (see [`version::McpVersion`]).
 //!
 //! Every `export interface`/`export type`/`export const` in the vendored
 //! `schema/draft-schema.ts` has a corresponding Rust binding here. Every
@@ -51,11 +52,11 @@
 //! - Streamable HTTP headers ([SEP-2243]): [`HTTP_HEADER_PROTOCOL_VERSION`],
 //!   [`HTTP_HEADER_METHOD`], [`HTTP_HEADER_NAME`], [`HTTP_HEADER_PARAM_PREFIX`].
 //!
-//! The upstream `schema.ts` has finalized the wire-version literal to
-//! `"2026-07-28"` (was `"2026-07-28"` pre-finalization). The vendored
-//! `schema/draft-schema.ts` still lives under the `schema/draft/` upstream path
-//! and may continue to receive field-level revisions; `schema/README.md`
-//! records the pin provenance and re-pin procedure.
+//! The upstream `schema.ts` has finalized its wire-version literal, and the
+//! vendored `schema/draft-schema.ts` is taken from the released
+//! `schema/2026-07-28/` upstream path. That directory receives only errata
+//! against the released spec; `schema/README.md` records the pin provenance
+//! and the re-pin procedure.
 //!
 //! [SEP-2106]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2106-tool-output-schema.md
 //! [SEP-2133]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2133-extensions.md
@@ -113,7 +114,7 @@ pub use meta::{Annotations, MetaObject, RequestMetaObject};
 
 /// Bidirectional wire-format compliance harness against the upstream MCP spec's
 /// canonical example JSON fixtures (`modelcontextprotocol/modelcontextprotocol`
-/// at `schema/draft/examples`). Gated behind the `compliance` Cargo feature
+/// at `schema/2026-07-28/examples`). Gated behind the `compliance` Cargo feature
 /// (default-off) — adds no code to the published library surface.
 ///
 /// Entry points: `tests/upstream_fixtures.rs` (build-time gate) and
@@ -177,7 +178,7 @@ pub use subscriptions::{
     SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, SUBSCRIPTIONS_LISTEN_METHOD, SubscriptionFilter,
     SubscriptionsAcknowledgedNotification, SubscriptionsAcknowledgedNotificationParams,
     SubscriptionsListenRequest, SubscriptionsListenRequestParams, SubscriptionsListenResult,
-    SubscriptionsListenResultMeta,
+    SubscriptionsListenResultMetaObject, SubscriptionsListenResultResponse,
 };
 // SEP-2577-deprecated re-exports kept available during the migration window.
 #[allow(deprecated)]
@@ -206,9 +207,9 @@ pub use turul_rpc::{
 /// The MCP protocol version string this crate currently targets, exactly as it appears
 /// on the wire in `LATEST_PROTOCOL_VERSION` of the upstream `schema.ts`.
 ///
-/// The finalized schema emits the stable date literal `"2026-07-28"` (the
-/// pre-finalization draft emitted `"2026-07-28"`, still accepted on
-/// deserialize by [`McpVersion`] for back-compat).
+/// The finalized schema emits the stable date literal `"2026-07-28"`. The
+/// pre-finalization draft literal is rejected by [`McpVersion`], not accepted
+/// — the transitional alias was retired.
 pub const MCP_VERSION: &str = "2026-07-28";
 
 /// Common result type for MCP operations

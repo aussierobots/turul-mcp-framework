@@ -1,4 +1,4 @@
-//! Coverage table: one [`Case`] per upstream `schema/draft/examples/*` directory.
+//! Coverage table: one [`Case`] per upstream `schema/2026-07-28/examples/*` directory.
 //!
 //! Each [`Case`] either binds a fixture to a Rust type ([`Kind`] != `NotModeled`,
 //! `parse_and_reserialize` parses the JSON into that type and re-serializes for
@@ -67,7 +67,7 @@ where
 }
 
 // ============================================================
-// CASES table — 87 entries, sorted lexicographically to match
+// CASES table — 88 entries, sorted lexicographically to match
 // `list_example_dirs` output for trivial diffing.
 // ============================================================
 
@@ -460,8 +460,13 @@ pub const CASES: &[Case] = &[
     },
     Case {
         dir: "SubscriptionsListenResult",
-        kind: Kind::NotModeled,
-        parse_and_reserialize: not_modeled,
+        kind: Kind::Result,
+        parse_and_reserialize: roundtrip::<crate::subscriptions::SubscriptionsListenResult>,
+    },
+    Case {
+        dir: "SubscriptionsListenResultResponse",
+        kind: Kind::Response,
+        parse_and_reserialize: roundtrip::<crate::subscriptions::SubscriptionsListenResultResponse>,
     },
     Case {
         dir: "TextContent",
@@ -536,8 +541,10 @@ mod tests {
     }
 
     #[test]
-    fn cases_table_has_86_entries() {
-        // Hard count — matches the upstream tree at the pinned SHA.
-        assert_eq!(CASES.len(), 87);
+    fn cases_table_matches_upstream_fixture_count() {
+        // Hard count — matches the number of example directories in the
+        // upstream tree at the pinned SHA. Bump it in the same slice that
+        // re-pins, so a fixture directory added upstream cannot land unnoticed.
+        assert_eq!(CASES.len(), 88);
     }
 }

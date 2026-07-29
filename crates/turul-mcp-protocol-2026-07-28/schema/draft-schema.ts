@@ -48,7 +48,7 @@ export const JSONRPC_VERSION = "2.0";
  * - Unless empty, MUST start and end with an alphanumeric character (`[a-z0-9A-Z]`).
  * - Interior characters may be alphanumeric, hyphens (`-`), underscores (`_`), or dots (`.`).
  *
- * @see [General fields: `_meta`](/specification/draft/basic/index#meta) for more details.
+ * @see [General fields: `_meta`](/specification/2026-07-28/basic/index#meta) for more details.
  * @category Common Types
  */
 export type MetaObject = Record<string, unknown>;
@@ -57,7 +57,7 @@ export type MetaObject = Record<string, unknown>;
  * Extends {@link MetaObject} with additional request-specific fields. All key naming rules from `MetaObject` apply.
  *
  * @see {@link MetaObject} for key naming rules and reserved prefixes.
- * @see [General fields: `_meta`](/specification/draft/basic/index#meta) for more details.
+ * @see [General fields: `_meta`](/specification/2026-07-28/basic/index#meta) for more details.
  * @category Common Types
  */
 export interface RequestMetaObject extends MetaObject {
@@ -114,7 +114,7 @@ export interface RequestMetaObject extends MetaObject {
  * Extends {@link MetaObject} with additional notification-specific fields. All key naming rules from `MetaObject` apply.
  *
  * @see {@link MetaObject} for key naming rules and reserved prefixes.
- * @see [General fields: `_meta`](/specification/draft/basic/index#meta) for more details.
+ * @see [General fields: `_meta`](/specification/2026-07-28/basic/index#meta) for more details.
  * @category Common Types
  */
 export interface NotificationMetaObject extends MetaObject {
@@ -137,7 +137,7 @@ export interface NotificationMetaObject extends MetaObject {
  * Extends {@link MetaObject} with additional result-specific fields. All key naming rules from `MetaObject` apply.
  *
  * @see {@link MetaObject} for key naming rules and reserved prefixes.
- * @see [General fields: `_meta`](/specification/draft/basic/index#meta) for more details.
+ * @see [General fields: `_meta`](/specification/2026-07-28/basic/index#meta) for more details.
  * @category Common Types
  */
 export interface ResultMetaObject extends MetaObject {
@@ -1323,7 +1323,7 @@ export interface SubscriptionsListenRequest extends JSONRPCRequest {
  * @see {@link MetaObject} for key naming rules and reserved prefixes.
  * @category `subscriptions/listen`
  */
-export interface SubscriptionsListenResultMeta extends ResultMetaObject {
+export interface SubscriptionsListenResultMetaObject extends ResultMetaObject {
   /**
    * Identifies the subscription stream this response closes, so the client can
    * correlate it with the originating subscription — mirroring the same key on
@@ -1347,7 +1347,20 @@ export interface SubscriptionsListenResultMeta extends ResultMetaObject {
  * @category `subscriptions/listen`
  */
 export interface SubscriptionsListenResult extends Result {
-  _meta: SubscriptionsListenResultMeta;
+  _meta: SubscriptionsListenResultMetaObject;
+}
+
+/**
+ * A successful response from the server for a {@link SubscriptionsListenRequest | subscriptions/listen}
+ * request, sent when the server tears the subscription down gracefully.
+ *
+ * @example Subscription closed gracefully response
+ * {@includeCode ./examples/SubscriptionsListenResultResponse/listen-closed-response.json}
+ *
+ * @category `subscriptions/listen`
+ */
+export interface SubscriptionsListenResultResponse extends JSONRPCResultResponse {
+  result: SubscriptionsListenResult;
 }
 
 /**

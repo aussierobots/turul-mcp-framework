@@ -4,9 +4,9 @@ Wire-format compliance is asserted against the canonical JSON examples
 maintained alongside the spec at:
 
 - **Repository**: `modelcontextprotocol/modelcontextprotocol`
-- **Subpath**: `schema/draft/examples`
-- **Commit SHA** (pin used by `git checkout`): `71e306956a4959c9655e5036be215d41986596e6`
-- **Captured**: 2026-07-28 (pin advanced with the c56f0ad2… schema re-pin; see ADR-027 revision log). Prior: 2026-07-02 (6e4cba2d…), 2026-06-10 (1bf94a60…)
+- **Subpath**: `schema/2026-07-28/examples`
+- **Commit SHA** (pin used by `git checkout`): `271ecc9accafdd9b83a3c869fa67c22953b2af80`
+- **Captured**: 2026-07-29 (moved to the released `schema/2026-07-28/` path with the 742750af… schema re-pin; see ADR-027 revision log). Prior: 2026-07-28 (c56f0ad2…), 2026-07-02 (6e4cba2d…), 2026-06-10 (1bf94a60…)
 
 `refresh --write` maintains **only the Commit SHA line** here. Any other value
 recorded in this file is hand-maintained and will silently rot across a bump —

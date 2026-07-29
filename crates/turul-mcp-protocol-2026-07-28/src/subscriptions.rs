@@ -177,7 +177,7 @@ impl SubscriptionsAcknowledgedNotification {
 }
 
 /// `_meta` for [`SubscriptionsListenResult`]. Schema:
-/// `SubscriptionsListenResultMeta extends ResultMetaObject` with a REQUIRED
+/// `SubscriptionsListenResultMetaObject extends ResultMetaObject` with a REQUIRED
 /// `io.modelcontextprotocol/subscriptionId: RequestId` — the id of the
 /// `subscriptions/listen` request this result closes (equals the result's
 /// own `id` in the JSON-RPC envelope). Extending
@@ -190,7 +190,7 @@ impl SubscriptionsAcknowledgedNotification {
 /// wire. The typed field always wins; a colliding `extra` entry is dropped
 /// rather than emitted.
 #[derive(Debug, Clone, Deserialize)]
-pub struct SubscriptionsListenResultMeta {
+pub struct SubscriptionsListenResultMetaObject {
     #[serde(rename = "io.modelcontextprotocol/subscriptionId")]
     pub subscription_id: turul_rpc::RequestId,
 
@@ -203,7 +203,7 @@ pub struct SubscriptionsListenResultMeta {
     pub extra: HashMap<String, Value>,
 }
 
-impl serde::Serialize for SubscriptionsListenResultMeta {
+impl serde::Serialize for SubscriptionsListenResultMetaObject {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -236,7 +236,7 @@ impl serde::Serialize for SubscriptionsListenResultMeta {
     }
 }
 
-impl SubscriptionsListenResultMeta {
+impl SubscriptionsListenResultMetaObject {
     pub fn new(subscription_id: turul_rpc::RequestId) -> Self {
         Self {
             subscription_id,
@@ -265,16 +265,27 @@ pub struct SubscriptionsListenResult {
     pub result_type: crate::result_type::ResultType,
 
     #[serde(rename = "_meta")]
-    pub meta: SubscriptionsListenResultMeta,
+    pub meta: SubscriptionsListenResultMetaObject,
 }
 
 impl SubscriptionsListenResult {
     pub fn new(subscription_id: turul_rpc::RequestId) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
-            meta: SubscriptionsListenResultMeta::new(subscription_id),
+            meta: SubscriptionsListenResultMetaObject::new(subscription_id),
         }
     }
+}
+
+/// JSON-RPC envelope carrying a [`SubscriptionsListenResult`], sent when the
+/// server tears the subscription down gracefully.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscriptionsListenResultResponse {
+    /// Always `"2.0"`.
+    pub jsonrpc: String,
+    /// Request id this response is for.
+    pub id: serde_json::Value,
+    pub result: SubscriptionsListenResult,
 }
 
 // Trait impls: `SubscriptionsListenRequest` satisfies
@@ -493,12 +504,12 @@ mod tests {
         );
     }
 
-    /// `SubscriptionsListenResultMeta extends ResultMetaObject`, so the
+    /// `SubscriptionsListenResultMetaObject extends ResultMetaObject`, so the
     /// subscription-close result carries the server identity alongside the
     /// subscription id rather than instead of it.
     #[test]
     fn listen_result_meta_carries_server_info_beside_subscription_id() {
-        let meta = SubscriptionsListenResultMeta::new(turul_rpc::RequestId::Number(7))
+        let meta = SubscriptionsListenResultMetaObject::new(turul_rpc::RequestId::Number(7))
             .with_server_info(crate::initialize::Implementation::new("srv", "0.4.0"));
         let v = serde_json::to_value(&meta).unwrap();
         assert_eq!(v["io.modelcontextprotocol/subscriptionId"], 7);
@@ -509,7 +520,7 @@ mod tests {
     /// `serverInfo` to that reserved set must not let a caller emit it twice.
     #[test]
     fn listen_result_meta_extra_cannot_shadow_server_info() {
-        let mut meta = SubscriptionsListenResultMeta::new(turul_rpc::RequestId::Number(7))
+        let mut meta = SubscriptionsListenResultMetaObject::new(turul_rpc::RequestId::Number(7))
             .with_server_info(crate::initialize::Implementation::new("srv", "0.4.0"));
         meta.extra.insert(
             crate::meta::META_KEY_SERVER_INFO.to_string(),
@@ -528,13 +539,13 @@ mod tests {
 
     #[test]
     fn listen_result_meta_extra_cannot_shadow_subscription_id() {
-        // `SubscriptionsListenResultMeta.extra` is a public, caller-writable
+        // `SubscriptionsListenResultMetaObject.extra` is a public, caller-writable
         // `#[serde(flatten)]` map. If a caller populates it with the reserved
         // `io.modelcontextprotocol/subscriptionId` key, the typed field and
         // the flattened map must not both emit it on the wire. Checked
         // against the raw serialized text: `to_value()` cannot observe a
         // duplicate key (a `Map` silently overwrites on the second insert).
-        let mut meta = SubscriptionsListenResultMeta::new(turul_rpc::RequestId::Number(7));
+        let mut meta = SubscriptionsListenResultMetaObject::new(turul_rpc::RequestId::Number(7));
         meta.extra.insert(
             crate::meta::META_KEY_SUBSCRIPTION_ID.to_string(),
             serde_json::json!("attacker-controlled"),
@@ -560,7 +571,7 @@ mod tests {
 
     #[test]
     fn listen_result_rejects_missing_meta() {
-        // Schema: `SubscriptionsListenResult._meta: SubscriptionsListenResultMeta`
+        // Schema: `SubscriptionsListenResult._meta: SubscriptionsListenResultMetaObject`
         // is required (overrides the base `Result._meta?`).
         let wire = json!({ "resultType": "complete" });
         assert!(serde_json::from_value::<SubscriptionsListenResult>(wire).is_err());

@@ -1,6 +1,6 @@
 //! Wire-format compliance CLI for `turul-mcp-protocol-2026-07-28`.
 //!
-//! Fetches the pinned upstream `schema/draft/examples` tree and round-trips
+//! Fetches the pinned upstream `schema/2026-07-28/examples` tree and round-trips
 //! every modeled fixture through its Rust binding. Exits 0 if all modeled
 //! cases match, non-zero otherwise. The same `compliance::roundtrip::run_all`
 //! is called by `tests/upstream_fixtures.rs` — green tests ⇒ green binary.
@@ -82,6 +82,12 @@ fn run() -> ExitCode {
 /// and (with `--write`) atomically rewrite the PIN in `fetch.rs` and the
 /// markdown in `schema/EXAMPLES_PIN.md`. Exits non-zero if any modeled case
 /// would regress under the new pin.
+///
+/// Probing `main` is safe because `PIN.subpath` names the dated
+/// `schema/2026-07-28/` directory, which upstream only touches to publish
+/// errata against the released spec. Resolving a *floating* subpath such as
+/// `schema/draft/` against `main` would instead walk onto the next spec
+/// cycle's content while still claiming to implement 2026-07-28.
 fn refresh(args: &[String]) -> ExitCode {
     let write = args.iter().any(|a| a == "--write");
     println!("refresh (write={write})");

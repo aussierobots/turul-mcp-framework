@@ -8,75 +8,80 @@ These scripts test the **actual intent and functionality** of each example, not 
 
 ## Scripts
 
-### Individual Phase Scripts
+### Individual Verification Scripts
 
-- **`verify_phase1.sh`** - Calculator Learning Progression (5 examples)
+- **`verify_calculator_examples.sh`** - Calculator Learning Progression (5 examples)
   - Tests all 4 tool creation patterns (function, derive, builder, manual)
   - Verifies actual math: `5.0 + 3.0 = 8.0`
   - Validates pattern equivalence
 
-- **`verify_phase2.sh`** - Resource Servers (6 examples)
+- **`verify_resource_servers.sh`** - Resource Servers (6 examples)
   - Tests `resources/list` and `resources/read`
   - Verifies template variable substitution
   - Validates session-aware resource behavior
 
-- **`verify_phase3.sh`** - Prompts & Special Features (7 examples)
+- **`verify_prompts_examples.sh`** - Prompts & Special Features (7 examples)
   - Tests `prompts/get` with template substitution
   - Validates completion, sampling, elicitation features
   - Verifies pagination and notification patterns
 
-- **`verify_phase4.sh`** - Session Storage Backends (4 examples)
+- **`verify_storage_backends.sh`** - Session Storage Backends (4 examples)
   - Tests SQLite, PostgreSQL, DynamoDB, stateful operations
   - Verifies session persistence across requests
   - Validates storage-specific behavior
 
-- **`verify_phase5.sh`** - Advanced/Composite Servers (9 examples)
+- **`verify_advanced_servers.sh`** - Advanced/Composite Servers (9 examples)
   - Tests real business logic (alerts, audit, logging)
   - Verifies multi-capability servers
   - Validates complex workflows
 
-- **`verify_phase6.sh`** - Clients & Test Utilities (5 examples)
+- **`verify_client_examples.sh`** - Clients & Test Utilities (5 examples)
   - Tests CLIENT behavior (not servers!)
   - Verifies session management, SSE streaming
   - Validates client-server integration
 
-- **`verify_phase7.sh`** - Lambda Examples (3 examples)
+- **`verify_lambda_examples.sh`** - Lambda Examples (3 examples)
   - Tests AWS Lambda deployment patterns (compilation only)
   - Verifies serverless MCP builds correctly
   - Note: Full testing requires AWS deployment
 
-- **`verify_phase8.sh`** - Meta Examples (3 examples)
+- **`verify_meta_examples.sh`** - Meta Examples (3 examples)
   - Tests builders showcase, performance testing
   - Verifies demonstration and tutorial examples
   - Validates educational content
 
-### Master Script
+### Master Scripts
 
-- **`run_all_phases.sh`** - Runs all 8 phases sequentially
+- **`verify_all_examples.sh`** - Runs all 8 verification phases sequentially
   - Generates comprehensive report
   - Interactive prompts between phases
   - Provides pass/fail summary
 
+- **`verify_all_examples_unattended.sh`** - Runs all 8 verification phases non-interactively
+  - Generates comprehensive report without prompts
+  - Collects results to temporary files
+  - Suitable for CI/CD pipelines
+
 ## Usage
 
-### Run Individual Phase
+### Run Individual Verification
 
 ```bash
-# Run a specific phase
-./scripts/verify_phase1.sh
+# Run a specific verification script
+./scripts/verify_calculator_examples.sh
 
 # Run with output capture
-./scripts/verify_phase1.sh 2>&1 | tee phase1_results.log
+./scripts/verify_calculator_examples.sh 2>&1 | tee calculator_results.log
 ```
 
-### Run All Phases
+### Run All Examples
 
 ```bash
 # Interactive mode (prompts between phases)
-./scripts/run_all_phases.sh
+./scripts/verify_all_examples.sh
 
-# Non-interactive (remove read prompts first)
-./scripts/run_all_phases.sh 2>&1 | tee full_verification.log
+# Non-interactive (unattended)
+./scripts/verify_all_examples_unattended.sh 2>&1 | tee full_verification.log
 ```
 
 ### Run Individual Examples Manually
@@ -87,28 +92,37 @@ RUST_LOG=error cargo run --bin minimal-server -- --port 8641 &
 SERVER_PID=$!
 sleep 3
 
-# Initialize and get session ID (from header in lenient mode)
-SESSION_ID=$(curl -i -s -X POST "http://127.0.0.1:8641/mcp" \
+# MCP 2026-07-28 is stateless: no `initialize` handshake and no session header.
+# The protocol version and client capabilities ride in `_meta` on every request.
+
+# Every request carries the MCP-Protocol-Version and Mcp-Method headers, and a
+# params._meta block. `Mcp-Name` is additionally required on named calls
+# (tools/call, prompts/get, resources/read) and MUST equal the name in the body.
+
+# Discover what the server supports (optional — clients MAY call this first)
+curl -s -X POST "http://127.0.0.1:8641/mcp" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
-  | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
-
-echo "Session ID: $SESSION_ID"
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: server/discover" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | jq
 
 # List tools
 curl -s -X POST "http://127.0.0.1:8641/mcp" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
-  -H "MCP-Session-ID: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | jq
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/list" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | jq
 
-# Call tool
+# Call a tool — Mcp-Name must equal params.name
 curl -s -X POST "http://127.0.0.1:8641/mcp" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
-  -H "MCP-Session-ID: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"Hello"}}}' | jq
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: echo" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"text":"Hello, MCP!"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | jq
 
 # Cleanup
 kill $SERVER_PID
@@ -200,7 +214,7 @@ RUST_LOG=error timeout 30s cargo run --bin ...
 
 ## Next Steps
 
-1. Run all phases: `./scripts/run_all_phases.sh`
+1. Run all examples: `./scripts/verify_all_examples.sh`
 2. Review results
 3. Fix any failing examples
 4. Re-run verification until all pass
