@@ -99,6 +99,11 @@ gate_opt_in_2025() {
 # builds the function before it can answer.
 gate_lambda() {
   run "2026 Lambda E2E (cargo lambda watch, real Runtime API)" ./scripts/e2e-lambda-local.sh
+  # The 2025-11-25 lane is a separate script, not a flag: its contract is the
+  # session handshake 2026 removed, so the assertions share no shape with the
+  # 2026 ones beyond the boot loop. It builds the same binary with a different
+  # feature set.
+  run "2025-11-25 Lambda E2E (cargo lambda watch, real Runtime API)" ./scripts/e2e-lambda-local-2025-11-25.sh
 }
 
 gate_mutex() {
