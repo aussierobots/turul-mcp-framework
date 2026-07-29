@@ -23,7 +23,7 @@ Each ADR follows the standard format:
 | [003](./003-zero-configuration-principle.md) | Zero-Configuration Design Principle | Mandatory | 2024-01-01 | Users never specify method strings; framework auto-determines |
 | [004](./004-sessioncontext-macro-support.md) | SessionContext Macro Support | Accepted | 2025-08-28 | Automatic SessionContext injection in macros |
 | [004](./004-component-extension-principle.md) | Component Extension Principle | Mandatory | 2024-01-01 | Extend existing components, never create "enhanced" versions |
-| [005](./005-mcp-message-notifications-architecture.md) | MCP Message Notifications Architecture | Accepted | 2025-09-02 | Dual-stream SSE notification delivery and event type formatting |
+| [005](./005-mcp-message-notifications-architecture.md) | MCP Message Notifications Architecture | Superseded by [023](./023-tool-change-detection-and-notification.md)/[006](./006-streamable-http-compatibility.md) | 2025-09-02 | Dual-stream SSE notification delivery and event type formatting |
 | [005](./005-trait-based-architecture.md) | Trait-Based Architecture Pattern | Mandatory | 2024-01-01 | Trait-based design for extensibility and testability |
 | [006](./006-streamable-http-compatibility.md) | Streamable HTTP Compatibility | Accepted | 2025-09-15 | SSE streaming and chunked transfer encoding for progress notifications |
 | [007](./007-auto-detection-resource-security.md) | Auto-detection Resource Security | Accepted | 2025-09-18 | Framework auto-detects resource implementations to prevent security issues |
@@ -46,7 +46,7 @@ Each ADR follows the standard format:
 | [024](./024-lambda-eager-handler-init.md) | Lambda Eager Handler Initialisation | Accepted | 2026-05-04 | Eager handler init on cold start for the Lambda target |
 | [025](./025-extract-turul-rpc.md) | Extract turul-rpc; treat turul-mcp-json-rpc-server as terminal 0.3 shim | Accepted | 2026-05-10 | Move JSON-RPC core to sibling `turul-rpc`; shim retires at 0.4 |
 | [026](./026-lambda-streaming-empty-body-contract.md) | Lambda Streaming Response Empty-Body Envelope Contract | Closed | 2026-05-11 | Empty-body streaming envelope; APIGW MOCK on OPTIONS is the permanent pattern |
-| [027](./027-targeting-mcp-draft-2026-v1.md) | Targeting MCP 2026-07-28; regenerate on final spec | Accepted (in-flight) | 2026-05-24 | Adopt the 2026-07-28 release candidate; wire string finalized to `"2026-07-28"` |
+| [027](./027-targeting-mcp-draft-2026-v1.md) | Targeting MCP 2026-07-28 | Accepted | 2026-05-24 | Adopt MCP 2026-07-28, now the released current spec; wire string `"2026-07-28"`. Regeneration trigger has fired — see the revision log |
 | [028](./028-extensions-strategy.md) | Extensions strategy — separate `turul-mcp-ext-*` crates | Accepted | 2026-05-24 | Mirror upstream `ext-*` repos; Tasks become a 2026 extension |
 | [029](./029-spec-coexistence-via-cargo-features.md) | Spec-version coexistence via mutually-exclusive cargo features | Accepted | 2026-05-31 | One protocol-`<date>` feature selects the alias; default 2026-07-28 |
 | [030](./030-turul-mcp-client-bilingual-spec-coexistence.md) | `turul-mcp-client` spec coexistence — bilingual default | Accepted | 2026-05-31 | Client links both versioned protocol crates and negotiates per connection |

@@ -9,6 +9,155 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### Changed (2026-07-29, adopt the released MCP 2026-07-28 spec)
+
+- **Schema re-pinned from the pre-release draft path to the released one.** Upstream published
+  2026-07-28 and moved the schema from `schema/draft/schema.ts` to the immutable dated
+  `schema/2026-07-28/schema.ts`. `schema/draft-schema.ts` is now vendored from commit
+  `271ecc9accafdd9b83a3c869fa67c22953b2af80` (content sha256
+  `742750af0bb8c716e7030c4977c992b55d1adc4407e9e66997db5846baedc2cd`, blob `9b55feeb…`);
+  `PIN` in `src/compliance/fetch.rs` and `schema/EXAMPLES_PIN.md` moved with it to
+  `subpath: "schema/2026-07-28/examples"`.
+  **The pin is the content-bearing commit, not the release tag.** Tag `2026-07-28` is merge
+  commit `5f5440bb…`; `resolve_subpath_head` filters history by subpath and never returns it,
+  so pinning the tag would leave `fetch.rs` and `schema/README.md` permanently disagreeing
+  with what `refresh` computes. `refresh` still probes `main`, which is now *correct* rather
+  than hazardous: with the subpath naming the dated directory it detects post-release errata
+  while never reaching next-cycle draft content.
+- **No wire-format change.** The released schema differs from the prior pin only by TypeDoc
+  `@see` anchors (`/specification/draft/…` → `/specification/2026-07-28/…`), the interface
+  rename `SubscriptionsListenResultMeta` → `SubscriptionsListenResultMetaObject`, and one new
+  type `SubscriptionsListenResultResponse`. Both deltas are applied; the rename was confined
+  to `turul-mcp-protocol-2026-07-28` (no external consumers). Upstream fixture directories
+  87 → 88; modeled cases 10/87 → 12/88, with 24/24 fixtures passing.
+- **`turul-http-mcp-server` had two enums named `McpProtocolVersion`.** The one exported from
+  `lib.rs` and `prelude.rs` lacked `V2026_07_28` and could not parse `"2026-07-28"` — the
+  crate's own default spec version — while a second definition inside `streamable_http.rs`
+  could. Collapsed to the single definition in `protocol.rs`; `LATEST` is now cfg-selected to
+  the enabled lane instead of hardcoded to 2025-11-25. The inherent
+  `to_string(&self) -> &'static str` was removed: it shadowed `ToString` (which returns
+  `String`), so `let s: String = v.to_string()` did not compile. Use `as_str()`; `Display`
+  supplies `to_string()` correctly. Guarded by `tests/public_protocol_version.rs`, one of
+  whose tests compiles only if the root and prelude paths name a single type.
+- **`notifications/initialized` no longer takes the synchronous lifecycle path on the 2026
+  lane.** The ordering constraint exists only for the 2025-11-25 handshake; it is now
+  cfg-gated. Acking an unrecognised notification with 202 is unchanged and deliberate —
+  JSON-RPC notifications carry no response. `error_mapping_2026.rs` previously probed removed
+  *notification* methods with an id-carrying *request* envelope and so proved nothing about
+  the notification path; it now sends the real envelope.
+- **Publish order re-derived from the actual dependency graph.** The documented order in
+  CLAUDE.md would have failed: `turul-mcp-server` depends non-optionally on
+  `turul-mcp-oauth` but was published first, and four crates added since it was written were
+  missing. `tests/` is now `publish = false` — a test-only crate was publishable.
+
+### Fixed (2026-07-29, Roots is no longer hostable on the 2026 lane)
+
+- **`McpServerBuilder::with_roots()` registered a removed method on a 2026-07-28 build.**
+  `roots/list` is not a member of the 2026 client-to-server request union — the schema defines
+  `ListRootsRequest` as sent *from the server to the client*, and the release routes roots
+  through an MRTR input request instead. Calling `.with_roots()` on a 2026 server nevertheless
+  installed an inbound handler, so `roots/list` answered **HTTP 200** where the spec requires
+  404 with `-32601` (verified on a live server before the fix). `with_roots()`, `root()` and the
+  `roots` field are now `#[cfg(feature = "protocol-2025-11-25")]`, matching the treatment
+  Sampling and Logging already had — the leak is now a compile error rather than a wire defect.
+  `examples/roots-server` is 2025-pinned and unaffected.
+
+  Deliberately *not* `#[deprecated]`: that would say "works, but migrate", and on 2026 these
+  did not work correctly. The SEP-2577 deprecation of the Roots *feature* is expressed where it
+  belongs — on the protocol types, which keep `ListRootsRequest` as a valid MRTR `InputRequest`
+  variant for as long as the spec does. Removal trigger for the gated surfaces: retirement of
+  the `protocol-2025-11-25` lane; removal date no later than the release adopting the first MCP
+  revision on or after 2027-07-28.
+
+### Changed (2026-07-29, response framing chosen per request)
+
+- **A combined `Accept: application/json, text/event-stream` no longer forces SSE on every
+  `tools/call`.** The spec lets the server answer a request with either a single JSON object
+  or an SSE stream and requires clients to support both, so this was always a choice rather
+  than a conformance issue — but the old rule chose by method name, so every simple call paid
+  SSE framing on the branch client implementations exercise least. The choice is now made from
+  the request: SSE when it opted into request-scoped notifications via `_meta.progressToken`
+  or `_meta."io.modelcontextprotocol/logLevel"`, plain JSON otherwise. A request declaring
+  neither cannot legally be sent progress or log notifications, so it loses nothing.
+  Side benefit: plain JSON is the only path that can carry `-32020`/`-32021` on HTTP 400 as
+  their schemas require, since chunked SSE commits `200 OK` before dispatch. `subscriptions/listen`
+  is unaffected — it is served on its own path and still requires `Accept: text/event-stream`.
+  **2026-07-28 lane only**: the frozen 2025-11-25 lane keeps its previous method-name heuristic,
+  since its clients were built against always-SSE `tools/call` and gain nothing from the change.
+  See ADR-006's 2026-07-29 revision.
+
+### Added (2026-07-29)
+
+- **`scripts/interop-fastmcp.sh`** — third-party interoperability probe. Drives a turul server
+  with FastMCP through a logging proxy and asserts on the bytes the client actually sent:
+  `server/discover` → `tools/list` → `tools/call`, every request carrying
+  `MCP-Protocol-Version: 2026-07-28`, with no `initialize` and no `Mcp-Session-Id`. It is the
+  only check in the repo whose client half this project did not write. Not in CI (needs network
+  and a pre-release FastMCP); run it before a release.
+
+
+- **`scripts/check-schema-pin.sh`** — offline gate asserting the vendored schema's checksum
+  matches its provenance block, that `fetch.rs` / `schema/README.md` / `EXAMPLES_PIN.md` name
+  one commit, and that the pinned subpath is the dated directory rather than the floating
+  `schema/draft/`. Nothing previously recomputed the checksum, so a tampered schema or a
+  half-applied re-pin stayed invisible: the compliance suite validates Rust types against
+  whatever bytes are on disk. Wired into CI and `scripts/ci-gates.sh`. Verified by injecting
+  three drifts (tampered schema, mismatched pin, subpath regressed to `schema/draft/`) — each
+  fails the gate; the clean tree passes.
+- **CI now runs the whole integration-test crate.** `tests/Cargo.toml` declares 13 `[[test]]`
+  targets; CI invoked two. `example_validation` had not compiled since `origin_policy` was
+  added to `ServerConfig` — a full feature slice landed with no signal there. Fixed, and all
+  13 targets are invoked with a check that the CI list matches the manifest.
+- **Rustdoc coverage for the 2025-11-25 lane's derive examples.** Five doctests in
+  `turul-mcp-derive` are `rust,ignore` under the default lane and were compiled by no job.
+  `--doc` cannot be used (doctests build the dev-dependency graph and trip the alias mutex),
+  so the job runs `cargo doc` on the opt-in lane instead.
+
+### Fixed (2026-07-29, documentation accuracy)
+
+- **De-drafted the repo.** CLAUDE.md/AGENTS.md described a moving draft and a "release
+  candidate", and directed the drift check at `schema/draft/schema.ts` — the path that is now
+  the *next* spec cycle. 94 `/specification/draft/…` citation URLs repointed after verifying
+  the dated sub-paths resolve. All six `.claude/agents/*.md` targeted 2025-11-25 and two
+  directed edits into the frozen crate; retargeted with explicit do-not-edit guards and a
+  lane banner. AGENTS.md documented `cargo build --workspace` / `cargo test --workspace`,
+  both of which fail on this branch via the protocol-alias mutex. CLAUDE.md's
+  §"Reviewing Agents" pointed every spawned reviewer at a `/Users/nick/…` path that does not
+  exist here, so reviewers silently read no rules at all.
+- **Removed a false compliance claim.** Three published crate docs stated the
+  `DRAFT-2026-v1` literal was "still accepted on deserialize for back-compat";
+  `src/version.rs` asserts it *fails* to parse. Two contradictory CHANGELOG entries about the
+  same alias were reconciled.
+- **Compliance-matrix self-accounting.** Minor 12 of the final changelog (the error-code
+  allocation policy and `HeaderMismatchError`) had no row despite being implemented; the gap
+  register held 78 checked entries against a claimed 73, with `UTIL/COMP-3` reused for two
+  unrelated gaps (the second is now `UTIL/COMP-4` — earlier CHANGELOG references to that
+  second meaning predate the rename). Stale fixture counts re-graded.
+- **ADR drift.** ADR-006 and ADR-023 told implementers that 2026 core has no vehicle for
+  server→client notifications and advised running in legacy 2025-11-25 mode — `subscriptions/listen`
+  is core and shipped. ADR-028 cited `-32003` where the schema now exports `-32021`. ADR-030
+  misquoted ADR-027's wire string. ADR-005 marked Superseded. Dated revision-log entries were
+  preserved verbatim throughout.
+- Two example READMEs documented `tools/call` smoke tests that fail as written (`Mcp-Name`
+  must equal the invoked item's name); `scripts/README.md` taught the removed `initialize`
+  handshake; `scripts/test_all_examples.sh` hard-coded an absolute path from another machine.
+
+### Verified (2026-07-29, third-party interoperability)
+
+- **FastMCP 4.0.0b1 completes the stateless journey against a 2026-07-28 build.** Captured at
+  a logging proxy, so this is the wire exchange rather than a client's self-report:
+  `server/discover` → `tools/list` → `tools/call`, every request carrying
+  `MCP-Protocol-Version: 2026-07-28`, with no `initialize`, no `notifications/initialized` and
+  no `Mcp-Session-Id`. This is the first external verification of the 2026 lane; every prior
+  green result was this project's own code on both ends.
+- **The official TypeScript SDK cannot yet reach this lane.** `@modelcontextprotocol/sdk@1.30.0`
+  lists `SUPPORTED_PROTOCOL_VERSIONS` through 2025-11-25 only and receives HTTP 400 from a
+  2026 server — correct behaviour for a single-spec build. It interoperates with the
+  2025-11-25 opt-in lane, verified the same way.
+- Known caveat: given `Accept: application/json, text/event-stream`, this server answers with
+  SSE framing while FastMCP answers with plain JSON. Both are permitted by Streamable HTTP.
+
+
 > **Release status.** This entry tracks the in-progress 0.4.0 cut on the
 > `2026-07-28-MCP-Specification` branch (and its current sub-branch
 > `feat/turul-mcp-protocol-2026-07-28`). The workspace `[workspace.package].version`
@@ -53,7 +202,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed (2026-07-28, stale documentation)
 
 - **Deleted the orphaned `docs/schema.ts`** — 1534 lines of 2025-11-25 schema with stripped interface bodies, referenced by nothing, duplicating what the frozen `turul-mcp-protocol-2025-11-25` crate already models.
-- **`turul-mcp-protocol-2026-07-28/README.md` still described the pre-finalization draft** — it stated the wire-version string *is* `DRAFT-2026-v1` and that finalization was pending, while the crate emits `"2026-07-28"` and accepts the draft literal only as a deserialize alias. Also corrected the stale test count (322 → 420) and "ETag-pinned" (now commit-pinned).
+- **`turul-mcp-protocol-2026-07-28/README.md` still described the pre-finalization draft** — it stated the wire-version string *is* `DRAFT-2026-v1` and that finalization was pending, while the crate emits `"2026-07-28"` and accepted the draft literal only as a deserialize alias. Also corrected the stale test count (322 → 420) and "ETag-pinned" (now commit-pinned). *(Superseded within this same unreleased version by the "retire the pre-finalization `DRAFT-2026-v1` literal" entry above, which removed the deserialize alias entirely — the crate now rejects the literal.)*
 - **COMPLIANCE.md claimed the schema types `NotificationParams._meta` as `MetaObject`** — it is `NotificationMetaObject`, and the row was marked fully compliant. Re-stated as the same structural-only deviation as `Result._meta`.
 
 ### Added (2026-07-14)

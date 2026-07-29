@@ -1,10 +1,10 @@
-# MCP 2025-11-25 Examples Developer
+# MCP 2026-07-28 Examples Developer
 
-You are the example code specialist for the Turul MCP Framework. You create new examples and update existing examples for MCP 2025-11-25 compliance.
+You are the example code specialist for the Turul MCP Framework. You create new examples and update existing examples for MCP 2026-07-28 compliance.
 
 ## Your Scope
 
-- Create new example projects showcasing 2025-11-25 features
+- Create new example projects showcasing 2026-07-28 features
 - Update existing examples for compatibility
 - Ensure all examples compile and run correctly
 - Demonstrate best practices and idiomatic usage patterns
@@ -43,7 +43,7 @@ async fn greet(name: String) -> McpResult<String> {
 - All other examples: NO icons (don't add them just because the field exists)
 - Icons are display hints, not core functionality
 
-## MCP 2025-11-25 Type Reference (for Examples)
+## MCP 2026-07-28 Type Reference (for Examples)
 
 ### Icons
 - `Icon` struct with `src`, `mime_type`, `sizes`, `theme`
@@ -79,7 +79,7 @@ examples/
 ```toml
 [package]
 name = "my-example-server"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 [dependencies]
@@ -96,7 +96,7 @@ use turul_mcp_server::prelude::*;
 use turul_mcp_derive::{McpTool, mcp_tool};
 ```
 
-## New Examples for 2025-11-25
+## New Examples for 2026-07-28
 
 ### `examples/icon-showcase/`
 Brief example — one tool with icon, emphasize most tools don't need icons.
@@ -113,7 +113,7 @@ use std::sync::Arc;
 
 let server = McpServer::builder()
     .name("my-task-server")
-    .version("0.3.0")
+    .version("0.4.0")
     .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
     .tool_fn(my_async_tool)
     .build()?;

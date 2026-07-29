@@ -5,7 +5,7 @@
 3. Touch only what you must. Clean up only your own mess.
 4. Define success criteria. Loop until verified.
 
-Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and complete MCP 2025-11-25 specification support.
+Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and MCP 2026-07-28 specification support (2025-11-25 available as an opt-in build).
 
 > **Source of Truth**
 > - **AGENTS.md** — repo policy, compliance rules, full architecture
@@ -15,16 +15,20 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 
 ## Branch Lock: `2026-07-28-MCP-Specification`
 
-**This branch tracks adoption of the MCP 2026-07-28 release candidate** (stateless core, `initialize`/`Mcp-Session-Id` removed, Tasks moved to extension, error code `-32002` → `-32602`, JSON Schema 2020-12, MCP Apps, caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging). See https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/.
+**This branch tracks adoption of MCP 2026-07-28, now the released current specification** (stateless core, `initialize`/`Mcp-Session-Id` removed, Tasks moved to extension, error code `-32002` → `-32602`, JSON Schema 2020-12, MCP Apps, caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging). See https://modelcontextprotocol.io/specification/2026-07-28.
 
 - **DO NOT merge `2026-07-28-MCP-Specification` into `main` without the maintainer's express authority.**
 - **DO NOT fast-forward, rebase-onto-main, squash-to-main, or open a merge PR for this branch** unless the maintainer (Nick) has explicitly authorized that specific action in the current session.
 - **DO NOT delete the branch, force-push it, or treat it as "complete"** without express authority. "Tests pass" / "all SEPs implemented" is not sufficient — final disposition is the maintainer's call.
-- All work for the 2026-07-28 spec lands on this branch. `main` continues to hold 2025-11-25 (current) until the maintainer chooses to cut over.
+- All work for the 2026-07-28 spec lands on this branch. `main` continues to hold 2025-11-25 — now the *previous* spec, not the current one — until the maintainer chooses to cut over.
 
 ### Check the schema pins BEFORE any 2026-07-28 work
 
-**The draft is still moving and is about to finalize as the current spec.** Upstream keeps revising `schema/draft/schema.ts` in place, so a crate that was compliant last week can be non-compliant today with no local change. Start every 2026-07-28 slice by checking drift — before writing code, and before trusting a green suite:
+**2026-07-28 has finalized.** The released schema lives at the immutable upstream path
+`schema/2026-07-28/schema.ts`; upstream `schema/draft/` is now the *next* spec cycle's
+floating pointer and is no longer what this crate tracks. Anything still resolving against
+`schema/draft/` or against `main` will silently drift onto next-cycle content. Verify the pin
+still names the released artifact — before writing code, and before trusting a green suite:
 
 ```bash
 # 1. Which commit last changed the fixtures, and does the harness still pass there?
@@ -34,7 +38,7 @@ cargo run -p turul-mcp-protocol-2026-07-28 --bin mcp-compliance-2026-07-28 \
 # 2. Has the vendored schema itself drifted from its pinned commit?
 shasum -a 256 crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts
 #    compare against the Content sha256 in schema/README.md, then diff that
-#    commit against upstream main
+#    commit against the released tag 2026-07-28 — never against upstream main
 ```
 
 Governing rules — including the one-immutable-commit requirement and the
@@ -456,8 +460,8 @@ cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
 - Hidden invariants that can't be expressed in the type — `caller must hold the mutex when invoking this`
 - Constraints not visible from one site — `keep in sync with the kebab-case in foo.rs::REGISTRY`
 - Workarounds for specific bugs with context — `reqwest #1234: trailing newline corrupts the cookie jar`
-- Verifiable schema anchors by NAME, not line — `Wire shape of \`elicitation/create\`'s URL-mode params — see \`ElicitRequestURLParams\` in the DRAFT-2026-v1 schema.` Names survive re-pins; line numbers don't.
-- **Mirror the schema's `@see` anchors** when the upstream type carries one. The MCP schema uses TypeDoc `@see` block tags pointing to the spec docs (e.g. `@see [General fields: _meta](/specification/draft/basic/index#meta)`). When our Rust binding documents that type, carry the same anchor through as a doc link — anchors are URL fragments tied to section IDs, not line numbers, so they survive re-pins. Example: `/// See [General fields: _meta](https://modelcontextprotocol.io/specification/draft/basic/index#meta).` Anchors that are missing from the upstream schema (an `@see` we couldn't find) ARE useful information — flag them, don't make them up.
+- Verifiable schema anchors by NAME, not line — `Wire shape of \`elicitation/create\`'s URL-mode params — see \`ElicitRequestURLParams\` in the 2026-07-28 schema.` Names survive re-pins; line numbers don't.
+- **Mirror the schema's `@see` anchors** when the upstream type carries one. The MCP schema uses TypeDoc `@see` block tags pointing to the spec docs (e.g. `@see [General fields: _meta](/specification/2026-07-28/basic/index#meta)`). When our Rust binding documents that type, carry the same anchor through as a doc link — anchors are URL fragments tied to section IDs, not line numbers, so they survive re-pins. Example: `/// See [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta).` Anchors that are missing from the upstream schema (an `@see` we couldn't find) ARE useful information — flag them, don't make them up.
 
 **Default: write no comment.** If removing the comment wouldn't confuse a future reader, don't write it. Well-named identifiers describe WHAT; comments earn their place by explaining WHY.
 
@@ -490,10 +494,10 @@ The verification runs **before** the "done" claim, not after a reviewer finds th
 
 **Any agent spawned to review code, audit compliance, or critique a design MUST first read the rules they'll be judging against. Their report is worth nothing if they don't know what "compliant" means in this repo.**
 
-When spawning a reviewer agent (Explore, Plan, code-reviewer, devils-advocate, etc.), the prompt MUST tell them — explicitly, by absolute path — to read:
+When spawning a reviewer agent (Explore, Plan, code-reviewer, devils-advocate, etc.), the prompt MUST tell them — explicitly, by path — to read:
 
-1. `/Users/nick/turul-mcp-framework/AGENTS.md` — repo policy (source of truth, wins on conflict)
-2. `/Users/nick/turul-mcp-framework/CLAUDE.md` — operator playbook (this file)
+1. `~/turul-mcp-framework/AGENTS.md` — repo policy (source of truth, wins on conflict)
+2. `~/turul-mcp-framework/CLAUDE.md` — operator playbook (this file)
 3. Any ADR in `docs/adr/` that governs the area under review
 
 Agents have filesystem access via the `Read` tool. They will NOT magically know about the Comments rule, the Branch Lock, the Protocol Crate Purity rule, the schema-line-numbers-rot caveat, or the `@see` anchor convention unless the prompt instructs them to read CLAUDE.md/AGENTS.md and apply those rules. Don't assume — instruct.
@@ -535,12 +539,23 @@ Before publishing a new version:
 3. **Plugin skill versions**: Skills use generic minor version (`v0.3`, not `v0.3.13`) — do NOT bump on patch releases. Only update when the minor version changes (e.g., `v0.3` → `v0.4`).
 4. **CHANGELOG.md**: Add release entry with date and comparison links
 5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
-6. **Publish order** (dependency-first):
+6. **Publish order** (dependency-first, derived from the actual non-dev dependency graph):
    ```
-   json-rpc-server → protocol-2025-06-18 → protocol-2025-11-25 → protocol → builders →
-   session-storage → task-storage → server-state-storage → derive* → http-server → server → client → aws-lambda → oauth
+   protocol-2026-07-28 → protocol → session-storage → http-server → builders → derive* →
+   ext-tasks → oauth → schema-validation → server-state-storage → task-storage →
+   server → aws-lambda → client → ext-apps
    ```
    *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
+
+   Frozen `turul-mcp-json-rpc-server`, `turul-mcp-protocol-2025-06-18` and
+   `turul-mcp-protocol-2025-11-25` stay published at `0.3.47` — no republish step.
+   `turul-mcp-framework-integration-tests` is `publish = false`.
+
+   Regenerate this list rather than hand-editing it — `turul-mcp-server` depends on
+   `turul-mcp-oauth` non-optionally, so an order that publishes the server first fails:
+   ```bash
+   cargo metadata --format-version 1 --no-deps   # then topo-sort on kind == null deps
+   ```
 7. **Git tag**: `git tag v0.x.y && git push origin v0.x.y`
 
 ## Architecture

@@ -212,7 +212,7 @@ When either single-spec feature is active, the version field becomes `Arc<RwLock
 
 ## Relationship to ADR-027 and ADR-029
 
-- **ADR-027** locks the protocol crate (`turul-mcp-protocol-2026-07-28`) to wire string `"DRAFT-2026-v1"`. The workspace alias flip (Phase 9.4) is committed per ADR-029 §"What the cutover slice ships" item 5 (flip-all-at-once). This ADR is independent of the alias flip: `turul-mcp-client` imports both versioned crates directly, not through the alias, so the alias-flip moment is invisible to client consumers.
+- **ADR-027** locks the protocol crate (`turul-mcp-protocol-2026-07-28`) to wire string `"2026-07-28"` (finalized; `"DRAFT-2026-v1"` was the pre-finalization placeholder and is now rejected by `McpVersion::from_str`). The workspace alias flip (Phase 9.4) is committed per ADR-029 §"What the cutover slice ships" item 5 (flip-all-at-once). This ADR is independent of the alias flip: `turul-mcp-client` imports both versioned crates directly, not through the alias, so the alias-flip moment is invisible to client consumers.
 - **ADR-029** chooses single-spec-per-build for `turul-mcp-server` / `turul-http-mcp-server` / `turul-mcp-aws-lambda`. This ADR diverges from that choice for the client. The divergence is deliberate and is justified by the architectural asymmetry between server and client (process-state-machine constraint vs per-connection byte-emission flexibility).
 - The bilingual client is a pre-requisite for cross-version integration testing during the cutover. Once Phase 9.4 lands and ADR-029's server-side cutover is complete, the bilingual client lets us run a single test binary that exercises both legacy and current servers from one process.
 

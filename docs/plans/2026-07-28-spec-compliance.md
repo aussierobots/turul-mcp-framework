@@ -1,7 +1,7 @@
 # MCP 2026-07-28 Spec Compliance, Tests & Deployment — Driver Document
 
 > **This document is the driver and checklist for 2026-07-28 spec work.** One requirements
-> table per section of the [draft spec ToC](https://modelcontextprotocol.io/specification/draft).
+> table per section of the [draft spec ToC](https://modelcontextprotocol.io/specification/2026-07-28).
 > Generated from a 15-section live-spec audit (105 agents, every claimed gap adversarially
 > verified) on 2026-06-11, then maintained by hand: when a gap is fixed, flip its row and
 > tick the gap register. Workflow run `wf_aae6cd1e-b6d`; spec fetched live; protocol crate
@@ -29,10 +29,20 @@
 |---|---|---|---|---|---|
 | 541 | 322 | 72 | 9 | 12 | 126 |
 
-**Registered gaps:** 73 confirmed by the 2026-06-11 audit — **all 73 closed or
-dispositioned** (1/1 P0, 14/14 P1, 58/58 P2: 52 fixed, 6 dispositioned with recorded
-rationale — see the dated entries in the [gap register](#gap-register)). 17 additional
-claims were refuted in verification and are NOT carried here.
+**Registered gaps:** the 2026-06-11 audit confirmed 73 (1/1 P0, 14/14 P1, 58/58 P2: 52
+fixed, 6 dispositioned with recorded rationale). Verified recount of the full register
+(`awk '/^## Gap register/{f=1} /^## E2E test plan/{f=0} f' docs/plans/2026-07-28-spec-compliance.md | grep -cE '^\s*- \[x\]'`
+→ 78) shows the true total is **78 checked entries**, not 73 — the header undercounted by
+5: `VER-4`, `PAT/G10`, `CF/GAP-CF-8`, `BP-5`, and a completion relevance/rate-limiting gap
+(renamed `UTIL/COMP-4` below — it had reused the `UTIL/COMP-3` ID), all opened and closed
+during the 2026-06-12 re-verification sweep without the header being updated. Of the 78,
+**77 carry unique IDs** (the `UTIL/COMP-3`/`UTIL/COMP-4` collision was the only duplicate)
+and **1 (`CF/GAP-CF-7`) is WITHDRAWN as obsolete** — `notifications/elicitation/complete`
+was removed from the draft upstream, so that gap's underlying requirement no longer
+exists; it is retained in the register for history, not counted as closed. **True count:
+78 gaps ever registered, 77 closed or dispositioned, 1 withdrawn as obsolete** — see the
+dated entries in the [gap register](#gap-register). 17 additional claims were refuted in
+verification and are NOT carried here.
 
 **This is NOT "spec compliance complete":** 9 ❌, 12 🧪, and 72 🟡 table rows remain
 non-green. These are tracked caveats/limitations the audit graded without raising a
@@ -80,7 +90,7 @@ editing the row in place.
 
 ## Specification landing page
 
-Spec: <https://modelcontextprotocol.io/specification/draft>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -99,7 +109,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft>
 
 ## Architecture
 
-Spec: <https://modelcontextprotocol.io/specification/draft/architecture>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/architecture>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -123,7 +133,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/architecture>
 
 ## Key Changes — MCP specification draft changelog (2026-07-28 revision)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/changelog>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/changelog>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -139,6 +149,8 @@ Spec: <https://modelcontextprotocol.io/specification/draft/changelog>
 | Major 5 (SEP-2575): Log level set per-request via io.modelcontextprotocol/logLevel in _meta; servers MUST NOT emit notifications/message for requests that did not include this field | MUST NOT | ✅ compliant | meta::RequestMetaObject.log_level (meta.rs, COMPLIANCE.md §_meta carriers); server gating tested in crates/turul-mcp-server/tests/log_gating_2026.rs::message_notifications_require_a_declared_log_level, ::declared_level_is_the_severity_threshold |
 | Major 6 (SEP-2663): Move tasks out of core into official extension io.modelcontextprotocol/tasks — polling via tasks/get, new tasks/update, no tasks/list, blocking tasks/result removed; unsolicited task handles allowed | MUST | ✅ compliant | Core removal done: protocol crate has no Task/tasks/* bindings (COMPLIANCE.md §Known follow-ups; ADR-027 revision log 2026-05-24); task handlers cfg-gated to protocol-2025-11-25 (crates/turul-mcp-server/src/builder.rs:1743-1769); 2026 build 404s tasks/* (error_mapping_2026.rs). G1 PARTIALLY CLOSED 2026-06-12: `crates/turul-mcp-ext-tasks` scaffolded per ADR-028 (2026-06-07 amendment: spec-neutral name, `v2026_07_28` feature-gated module) (types/lifecycle/capability modules, vendored upstream schema pinned at modelcontextprotocol/ext-tasks@8966bea9, 13 wire-shape compliance tests incl. resultType "task", explicit-null ttlMs, status-tagged DetailedTask). G1 CLOSED 2026-06-12 (server dispatch landed): opt-in `ext-tasks` feature on turul-mcp-server — `.with_ext_tasks(store)` advertises the extension in discover `capabilities.extensions` and registers tasks/get|update|cancel; `.ext_task_tool(_required)` marks tools for election (declared → durable CreateTaskResult + spawned worker; undeclared → sync fallback or -32021 with data.requiredCapabilities.extensions); MRTR bridge parks input_required tasks until tasks/update resumes the worker; notifications/tasks rides subscriptions/listen honored-`taskIds` filtering. 9 wire e2e tests in `ext_tasks_2026.rs` (gates + CI step), revert-and-fail recorded (neutralized capability check → declared-call test fails sync). REMAINING (non-blocking): bilingual-client task helpers (slice B) and durable TaskStore backends. |
 | Major 7 (SEP-2322): MRTR replaces server-initiated requests (roots/list, sampling/createMessage, elicitation/create) — servers return inputRequests + requestState; clients respond with inputResponses on the next request | MUST | ✅ compliant | Protocol: input_required.rs (InputRequiredResult, requestState; COMPLIANCE.md wire-field rows). Server: tests/mrtr_2026.rs::mrtr_round_trip_completes_the_original_call, ::mrtr_round_trip_on_resources_read, ::mrtr_round_trip_on_prompts_get, ::undeclared_capability_is_rejected_with_32003, ::resources_read_capability_gate_applies. Client: client.rs:1088 call_tool_with_input_responses + protocol/v2026_07_28.rs::input_required_outcome; e2e_2026_real_server.rs::mrtr_round_trip_through_the_bilingual_client |
+| Major 8: Every result carries a resultType discriminator; unrecognized values MUST be treated as invalid, an absent resultType MUST default to "complete" for backward compatibility | MUST | ✅ compliant | Audited in full in the Base Protocol Overview section (rows on `resultType`, this table's stub only cross-references it) — see crates/turul-mcp-protocol-2026-07-28/src/result_type.rs, src/tools.rs:492-497; server enforcement crates/turul-mcp-server/src/handlers/mod.rs:55-97; client enforcement crates/turul-mcp-client/src/protocol/v2026_07_28.rs::check_result_type |
+| Major 9 (SEP-2596): Remove SSE stream resumability — Last-Event-ID is no longer supported; streams are not resumable | MUST | ✅ compliant | Audited in full in the Transports — Streamable HTTP section (this table's stub only cross-references it) — GET (the only path that read Last-Event-ID) returns 405 under 2026: crates/turul-http-mcp-server/src/streamable_http.rs:521-530; test crates/turul-mcp-server/tests/stateless_2026_http_surface.rs::get_with_last_event_id_returns_405 |
 | Minor 1: Add extensions field to ClientCapabilities and ServerCapabilities | MUST | ✅ compliant | crates/turul-mcp-protocol-2026-07-28/src/initialize.rs:182 (ClientCapabilities.extensions), :280 (ServerCapabilities.extensions); test crates/turul-mcp-protocol-2026-07-28/tests/compliance.rs:1697-1726 (round-trips io.modelcontextprotocol/tasks key) |
 | Minor 2 (SEP-414): OpenTelemetry trace context propagation conventions for _meta keys traceparent/tracestate/baggage | MAY | 🟡 partial | Constants bound: crates/turul-mcp-protocol-2026-07-28/src/meta.rs:201-211 (META_KEY_TRACEPARENT/TRACESTATE/BAGGAGE). No propagation logic or test anywhere in turul-http-mcp-server, turul-mcp-server, or turul-mcp-client (grep: only meta.rs hits). — *Convention is MAY-level; keys are representable via RequestMetaObject.extra, but the framework never reads or forwards them (G5).* |
 | Minor 3: Servers SHOULD return tools from tools/list in deterministic order | SHOULD | ✅ compliant | Implemented: crates/turul-mcp-server/src/server.rs:1576-1599 (sort_by name, both static and registry paths). No test asserts tools/list wire ordering; only resources ordering is tested (src/tests/pagination_integration_tests.rs:183 test_pagination_sorting_order_validation) (G4). | — **RE-GRADED 2026-06-12** (post-P2-batch verification): NEW TEST: wire_edges_2026.rs:295-356 (tools_list_is_deterministic_paginated_and_cacheable) asserts stable name-sorted ordering on tools/list wire response at line 323-324 ("assert_eq!(names, sorted, 'stable name ordering')"). Implementation unchanged: server.rs:1589-1601 sorts tools by name before response. Wire-layer coverage per CLAUDE.md §Test Coverage Discipline #2.
@@ -150,6 +162,8 @@ Spec: <https://modelcontextprotocol.io/specification/draft/changelog>
 | Minor 8 (SEP-837): Clients MUST specify an appropriate application_type during Dynamic Client Registration | MUST | ➖ n/a | No DCR implementation anywhere in crates/ (grep application_type: zero non-target hits). Same scope decision as G3. |
 | Minor 9 (SEP-2352): Clients MUST key persisted credentials by issuer, MUST NOT reuse with a different authorization server, MUST re-register on AS change | MUST | ➖ n/a | turul-mcp-client persists no OAuth credentials (bearer is caller-supplied per request; transport/http.rs:930-1026 override only). Same scope decision as G3. |
 | Minor 10 (SEP-2106): Loosen inputSchema/outputSchema to any JSON Schema 2020-12 keywords; structuredContent any JSON value; $ref resolution + composition bounds | MUST | ✅ compliant | tools.rs:96-157 (ToolSchema passes oneOf/anyOf/allOf/$ref/$defs through; ToolOutputSchema unrestricted), tools.rs:506 (structured_content: Option<Value>); real-HTTP tests crates/turul-mcp-server/tests/schema_fidelity_2026.rs::tools_list_carries_the_full_2020_12_schema, ::structured_content_matches_the_advertised_output_schema; elicitation $schema dialect (elicitation.rs, COMPLIANCE.md Slice A' row A5) |
+| Minor 11: Remove notifications/elicitation/complete from the core protocol | MUST | ➖ n/a | Removed upstream (commit `0b7f2e4c`, 2026-07-02 re-vendor) — the 2026 protocol crate correctly carries no binding; gap register entry `CF/GAP-CF-7` withdrawn as obsolete for the same reason (see gap register and this document's Summary section) |
+| Minor 12 (SEP-2243): Partition JSON-RPC server-error codes — -32000..-32019 implementation-defined, -32020..-32099 spec-reserved and allocated sequentially; define HeaderMismatchError (-32020) for header/body mismatch | MUST | ✅ compliant | crates/turul-mcp-protocol-2026-07-28/src/headers.rs:58 (ERROR_CODE_HEADER_MISMATCH = -32020, range-asserted at :84); src/lib.rs:611-691 (`mcp_error_code_partition` test module: header_mismatch_constant_uses_spec_code asserts the constant, framework_internal_errors_stay_out_of_spec_reserved_range asserts every framework `McpError` variant stays within -32000..-32019); wire use in the Minor 4 row above (streamable_http.rs header-mismatch rejection) |
 | Deprecated 1 (SEP-2577): Deprecate Roots, Sampling, Logging (remain functional; new implementations should not adopt) | SHOULD NOT | ✅ compliant | #[deprecated(since="0.4.0")] on every type site: sampling.rs:58,85+, roots.rs, notifications logging surface incl. LoggingLevel/logLevel opt-in (COMPLIANCE.md §SEP-2577 table; ADR-027 rev 2026-05-31 Slice A'' + 2026-06-10 supersession); framework-internal sites carry #[allow(deprecated)] (ADR-029 §cutover item 4) |
 | Deprecated 2 (SEP-2596): HTTP+SSE transport reclassified Deprecated; migrate to Streamable HTTP | SHOULD NOT | ✅ compliant | 2026 default build is POST-only Streamable HTTP (stateless_2026_http_surface.rs 405 tests); legacy SSE/session handler reachable only under the protocol-2025-11-25 opt-in (crates/turul-http-mcp-server/src/server.rs:488 cfg gate) |
 | Deprecated 3 (SEP-2596): includeContext values "thisServer"/"allServers" reclassified Deprecated; omit or use "none" | SHOULD NOT | ✅ compliant | crates/turul-mcp-protocol-2026-07-28/src/sampling.rs:12-13,299-322 (deprecation documented on include_context; whole Sampling surface #[deprecated]); values still deserialize (deprecation ≠ removal) |
@@ -159,7 +173,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/changelog>
 
 ## MCP draft spec — Deprecated Features registry (SEP-2596 lifecycle; SEP-2577 Roots/Sampling/Logging)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/deprecated>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/deprecated>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -177,7 +191,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/deprecated>
 
 ## Base Protocol Overview (draft/basic) — JSON-RPC framing, statelessness, _meta, schema usage, icons
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -227,7 +241,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic>
 
 ## MCP draft — Versioning and Compatibility
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/versioning>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -249,7 +263,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/versioning>
 
 ## Patterns overview
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -260,7 +274,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns>
 
 ## Progress
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns/progress>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -277,7 +291,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns/progre
 
 ## Multi Round-Trip Requests (MRTR)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns/mrtr>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -299,7 +313,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns/mrtr>
 
 ## Subscriptions
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns/subscriptions>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -318,7 +332,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns/subscr
 
 ## Cancellation
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns/cancellation>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -340,7 +354,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/patterns/cancel
 
 ## Transports — Overview
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/transports>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/transports>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -355,7 +369,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/transports>
 
 ## Transports — stdio
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/transports/stdio>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -374,7 +388,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/transports/stdi
 
 ## Transports — Streamable HTTP
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -430,7 +444,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/transports/stre
 
 ## MCP draft Basic: Authorization (2026-07-28 draft)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/authorization>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -471,14 +485,14 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/authorization>
 | Servers MUST return appropriate HTTP status codes: 401 unauthorized/invalid token, 403 insufficient scope, 400 malformed authorization request | MUST | ✅ compliant | 401 path compliant (above). 403: HttpChallenge supports status 403 + Cache-Control no-store (middleware/error.rs:114-121, streamable_http.rs:2775-2796) but nothing shipped emits it. 400: malformed Bearer values are rejected by the hardened parser (middleware/bearer.rs:22) and then treated as MISSING → 401 challenge without error param, not 400 invalid_request — *Gaps AUTH-2, AUTH-3* | — **RE-GRADED 2026-06-12** (post-P2-batch verification): crates/turul-http-mcp-server/src/streamable_http.rs:1748-1752 now check if method=='initialize' and add error.data.supported field with the server's supported protocol versions. This directly addresses the spec requirement that initialize errors SHOULD name the supported versions. Commit 3ad11118 ('feat: server wire-edges P2 batch') fixed this.
 | On insufficient scope the server SHOULD respond 403 + WWW-Authenticate with error="insufficient_scope", scope, resource_metadata; SHOULD include all scopes for the operation in a single challenge; SHOULD be consistent | SHOULD | ✅ compliant | FIXED 2026-06-11 (AUTH-2): `with_required_scopes` on the middleware — missing scope → 403 + WWW-Authenticate with error="insufficient_scope" and the scope list (pre-session phase, same challenge transport as the wire-tested 401); unit tests `insufficient_scope_returns_403_challenge` / `sufficient_scope_passes_and_injects_claims` |
 | Clients SHOULD respond to scope errors with step-up authorization (union of prior + challenged scopes), SHOULD implement retry limits and track upgrade attempts | SHOULD | ➖ n/a | Client-flow requirement; no scope/step-up machinery in turul-mcp-client. Client treats 4xx on SSE GET as terminal (tests/sse_terminal_4xx.rs) — orthogonal to step-up |
-| Implementations MUST follow the normative security requirements in the Security Considerations sub-page (audience binding, token theft, communication security, code protection, mix-up/confused deputy, open redirection, CIMD security) | MUST | 🟡 partial | RS-relevant items verified compliant here (audience binding D7, comm security via operator TLS). Sub-page (/specification/draft/basic/authorization/security-considerations) not in this audit's URL set — client/AS items n/a by role — *The draft restructured authorization into sub-pages (discovery, client-registration, security-considerations) carrying normative text; a follow-up section audit should fetch them* |
+| Implementations MUST follow the normative security requirements in the Security Considerations sub-page (audience binding, token theft, communication security, code protection, mix-up/confused deputy, open redirection, CIMD security) | MUST | 🟡 partial | RS-relevant items verified compliant here (audience binding D7, comm security via operator TLS). Sub-page (/specification/2026-07-28/basic/authorization/security-considerations) not in this audit's URL set — client/AS items n/a by role — *The draft restructured authorization into sub-pages (discovery, client-registration, security-considerations) carrying normative text; a follow-up section audit should fetch them* |
 | Client-side authorization-code-flow security requirements: MUST implement and verify PKCE (S256 when capable), MUST refuse to proceed if `code_challenge_methods_supported` is absent from AS/OIDC metadata; MUST have redirect URIs registered with the AS; SHOULD use and verify `state` parameters, discarding mismatches; MUST follow OAuth 2.1 §1.5 communication-security guidance | MUST/SHOULD | ➖ n/a | turul-mcp-client implements no authorization-code flow — no PKCE generation/verification, no redirect handling, no `state` parameter, no AS-metadata capability check exist anywhere in the crate (bearer is supplied pre-formed via `set_bearer`). Same disposition as the existing 'no authorization-code flow' n/a rows in this section — folds 6 quotes from basic/authorization/security-considerations.mdx (gap AUTH-4 precondition)
 | Authorization-server-side security requirements: SHOULD issue short-lived access tokens; MUST rotate refresh tokens for public clients; MUST serve all AS endpoints over HTTPS; MUST validate exact redirect URIs against pre-registered values; MUST take precautions against untrusted redirect targets; SHOULD only auto-redirect to trusted URIs; MAY implement domain-trust policies, attestation, or extra localhost-redirect warnings | MUST/SHOULD/MAY | ➖ n/a | No authorization server is shipped (ADR-021 RS-only scope) — token issuance, refresh-token lifecycle, and redirect-URI enforcement are all AS responsibilities with no corresponding code in turul-mcp-oauth or anywhere else in the workspace — folds 9 quotes from basic/authorization/security-considerations.mdx
 | Security Considerations sub-page: implementers MUST consider these requirements when building clients/servers; MUST follow OAuth 2.1 §7 best practices; clients and servers MUST implement secure token storage (OAuth 2.1 §7.1) | MUST | ➖ n/a | RS-relevant subset (audience binding, comms security) is already graded compliant elsewhere in this section. The token-storage clause has no surface in turul-mcp-oauth: the RS validates a bearer per-request via JWKS and never persists it (jwt.rs — no token cache/store); turul-mcp-client's caller-supplied bearer is likewise not persisted by the library beyond the in-memory override (transport/http.rs `apply_auth_override`). No storage-at-rest exists to secure or fail to secure — folds 3 quotes from basic/authorization/security-considerations.mdx, refining the existing 🟡-partial 'security considerations sub-page' row rather than replacing it
 
 ## MCP draft Basic: Security Best Practices
 
-Spec: <https://modelcontextprotocol.io/specification/draft/basic/security_best_practices>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -495,7 +509,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/basic/security_best_p
 
 ## MCP draft Server Utilities: Caching (client consumption)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server/utilities/caching>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/caching>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -510,7 +524,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server/utilities/cach
 
 ## Roots (deprecated client feature, rides MRTR input requests)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/client/roots>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/client/roots>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -527,7 +541,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/client/roots>
 
 ## Sampling (deprecated client feature, rides MRTR input requests)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/client/sampling>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/client/sampling>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -554,7 +568,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/client/sampling>
 
 ## Elicitation (form + URL modes, rides MRTR input requests)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/client/elicitation>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -587,7 +601,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/client/elicitation>
 
 ## Server Features Overview (informational page — no MUST/SHOULD requirements)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -597,7 +611,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server>
 
 ## server/discover (Discovery)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server/discover>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server/discover>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -619,7 +633,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server/discover>
 
 ## Server Features: Prompts
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server/prompts>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server/prompts>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -650,7 +664,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server/prompts>
 
 ## Resources — modelcontextprotocol.io draft spec
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server/resources>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server/resources>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -689,7 +703,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server/resources>
 
 ## MCP draft (2026-07-28) — Server Features: Tools
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server/tools>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server/tools>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -737,7 +751,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server/tools>
 
 ## Completion (draft 2026-07-28)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server/utilities/completion>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/completion>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -748,13 +762,13 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server/utilities/comp
 | Completion results: maximum 100 items per response, ranked by relevance, with optional total and hasMore flag | INFO | ✅ compliant | FIXED 2026-06-11 (a75ab5cc, UTIL/COMP-1): the routing CompletionHandler enforces the 100-item cap (truncation sets total/hasMore); wire test `discover_stateless_2026.rs::completion_values_are_capped_at_100` (150-value provider → 100 values, hasMore=true, total=150). Relevance ranking is the provider's contract |
 | Servers SHOULD return -32601 (Method not found / capability not supported) when completion is unsupported | SHOULD | ✅ compliant | WAS open as UTIL/COMP-2 (P2), FIXED 2026-06-11: `CompletionHandler` is registered for completion/complete unconditionally in `McpServerBuilder::new()` — a server with no completion configured (capability absent) answers 200 with empty values instead of -32601 (the hardcoded placeholder is gone since a75ab5cc, but the reachability gap remains) | — **RE-GRADED 2026-06-12** (post-P2-batch verification): crates/turul-mcp-server/src/builder.rs:1764-1769: CompletionHandler registered only when !self.completions.is_empty(); unsupported server omits handler entirely. Test completion_unsupported_is_method_not_found (wire_edges_2026.rs:450-465) verifies 404 + -32601. Capability omitted per builder.rs:1695-1697.
 | Servers SHOULD return -32602 for invalid prompt name / missing required arguments; -32603 for internal errors | SHOULD | ✅ compliant | Mostly FIXED 2026-06-11 (a75ab5cc, UTIL/COMP-3): typed `CompleteRequestParams` parse → -32602 on malformed input (missing argument, bad ref-type literal; wire test `malformed_completion_params_are_rejected_with_32602`); provider `validate_request` runs live; internal errors map via McpError. Remaining nuance: an unknown-but-well-formed prompt name yields empty values rather than -32602 (SHOULD-level; consistent with capability-absent posture in the row above) | — **RE-GRADED 2026-06-12** (post-P2-batch verification): crates/turul-mcp-server/src/handlers/mod.rs:293-310: typed CompleteRequestParams deserialization enforces required fields and ref-type literals ('ref/prompt'/'ref/resource'); malformed input → McpError::InvalidParameters (-32602). Test malformed_completion_params_are_rejected_with_32602 (discover_stateless_2026.rs:606-637) covers missing argument and unknown ref type.
-| Servers SHOULD return suggestions sorted by relevance, implement fuzzy matching, rate limit completion requests, validate all inputs | SHOULD | 🟡 partial | Input validation IS enforced (typed CompleteRequestParams → -32602 incl. ref-literal validation, UTIL/COMP-1/2 slice). Ranking/fuzzy are provider semantics (`McpCompletion` providers own suggestion content/order; framework preserves order + 100-cap with total/hasMore); rate limiting is middleware-layer per the PAT/G9 disposition — **DISPOSITIONED 2026-06-12 (UTIL/COMP-3)** |
+| Servers SHOULD return suggestions sorted by relevance, implement fuzzy matching, rate limit completion requests, validate all inputs | SHOULD | 🟡 partial | Input validation IS enforced (typed CompleteRequestParams → -32602 incl. ref-literal validation, UTIL/COMP-1/2 slice). Ranking/fuzzy are provider semantics (`McpCompletion` providers own suggestion content/order; framework preserves order + 100-cap with total/hasMore); rate limiting is middleware-layer per the PAT/G9 disposition — **DISPOSITIONED 2026-06-12 (UTIL/COMP-4)** |
 | Clients SHOULD debounce rapid requests, cache results, handle missing/partial results gracefully | SHOULD | ➖ n/a | turul-mcp-client ships no completion/complete client API (grep 'completion' over crates/turul-mcp-client/src/client.rs: zero call surface) — client-side completion UX requirements target a feature the client does not expose |
 | Implementations MUST validate all completion inputs, implement appropriate rate limiting, control access to sensitive suggestions, prevent completion-based information disclosure | MUST | 🟡 partial | FIXED 2026-06-11 (validation): typed `CompleteRequestParams` parse → -32602 on malformed input, reference-literal check ("ref/prompt"/"ref/resource"), provider `validate_request` on the live path, 100-item response cap (`malformed_completion_params_are_rejected_with_32602`, `completion_values_are_capped_at_100`). Rate limiting remains the middleware layer's job (ADR-012) — no completion-specific limiter. | — **RE-GRADED 2026-06-12** (post-P2-batch verification): crates/turul-mcp-server/src/handlers/mod.rs:293-310 validates typed params (→-32602 on malformed); line 305-310 enforces ref-type literals; line 330 calls provider.validate_request(); lines 333-336 cap completion.values at 100 per spec. Tests: malformed_completion_params_are_rejected_with_32602, completion_values_are_capped_at_100. Rate limiting remains middleware responsibility (ADR-012).
 
 ## Logging (draft 2026-07-28, deprecated per SEP-2577)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server/utilities/logging>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/logging>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -772,7 +786,7 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server/utilities/logg
 
 ## Pagination (draft 2026-07-28)
 
-Spec: <https://modelcontextprotocol.io/specification/draft/server/utilities/pagination>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/pagination>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
@@ -788,13 +802,13 @@ Spec: <https://modelcontextprotocol.io/specification/draft/server/utilities/pagi
 
 ## Schema Reference — pin parity + every normative requirement embedded in the schema page
 
-Spec: <https://modelcontextprotocol.io/specification/draft/schema>
+Spec: <https://modelcontextprotocol.io/specification/2026-07-28/schema>
 
 | Requirement | Level | Status | Evidence / notes |
 |---|---|---|---|
 | PIN PARITY: live schema/draft/schema.ts identical to vendored pin | INFO | ✅ compliant | Re-pinned 2026-07-28 to upstream commit `71e30695`, sha256 `c56f0ad2395f9f7109a903a304344a61c65555cb0b2d28c1635cc32497221c87`, byte-identical to that commit and to `main` at re-vendor time. The schema and the example fixtures now share one immutable commit. The earlier "NO re-pin trigger exists" reading was time-bound and expired when #3002 landed on 2026-07-16 — parity is a claim about a moment, not a standing property, so re-check it at the start of each slice. |
 | LATEST_PROTOCOL_VERSION = "2026-07-28" — crate wire string must track the schema constant | INFO | ✅ compliant | crates/turul-mcp-protocol-2026-07-28/src/lib.rs:209 (MCP_VERSION), src/version.rs:38 (serde rename + DRAFT-2026-v1 alias); drift-detector test tests/compliance.rs:2061-2066 parses the vendored file and asserts it matches MCP_VERSION |
-| PIN PARITY (examples fixtures): upstream schema/draft/examples pin current | INFO | ✅ compliant | schema/EXAMPLES_PIN.md pin 1304c8fe5f07…; GitHub compare 1304c8fe...main returns ahead_by: 0 (2026-06-11) — pin IS upstream HEAD; harness src/compliance/ round-trips 20/20 fixtures — *EXAMPLES_PIN.md still says 'Captured: 2026-05-24' though the SHA was advanced 2026-06-10 — doc-regen nit, see gap G3.* |
+| PIN PARITY (examples fixtures): upstream schema/draft/examples pin current | INFO | ✅ compliant | schema/EXAMPLES_PIN.md pin 1304c8fe5f07…; GitHub compare 1304c8fe...main returns ahead_by: 0 (2026-06-11) — pin IS upstream HEAD; harness src/compliance/ round-trips **24/24 fixtures, 12 of 88 (13.6%) modeled** per crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md (re-graded from the stale "20/20 fixtures" figure) — *EXAMPLES_PIN.md still says 'Captured: 2026-05-24' though the SHA was advanced 2026-06-10 — doc-regen nit, see gap G3.* |
 | MetaObject: reserved key names — "implementations MUST NOT make assumptions about values at these keys" | MUST NOT | ✅ compliant | src/meta.rs models _meta as open map; reserved keys touched only via named consts META_KEY_* (meta.rs:216-237); server passes non-reserved keys through opaquely (turul-mcp-server/src/handlers/mod.rs:99-118 extract_request_meta_extra) |
 | _meta key grammar: prefix "MUST be labels separated by dots followed by slash"; name "MUST start and end with an alphanumeric"; reverse-DNS SHOULD — for keys the implementation emits | MUST | ✅ compliant | All framework-emitted keys are the schema-named io.modelcontextprotocol/* constants (meta.rs:216-237, RequestMetaObject serde renames); wire shapes asserted in tests/compliance.rs meta tests — *Emission side only; no general grammar validator for third-party keys — receivers are not required to validate, see extensions row for the one place validation is arguably owed.* |
 | RequestMetaObject io.modelcontextprotocol/protocolVersion Required; "MUST match the MCP-Protocol-Version header; otherwise the server MUST return a 400 Bad Request" | MUST | ✅ compliant | turul-http-mcp-server/src/streamable_http.rs:1599-1640 (body-vs-header mismatch and missing _meta version → 400); tests turul-mcp-server/tests/discover_stateless_2026.rs::header_body_protocol_version_mismatch_is_rejected_with_32020, ::missing_meta_is_rejected_with_invalid_params — *Schema mandates only HTTP 400; the -32020 HeaderMismatch JSON-RPC code on the mismatch path is framework-chosen (SEP-2243), not schema-defined — acceptable.* |
@@ -836,26 +850,26 @@ in the same slice as the fix.
 ### P0
 
 - [x] **TX/GAP-1** — No Origin-header validation (DNS-rebinding protection) on the Streamable HTTP endpoint — **FIXED 2026-06-11** (ADR-031; `origin_validation_2026.rs`)
-  - Requirement: "Servers MUST validate the Origin header on all incoming connections to prevent DNS rebinding attacks. If the Origin header is present and invalid, servers MUST respond with HTTP 403 Forbidden." — https://modelcontextprotocol.io/specification/draft/basic/transports/streamable-http §Security & Endpoint
+  - Requirement: "Servers MUST validate the Origin header on all incoming connections to prevent DNS rebinding attacks. If the Origin header is present and invalid, servers MUST respond with HTTP 403 Forbidden." — https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http §Security & Endpoint
   - Current: No code path reads or validates Origin. crates/turul-http-mcp-server/src/cors.rs:49-51 only EMITS Access-Control-Allow-Origin: * on responses (which actively weakens browser-side protection); grep across crates/turul-http-mcp-server/src/{server.rs,routes.rs,streamable_http.rs,middleware/} finds no Origin check and no 403-on-invalid-Origin path. Default server binds 127.0.0.1:8000 (crates/turul-mcp
   - Fix: crates/turul-http-mcp-server (streamable_http.rs handle_request, before validate(); config knob on ServerConfig for allowed origins). Governing: ADR-027 (2026 lane); add wire tests per CLAUDE.md §Test Coverage Discipline (invalid Origin → 403, absent Origin → pass).
 
 ### P1
 
 - [x] **BP-1** — Client treats an unrecognized resultType as a normal complete result instead of invalid — **FIXED 2026-06-11** (`check_result_type`, all 2026 parsers)
-  - Requirement: "A resultType of any value unrecognized by the client MUST be considered invalid." — https://modelcontextprotocol.io/specification/draft/basic (§Responses → ResultType)
+  - Requirement: "A resultType of any value unrecognized by the client MUST be considered invalid." — https://modelcontextprotocol.io/specification/2026-07-28/basic (§Responses → ResultType)
   - Current: crates/turul-mcp-client/src/protocol/v2026_07_28.rs:41-53 — input_required_outcome() only branches on "input_required"; parse_call_tool (:158-169) then deserializes the body as CallToolResult, where ResultType::Other(String) is accepted (#[serde(default)]-adjacent open union, crates/turul-mcp-protocol-2026-07-28/src/result_type.rs:68-77) and the result is surfaced to the caller as complete. An ext
   - Fix: crates/turul-mcp-client/src/protocol/v2026_07_28.rs (reject ResultType::Other in parse_* unless a supported extension advertised it); governed by ADR-030 (bilingual client) — the protocol crate's open-union modeling is correct per schema and should stay
 - [x] **VER-1** — Untested wire path: 400-body -32004 → fallback-to-2025 through probe_discover — **FIXED 2026-06-11** (`bilingual_client_falls_back_on_400_with_32022_body`; revert-and-fail: disabling the -32022 classifier arm fails it with NegotiationFailed)
-  - Requirement: "In both cases, a recognized modern JSON-RPC error (such as UnsupportedProtocolVersionError) identifies a modern server: the client retries with a supported version rather than falling back." — https://modelcontextprotocol.io/specification/draft/basic/versioning §Backward Compatibility
+  - Requirement: "In both cases, a recognized modern JSON-RPC error (such as UnsupportedProtocolVersionError) identifies a modern server: the client retries with a supported version rather than falling back." — https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning §Backward Compatibility
   - Current: The implementation exists (crates/turul-mcp-client/src/client.rs:371-381 parses an HTTP 400 body into a JSON-RPC code; version.rs:92 maps -32004 → FallbackTo2025), but no test exercises it end-to-end: grep for -32004 across crates/turul-mcp-client/tests/ returns nothing — only the classify_probe unit test (version.rs::unsupported_protocol_version_falls_back_to_2025) covers the code constant. The b
   - Fix: crates/turul-mcp-client/tests/bilingual_negotiation.rs — add a wiremock case: server/discover → HTTP 400 with body {"error":{"code":-32004,"data":{"supported":["2025-11-25"]}}} → client must initialize and lock V2025_11_25. Governed by ADR-030 (rev 2026-06-10 item 3) and CLAUDE.md §Test Coverage Dis
 - [x] **PAT/G1** — Client disconnect does not cancel in-flight request processing (Streamable HTTP MUST) — **FIXED 2026-06-11** (dispatch raced against `sender.closed()`; dropping the future stops work, returning sends nothing further; wire test `cancellation_2026.rs::client_disconnect_cancels_the_in_flight_request`, red-phase recorded)
-  - Requirement: "Streamable HTTP: Closing the SSE response stream is the cancellation signal. The server MUST treat a client disconnect as cancellation of that request." — https://modelcontextprotocol.io/specification/draft/basic/patterns/cancellation
+  - Requirement: "Streamable HTTP: Closing the SSE response stream is the cancellation signal. The server MUST treat a client disconnect as cancellation of that request." — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation
   - Current: crates/turul-http-mcp-server/src/streamable_http.rs:2285-2308 spawns run_middleware_and_dispatch detached from the response body; when the client disconnects, the mpsc body receiver drops but the handler keeps executing to completion (only sender.send fails at :2213-2216). No cancellation signal is plumbed to handlers — CancellationHandle (crates/turul-mcp-server/src/cancellation.rs) is wired only
   - Fix: crates/turul-http-mcp-server/src/streamable_http.rs (observe body drop / wrap dispatch in an abortable scope) + expose a cancellation signal on SessionContext in crates/turul-mcp-server. Governed by ADR-027 (2026 transport contract); needs an ADR update or new ADR section plus a wire-layer test per 
 - [x] **PAT/G2** — Request progressToken never surfaced to handlers — **FIXED 2026-06-11** (`mcp:progressToken` extension injected at the tools/call + resources/read handlers; `SessionContext::progress_token()` accessor + `notify_request_progress(progress, total)` no-op-without-token emitter; numeric tokens round-trip as JSON numbers — fixing a stringifying bridge in session.rs; wire tests `progress_2026.rs`, revert-and-fail proven)
-  - Requirement: "Progress notifications MUST only reference tokens that: Were provided in an active request; Are associated with an in-progress operation." — https://modelcontextprotocol.io/specification/draft/basic/patterns/progress
+  - Requirement: "Progress notifications MUST only reference tokens that: Were provided in an active request; Are associated with an in-progress operation." — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress
   - Current: On the 2026 path the tools/resources/prompts handlers extract only mcp:mrtr:* extensions (crates/turul-mcp-server/src/handlers/mod.rs:765-780); SessionContext has no accessor for the request's _meta.progressToken (session.rs:339-358), and handlers/mod.rs:99-106 strips progressToken from echoed meta. A tool wanting to emit progress must invent a token (the in-repo example does: tests/sse_progress_d
   - Fix: crates/turul-mcp-server/src/handlers/mod.rs (extract _meta.progressToken per request) + src/session.rs (SessionContext::progress_token() accessor; have notify_progress default to it). ADR-027 governs; add a 2026 wire test asserting the emitted notification carries the caller's token.
 - [x] **TX/GAP-2** — Closing the SSE response stream is not treated as cancellation of the request — **FIXED 2026-06-11** (same slice as PAT/G1)
@@ -863,15 +877,15 @@ in the same slice as the fix.
   - Current: Dispatch runs in a detached tokio::spawn (crates/turul-http-mcp-server/src/streamable_http.rs:2293-2423) decoupled from the HTTP connection; when the client closes the stream, the handler/tool keeps executing to completion and channel-send failures are merely logged (:2400-2402). The 'MUST NOT send further messages' half is physically satisfied (the stream is gone) but no cancellation signal reach
   - Fix: crates/turul-http-mcp-server/src/streamable_http.rs create_streaming_response — tie the dispatch future to body/connection lifetime (e.g. abort on body-drop or select against a close signal) and propagate a CancellationToken into SessionContext. Governing: ADR-027; same-slice wire test (drop the res
 - [x] **AUTH-1** — No real-HTTP coverage of the OAuth 401 challenge or PRM well-known route on the 2026 default transport path — **FIXED 2026-06-11** (new `oauth_2026.rs` suite: 401+WWW-Authenticate for missing/garbage bearers, 401-outranks-400 ordering, RFC 9728 root+path well-known routes; revert-and-fail: suppressing the WWW-Authenticate header fails 2 tests. `turul-mcp-oauth` made spec-neutral with protocol forwarding features so it can ride the server's dev-deps without tripping the ADR-029 mutex)
-  - Requirement: "Invalid or expired tokens MUST receive a HTTP 401 response"; "MCP servers MUST implement OAuth 2.0 Protected Resource Metadata (RFC 9728)" — https://modelcontextprotocol.io/specification/draft/basic/authorization (§Token Handling, §Overview #4)
+  - Requirement: "Invalid or expired tokens MUST receive a HTTP 401 response"; "MCP servers MUST implement OAuth 2.0 Protected Resource Metadata (RFC 9728)" — https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization (§Token Handling, §Overview #4)
   - Current: Implementation exists and is unit-tested (middleware.rs::test_missing_bearer_returns_401; build_http_challenge_response at crates/turul-http-mcp-server/src/streamable_http.rs:2775-2796 adds WWW-Authenticate + Cache-Control: no-store + MCP-Protocol-Version), and Lambda streaming has a transport test (turul-mcp-aws-lambda/src/handler.rs:1533-1634). But none of the nine 2026 suites (crates/turul-mcp-
   - Fix: New crates/turul-mcp-server/tests/oauth_2026.rs real-HTTP suite (Builder → handler → wire bytes per CLAUDE.md §Test Coverage Discipline #2/#3), wired into ci.yml + scripts/ci-gates.sh; governed by ADR-021/ADR-022
 - [x] **CF/GAP-CF-1** — No elicitation mode-level capability gating on the server MRTR gate — **FIXED 2026-06-11** (mode-aware gate in `input_required_to_result`; wire tests `url_mode_elicitation_requires_the_url_subcapability` / `form_mode_elicitation_passes_with_empty_capability_object`, red-phase recorded)
-  - Requirement: "Servers MUST NOT send elicitation requests with modes that are not supported by the client" and "an empty capabilities object is equivalent to declaring support for form mode only" — https://modelcontextprotocol.io/specification/draft/client/elicitation §Capabilities
+  - Requirement: "Servers MUST NOT send elicitation requests with modes that are not supported by the client" and "an empty capabilities object is equivalent to declaring support for form mode only" — https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation §Capabilities
   - Current: input_required_to_result checks only caps.elicitation.is_none() (crates/turul-mcp-server/src/handlers/mod.rs:66-68). A tool emitting InputRequest::Elicit with ElicitRequestParams::Url passes the gate even when the client declared elicitation:{} (form-only per spec) or elicitation:{form:{}} — the URL-mode request is sent to a client that never declared url support.
   - Fix: crates/turul-mcp-server/src/handlers/mod.rs (input_required_to_result): match ElicitRequestParams::Url against caps.elicitation.url, Form against form-or-empty; add -32003 wire tests for the url-vs-form-only case in crates/turul-mcp-server/tests/mrtr_2026.rs. Governed by ADR-027 (2026 spec target); 
 - [x] **CF/GAP-CF-2** — No sampling.tools gating for tool-enabled sampling input requests — **FIXED 2026-06-11** (`tool_enabled_sampling_requires_the_tools_subcapability`, red-phase recorded)
-  - Requirement: "Servers MUST NOT send tool-enabled sampling requests to Clients that have not declared support for tool use via the sampling.tools capability" — https://modelcontextprotocol.io/specification/draft/client/sampling §Tools in Sampling
+  - Requirement: "Servers MUST NOT send tool-enabled sampling requests to Clients that have not declared support for tool use via the sampling.tools capability" — https://modelcontextprotocol.io/specification/2026-07-28/client/sampling §Tools in Sampling
   - Current: The gate checks only caps.sampling.is_none() (crates/turul-mcp-server/src/handlers/mod.rs:69-70). An InputRequest::CreateMessage whose params carry tools/toolChoice passes when the client declared bare sampling:{} without the tools sub-capability (SamplingCapabilities.tools, crates/turul-mcp-protocol-2026-07-28/src/initialize.rs:113-117 — the binding even documents 'Server MUST get an error if it 
   - Fix: crates/turul-mcp-server/src/handlers/mod.rs (input_required_to_result): when InputRequest::CreateMessage params.tools/tool_choice is Some, require caps.sampling.tools; add a -32003 wire test in crates/turul-mcp-server/tests/mrtr_2026.rs. Governed by ADR-027. Optionally also gate include_context this
 - [x] **CF/GAP-CF-3** — Client surfaces MRTR input_required only on tools/call — resources/read and prompts/get mis-parse it — **FIXED 2026-06-11** (same slice as PRM/PR-2026-02 + RES-G1)
@@ -879,46 +893,46 @@ in the same slice as the fix.
   - Current: Only parse_call_tool calls input_required_outcome (crates/turul-mcp-client/src/protocol/v2026_07_28.rs:158-169). parse_read_resource (:185-190) and parse_get_prompt (:199-204) deserialize straight into ReadResourceResult/GetPromptResult, so a spec-legal input_required result from this very framework's server (emitted at crates/turul-mcp-server/src/handlers/mod.rs:830,890; wire-tested in crates/tur
   - Fix: crates/turul-mcp-client/src/protocol/v2026_07_28.rs (add input_required_outcome to the read/get parsers) and src/client.rs (retry variants for resources/read and prompts/get); e2e in crates/turul-mcp-client/tests/e2e_2026_real_server.rs. Governed by ADR-030 (bilingual client); the ADR's 2026-06-10 '
 - [x] **CF/GAP-CF-4** — 2026 default server exposes an inbound roots/list method (wrong direction; non-spec on the stateless lane) — **FIXED 2026-06-11** (registrations 2025-gated; 404 wire test)
-  - Requirement: Roots is a client feature: 'servers send an InputRequiredResult containing a roots/list request' — roots/list is server→client only in the draft; the lane-split decision (ADR-027 + ADR-029, recorded in the 2026-06-10 release-readiness review since deleted in the 0.4 docs purge — git history) is that the 2026 default path serves roots only in the forms the 2026 spec actually defines (MRTR input requests). https://modelcontextprotocol.io/specification/draft/clien
+  - Requirement: Roots is a client feature: 'servers send an InputRequiredResult containing a roots/list request' — roots/list is server→client only in the draft; the lane-split decision (ADR-027 + ADR-029, recorded in the 2026-06-10 release-readiness review since deleted in the 0.4 docs purge — git history) is that the 2026 default path serves roots only in the forms the 2026 spec actually defines (MRTR input requests). https://modelcontextprotocol.io/specification/2026-07-28/clien
   - Current: builder default-handler registration inserts roots/list unconditionally — no #[cfg(feature="protocol-2025-11-25")] guard (crates/turul-mcp-server/src/builder.rs:158, again at :1704), unlike sampling/createMessage and elicitation/create which ARE 2025-gated (:159-168). RootsHandler answers with the SERVER's own configured roots (crates/turul-mcp-server/src/handlers/mod.rs:1033-1126), reversing the 
   - Fix: crates/turul-mcp-server/src/builder.rs — gate the roots/list handler (and the roots list_changed notification handlers) behind protocol-2025-11-25 like sampling/elicitation; add a 2026-surface rejection test in stateless_2026_http_surface.rs. Governed by ADR-027 + ADR-029 lane split; record in COMPL
 - [x] **PRM/PR-2026-02** — Client cannot complete the MRTR round-trip on prompts/get — **FIXED 2026-06-11** (`get_prompt_with_input_responses` + e2e)
-  - Requirement: "Servers MAY also respond to prompts/get with an InputRequiredResult… When retrying the request, clients include inputResponses and, if provided by the server, requestState in the request parameters." — https://modelcontextprotocol.io/specification/draft/server/prompts §Getting a Prompt
+  - Requirement: "Servers MAY also respond to prompts/get with an InputRequiredResult… When retrying the request, clients include inputResponses and, if provided by the server, requestState in the request parameters." — https://modelcontextprotocol.io/specification/2026-07-28/server/prompts §Getting a Prompt
   - Current: parse_get_prompt (crates/turul-mcp-client/src/protocol/v2026_07_28.rs:199-204) does not check input_required_outcome — unlike parse_call_tool (:158-169) — so a spec-valid InputRequiredResult surfaces as a serde error (GetPromptResult requires `messages`), not McpClientError::InputRequired. No get_prompt_with_input_responses retry API exists (only call_tool_with_input_responses, client.rs:1088-1114
   - Fix: crates/turul-mcp-client/src/protocol/v2026_07_28.rs (add input_required_outcome check to parse_get_prompt) + crates/turul-mcp-client/src/client.rs (get_prompt_with_input_responses); governed by ADR-030 (bilingual client) — add a real-server test alongside mrtr_round_trip_through_the_bilingual_client
 - [x] **RES-G1** — Bilingual client cannot consume InputRequiredResult on resources/read (MRTR) — **FIXED 2026-06-11** (`read_resource_with_input_responses` + e2e)
-  - Requirement: "Servers MAY also respond to resources/read with an InputRequiredResult... When retrying the request, clients include inputResponses and, if provided by the server, requestState in the request parameters." — https://modelcontextprotocol.io/specification/draft/server/resources §Reading Resources
+  - Requirement: "Servers MAY also respond to resources/read with an InputRequiredResult... When retrying the request, clients include inputResponses and, if provided by the server, requestState in the request parameters." — https://modelcontextprotocol.io/specification/2026-07-28/server/resources §Reading Resources
   - Current: crates/turul-mcp-client/src/protocol/v2026_07_28.rs:185-190 — parse_read_resource deserializes straight into ReadResourceResult without the input_required_outcome() check that parse_call_tool performs (v2026_07_28.rs:161-166). An input_required result (no contents field) fails serde and surfaces as a deserialization error, discarding inputRequests/requestState. No retry API exists for resources/re
   - Fix: crates/turul-mcp-client/src/protocol/v2026_07_28.rs (add input_required_outcome check to parse_read_resource/parse_get_prompt) + crates/turul-mcp-client/src/client.rs (read_resource_with_input_responses retry surface); governed by ADR-030 (bilingual client) with ADR-027 as spec target; test in crate
 - [x] **TOOLS-G1** — Client MUST-level x-mcp-header tool exclusion has zero test coverage — **FIXED 2026-06-11** (`invalid_x_mcp_header_tools_are_excluded_from_tools_list`; revert-and-fail: neutering the filter fails it with both tools listed)
-  - Requirement: "Clients using the Streamable HTTP transport MUST reject tool definitions where any x-mcp-header value violates these constraints. Rejection means the client MUST exclude the invalid tool from the result of tools/list" — https://modelcontextprotocol.io/specification/draft/server/tools#x-mcp-header
+  - Requirement: "Clients using the Streamable HTTP transport MUST reject tool definitions where any x-mcp-header value violates these constraints. Rejection means the client MUST exclude the invalid tool from the result of tools/list" — https://modelcontextprotocol.io/specification/2026-07-28/server/tools#x-mcp-header
   - Current: Implemented at turul-mcp-client/src/protocol/v2026_07_28.rs:82-102 (parse_list_tools filters via scan_x_mcp_headers, tracing::warn with tool+reason), but no test anywhere serves a tools/list containing one malformed-annotation tool and asserts it is excluded while valid tools survive. An untested MUST violates CLAUDE.md §Test Coverage Discipline #2 (production-path coverage).
   - Fix: crates/turul-mcp-client (wiremock test alongside bilingual_2026_operations.rs mounting a 2026 tools/list with one invalid + one valid tool); governed by ADR-027 / ADR-030
 - [x] **UTIL/COMP-1** — McpCompletion providers are never dispatched — completion/complete always answers with hardcoded placeholder values — **FIXED 2026-06-11** (provider routing: reference-match first, can_handle fallback, priority+insertion deterministic order; red-phase recorded)
-  - Requirement: Completion page: servers "can provide contextual suggestions" for prompt/template arguments; "Servers SHOULD: Return suggestions sorted by relevance ... Validate all inputs"; Security: "Implementations MUST: Validate all completion inputs". https://modelcontextprotocol.io/specification/draft/server/utilities/completion
+  - Requirement: Completion page: servers "can provide contextual suggestions" for prompt/template arguments; "Servers SHOULD: Return suggestions sorted by relevance ... Validate all inputs"; Security: "Implementations MUST: Validate all completion inputs". https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/completion
   - Current: builder.rs:910-912 stores McpCompletion providers in self.completions, but the only read is `has_completions = !self.completions.is_empty()` (builder.rs:1582) for capability advertisement. Dispatch for completion/complete is permanently the static CompletionHandler registered in McpServerBuilder::new() (builder.rs:136-139), which ignores params and returns ["example1","example2"] (crates/turul-mcp
   - Fix: crates/turul-mcp-server: wire a completion handler that routes to registered providers (mirror the SessionAware* pattern), enforce the 100-item cap and validate_request on that path; e2e in crates/turul-mcp-server/tests/discover_stateless_2026.rs or a new completion_2026.rs. Governed by ADR-027 (202
 
 ### P2
 
 - [x] **ARCH/GAP-ARCH-1** — Client discards server-declared capabilities from server/discover — **FIXED 2026-06-11** (`DiscoveredServer` retained at probe time; `discovered_server()`/`server_capabilities()`/`server_instructions()` accessors; e2e `progress_feed_and_discovered_server_accessors`. Per-request respect on 2026 additionally rides the ack-first honored-filter protocol the client already exposes via `SubscriptionStream.honored`)
-  - Requirement: "Both parties must respect declared capabilities throughout the interaction" — https://modelcontextprotocol.io/specification/draft/architecture §Capability Negotiation
+  - Requirement: "Both parties must respect declared capabilities throughout the interaction" — https://modelcontextprotocol.io/specification/2026-07-28/architecture §Capability Negotiation
   - Current: probe_discover classifies the discover response only as Discovered vs JsonRpcError(code) (crates/turul-mcp-client/src/client.rs:362-366); the result's capabilities object is dropped. The client will issue e.g. subscriptions/listen or prompts/get regardless of whether the server advertised the feature, relying on server-side -32601/-32602 errors
   - Fix: crates/turul-mcp-client (retain DiscoverResult.capabilities on the negotiated session and gate/annotate feature calls); governed by ADR-030 (bilingual client). Architecture-page wording is lowercase-must prose, so P2 not P0; confirm desired strictness with maintainer before adding client-side gating
 - [x] **ARCH/GAP-ARCH-2** — No test asserts capabilities.tools is present in server/discover — **FIXED 2026-06-11** (`discover_advertises_registered_feature_capabilities` asserts tools + completions advertisement; the client e2e additionally asserts capabilities.tools through `server_capabilities()`)
-  - Requirement: "Implemented server features must be advertised in the server's capabilities" / "Tool invocation requires the server to declare tool capabilities" — https://modelcontextprotocol.io/specification/draft/architecture §Capability Negotiation
+  - Requirement: "Implemented server features must be advertised in the server's capabilities" / "Tool invocation requires the server to declare tool capabilities" — https://modelcontextprotocol.io/specification/2026-07-28/architecture §Capability Negotiation
   - Current: Implementation exists (crates/turul-mcp-server/src/builder.rs:1592-1615 auto-detect) but discover_stateless_2026.rs::server_discover_answers_without_a_session asserts only body["result"]["capabilities"].is_object(); only the resources.subscribe flag has a truthfulness test (subscriptions_listen_2026.rs::resources_subscribe_capability_is_advertised_truthfully)
   - Fix: crates/turul-mcp-server/tests/discover_stateless_2026.rs — extend the discover assertion to capabilities.tools/prompts/resources truthfulness; CLAUDE.md §Capabilities Truthfulness and AGENTS.md §Capability truthfulness govern
 - [x] **CHG/G4** — tools/list deterministic ordering implemented but untested at the wire — **FIXED 2026-06-11 (`wire_edges_2026.rs::tools_list_is_deterministic_paginated_and_cacheable`: two calls byte-equal, name-sorted)**
-  - Requirement: "Servers SHOULD return tools from tools/list in a deterministic order to enable client-side caching" — https://modelcontextprotocol.io/specification/draft/changelog (Minor 3)
+  - Requirement: "Servers SHOULD return tools from tools/list in a deterministic order to enable client-side caching" — https://modelcontextprotocol.io/specification/2026-07-28/changelog (Minor 3)
   - Current: crates/turul-mcp-server/src/server.rs:1576-1599 sorts tool descriptors by name on both static and registry paths, but no test asserts tools/list response ordering; only resources URI ordering is covered (crates/turul-mcp-server/src/tests/pagination_integration_tests.rs:183).
   - Fix: Add an ordering assertion to an existing 2026 real-HTTP suite (e.g. crates/turul-mcp-server/tests/stateless_2026_http_surface.rs or schema_fidelity_2026.rs); CLAUDE.md §Test Coverage Discipline #2 (production-path coverage) governs.
 - [x] **CHG/G6** — -32602 resource-not-found mapping proven only at the protocol layer, not via a real-HTTP resources/read miss — **FIXED 2026-06-11 (`wire_edges_2026.rs::nonexistent_resource_is_invalid_params_on_the_wire`)**
-  - Requirement: "Change resource not found error code from -32002 to -32602 (Invalid Params)" — https://modelcontextprotocol.io/specification/draft/changelog (Minor 6)
+  - Requirement: "Change resource not found error code from -32002 to -32602 (Invalid Params)" — https://modelcontextprotocol.io/specification/2026-07-28/changelog (Minor 6)
   - Current: Mapping implemented at crates/turul-mcp-protocol-2026-07-28/src/lib.rs:460-466 with unit tests (tests/compliance.rs error_codes module, ~:2710-2740). The server-side 2026 suites assert -32602 only for missing _meta (discover_stateless_2026.rs:237); no test posts resources/read with an unknown URI through Builder → handle_streaming and asserts -32602 wire bytes.
   - Fix: crates/turul-mcp-server/tests/error_mapping_2026.rs — add a resources/read unknown-URI case; CLAUDE.md §Test Coverage Discipline #3 (wire-layer coverage) governs.
 - [x] **DEP-GAP-1** — HTTP+SSE transport (deprecated since 2025-03-26 per SEP-2596) carries no deprecation marker and is documented as a normal option — **FIXED 2026-06-11** (`#[deprecated]` on client `SseTransport` + lib.rs/README migration notes; SEP-2596 note on the server's legacy `session_handler` module; `ServerConfig.enable_get_sse` + `get_sse()` deprecated on the 2026 lane via `cfg_attr` — POST-only endpoint, GET = 405)
-  - Requirement: Deprecated registry row: "HTTP+SSE transport — SEP-2596 — deprecated 2025-03-26 — migrate to Streamable HTTP — earliest removal: three months after SEP-2596 reaches Final"; lifecycle policy: "new implementations SHOULD NOT adopt it" (https://modelcontextprotocol.io/specification/draft/deprecated)
+  - Requirement: Deprecated registry row: "HTTP+SSE transport — SEP-2596 — deprecated 2025-03-26 — migrate to Streamable HTTP — earliest removal: three months after SEP-2596 reaches Final"; lifecycle policy: "new implementations SHOULD NOT adopt it" (https://modelcontextprotocol.io/specification/2026-07-28/deprecated)
   - Current: crates/turul-mcp-client/src/transport/sse.rs:22 defines `SseTransport` ("SSE transport for MCP client (HTTP+SSE 2024-11-05)") with no #[deprecated] attribute; turul-mcp-client/src/lib.rs:89-91 and turul-mcp-client/README.md:87-89,459-464 show it in examples with no migration note; server-side legacy path turul-http-mcp-server/src/session_handler.rs (protocol ≤2024-11-05) is likewise unmarked. The 
   - Fix: crates/turul-mcp-client/src/transport/sse.rs (add #[deprecated] pointing to Streamable HTTP / HttpTransport) + lib.rs/README doc notes; consider the same on turul-http-mcp-server/src/session_handler.rs public exports. No ADR currently governs transport deprecation — extend COMPLIANCE.md §SEP-2577 or
 - [x] **DEP-GAP-3** — No test asserts the SEP-2577 #[deprecated] markers exist — reverting Slice A'' would not fail CI — **FIXED 2026-06-11 (source tripwire `sep_2577_marker_tripwire::deprecation_markers_are_present` — reverting the markers now fails the protocol crate's tests)**
@@ -926,51 +940,51 @@ in the same slice as the fix.
   - Current: grep finds zero `deny(deprecated)` probes or compile-tests anywhere in crates/ ; tests/compliance.rs:12 sets #![allow(deprecated)] crate-wide so existing tests are insensitive to marker removal. The 21 schema @deprecated sites (draft-schema.ts) are mirrored in Rust today (verified manually this audit), but the compliance harness (src/compliance/coverage.rs) performs no schema-@deprecated ↔ Rust-#[
   - Fix: crates/turul-mcp-protocol-2026-07-28: either a small #[deny(deprecated)] doctest/compile-probe per feature (Root, SamplingMessage, LoggingLevel) or a coverage.rs parity assertion against the schema's @deprecated markers. Governed by ADR-027 (compliance tests are the contract) and CLAUDE.md §Test Cov
 - [x] **BP-2** — Server accepts spec-invalid null request IDs — **FIXED 2026-06-11 (transport rejects `"id": null` with 400 + -32600 before dispatch on both lanes; `null_request_id_is_rejected`, revert-and-fail proven. turul-rpc keeps its base-JSON-RPC Null variant; the MCP transport enforces the stricter contract)**
-  - Requirement: "Requests MUST include a string or integer ID. Unlike base JSON-RPC, the ID MUST NOT be null." — https://modelcontextprotocol.io/specification/draft/basic (§Requests)
+  - Requirement: "Requests MUST include a string or integer ID. Unlike base JSON-RPC, the ID MUST NOT be null." — https://modelcontextprotocol.io/specification/2026-07-28/basic (§Requests)
   - Current: turul-rpc-core-0.2.1/src/types.rs:13-17 — RequestId includes a Null variant accepted on deserialize, so a 2026 request with "id": null parses as a normal Request and dispatches; the response echoes the null id. Documented as intentional deviation #1 in crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md §"Intentional deviations" (upstream turul-rpc back-compat choice). The client never emits null (
   - Fix: crates/turul-http-mcp-server/src/streamable_http.rs — add a RequestId::Null rejection (−32600/−32602 + HTTP 400) on the 2026 guard path next to the _meta guard at :1598; or fix upstream in turul-rpc (its ADR-002 governs the permissive posture). Update COMPLIANCE.md deviation entry either way; ADR-02
 - [x] **BP-3** — No JSON Schema dialect validation; unsupported $schema dialects are not detected or rejected — **DISPOSITIONED 2026-06-11 (documented limitation): the framework emits 2020-12 schemas; foreign `$schema` dialects on inbound tool definitions pass through unvalidated — dialect validation requires a multi-dialect validator dependency and is application/SDK-level. Revisit with TOOLS-G2's validator decision**
-  - Requirement: "Clients and servers MUST validate schemas according to their declared or default dialect. They MUST handle unsupported dialects gracefully by returning an appropriate error indicating the dialect is not supported" and "Clients and servers SHOULD document which schema dialects they support" — https://modelcontextprotocol.io/specification/draft/basic (§JSON Schema Usage → Implementation Requirement
+  - Requirement: "Clients and servers MUST validate schemas according to their declared or default dialect. They MUST handle unsupported dialects gracefully by returning an appropriate error indicating the dialect is not supported" and "Clients and servers SHOULD document which schema dialects they support" — https://modelcontextprotocol.io/specification/2026-07-28/basic (§JSON Schema Usage → Implementation Requirement
   - Current: No JSON Schema validator dependency exists in any workspace manifest (grep 'jsonschema' over Cargo.toml files: zero hits) and no code inspects a $schema field (grep over turul-mcp-server/src and turul-mcp-client/src: zero hits). ElicitationSchema models $schema as data (Slice A5) but nothing branches on it; tool-argument checking is macro-generated typed deserialization, not dialect-aware schema e
   - Fix: crates/turul-mcp-server (elicitation/tool-schema processing path) + crates/turul-mcp-client; needs a new ADR (none currently governs schema-dialect processing — ADR-027 covers type fidelity only). Minimum slice: detect non-2020-12 $schema values and return the spec's unsupported-dialect error; docum
 - [x] **BP-4** — Missing-clientInfo and missing-protocolVersion _meta rejection branches are untested — **FIXED 2026-06-11 (`incomplete_meta_branches_are_rejected`: missing clientInfo and missing protocolVersion each → 400 + -32602)**
-  - Requirement: "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code -32602 (Invalid params). On HTTP, the response status MUST be 400 Bad Request." — https://modelcontextprotocol.io/specification/draft/basic (§General fields → _meta → Per-request protocol fields)
+  - Requirement: "A request missing any required field is malformed; the server MUST reject it with JSON-RPC error code -32602 (Invalid params). On HTTP, the response status MUST be 400 Bad Request." — https://modelcontextprotocol.io/specification/2026-07-28/basic (§General fields → _meta → Per-request protocol fields)
   - Current: All four guard branches are implemented (crates/turul-http-mcp-server/src/streamable_http.rs:1608-1650), but the real-HTTP suite covers only missing _meta entirely and missing clientCapabilities (crates/turul-mcp-server/tests/discover_stateless_2026.rs::missing_meta_is_rejected_with_invalid_params, ::incomplete_meta_missing_client_capabilities_is_rejected). The clientInfo-absent and protocolVersio
   - Fix: crates/turul-mcp-server/tests/discover_stateless_2026.rs — add two cases to assert_rejected_invalid_params (missing clientInfo, missing protocolVersion); CLAUDE.md §Test Coverage Discipline #2/#3 (production-path + wire-layer) governs
 - [x] **VER-2** — Modern-only server's errors to `initialize` do not name supported protocol versions — **FIXED 2026-06-11 (the initialize 404's error.data names supported versions; `initialize_error_names_supported_versions`)**
-  - Requirement: "A server that supports only modern versions SHOULD name the protocol versions it supports in any error it returns to an initialize request, on any transport: legacy clients have no fall-forward mechanism, and this message may be the only diagnostic they can surface to users." — https://modelcontextprotocol.io/specification/draft/basic/versioning §Backward Compatibility
+  - Requirement: "A server that supports only modern versions SHOULD name the protocol versions it supports in any error it returns to an initialize request, on any transport: legacy clients have no fall-forward mechanism, and this message may be the only diagnostic they can surface to users." — https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning §Backward Compatibility
   - Current: On a 2026-only build, a legacy client's initialize is rejected with 400 + -32020 "missing required MCP-Protocol-Version header" (crates/turul-http-mcp-server/src/streamable_http.rs:1393+), and a headed initialize gets the generic 404 + -32601 method_not_found (streamable_http.rs:1678-1700 — the block comment explicitly routes initialize there). Neither message names "2026-07-28".
   - Fix: crates/turul-http-mcp-server/src/streamable_http.rs — special-case body method == "initialize" in both the header-validation failure path and the unknown-method path to include the supported version list in the error message/data; add a test to crates/turul-mcp-server/tests/discover_stateless_2026.r
 - [x] **VER-3** — Client ignores error.data.supported on -32022 — **FIXED 2026-06-11** (probe parses `data.supported`; fallback only when 2025-11-25 is mutually supported, otherwise the abort names the server's list; classifier unit tests). Mid-session -32022 surfaces as `ServerError{code:-32022,..}` to the caller — version is locked per connection by design (ADR-030), so no mid-session renegotiation
-  - Requirement: "The client SHOULD select a mutually supported version from the supported list and retry the request, or surface an error to the user if no compatible version exists." — https://modelcontextprotocol.io/specification/draft/basic/versioning §Protocol Version Negotiation
+  - Requirement: "The client SHOULD select a mutually supported version from the supported list and retry the request, or surface an error to the user if no compatible version exists." — https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning §Protocol Version Negotiation
   - Current: probe_discover (crates/turul-mcp-client/src/client.rs:371-381) extracts only error.code; data.supported is discarded. classify_probe (version.rs:92) hardwires -32004 → FallbackTo2025, so a modern-only server whose supported list excludes 2025-11-25 receives a futile legacy initialize instead of a clean ProtocolNegotiationFailed. A -32004 on a post-connect request is surfaced as a plain error with 
   - Fix: crates/turul-mcp-client/src/version.rs + client.rs — surface data.supported into the probe decision: fall back only when "2025-11-25" is listed (or the list is absent), otherwise abort with the supported list in the error. Governed by ADR-030 §Version detection mechanism; update its revision log in 
 - [x] **PAT/G3** — Client MRTR retry API covers tools/call only — resources/read and prompts/get flows cannot be completed — **FIXED 2026-06-11** (same slice as CF/GAP-CF-3)
-  - Requirement: "Servers MAY send InputRequiredResult responses on: prompts/get, resources/read, tools/call" and the client "MUST construct the requested inputs before retrying the original request" — https://modelcontextprotocol.io/specification/draft/basic/patterns/mrtr
+  - Requirement: "Servers MAY send InputRequiredResult responses on: prompts/get, resources/read, tools/call" and the client "MUST construct the requested inputs before retrying the original request" — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr
   - Current: Only call_tool_with_input_responses exists (crates/turul-mcp-client/src/client.rs:1088-1119). No read_resource/get_prompt variant accepts inputResponses/requestState, so a bilingual-client consumer hitting input_required on those methods has no supported retry path.
   - Fix: crates/turul-mcp-client/src/client.rs (read_resource_with_input_responses / get_prompt_with_input_responses mirroring the tools/call helper) + e2e coverage in tests/e2e_2026_real_server.rs. ADR-030 (bilingual client) governs.
 - [x] **PAT/G4** — Client cannot request or observe per-request progress on the 2026 path — **FIXED 2026-06-11** (`call_tool_with_progress(name, args, progress_token, on_progress)`: token rides `_meta.progressToken`, the request goes out SSE-framed via `send_request_streaming`, progress params are handed to the callback before the final result; real-server e2e `progress_feed_and_discovered_server_accessors`)
-  - Requirement: "When a party wants to receive progress updates for a request, it includes a progressToken in the request metadata" — https://modelcontextprotocol.io/specification/draft/basic/patterns/progress
+  - Requirement: "When a party wants to receive progress updates for a request, it includes a progressToken in the request metadata" — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress
   - Current: crate turul-mcp-client's 2026 request builder (src/protocol/v2026_07_28 request_meta) never includes progressToken and no public API adds one; high-level call_tool uses JSON framing (send_request_internal), so notifications/progress on the request stream are not consumable. Transport-level SSE parsing of progress frames exists only as unit tests (src/transport/http.rs:1756-1798).
   - Fix: crates/turul-mcp-client/src/client.rs + src/protocol/v2026_07_28 (optional progressToken on request _meta; a streaming call_tool variant exposing notifications). MAY-level feature, so P2. ADR-030 governs.
 - [x] **PAT/G5** — SessionContext progress helpers are u64-only and cannot carry message — **FIXED 2026-06-11 (`notify_request_progress_with_message(progress, total, message)` carries the spec's optional message; f64 end-to-end. The u64 helpers remain as 2025-lane compat)**
-  - Requirement: "The progress and the total values MAY be floating point"; "The message field SHOULD provide relevant human readable progress information" — https://modelcontextprotocol.io/specification/draft/basic/patterns/progress
+  - Requirement: "The progress and the total values MAY be floating point"; "The message field SHOULD provide relevant human readable progress information" — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress
   - Current: notify_progress(progress: u64) and notify_progress_with_total(progress: u64, total: u64) at crates/turul-mcp-server/src/session.rs:371-424 — no f64, no message param — while the wire type is f64 with optional message (protocol ProgressNotificationParams). Float/message emission requires bypassing the documented helper via the raw broadcaster.
   - Fix: crates/turul-mcp-server/src/session.rs (f64 params + message-bearing variant; CLAUDE.md §MCP Compliance already mandates f64 progress fields).
 - [x] **PAT/G6** — No 2026-path wire tests for progress delivery, progress-stops-after-completion, or inbound notifications/cancelled — **FIXED 2026-06-11** (`progress_2026.rs` delivery + ordering tests; `cancellation_2026.rs::inbound_cancelled_notification_is_accepted_and_ignored`)
-  - Requirement: "Progress notifications MUST stop after completion" (progress page); "Invalid cancellation notifications SHOULD be ignored" (cancellation page) — https://modelcontextprotocol.io/specification/draft/basic/patterns/progress, …/cancellation
+  - Requirement: "Progress notifications MUST stop after completion" (progress page); "Invalid cancellation notifications SHOULD be ignored" (cancellation page) — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress, …/cancellation
   - Current: The only end-to-end progress test (tests/sse_progress_delivery.rs) runs in the root integration crate pinned to protocol-2025-11-25 (tests/Cargo.toml:9-18). No crates/turul-mcp-server/tests/*_2026.rs exercises notifications/progress riding a 2026 POST SSE response, the no-progress-after-final-frame ordering, or a POSTed notifications/cancelled (stateless_2026_http_surface.rs:226-250 covers notific
   - Fix: crates/turul-mcp-server/tests/ (new progress_2026.rs SSE-framed tools/call test; extend stateless_2026_http_surface.rs with a notifications/cancelled 202 case). Per CLAUDE.md §Test Coverage Discipline #2/#3 these must drain real wire bytes.
 - [x] **PAT/G7** — MRTR negative paths untested — **FIXED 2026-06-11** (`mrtr_2026.rs::input_required_with_neither_field_is_a_server_error` + `::input_required_escaping_a_non_mrtr_method_is_an_error`)
-  - Requirement: "Servers MUST include at least one of inputRequests or requestState in every InputRequiredResult"; "Servers MUST NOT send InputRequiredResult responses on any other client requests" — https://modelcontextprotocol.io/specification/draft/basic/patterns/mrtr
+  - Requirement: "Servers MUST include at least one of inputRequests or requestState in every InputRequiredResult"; "Servers MUST NOT send InputRequiredResult responses on any other client requests" — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr
   - Current: Both enforced in code (handlers/mod.rs:89-94 converts the neither-case to an error; turul-mcp-protocol-2026-07-28/src/lib.rs:495-498 maps stray McpError::InputRequired to internal_error) but no test in crates/turul-mcp-server/tests/mrtr_2026.rs exercises either rejection, so a regression would pass CI.
   - Fix: crates/turul-mcp-server/tests/mrtr_2026.rs (add a tool raising InputRequired{None,None} and assert JSON-RPC error, plus a non-MRTR method asserting no input_required result). ADR-027 governs; revert-and-fail check required per CLAUDE.md §Test Coverage Discipline #4.
 - [x] **PAT/G8** — Subscription stream lifecycle edges untested — **FIXED 2026-06-11** (concurrent-subscriptions + drop-unregisters wire tests; server-shutdown half dispositioned: teardown is socket-close, no graceful-shutdown API exists to test — see the patterns table row)
-  - Requirement: "The server tears it down (e.g., during shutdown) — it MUST close the SSE stream (HTTP)"; "A client MAY have multiple active subscriptions concurrently" — https://modelcontextprotocol.io/specification/draft/basic/patterns/subscriptions
+  - Requirement: "The server tears it down (e.g., during shutdown) — it MUST close the SSE stream (HTTP)"; "A client MAY have multiple active subscriptions concurrently" — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/subscriptions
   - Current: Streams close only with the socket/process; no explicit teardown path or test in streamable_http.rs:1838-2053. Client-side drop-closes-stream is documented (client.rs:1014-1022) but unverified server-side (connection unregistration after drop). No test opens two concurrent listen streams and demultiplexes by subscriptionId.
   - Fix: crates/turul-mcp-server/tests/subscriptions_listen_2026.rs (+ client tests/e2e_2026_real_server.rs) for drop/teardown/concurrency; if a graceful-shutdown hook is added to turul-http-mcp-server, record it against ADR-027.
 - [x] **PAT/G9** — No progress-token tracking or notification rate limiting (SHOULD-level) — **DISPOSITIONED 2026-06-11: notification rate limiting is the middleware layer's job (ADR-012 — a rate-limit middleware ships as an example); per-token tracking is inherent to the request-scoped design (the token lives in the request's session extensions and dies with it)**
-  - Requirement: "Senders and receivers SHOULD track active progress tokens"; "Both parties SHOULD implement rate limiting to prevent flooding" — https://modelcontextprotocol.io/specification/draft/basic/patterns/progress
+  - Requirement: "Senders and receivers SHOULD track active progress tokens"; "Both parties SHOULD implement rate limiting to prevent flooding" — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/progress
   - Current: Neither crates/turul-http-mcp-server (progress forwarding, streamable_http.rs:2156-2241) nor crates/turul-mcp-client (transport/http.rs SSE parsing) tracks active tokens or throttles notification emission/consumption.
   - Fix: crates/turul-http-mcp-server/src/streamable_http.rs (server emit side, naturally combined with G2's token plumbing) and crates/turul-mcp-client transport. SHOULD-level; defer behind G1/G2.
 - [x] **TX/GAP-3** — X-Accel-Buffering: no missing on per-request POST SSE responses — **FIXED 2026-06-11 (`X-Accel-Buffering: no` on streaming POST responses — nginx-family proxies no longer buffer SSE frames)**
@@ -986,7 +1000,7 @@ in the same slice as the fix.
   - Current: Client exclusion implemented at crates/turul-mcp-client/src/protocol/v2026_07_28.rs:79-103 (filter + tracing::warn) — no test serves a malformed annotation and asserts the tool is dropped. Server mid-stream notification relation holds by construction (per-request ephemeral session, streamable_http.rs:2157-2283) — no 2026-lane wire test drains a POST SSE stream and asserts notification-before-final
   - Fix: crates/turul-mcp-client/tests/ (wiremock tools/list with an invalid x-mcp-header → assert exclusion + bindings absent); crates/turul-mcp-server/tests/ (progress-emitting tool over Accept: text/event-stream → assert notification frames precede final frame). Governing: CLAUDE.md §Test Coverage Discipl
 - [x] **TX/GAP-6** — Legacy-fallback classification keys on a single error code — **FIXED 2026-06-11** (structured -32602 now also classifies FallbackTo2025 per "commonly -32601 or -32602"; the prior -32602→Abort unit pin was migrated WITH the contract after verifying the spec text)
-  - Requirement: "The fallback MUST NOT be keyed to one specific error code: legacy servers respond to unknown pre-initialize requests with implementation-defined errors (commonly -32601 or -32602) or not at all." — https://modelcontextprotocol.io/specification/draft/basic/transports/stdio §Backward Compatibility (same era-detection contract referenced from streamable-http §Backward Compatibility)
+  - Requirement: "The fallback MUST NOT be keyed to one specific error code: legacy servers respond to unknown pre-initialize requests with implementation-defined errors (commonly -32601 or -32602) or not at all." — https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/stdio §Backward Compatibility (same era-detection contract referenced from streamable-http §Backward Compatibility)
   - Current: classify_probe (crates/turul-mcp-client/src/version.rs:78-116): FallbackTo2025 fires only on JsonRpcError(-32601) (plus -32004 as the modern retry signal); any other JSON-RPC error — including a legacy server answering -32602 — yields Abort. Bare 404/405 fallback is opt-in (allow_legacy_gateway_fallback). The abort-on-ambiguity posture is a deliberate anti-downgrade defense (tested bilingual_negot
   - Fix: crates/turul-mcp-client/src/version.rs classify_probe (+ bilingual_negotiation.rs cases). Decision needed: either extend the fallback set (at minimum -32602) or record the stricter-than-spec posture as a documented deviation in ADR-030's revision log. Governing: ADR-030 (bilingual client).
 - [x] **TX/GAP-7** — Client does not auto-refresh tools/list and retry after an Mcp-Param rejection — **FIXED 2026-06-11** (call_tool's 2026 arm: on HeaderMismatch (-32020), one `refresh_tools()` + one retry with recomputed Mcp-Param headers; a second HeaderMismatch surfaces; test bilingual_negotiation.rs::call_tool_recovers_from_header_mismatch_with_one_refresh_and_retry, commit 4690e007)
@@ -994,27 +1008,27 @@ in the same slice as the fix.
   - Current: On a binding-cache miss the call goes out without Mcp-Param-* headers (crates/turul-mcp-client/src/client.rs:906-922); on a HeaderMismatch (-32020) rejection the client now refreshes tools/list once and retries with recomputed headers (client.rs:1062-1074, commit 4690e007) — the prior "no automatic list_tools()+retry exists" claim is stale.
   - Fix: crates/turul-mcp-client/src/client.rs call_tool 2026 path — on -32001 HeaderMismatch with empty binding cache, refresh bindings once and retry; or document the application-retry contract in ADR-030. SHOULD-level, optional for 0.4.0.
 - [x] **AUTH-2** — 403 insufficient_scope challenge is unimplementable with shipped components — **FIXED 2026-06-11** (`OAuthResourceMiddleware::with_required_scopes`: missing scope → 403 + `error="insufficient_scope"` challenge in the pre-session phase; unit tests with minted HS256 tokens against an injected JWKS cache)
-  - Requirement: "the server SHOULD respond with HTTP 403 Forbidden ... WWW-Authenticate header with error=\"insufficient_scope\", scope, resource_metadata" — https://modelcontextprotocol.io/specification/draft/basic/authorization (§Runtime Insufficient Scope Errors)
+  - Requirement: "the server SHOULD respond with HTTP 403 Forbidden ... WWW-Authenticate header with error=\"insufficient_scope\", scope, resource_metadata" — https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization (§Runtime Insufficient Scope Errors)
   - Current: OAuthResourceMiddleware never inspects TokenClaims.scope (crates/turul-mcp-oauth/src/middleware.rs:62-93). The ADR-022 P2c 'tool-level 403' pattern cannot work: HttpChallenge is only honored in the pre-session phase; returned from any post-session middleware it panics the unreachable!() guard (streamable_http.rs:2749-2751, session_handler.rs:1314-1316), and tools can only return McpError. No examp
   - Fix: crates/turul-mcp-oauth — optional scope-requirement check on OAuthResourceMiddleware (pre-session, method→required-scopes map) emitting http_challenge(403, ...error="insufficient_scope"...); update ADR-021/ADR-022 P2c which currently documents an unreachable pattern
 - [x] **AUTH-3** — Malformed Authorization header mapped to 401-as-missing instead of 400 — **FIXED 2026-06-11** (`RequestContext::authorization_malformed` set by both transports; middleware answers 400 + `error="invalid_request"`; wire test `oauth_2026.rs::malformed_authorization_header_gets_400_invalid_request`, red-phase recorded)
-  - Requirement: "Servers MUST return appropriate HTTP status codes ... 400 Bad Request: Malformed authorization request" — https://modelcontextprotocol.io/specification/draft/basic/authorization (§Error Handling); RFC 6750 §3.1 invalid_request → 400
+  - Requirement: "Servers MUST return appropriate HTTP status codes ... 400 Bad Request: Malformed authorization request" — https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization (§Error Handling); RFC 6750 §3.1 invalid_request → 400
   - Current: The hardened parser (crates/turul-http-mcp-server/src/middleware/bearer.rs:22, extract_bearer_token) rejects malformed Bearer values (control chars, multi-token) by returning None, so the middleware emits a bare 401 challenge with no error param (turul-mcp-oauth/src/middleware.rs:68-70) — indistinguishable from a missing header. No 400/invalid_request path exists for malformed credentials.
   - Fix: crates/turul-http-mcp-server/src/middleware/bearer.rs (distinguish absent vs malformed) + turul-mcp-oauth/src/middleware.rs (400 + error="invalid_request" for malformed); ADR-021 D6 governs the parser contract
 - [x] **AUTH-5** — No guard against offline_access in advertised scopes — **FIXED 2026-06-11** (`with_scopes` filters `offline_access` with a warning; unit test `offline_access_is_filtered_from_scopes`)
-  - Requirement: "MCP Servers (Protected Resources) SHOULD NOT include offline_access in WWW-Authenticate scope or Protected Resource Metadata scopes_supported" — https://modelcontextprotocol.io/specification/draft/basic/authorization (§Refresh Tokens)
+  - Requirement: "MCP Servers (Protected Resources) SHOULD NOT include offline_access in WWW-Authenticate scope or Protected Resource Metadata scopes_supported" — https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization (§Refresh Tokens)
   - Current: ProtectedResourceMetadata::with_scopes (crates/turul-mcp-oauth/src/metadata.rs:112-115) accepts any scope string; build_challenge (middleware.rs:40-53) echoes the full set into WWW-Authenticate. An operator configuring offline_access silently violates the SHOULD NOT — no validation, no doc warning, no test.
   - Fix: crates/turul-mcp-oauth/src/metadata.rs — reject or warn on offline_access in with_scopes + doc note; ADR-021 D9 revision log
 - [x] **AUTH-6** — 2025-lane sessionless-ping bypass skips pre-session OAuth verification — **FIXED 2026-06-11** (ping bypass moved AFTER the pre-session auth phase — it waives the session requirement only, matching the `allow_unauthenticated_ping` doc contract; 2025-lane wire test `tests/ping_auth_2025.rs` wired into gate_opt_in_2025 + ci.yml; revert-and-fail proven by stashing the reorder)
-  - Requirement: "MCP servers that implement authorization MUST verify all inbound requests" — https://modelcontextprotocol.io/specification/draft/basic/security_best_practices (§Session Hijacking Mitigation)
+  - Requirement: "MCP servers that implement authorization MUST verify all inbound requests" — https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices (§Session Hijacking Mitigation)
   - Current: On the protocol-2025-11-25 lane with allow_unauthenticated_ping=true (default), a sessionless ping is dispatched via run_middleware_and_dispatch BEFORE the pre-session auth phase runs (streamable_http.rs:~1226-1268 precedes the auth phase at 1271-1337), so OAuthResourceMiddleware never sees it. The 2026 default path is unaffected (is_sessionless_ping hard-coded false under protocol-2026-07-28, str
   - Fix: crates/turul-http-mcp-server/src/streamable_http.rs — run execute_before_session before the ping fast-path (or document allow_unauthenticated_ping=false as mandatory when auth middleware is installed); ADR-021 D4 governs the two-phase ordering. 2025 lane only
 - [x] **AUTH-7** — Session IDs not bound to user identity (2025 lane) — **DISPOSITIONED 2026-06-11 (by design, no code change)**: ADR-021 D2 deliberately keeps auth claims request-scoped; the 2026 default lane has no client-visible sessions (moot); on the 2025 lane, deployments needing binding implement it in middleware (store `claims.sub` in session state on first request via `SessionInjection`, reject mismatches subsequently — the claims extension provides the materials). A framework-level binding would change the session-storage key format for every backend, which the SHOULD does not warrant for a legacy lane
-  - Requirement: "MCP servers SHOULD bind session IDs to user-specific information ... Use a key format like <user_id>:<session_id>" — https://modelcontextprotocol.io/specification/draft/basic/security_best_practices (§Session Hijacking Mitigation)
+  - Requirement: "MCP servers SHOULD bind session IDs to user-specific information ... Use a key format like <user_id>:<session_id>" — https://modelcontextprotocol.io/specification/2026-07-28/basic/security_best_practices (§Session Hijacking Mitigation)
   - Current: Sessions and queued events are keyed by session_id alone across turul-mcp-session-storage and StreamManager; auth claims are deliberately request-scoped and never joined to the session key (ADR-021 D2, middleware.rs:85-89). A guessed session ID plus a valid (but different-user) bearer would be accepted on the 2025 lane. Moot on the 2026 default path — no client-visible session IDs exist.
   - Fix: crates/turul-mcp-server (SessionManager) + turul-mcp-session-storage — optional claims-derived binding (e.g. sub) checked on session attach; needs an ADR amendment to ADR-021 D2 since it intersects the request-scoped-auth invariant. 2025 lane only; low priority if the lane retires before implementat
 - [x] **CF/GAP-CF-5** — DeclaredCapabilities cannot express sub-capabilities — **FIXED 2026-06-11** (`elicitation_url`, `sampling_tools`, `sampling_context` map into `elicitation.url`/`sampling.tools`/`sampling.context` in every request's `_meta`; unit test `sub_capabilities_map_into_request_meta`)
-  - Requirement: "capabilities: { elicitation: { form: {}, url: {} } }" / "sampling: { tools: {} }" — mode/sub-capability declarations are how a client opts into URL elicitation and tool-enabled sampling. https://modelcontextprotocol.io/specification/draft/client/elicitation §Capabilities; .../client/sampling §Capabilities
+  - Requirement: "capabilities: { elicitation: { form: {}, url: {} } }" / "sampling: { tools: {} }" — mode/sub-capability declarations are how a client opts into URL elicitation and tool-enabled sampling. https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation §Capabilities; .../client/sampling §Capabilities
   - Current: DeclaredCapabilities is three booleans (crates/turul-mcp-client/src/config.rs:43-50); request_meta maps them to empty Default capability objects (crates/turul-mcp-client/src/protocol/v2026_07_28.rs:23-32). elicitation:true wires {} (form-only per spec); there is no way for an application to declare url mode or sampling.tools/context, so a spec-honest server will never send URL-mode elicitation or 
   - Fix: crates/turul-mcp-client/src/config.rs (structured DeclaredCapabilities with form/url and tools/context sub-flags) + src/protocol/v2026_07_28.rs + src/session.rs::create_client_capabilities (2025 leg). Governed by ADR-030.
 - [x] **CF/GAP-CF-6** — Roots and sampling arms of the -32003 capability gate are untested; no wire e2e for ListRoots/CreateMessage input requests — **FIXED 2026-06-11 (`roots_and_sampling_capability_arms_are_gated`: undeclared → 400 -32003, declared → input_required, for both arms)**
@@ -1022,27 +1036,27 @@ in the same slice as the fix.
   - Current: Only the elicitation arm is exercised end-to-end (undeclared_capability_is_rejected_with_32003 and resources_read_capability_gate_applies, crates/turul-mcp-server/tests/mrtr_2026.rs:191,460). The InputRequest::ListRoots / InputRequest::CreateMessage match arms (crates/turul-mcp-server/src/handlers/mod.rs:69-73) have zero production-path coverage; no e2e drives a roots/list or sampling/createMessag
   - Fix: crates/turul-mcp-server/tests/mrtr_2026.rs (gate + round-trip tests per variant) and crates/turul-mcp-client/tests/e2e_2026_real_server.rs. Per CLAUDE.md §Test Coverage Discipline #2/#3 (production-path + wire-layer) — governed by ADR-027.
 - [x] **CF/GAP-CF-7 — WITHDRAWN (obsolete)**: `notifications/elicitation/complete` was removed from the draft (upstream `0b7f2e4c`, 2026-07-02 re-vendor); the 2026 protocol crate correctly has no binding, so there is nothing to emit or handle. The original entry is retained below for history. ~~FIXED 2026-06-11 (server emission helper `SessionContext::notify_elicitation_complete(elicitation_id)` — rides the initiating request's stream so the only-to-initiator MUST holds by construction. Client-side ID bookkeeping is application-level: the client surfaces notifications verbatim)**
-  - Requirement: Servers "MAY send a notifications/elicitation/complete notification ... MUST only send to the client that initiated ... MUST include the elicitationId"; "Clients MUST ignore notifications referencing unknown or already-completed IDs" — https://modelcontextprotocol.io/specification/draft/client/elicitation §Completion Notifications
+  - Requirement: Servers "MAY send a notifications/elicitation/complete notification ... MUST only send to the client that initiated ... MUST include the elicitationId"; "Clients MUST ignore notifications referencing unknown or already-completed IDs" — https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation §Completion Notifications
   - Current: ElicitationCompleteNotification exists with correct method string and required elicitationId (crates/turul-mcp-protocol-2026-07-28/src/notifications.rs:441-470, unit test :803). No code in turul-mcp-server, turul-http-mcp-server, or turul-mcp-client references it (grep for elicitation/complete returns only the protocol crate). The 2026 server has no API for a tool to fire it through subscriptions/
   - Fix: Server: an emission helper on SessionContext routed through the SessionManager event bus (CLAUDE.md §Notification Persistence Architecture); client: at minimum document the host-app obligation, ideally track outstanding elicitationIds from surfaced URL-mode input requests. Governed by ADR-027; clien
 - [x] **CF/GAP-CF-9** — No enforcement of sampling tool_use/tool_result message constraints — **DISPOSITIONED 2026-06-11: tool_use/tool_result message-shape constraints belong to the SEP-2577-deprecated sampling surface; the framework passes application-constructed CreateMessage params through verbatim and the MRTR capability gate (sampling.tools) already blocks tool-enabled sampling against non-declaring clients. Constraint validation deferred with the deprecation horizon**
-  - Requirement: "a user message containing tool results MUST contain ONLY tool results"; "every assistant message containing ToolUseContent blocks MUST be followed by a user message consisting entirely of ToolResultContent blocks, with each tool use matched by a corresponding tool result"; Security #6 — https://modelcontextprotocol.io/specification/draft/client/sampling §Message Content Constraints
+  - Requirement: "a user message containing tool results MUST contain ONLY tool results"; "every assistant message containing ToolUseContent blocks MUST be followed by a user message consisting entirely of ToolResultContent blocks, with each tool use matched by a corresponding tool result"; Security #6 — https://modelcontextprotocol.io/specification/2026-07-28/client/sampling §Message Content Constraints
   - Current: SamplingMessageContent::Multiple is an unconstrained Vec mixing text/image/audio/tool_use/tool_result (crates/turul-mcp-protocol-2026-07-28/src/sampling.rs:191-274); no validation helper or constructor enforces the only-tool-results rule or toolUseId pairing. Server authors building multi-turn sampling MRTR loops get no framework support for these MUSTs and no test covers an invalid sequence.
   - Fix: Validation helper in turul-mcp-builders (per Protocol Crate Purity); unit tests against the spec's invalid-sequence examples. Low urgency because Sampling is SEP-2577-deprecated and the framework never constructs these messages itself — but the types are shipped and the MUST is on servers built with
 - [x] **DISC-1** — Client ignores DiscoverResult body — **FIXED 2026-06-11** (same slice as ARCH/GAP-ARCH-1: body parsed into `DiscoveredServer` incl. supportedVersions/instructions; e2e asserts instructions and supportedVersions round-trip)
-  - Requirement: "supportedVersions ... The client should choose a version from this list for use in subsequent requests" + "instructions ... can be used by clients to improve an LLM's understanding of available tools" — https://modelcontextprotocol.io/specification/draft/server/discover
+  - Requirement: "supportedVersions ... The client should choose a version from this list for use in subsequent requests" + "instructions ... can be used by clients to improve an LLM's understanding of available tools" — https://modelcontextprotocol.io/specification/2026-07-28/server/discover
   - Current: crates/turul-mcp-client/src/client.rs:364 classifies any body with a `result` key as DiscoverProbe::Discovered without parsing it; :288 and :312-315 then lock V2026_07_28 unconditionally. DiscoverResult.supportedVersions, .capabilities, and .instructions are never read or exposed to client consumers.
   - Fix: crates/turul-mcp-client/src/client.rs (probe_discover → parse DiscoverResult, intersect supportedVersions, store server capabilities/instructions). Governed by ADR-030 (bilingual client); ADR-027 amendment (d) names bilingual round-trip as a publication gate.
 - [x] **DISC-4** — instructions production path (builder → DiscoverHandler → wire) has no test — **FIXED 2026-06-11 (client e2e `progress_feed_and_discovered_server_accessors` asserts the builder-set instructions round-trip through DiscoverHandler to the wire)**
-  - Requirement: DiscoverResult.instructions (optional): "Natural-language guidance for LLMs on how to use this server effectively" — https://modelcontextprotocol.io/specification/draft/server/discover
+  - Requirement: DiscoverResult.instructions (optional): "Natural-language guidance for LLMs on how to use this server effectively" — https://modelcontextprotocol.io/specification/2026-07-28/server/discover
   - Current: Plumbed end-to-end (builder.rs:335-337 → server.rs:1459-1461 → discover.rs:127-130) but only the protocol-crate unit test (discover.rs::discover_result_serializes_instructions_when_present) covers serialization; no real-HTTP test builds a server with .instructions(...) and asserts the field in the server/discover response — violates CLAUDE.md §Test Coverage Discipline #2 (production-path coverage)
   - Fix: crates/turul-mcp-server/tests/discover_stateless_2026.rs — add .instructions() to the fixture server and assert result.instructions. ADR-027 governs.
 - [x] **PRM/PR-2026-01** — prompts/list drops declared title, icons, and _meta from prompt descriptors — **FIXED 2026-06-11 (prompts/list carries title, icons, and _meta; `prompt_descriptors_and_error_codes`)**
-  - Requirement: "A prompt definition includes: name… title: Optional human-readable name of the prompt for display purposes… icons: Optional array of icons for display in user interfaces" — https://modelcontextprotocol.io/specification/draft/server/prompts §Data Types; schema `Prompt extends BaseMetadata, Icons` (draft-schema.ts:1514)
+  - Requirement: "A prompt definition includes: name… title: Optional human-readable name of the prompt for display purposes… icons: Optional array of icons for display in user interfaces" — https://modelcontextprotocol.io/specification/2026-07-28/server/prompts §Data Types; schema `Prompt extends BaseMetadata, Icons` (draft-schema.ts:1514)
   - Current: PromptsListHandler rebuilds each descriptor as Prompt::new(p.name()) + description + arguments only (crates/turul-mcp-server/src/handlers/mod.rs:291-305), discarding title/icons/_meta even though every registered McpPrompt already provides them via PromptDefinition::to_prompt() (crates/turul-mcp-builders/src/traits/prompt_traits.rs:205-214). A user-set prompt title or icon never reaches the wire
   - Fix: crates/turul-mcp-server/src/handlers/mod.rs (use p.to_prompt() instead of manual reconstruction); framework behavior, no ADR governs — per CLAUDE.md §Test Coverage Discipline a regression test on the prompts/list wire is required in the same slice
 - [x] **PRM/PR-2026-04** — No 2026-path wire test for prompts/get error codes (-32602 unknown prompt / missing required argument) — **FIXED 2026-06-11 (unknown prompt → -32602 pinned in `prompt_descriptors_and_error_codes`)**
-  - Requirement: "Servers SHOULD return standard JSON-RPC errors for common failure cases: Invalid prompt name: -32602… Missing required arguments: -32602" — https://modelcontextprotocol.io/specification/draft/server/prompts §Error Handling
+  - Requirement: "Servers SHOULD return standard JSON-RPC errors for common failure cases: Invalid prompt name: -32602… Missing required arguments: -32602" — https://modelcontextprotocol.io/specification/2026-07-28/server/prompts §Error Handling
   - Current: Mapping is implemented (handlers/mod.rs:425-443 → McpError → invalid_params -32602 via lib.rs:438/443-450/469-471) but the only coverage is handler-unit-level in the 2025-pinned regression crate (tests/prompts/tests/prompts_endpoints_integration.rs::test_prompts_get_nonexistent_prompt asserts the McpError variant, not the wire code). error_mapping_2026.rs covers only unknown-method 404; no 2026 re
   - Fix: crates/turul-mcp-server/tests/error_mapping_2026.rs (add prompts/get cases); CLAUDE.md §Test Coverage Discipline #3 (wire-layer coverage) is the governing rule
 - [x] **PRM/PR-2026-05** — PromptAnnotations type in the 2026 protocol crate has no schema counterpart — **FIXED 2026-06-11 (PromptAnnotations REMOVED from the 2026 protocol crate — no schema counterpart, protocol-purity violation; the type now lives in turul-mcp-builders as an explicitly framework-side display hint)**
@@ -1066,19 +1080,19 @@ in the same slice as the fix.
   - Current: builder.rs:1110 (with_resources) sets list_changed=Some(has_resources) — i.e. true for any static server with resources — which build() then unconditionally overwrites to Some(false) at builder.rs:1630-1634. Net wire value is truthful (false), but the intermediate value is drift that would advertise untruthfully if the build() overwrite is ever reordered. Relatedly, 2026 real-server pagination of 
   - Fix: crates/turul-mcp-server/src/builder.rs (make with_resources set Some(false) or derive from an actual dynamic-source flag); add a paginated resources/list case to crates/turul-mcp-server/tests/discover_stateless_2026.rs
 - [x] **TOOLS-G2** — Client performs no structuredContent validation against outputSchema — **DISPOSITIONED 2026-06-11 (deliberate)**: full JSON Schema 2020-12 validation would add a validator dependency to the published client for a SHOULD; the client exposes both the raw `structuredContent` and the cached `outputSchema`, so applications that need validation can apply their validator of choice. Revisit if a workspace-level schema validator lands
-  - Requirement: Clients SHOULD "validate structured results against this schema" and "Follow the $ref resolution requirements when validating tool inputs and outputs against inputSchema and outputSchema" — https://modelcontextprotocol.io/specification/draft/server/tools#output-schema and #security-considerations
+  - Requirement: Clients SHOULD "validate structured results against this schema" and "Follow the $ref resolution requirements when validating tool inputs and outputs against inputSchema and outputSchema" — https://modelcontextprotocol.io/specification/2026-07-28/server/tools#output-schema and #security-considerations
   - Current: parse_call_tool (turul-mcp-client/src/protocol/v2026_07_28.rs:158-169) deserializes the result envelope only; the cached tool outputSchema is never used for JSON Schema 2020-12 validation of structuredContent.
   - Fix: crates/turul-mcp-client (opt-in validation hook; needs a 2020-12 validator dep — weigh cost per CLAUDE.md §Simple Solutions First); ADR-030 governs client behavior
 - [x] **TOOLS-G3** — Tool name format constraints unenforced (server and client) — **FIXED 2026-06-11 (registration-time validation `tool_name_violation` warns on length/charset violations — SHOULD-level, warn not error; unit-tested)**
-  - Requirement: "Tool names SHOULD be between 1 and 128 characters"; "the only allowed characters SHOULD be: A-Z a-z 0-9 _ - ."; "SHOULD NOT contain spaces, commas" — https://modelcontextprotocol.io/specification/draft/server/tools#tool-names
+  - Requirement: "Tool names SHOULD be between 1 and 128 characters"; "the only allowed characters SHOULD be: A-Z a-z 0-9 _ - ."; "SHOULD NOT contain spaces, commas" — https://modelcontextprotocol.io/specification/2026-07-28/server/tools#tool-names
   - Current: No length/charset validation at registration (turul-mcp-server/src/builder.rs .tool(), server.rs:1473 HashMap keying) nor on the client parse path. A tool named "my tool, v2" registers and lists without warning.
   - Fix: crates/turul-mcp-server builder registration (warn or reject) and/or a shared validator in turul-mcp-protocol-2026-07-28 (spec-anchored, so protocol-crate-purity-compatible); ADR-027
 - [x] **TOOLS-G4** — Unknown-tool → -32602 verified only at protocol-crate unit level — **FIXED 2026-06-11 (`unknown_tool_is_invalid_params_on_the_wire`)**
-  - Requirement: Protocol errors for "Unknown tool" are standard JSON-RPC errors with code -32602 (2026 change from -32002) — https://modelcontextprotocol.io/specification/draft/server/tools#error-handling
+  - Requirement: Protocol errors for "Unknown tool" are standard JSON-RPC errors with code -32602 (2026 change from -32002) — https://modelcontextprotocol.io/specification/2026-07-28/server/tools#error-handling
   - Current: Mapping exists (turul-mcp-protocol-2026-07-28/src/lib.rs:460-465) and is unit-tested (tests/compliance.rs:2718-2731), but no 2026 real-HTTP test issues tools/call with a nonexistent tool name and asserts the wire error code/status (error_mapping_2026.rs covers unknown METHODS only).
   - Fix: crates/turul-mcp-server/tests/error_mapping_2026.rs (add unknown-tool case); CLAUDE.md §Test Coverage Discipline #3 (wire-layer)
 - [x] **TOOLS-G5** — notifications/tools/list_changed delivery on a 2026 listen stream untested — **FIXED 2026-06-11** (`concurrent_subscriptions_receive_their_own_subsets` pins delivery + subscriptionId stamping through the same `broadcast_to_all_sessions` pipeline `ToolRegistry` uses; the registry→broadcast call itself is unit-covered in tool_registry.rs)
-  - Requirement: Servers that declared listChanged SHOULD send a notification to clients with a subscriptions/listen stream with toolsListChanged: true — https://modelcontextprotocol.io/specification/draft/server/tools#list-changed-notification
+  - Requirement: Servers that declared listChanged SHOULD send a notification to clients with a subscriptions/listen stream with toolsListChanged: true — https://modelcontextprotocol.io/specification/2026-07-28/server/tools#list-changed-notification
   - Current: Filter and broadcast are implemented (turul-http-mcp-server/src/streamable_http.rs:1935,1999; turul-mcp-server/src/tool_registry.rs:192-203) and the ACK honoring toolsListChanged is tested (subscriptions_listen_2026.rs::listen_ack_omits_unsupported_types), but no test triggers a tool-set change and asserts notifications/tools/list_changed arrives on the toolsListChanged stream (the delivery test c
   - Fix: crates/turul-mcp-server/tests/subscriptions_listen_2026.rs (dynamic-tools feature variant of listen_acks_first_then_delivers_only_requested_types)
 - [x] **TOOLS-G6** — Mcp-Param mismatch error messages contain embedded whitespace runs — **FIXED 2026-06-11 (all four embedded-whitespace runs collapsed in the Mcp-Param mismatch / annotation-warning messages)**
@@ -1086,43 +1100,43 @@ in the same slice as the fix.
   - Current: Wrapped Rust string literals leak ~38-space runs into wire error messages, e.g. "header omitted but the parameter is present in the request body" — turul-mcp-server/src/server.rs:1938, :1954, :1960, :1991.
   - Fix: crates/turul-mcp-server/src/server.rs (use \ line-continuations or concat!); trivial fix, patch-level
 - [x] **TOOLS-G7** — tools/list deterministic ordering, pagination, and cacheable fields untested on the 2026 server wire path — **FIXED 2026-06-11 (`tools_list_is_deterministic_paginated_and_cacheable`: determinism, sorted order, limit+cursor walk visiting every tool once, ttlMs/cacheScope, invalid cursor → -32602)**
-  - Requirement: "Servers SHOULD return tools in a deterministic order"; tools/list "supports pagination and caching" (ttlMs/cacheScope required by CacheableResult) — https://modelcontextprotocol.io/specification/draft/server/tools#capabilities and #listing-tools
+  - Requirement: "Servers SHOULD return tools in a deterministic order"; tools/list "supports pagination and caching" (ttlMs/cacheScope required by CacheableResult) — https://modelcontextprotocol.io/specification/2026-07-28/server/tools#capabilities and #listing-tools
   - Current: Sort implemented (server.rs:1588/:1599, tool_registry.rs:158); cursor pagination implemented (server.rs:1611-1657); ttlMs/cacheScope serialized as required fields (tools.rs:313-317, unit-tested in protocol compliance.rs:1416-1469). But the *_2026.rs HTTP suites assert none of: ordering stability, cursor/nextCursor round-trip, or ttlMs/cacheScope presence on tools/list (resources/prompts list DO ge
   - Fix: crates/turul-mcp-server/tests/discover_stateless_2026.rs (extend tools_list_advertises_output_schema or add a multi-tool pagination/ordering/cache test)
 - [x] **UTIL/COMP-2** — completion/complete reachable on servers that do not advertise the completions capability (no -32601) — **FIXED 2026-06-11 (completion/complete is no longer a default handler — registered only by with_completion()/providers; an unconfigured server answers 404 + -32601; `completion_unsupported_is_method_not_found`; default handler counts migrated)**
-  - Requirement: "Servers SHOULD return standard JSON-RPC errors for common failure cases: Method not found: -32601 (Capability not supported)" — completion spec §Error Handling. https://modelcontextprotocol.io/specification/draft/server/utilities/completion
+  - Requirement: "Servers SHOULD return standard JSON-RPC errors for common failure cases: Method not found: -32601 (Capability not supported)" — completion spec §Error Handling. https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/completion
   - Current: builder.rs:136-139 registers the placeholder CompletionHandler unconditionally, so a default server (capabilities.completions absent) answers completion/complete with HTTP 200 placeholder values instead of -32601.
   - Fix: crates/turul-mcp-server/src/builder.rs — register the completion route only when providers/with_completion() are configured (same conditional pattern as resources/templates/list). ADR-027 governs.
 - [x] **UTIL/COMP-3** — Live completion path performs zero input validation (invalid prompt name / missing argument accepted) — **FIXED 2026-06-11** (same slice as UTIL/COMP-1: typed parse → -32602, ref-literal validation, provider validate_request)
-  - Requirement: "Invalid prompt name: -32602 (Invalid params); Missing required arguments: -32602" (SHOULD) and "Implementations MUST: Validate all completion inputs" — completion spec §Error Handling / §Security. https://modelcontextprotocol.io/specification/draft/server/utilities/completion
+  - Requirement: "Invalid prompt name: -32602 (Invalid params); Missing required arguments: -32602" (SHOULD) and "Implementations MUST: Validate all completion inputs" — completion spec §Error Handling / §Security. https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/completion
   - Current: handlers/mod.rs:213 takes `_params` and never deserializes CompleteRequestParams, so requests with a nonexistent prompt name, an unknown ref type, or no argument at all get 200 + placeholder values (only the generic 2026 _meta gate at streamable_http.rs:1598-1647 runs). Resolves together with COMP-1 if the new handler parses CompleteRequestParams via extract_params (which already yields -32602 on 
   - Fix: crates/turul-mcp-server completion handler (same slice as COMP-1).
 - [x] **UTIL/LOG-1** — No test for the MUST NOT delivery of notifications/message on listen streams; no test for invalid logLevel → -32602 — **FIXED 2026-06-11** (listen-exclusion asserted in the concurrent-subscriptions test; `unrecognized_log_level_is_rejected_with_32602`)
-  - Requirement: "the server MUST NOT deliver it on a subscriptions/listen stream or on any stream other than the one carrying the response" and "If the io.modelcontextprotocol/logLevel value ... is not a recognized log level, the server SHOULD reject that request with ... -32602". https://modelcontextprotocol.io/specification/draft/server/utilities/logging
+  - Requirement: "the server MUST NOT deliver it on a subscriptions/listen stream or on any stream other than the one carrying the response" and "If the io.modelcontextprotocol/logLevel value ... is not a recognized log level, the server SHOULD reject that request with ... -32602". https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/logging
   - Current: Both behaviors are implemented: the listen-stream filter's `_ => false` arm excludes notifications/message (crates/turul-http-mcp-server/src/streamable_http.rs:1998-2015), and an unrecognized level fails typed CallToolRequestParams parsing → McpError::InvalidParameters → -32602 (param_extraction.rs:20-26, lib.rs:438). Neither has a test: subscriptions_listen_2026.rs never emits a log message durin
   - Fix: crates/turul-mcp-server/tests/subscriptions_listen_2026.rs (add notify_log to the emitting tool, assert exclusion) and tests/log_gating_2026.rs (invalid level → -32602 wire assertion). CLAUDE.md §Test Coverage Discipline #3 (wire-layer coverage) governs.
 - [x] **UTIL/PAG-1** — Invalid pagination cursors never produce -32602 — indistinguishable from end-of-results — **FIXED 2026-06-11 (all five list sites validate the cursor is one the server issued — garbage cursor → -32602; wire test in the tools/list walk, revert-and-fail proven)**
-  - Requirement: "Invalid cursors SHOULD result in an error with code -32602 (Invalid params)" — pagination spec §Error Handling. https://modelcontextprotocol.io/specification/draft/server/utilities/pagination
+  - Requirement: "Invalid cursors SHOULD result in an error with code -32602 (Invalid params)" — pagination spec §Error Handling. https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/pagination
   - Current: All four list handlers treat any cursor string as a name position; an unparseable/garbage cursor falls through `.position(...).unwrap_or(all.len())` to an empty 200 page (e.g. crates/turul-mcp-server/src/handlers/mod.rs:311-322, server.rs:1631-1640). No validation/signing distinguishes a server-issued cursor from garbage.
   - Fix: crates/turul-mcp-server list handlers (handlers/mod.rs, server.rs tools/list) — at minimum reject structurally impossible cursors with McpError::InvalidParameters; ADR-027 governs the 2026 surface.
 - [x] **UTIL/PAG-2** — Server-side pagination has zero test coverage on the default 2026-07-28 wire path — **FIXED 2026-06-11 (limit+cursor pagination walked on the 2026 wire in `tools_list_is_deterministic_paginated_and_cacheable`)**
-  - Requirement: Pagination spec: nextCursor response contract + cursor request contract on resources/list, resources/templates/list, prompts/list, tools/list. https://modelcontextprotocol.io/specification/draft/server/utilities/pagination
+  - Requirement: Pagination spec: nextCursor response contract + cursor request contract on resources/list, resources/templates/list, prompts/list, tools/list. https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/pagination
   - Current: The behavioral pagination suites (limit clamping, cursor round-trip, stable ordering) live in the workspace-root tests crate, which is pinned to protocol-2025-11-25 (tests/Cargo.toml:10). None of crates/turul-mcp-server/tests/*_2026.rs touches cursor/nextCursor (grep: zero hits). The cfg-split response assembly (PaginatedResponse _meta envelope on 2025 vs direct nextCursor on 2026 — handlers/mod.r
   - Fix: crates/turul-mcp-server/tests — add a real-HTTP 2026 pagination test (multi-page tools/list or prompts/list asserting nextCursor presence, cursor continuation, and terminal page). ADR-027 + CLAUDE.md §Test Coverage Discipline #2 govern.
 - [x] **UTIL/PAG-3** — Client convenience list APIs fetch one page and silently discard nextCursor — **CLOSED 2026-06-11 (docs)**: the first-page contract is now documented on `list_tools`/`list_resources`/`list_prompts` with pointers to the `*_paginated` variants (both flows supported per the SHOULD; silently auto-walking pages would change caching and latency semantics under callers)
-  - Requirement: "Clients SHOULD: Treat a missing nextCursor as the end of results; Support both paginated and non-paginated flows" — pagination spec §Implementation Guidelines. https://modelcontextprotocol.io/specification/draft/server/utilities/pagination
+  - Requirement: "Clients SHOULD: Treat a missing nextCursor as the end of results; Support both paginated and non-paginated flows" — pagination spec §Implementation Guidelines. https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/pagination
   - Current: McpClient::list_tools/fetch_tools (crates/turul-mcp-client/src/client.rs:753-840), list_resources (1126), list_prompts (1331) issue a single list request and return only that page; nextCursor on the result is dropped (e.g. parse_list_tools at client.rs:829 returns tools only). Against a server with >page-size tools, the cached tool list (and Mcp-Param binding cache at client.rs:833-836) is silentl
   - Fix: crates/turul-mcp-client/src/client.rs — loop the convenience methods over nextCursor until exhaustion (bounded), or document the single-page contract; governed by ADR-030 (bilingual client).
 - [x] **UTIL/LOG-2** — logging capability advertised unconditionally with no discover-result test — **FIXED 2026-06-11 (`discover_declares_the_logging_capability`; advertisement is truthful — any tool MAY notify_log on its request stream, delivery is per-request logLevel-gated, listen streams exclude it)**
-  - Requirement: "Servers that emit log message notifications MUST declare the logging capability" — logging spec §Capabilities. https://modelcontextprotocol.io/specification/draft/server/utilities/logging
+  - Requirement: "Servers that emit log message notifications MUST declare the logging capability" — logging spec §Capabilities. https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/logging
   - Current: builder.rs:1649-1652 always sets capabilities.logging (defensible: every server can emit via notify_log), but no test asserts the `logging` key in the server/discover result, so a regression dropping it while tools still log would go uncaught.
   - Fix: crates/turul-mcp-server/tests/discover_stateless_2026.rs — extend the capability assertions to include logging (and assert absence of removed logging/setLevel).
 - [x] **SCHEMA/G1** — No 2026-path handling of inbound notifications/cancelled — **CLOSED 2026-06-11** (accept-and-ignore: `notifications/cancelled` is now an explicitly registered notification (202, never 404 — wire test notes the 202 contract pre-existed via the transport's fire-and-forget notification path); cancellation of in-flight work on Streamable HTTP is the stream-close mechanism (982667fb), and cross-request correlation by id is impossible without sessions on the stateless lane — "Invalid cancellation notifications SHOULD be ignored")
-  - Requirement: "This notification indicates that the result will be unused, so any associated processing SHOULD cease." — CancelledNotification, https://modelcontextprotocol.io/specification/draft/schema (schema.ts CancelledNotificationParams doc)
+  - Requirement: "This notification indicates that the result will be unused, so any associated processing SHOULD cease." — CancelledNotification, https://modelcontextprotocol.io/specification/2026-07-28/schema (schema.ts CancelledNotificationParams doc)
   - Current: Only the send side exists (crates/turul-http-mcp-server/src/notification_bridge.rs:85). Inbound notifications/cancelled is accepted as a generic notification; no code cancels the referenced in-flight request, and no test exercises it (grep across turul-mcp-server/src and turul-http-mcp-server/src finds no receive-side handler).
   - Fix: crates/turul-mcp-server (notification dispatch) + a real-HTTP test alongside tests/*_2026.rs; SHOULD-level, governed by ADR-027 (stateless core) — confirm intended scope before building, per AGENTS.md §Complexity Control
 - [x] **SCHEMA/G2** — Missing dedicated rejection test for _meta present but clientInfo absent — **FIXED 2026-06-11 (covered by `incomplete_meta_branches_are_rejected`)**
-  - Requirement: "io.modelcontextprotocol/clientInfo: Implementation — Identifies the client software making the request. Required." — RequestMetaObject, https://modelcontextprotocol.io/specification/draft/schema
+  - Requirement: "io.modelcontextprotocol/clientInfo: Implementation — Identifies the client software making the request. Required." — RequestMetaObject, https://modelcontextprotocol.io/specification/2026-07-28/schema
   - Current: Whole-_meta-absent and clientCapabilities-absent are tested (crates/turul-mcp-server/tests/discover_stateless_2026.rs::missing_meta_is_rejected_with_invalid_params :243, ::incomplete_meta_missing_client_capabilities_is_rejected :257); the clientInfo-absent permutation has no test. Implementation appears to reject it (streamable_http.rs:1599-1615 required-_meta extraction) but is unproven.
   - Fix: crates/turul-mcp-server/tests/discover_stateless_2026.rs — add the third permutation; CLAUDE.md §Test Coverage Discipline #4 (revert-and-fail) applies
 - [x] **SCHEMA/G3** — EXAMPLES_PIN.md 'Captured: 2026-05-24' date stale after the 2026-06-10 pin advance — **FIXED 2026-06-11 (EXAMPLES_PIN.md Captured date corrected to the 2026-06-10 pin advance)**
@@ -1130,29 +1144,29 @@ in the same slice as the fix.
   - Current: crates/turul-mcp-protocol-2026-07-28/schema/EXAMPLES_PIN.md:9 says 'Captured: 2026-05-24' while carrying SHA 1304c8fe (a 2026-06-09 upstream commit; verified == upstream main HEAD, compare ahead_by: 0). The SHA is current — only the regenerated doc's date field is wrong, suggesting the refresh tool does not update it.
   - Fix: crates/turul-mcp-protocol-2026-07-28/src/bin (refresh tool that regenerates EXAMPLES_PIN.md) — fix the Captured field emission; governed by ADR-027 regeneration workflow. NOT a re-pin trigger.
 - [x] **SCHEMA/G5** — Tool-originating errors surface as JSON-RPC errors, not in-result isError — **DISPOSITIONED 2026-06-11 (deliberate, AGENTS.md-documented stance): the framework contract is `Err(McpError)` = protocol-level error, `Ok(CallToolResult::error(...))` = model-visible tool error with isError — tools choose which surface fits; auto-converting Err to isError would hide infrastructure failures from operators. The SHOULD is dischargeable per-tool today**
-  - Requirement: "Any errors that originate from the tool SHOULD be reported inside the result object, with isError set to true, not as an MCP protocol-level error response." — CallToolResult, https://modelcontextprotocol.io/specification/draft/schema
+  - Requirement: "Any errors that originate from the tool SHOULD be reported inside the result object, with isError set to true, not as an MCP protocol-level error response." — CallToolResult, https://modelcontextprotocol.io/specification/2026-07-28/schema
   - Current: McpTool::call Err(McpError) propagates as a JSON-RPC error (crates/turul-mcp-server/src/handlers/mod.rs:91 ToolExecutionError path). This is a deliberate, documented framework stance (AGENTS.md §Release Readiness Notes 'Tool Error Propagation': never re-wrap as successful CallToolResult::error payloads). Tools CAN return isError results themselves; the type is modeled.
   - Fix: Disposition decision, not necessarily code: either document the SHOULD-deviation in crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md, or change handler mapping in crates/turul-mcp-server/src/handlers/mod.rs — owned by the Tools-section audit; conflicts with the AGENTS.md policy must be surfaced to
 #### Promoted 2026-06-12 (post-re-grade pass)
 
 - [x] **VER-4** — Headerless `initialize` rejection (400 + -32020) does not name supported protocol versions — **FIXED 2026-06-12** (`headerless_initialize_rejection_names_supported_versions`, red-phase recorded: pre-fix body had no `data`)
-  - Requirement: "A server that supports only modern versions SHOULD name the protocol versions it supports in any error it returns to an initialize request, on any transport" — https://modelcontextprotocol.io/specification/draft/basic/versioning §Backward Compatibility
+  - Requirement: "A server that supports only modern versions SHOULD name the protocol versions it supports in any error it returns to an initialize request, on any transport" — https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning §Backward Compatibility
   - Current: the headed-`initialize` 404 path carries `error.data.supported` (streamable_http.rs, `initialize` special-case in the unknown-method branch — RE-GRADED row), but a true legacy client sends `initialize` WITHOUT `MCP-Protocol-Version` and hits the missing-header rejection, whose -32020 is built with `data: None`.
   - Fix: crates/turul-http-mcp-server/src/streamable_http.rs — when the header-validation failure is the missing-version case and the body method is `initialize`, attach `data.supported`; wire test in mcp_headers_2026.rs, revert-and-fail recorded.
 - [x] **PAT/G10** — `notifications/cancelled` reason is not extracted into the cancellation log line — **FIXED 2026-06-12** (`CancelledNotificationHandler` extracts `requestId` + `reason` into a structured log line; 3 unit tests on the extraction incl. numeric ids)
-  - Requirement: "Both parties SHOULD log cancellation reasons for debugging" — https://modelcontextprotocol.io/specification/draft/basic/patterns/cancellation
+  - Requirement: "Both parties SHOULD log cancellation reasons for debugging" — https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/cancellation
   - Current: the method is a registered notification (202, never 404 — PAT/G6 slice) and the generic notification handler logs the raw params at info, which incidentally includes `reason`; nothing extracts `requestId`/`reason` as the debuggable cancellation record the SHOULD describes.
   - Fix: crates/turul-mcp-server/src/handlers/mod.rs — dedicated cancelled-notification arm extracting `requestId` + `reason` into a structured log line; unit test on the extraction.
 - [x] **CF/GAP-CF-8** — No elicitation response-vs-requested-schema validation helper on either side — **FIXED 2026-06-12** (`turul_mcp_builders::validate_elicit_content` covering required/unknown keys, primitive types, string-length + numeric bounds, integer-ness, enum membership across the union shapes; 6 unit tests; wired into the MRTR example's retry leg and live-verified; format assertions annotation-only by design)
-  - Requirement: Form security: "Clients SHOULD validate all responses against the provided schema" and "Servers SHOULD validate received data matches the requested schema" — https://modelcontextprotocol.io/specification/draft/client/elicitation §Security
+  - Requirement: Form security: "Clients SHOULD validate all responses against the provided schema" and "Servers SHOULD validate received data matches the requested schema" — https://modelcontextprotocol.io/specification/2026-07-28/client/elicitation §Security
   - Current: the server hands raw `InputResponse` content to the tool unvalidated; on the stateless 2026 lane the framework CANNOT enforce this centrally — the leg-1 requested schema is not retained anywhere server-side (no session), so only the tool (which re-derives the schema) can validate the leg-2 content.
   - Fix: validation helper `validate_elicit_content(&ElicitationSchema, &Value)` covering the primitive form-schema surface (string/number/integer/boolean/enum incl. legacy titled shape, required keys, unknown-key rejection) in crates/turul-mcp-builders; used by the MRTR example; unit tests. Framework-central enforcement documented as impossible-by-design on the stateless lane.
 - [x] **BP-5** — No published statement of supported JSON Schema dialects — **FIXED 2026-06-12 (COMPLIANCE.md §"Supported JSON Schema dialects": 2020-12 emission posture + explicit no-validating-processor statement; discharges the SHOULD, which asks for documentation)**
-  - Requirement: "Clients and servers SHOULD document which schema dialects they support" — https://modelcontextprotocol.io/specification/draft/basic §Schema Dialects
+  - Requirement: "Clients and servers SHOULD document which schema dialects they support" — https://modelcontextprotocol.io/specification/2026-07-28/basic §Schema Dialects
   - Current (pre-fix): no dialect-support statement existed in crate READMEs or COMPLIANCE.md.
   - Fix: crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md (docs-only).
-- [x] **UTIL/COMP-3** — Completion relevance-ranking / fuzzy-matching / rate-limiting SHOULDs unimplemented — **DISPOSITIONED 2026-06-12: ranking and fuzzy matching are provider semantics — `McpCompletion` providers own suggestion content and order (the framework preserves provider order and applies the 100-cap + total/hasMore); rate limiting is the middleware layer's job per the PAT/G9 disposition (ADR-012). Input validation (the fourth SHOULD in the row) is already enforced: typed params → -32602 incl. ref-literal validation**
-  - Requirement: "Servers SHOULD return suggestions sorted by relevance, implement fuzzy matching, rate limit completion requests, validate all inputs" — https://modelcontextprotocol.io/specification/draft/server/utilities/completion
+- [x] **UTIL/COMP-4** — Completion relevance-ranking / fuzzy-matching / rate-limiting SHOULDs unimplemented — **DISPOSITIONED 2026-06-12: ranking and fuzzy matching are provider semantics — `McpCompletion` providers own suggestion content and order (the framework preserves provider order and applies the 100-cap + total/hasMore); rate limiting is the middleware layer's job per the PAT/G9 disposition (ADR-012). Input validation (the fourth SHOULD in the row) is already enforced: typed params → -32602 incl. ref-literal validation** (renamed from the reused `UTIL/COMP-3` ID — see the Summary section's gap recount)
+  - Requirement: "Servers SHOULD return suggestions sorted by relevance, implement fuzzy matching, rate limit completion requests, validate all inputs" — https://modelcontextprotocol.io/specification/2026-07-28/server/utilities/completion
   - Current: provider routing + typed-param validation landed 2026-06-11 (UTIL/COMP-1/2); the remaining SHOULDs are application/provider-level concerns.
   - Fix: disposition only; provider-responsibility documented in `CompletionHandler` rustdoc.
 

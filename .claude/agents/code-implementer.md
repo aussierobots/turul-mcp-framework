@@ -76,13 +76,13 @@ impl MyPrompt {
 
 ### Version Negotiation
 - `McpVersion::LATEST` for comparisons (NOT hardcoded strings)
-- `supported_versions` array includes all versions through V2025_11_25
+- `supported_versions` array reports `["2026-07-28"]` (single spec per build)
 
 ## Validation Gates
 
 After EVERY batch of changes, run:
 ```bash
-cargo test -p turul-mcp-protocol-2025-11-25
+cargo test -p turul-mcp-protocol-2026-07-28
 cargo test -p turul-mcp-derive
 cargo test -p turul-mcp-server --lib
 cargo test -p turul-mcp-task-storage

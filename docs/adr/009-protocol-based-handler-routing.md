@@ -126,7 +126,7 @@ Stale binaries can mask routing changes and cause test failures.
 ## See Also
 
 - [MCP 2025-11-25 Specification](https://modelcontextprotocol.io/specification/2025-11-25)
-- [ADR-005: MCP Message Notifications Architecture](./005-mcp-message-notifications-architecture.md)
+- [ADR-005: MCP Message Notifications Architecture](./005-mcp-message-notifications-architecture.md) (superseded by ADR-023/ADR-006 — see ADR-005's Status)
 - [CLAUDE.md: HTTP Transport Routing](../../CLAUDE.md#http-transport-routing)
 ## 2026-07-28: McpProtocolVersion becomes feature-exclusive
 
@@ -209,3 +209,4 @@ A runtime selector (e.g., "if the request header is `2026-07-28`, decode as 2026
   `"DRAFT-2026-v1"` (a pre-finalization snapshot label); that string is now retained
   only as a deserialize-only alias. Updated the routing table, the routing pseudocode
   default, the mode-name prose, and the migration-impact note accordingly.
+- **2026-07-29 (2026-07-28 finalization)** — MCP 2026-07-28 has finalized and is now the released current specification; the `"DRAFT-2026-v1"` alias noted above is deserialize-only back-compat, not a live wire target. No routing behavior in this ADR changes as a result.

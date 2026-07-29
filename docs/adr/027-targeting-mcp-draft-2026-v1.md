@@ -1,6 +1,6 @@
-# ADR-027: Targeting MCP `DRAFT-2026-v1`; regenerate on final spec
+# ADR-027: Targeting MCP 2026-07-28
 
-**Status:** Accepted (in-flight)
+**Status:** Accepted — the spec has finalized; the regeneration trigger has fired (see the 2026-07-29 revision-log entry)
 **Date:** 2026-05-24
 **Crate:** `turul-mcp-protocol-2026-07-28`
 **Branch:** `2026-07-28-MCP-Specification` (and sub-branches off it)
@@ -23,7 +23,7 @@ We must commit to one wire string and one regeneration trigger. We cannot hold b
 
 The crate advertises and accepts the wire protocol version string exactly as the vendored schema declares it. Upstream finalized `LATEST_PROTOCOL_VERSION` from `"DRAFT-2026-v1"` to the stable date literal `"2026-07-28"` (re-pinned 2026-06-07 — see revision log). This is reflected in:
 
-- `crates/turul-mcp-protocol-2026-07-28/src/version.rs` — `McpVersion::V2026_07_28` serde-renames to `"2026-07-28"` with `alias = "DRAFT-2026-v1"`; `FromStr` parses both (the draft literal is accepted on deserialize for back-compat).
+- `crates/turul-mcp-protocol-2026-07-28/src/version.rs` — `McpVersion::V2026_07_28` serde-renames to `"2026-07-28"`. The transitional `alias = "DRAFT-2026-v1"` and its `FromStr` arm were **removed** once the literal was retired (see the revision log); a negative test now asserts the draft literal is rejected.
 - `crates/turul-mcp-protocol-2026-07-28/src/lib.rs::MCP_VERSION` — `"2026-07-28"`.
 - `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts` — source-of-truth, vendored with ETag for provenance.
 
@@ -77,14 +77,14 @@ Four user-locked architectural decisions revise this ADR's original deferral pos
 - **Phase 9.4 cutover work** in framework consumer crates (`turul-mcp-builders`, `turul-mcp-server`, `turul-mcp-client`, `turul-http-mcp-server`, `turul-mcp-aws-lambda`, examples, derive macros). **LANDED on `2026-07-28-MCP-Specification`** (2026-06-07). The default spec flipped to `protocol-2026-07-28`; a first-party 2026 stateless server (`server/discover` + per-request `_meta` request path, no `Mcp-Session-Id`) landed; the bilingual client, `ToolBuilder`, and dynamic-tools were made 2026-capable; 43 examples migrated to the 2026 default, 8 redundant duplicates removed, a small 2025-11-25 regression suite pinned. Not merged to `main`. See ADR-029's revision log (the rollout plan doc was executed and deleted in the 0.4 docs purge).
 - **Workspace turul-rpc 0.1 → 0.2.x bulk migration.** **LANDED** (2026-06-07, ADR-025) — the branch is single-major on `turul-rpc` 0.2. No longer a future item.
 - **`protocol-2025-11-25` feature flag end-to-end coverage.** **SATISFIED by the as-built per-crate CI lane** (see the 2026-06-10 revision-log entry below): `gate_opt_in_2025` builds + clippies each framework crate under `--no-default-features --features …,protocol-2025-11-25` and runs the full real-server e2e suites (tools/resources/prompts/roots/sampling/elicitation/tasks). The originally envisioned whole-workspace flag sweep is NOT achievable by design — spec-pinned workspace members trip the ADR-029 `compile_error!` mutex — so the per-crate matrix is the supported proof of coverage, not a reduced substitute.
-- **Optional extension crates** (`turul-mcp-ext-tasks-2026-07-28` per SEP-2663, `turul-mcp-ext-apps-2026-07-28` per SEP-1865) per ADR-028. Not blockers for 0.4.0 publication — the release notes will state that tasks and apps support require the respective extension crates (scaffolded post-0.4.0 unless prioritized).
+- **Optional extension crates** (`turul-mcp-ext-tasks` per SEP-2663, `turul-mcp-ext-apps` per SEP-1865) per ADR-028. Not blockers for 0.4.0 publication — the release notes will state that tasks and apps support require the respective extension crates. Both are scaffolded (ADR-028, 2026-06-12); server-side dispatch wiring for tasks remains open (ADR-028 §"Implementation order" step 3).
 
 ## Open items
 
 Live status and per-requirement coverage are in `docs/plans/2026-07-28-spec-compliance.md` (the original phase plan and the schema-coverage matrix were executed/superseded and deleted in the 0.4 docs purge). The "open items" that remain after the initial compliance push:
 
-- Phase 5.2 — `turul-mcp-ext-tasks-2026-07-28` crate scaffolding (per ADR-028)
-- Phase 5.3 — `turul-mcp-ext-apps-2026-07-28` crate scaffolding (per ADR-028)
+- Phase 5.2 — `turul-mcp-ext-tasks` crate scaffolding (per ADR-028). **Done** (2026-06-12); server-side dispatch wiring remains open.
+- Phase 5.3 — `turul-mcp-ext-apps` crate scaffolding (per ADR-028). **Done** (2026-06-12).
 - Phase 7 finalization — tighten transitional `Option<…>` cache fields to required when consumer paths are ready
 - Phase 1.1b — refine `JsonRpcResponse` into separate Success/Error structs, type `RequestId` strictly
 - Phase 9.4 — flip the `turul-mcp-protocol` alias from `2025-11-25` to `2026-07-28`. **DONE** (2026-06-07, branch-scoped). **Strategy per ADR-029: flip-all-at-once** (atomicity enforced by `compile_error!` guards on the feature-gated re-export). The alias now defaults to `protocol-2026-07-28`; the cascade reached every downstream consumer, the first-party 2026 server landed, and the consumer fleet was migrated (43 examples to the 2026 default, 8 removed, small 2025 regression suite pinned). See ADR-029 §"What the cutover slice ships" and its revision log.
@@ -151,3 +151,17 @@ Live status and per-requirement coverage are in `docs/plans/2026-07-28-spec-comp
    Revert-and-fail was run in a detached worktree at HEAD (never in-place; `git stash` has silently no-opped in this repo before) by copying the new test files onto unfixed code. Seven guards fail without the fix: `server_discover_answers_without_a_session`, `request_without_client_info_is_served`, `tools_call_result_carries_server_info_meta`, `sse_result_frame_carries_server_info_meta`, `origin_absent_is_allowed`, `absent_client_info_is_not_an_incomplete_meta`, and the client's `client_reads_server_info_from_result_meta`. One new test, `malformed_client_info_is_rejected`, passes on both old and new code and is therefore a contract test rather than a regression guard — the old code was strictly *more* rejecting, so it cannot discriminate; it guards the opposite direction, that relaxing to optional did not also make malformed values acceptable. Known remaining gap: the `SubscriptionsListenResult` close frame has type-level coverage only, because it is emitted solely on deliberate server-side teardown and no transport harness drives that path (the same shutdown-hook gap already recorded at the 2026-07-02 re-pin).
 
    **No version bump.** Nothing at 0.4.0 is published — crates.io shows `turul-mcp-protocol-2026-07-28` absent entirely and the rest of the family at `0.3.47` — so this revises an unreleased artifact rather than shipping a patch.
+
+- **2026-07-29** — **MCP 2026-07-28 finalized upstream; the regeneration trigger recorded in §"Regeneration trigger" has fired.** Upstream tagged `2026-07-28` at merge commit `5f5440bb26a62e2cf3440b92da5a667efa03b267` (PR #3158) and moved the released schema from `schema/draft/schema.ts` to the immutable dated path `schema/2026-07-28/schema.ts`.
+
+  **Wire impact: none.** The released schema differs from this crate's vendored pin (`71e30695`, content sha256 `c56f0ad2…`) in exactly three respects, none of which changes a serialized shape: (1) TypeDoc `@see` anchors moved from `/specification/draft/…` to `/specification/2026-07-28/…`; (2) the interface `SubscriptionsListenResultMeta` was renamed `SubscriptionsListenResultMetaObject`; (3) a new interface `SubscriptionsListenResultResponse extends JSONRPCResultResponse` was added, with a new example fixture directory. `LATEST_PROTOCOL_VERSION` is `"2026-07-28"` in both.
+
+  **Pin the content-bearing commit, not the tag.** `resolve_subpath_head` filters history by subpath; because the tag `5f5440bb` is a merge commit, the path-filtered head of both `schema/2026-07-28/schema.ts` and `schema/2026-07-28/examples` resolves to `271ecc9accafdd9b83a3c869fa67c22953b2af80` (blob `9b55feeb…`, content sha256 `742750af…`). Pinning the tag commit instead would leave `PIN` in `src/compliance/fetch.rs` and the provenance block in `schema/README.md` permanently disagreeing with what `refresh` computes — the two-different-commits split §"Schema pin governance" in AGENTS.md forbids. Both commits serve byte-identical schema content.
+
+  **Standing hazard introduced by finalization.** Upstream `schema/draft/` survived the release and is now the *next* spec cycle's floating pointer. It is byte-identical to `schema/2026-07-28/` today apart from the four anchor lines, so nothing is currently mis-tracked — but any pin, fetch, or drift check still resolving against `schema/draft/` or against `main` will silently walk onto next-cycle content while still claiming to implement 2026-07-28. The re-vendor to the dated path is tracked as a release blocker in `docs/plans/2026-07-28-release-checklist.md` §1.1.
+
+  **Landed in this slice.** `schema/draft-schema.ts` re-vendored from `271ecc9a` (content sha256 `742750af…`, blob `9b55feeb…`); `PIN` in `src/compliance/fetch.rs` moved to that commit and to `subpath: "schema/2026-07-28/examples"`; `SubscriptionsListenResultMeta` renamed `SubscriptionsListenResultMetaObject` (rename confined to this crate — zero external consumers); `SubscriptionsListenResultResponse` bound, following the `DiscoverResultResponse` precedent; both `SubscriptionsListenResult` and the new response modeled in `compliance/coverage.rs`. The fixture-count pin moved 87 → 88 and `modeled` moved 10/87 → 12/88 (24 fixtures, 24 passed) — a green run with an unmoved `modeled` count would have proven nothing about the new commit.
+
+  `refresh` still probes `main` rather than the tag, and that is now correct rather than a hazard: with `PIN.subpath` naming the dated directory, resolving `main` detects post-release *errata* to `schema/2026-07-28/` while never reaching next-cycle draft content. The hazard was only ever the floating subpath, not the floating ref.
+
+  The ADR filename retains its pre-finalization spelling deliberately — roughly fifteen documents cite it by exact path, and ADR filenames are permanent identifiers by convention here.

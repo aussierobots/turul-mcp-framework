@@ -460,12 +460,7 @@ In DRAFT-2026-v1 mode, the framework:
 
 ### When server-initiated notifications matter under DRAFT-2026-v1
 
-Server→client notifications that are NOT tied to a specific in-flight tool call (e.g., resource list changes, prompt list changes, generic server events) have **no transport vehicle in DRAFT-2026-v1 core**. They are deferred to:
-
-- **Extensions** that establish a long-lived connection (e.g., a future WebSocket transport extension under SEP-2133).
-- **Custom transports** outside the HTTP envelope.
-
-Servers that need to advertise list-changed events to long-lived clients should either run in legacy 2025-11-25 mode or wait for a streaming extension to land.
+**`subscriptions/listen` is the transport vehicle for out-of-band server→client notifications in the 2026-07-28 core.** It is a released, implemented method — the long-lived POST SSE stream opened by `handle_subscriptions_listen()` in `crates/turul-http-mcp-server/src/streamable_http.rs` — and it is the sole delivery path for `notifications/tools/list_changed` (and the other list-changed notifications) under the stateless core, since GET SSE is 2025-only (above). Server→client notifications not tied to a specific in-flight tool call are delivered over this stream rather than over GET SSE.
 
 ### Routing summary (updated)
 
@@ -485,3 +480,45 @@ The Lambda streaming limitation documented above (server-initiated notifications
 - ADR-009 §"DRAFT-2026-v1: McpProtocolVersion becomes feature-exclusive" — handler routing under the new default.
 - ADR-023 §"DRAFT-2026-v1: per-request fingerprint persistence" — tool-change semantics without per-session state.
 - ADR-027 §"Status update (2026-05-31)" — 0.4.0 ships DRAFT-2026-v1 as default.
+
+## Revision 2026-07-29 — response framing chosen per request, not per method
+
+The 2026-07-28 Streamable HTTP section states that for a JSON-RPC request the
+server "**MUST** return either `Content-Type: application/json` (a single JSON
+object) or `Content-Type: text/event-stream` (an SSE response stream)" and that
+"the client **MUST** support both". Either answer conforms; the choice is ours.
+
+This framework previously chose by method name: under a combined `Accept`, every
+`tools/call`, `sampling/createMessage` and `elicitation/create` received an SSE
+stream on the assumption any of them *might* emit mid-stream events. The cost was
+paid by every simple call, and SSE is the less exercised branch in client
+implementations.
+
+The choice is now made per request, from the request itself: SSE when the caller
+opted into request-scoped notifications with `_meta.progressToken` or
+`_meta."io.modelcontextprotocol/logLevel"`, and a single JSON object otherwise.
+Those two keys are the only per-request opt-ins for server→client notifications
+on a response stream, and both are gated on the request having asked —
+`ProgressNotificationParams.progressToken` is required and must be the token
+given in the originating request, and a server must not emit
+`notifications/message` for a request that declared no level. A request carrying
+neither cannot legally be sent either notification, so stream framing buys it
+nothing.
+
+Two consequences worth recording. Plain JSON is the only path that can carry the
+`-32020`/`-32021` header and capability errors on HTTP 400 as their schemas
+require, because the chunked SSE path commits `200 OK` before dispatch — routing
+more non-streaming requests through JSON therefore improves status-code fidelity.
+And `subscriptions/listen` is untouched: it is served on its own path, which
+independently requires `Accept: text/event-stream`.
+
+**Scope: 2026-07-28 only.** The 2025-11-25 lane keeps its historical method-name
+heuristic. That lane is a frozen spec snapshot whose clients were built against an
+always-SSE `tools/call`, and the motivation for the new rule — interoperating with
+2026 clients — does not apply there. Changing it would alter observable behaviour
+of a frozen spec for no benefit; its own integration suite asserts the old shape and
+correctly still does.
+
+Verified against a third-party client: FastMCP 4.0.0b1 completes
+`server/discover` → `tools/list` → `tools/call` against a 2026-07-28 build
+(`scripts/interop-fastmcp.sh`).

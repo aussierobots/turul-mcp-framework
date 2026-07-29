@@ -1,4 +1,4 @@
-# Migration Diff: 2025-11-25 → DRAFT-2026-v1
+# Migration Diff: 2025-11-25 → 2026-07-28
 
 Derived from `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts` (vendored 2026-05-24, ETag `8bdd4ae5...`). This document maps every TS symbol to its Rust counterpart and flags what's NEW, REMOVED, or CHANGED. Compliance work was driven from this diff via the (since executed and deleted) phase plan; current tracking is `docs/plans/2026-07-28-spec-compliance.md`.
 
@@ -8,7 +8,7 @@ Derived from `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts` (vend
 
 ## Method strings — exhaustive enumeration
 
-22 methods total in DRAFT-2026-v1 (vs 25+ in 2025-11-25):
+22 methods total in 2026-07-28 (vs 25+ in 2025-11-25):
 
 | Method | Direction | Status | Schema line |
 |--------|-----------|--------|-------------|
@@ -50,7 +50,7 @@ Derived from `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts` (vend
 ### `lib.rs`
 | Symbol | Status | Notes |
 |--------|--------|-------|
-| `MCP_VERSION` constant | **CHANGED** | `"2026-07-28"` → `"DRAFT-2026-v1"` (already landed) |
+| `MCP_VERSION` constant | **CHANGED** | `"2025-11-25"` → `"2026-07-28"` (already landed) |
 | `McpError::ResourceNotFound` | **CHANGED** | Wire code `-32002` → `-32602` (SEP-2164) |
 | `McpError::MissingRequiredClientCapability` | **NEW** | Code `-32003`, carries `requiredCapabilities: ClientCapabilities` in `data` |
 | `McpError::UnsupportedProtocolVersion` | **NEW** | Code `-32004`, carries `{supported: [], requested: ""}` in `data` |

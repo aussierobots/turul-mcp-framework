@@ -36,7 +36,7 @@ External dependencies (`serde`, `tokio`, etc.) continue to use `workspace = true
 This file documents the framework under two simultaneous spec targets:
 
 - **`main` (and any branch derived from `main`)** — MCP 2025-11-25 (stateful core: `initialize`/`notifications/initialized` handshake, `Mcp-Session-Id` header, capability negotiation at handshake time).
-- **`2026-07-28-MCP-Specification` (and side-branches of it, including `feat/turul-mcp-protocol-2026-07-28`)** — MCP DRAFT-2026-v1 release candidate (stateless core: handshake and session header removed, capabilities travel in `_meta` on every request, new `server/discover` method). See §"Branch Lock" below for the full diff.
+- **`2026-07-28-MCP-Specification` (and side-branches of it, including `feat/turul-mcp-protocol-2026-07-28`)** — MCP 2026-07-28, the released current specification (stateless core: handshake and session header removed, capabilities travel in `_meta` on every request, new `server/discover` method). See §"Branch Lock" below for the full diff.
 
 Rules in §"MCP Specification Compliance", §"Notifications Compliance", §"Testing Guidelines", §"Agent-Specific Instructions", §"Critic Review Mode", and §"Reviewer Focus Areas" are written against the `main` 2025-11-25 baseline and are explicitly tagged `(2025-11-25 baseline)` where the draft branch supersedes them. On the draft branch, defer to:
 
@@ -66,16 +66,28 @@ If a `(2025-11-25 baseline)` rule conflicts with a draft-branch spec requirement
 
 ## Building MCP Clients
 - Use `turul_mcp_client::McpClientBuilder` with an appropriate transport (`HttpTransport`, `SseTransport`, etc.); the builder owns connection retries and timeouts.
-- Invoke `client.connect().await?` to perform the JSON-RPC handshake; the client automatically sends `initialize` and the required `notifications/initialized` follow-up. (2025-11-25 baseline; the DRAFT-2026 branch is stateless and removes both `initialize` and `notifications/initialized`.)
+- Invoke `client.connect().await?` to perform the JSON-RPC handshake; the client automatically sends `initialize` and the required `notifications/initialized` follow-up. (2025-11-25 baseline; the 2026-07-28 branch is stateless and removes both `initialize` and `notifications/initialized`.)
 - Interact through the high-level APIs (`list_tools`, `call_tool`, `list_resources`, `read_resource`, `list_prompts`, `get_prompt`, etc.) which all return `McpClientResult<T>` with rich `McpClientError` variants.
 - For streaming notifications, subscribe through the transport-specific stream helpers and always handle progress tokens echoed by tools.
 - When embedding in other applications, propagate errors using the typed enums rather than string matching and surface meaningful diagnostics (e.g., include `McpClientError::Lifecycle` messaging when initialization fails).
 
 ## Build, Test, and Development Commands
-- Build: `cargo build --workspace`
-- Test (all): `cargo test --workspace`
-- Compliance tests: `cargo test --test mcp_compliance_tests`
-- Lint: `cargo clippy --workspace --all-targets -- -D warnings`
+
+**`--workspace` does not work on this branch.** Cargo unifies features across a
+single invocation, so building every member at once forces the mutually exclusive
+`protocol-2025-11-25` and `protocol-2026-07-28` features onto the shared
+`turul-mcp-protocol` dependency and trips its own guard
+(`features ... are mutually exclusive` + `E0659: MCP_VERSION is ambiguous`).
+Build the curated default-members set, then any opt-in member individually.
+
+- Build: `cargo build` (default-members = the 2026-07-28 lane)
+- Test: `cargo test`
+- Opt-in 2025-11-25 member: `cargo build -p <crate> --no-default-features --features protocol-2025-11-25`
+- Single non-default example: `cargo check -p <example> --all-targets`
+- Compliance tests: `cargo test -p turul-mcp-protocol-2026-07-28 --features compliance`
+- Schema pin integrity: `./scripts/check-schema-pin.sh`
+- Lint: `cargo clippy --all-targets -- -D warnings`
+- All release gates: `./scripts/ci-gates.sh` (mirrors the CI lanes)
 - Format: `cargo fmt --all -- --check`  •  Fix: `cargo fmt --all`
 - Run example: `cd examples/minimal-server && cargo run` (adjust folder as needed)
 - Middleware smoke tests: `bash scripts/test_middleware_live.sh` (HTTP) and `cargo lambda watch --package middleware-auth-lambda` (Lambda) for interactive validation.
@@ -86,14 +98,14 @@ If a `(2025-11-25 baseline)` rule conflicts with a draft-branch spec requirement
 
 ## MCP Specification Compliance (2025-11-25 baseline)
 
-_Rules below apply to `main` / the 2025-11-25 spec target. On the DRAFT-2026 branch, see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md` and §"Branch Lock" — stateless core, `_meta`-routed capability negotiation, error code `-32002 → -32602`._
+_Rules below apply to `main` / the 2025-11-25 spec target. On the 2026-07-28 branch, see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md` and §"Branch Lock" — stateless core, `_meta`-routed capability negotiation, error code `-32002 → -32602`._
 
 - Target spec: https://modelcontextprotocol.io/specification/2025-11-25
 - Requirements: correct JSON-RPC usage, `_meta` fields, version negotiation, pagination/cursors, progress, and session isolation/TTL.
 - Validate: run `cargo test --test mcp_compliance_tests`; for end‑to‑end session compliance, see README “MCP Session Management Compliance Testing”.
 
 ### TypeScript Schema Alignment (2025-11-25 baseline)
-- Shapes must match the latest TS schema in `turul-mcp-protocol-2025-11-25` (camelCase, optional `_meta` on params/results where spec allows). _On the DRAFT-2026 branch, the equivalent reference is `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`._
+- Shapes must match the latest TS schema in `turul-mcp-protocol-2025-11-25` (camelCase, optional `_meta` on params/results where spec allows). _On the 2026-07-28 branch, the equivalent reference is `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`._
 - Prompts: `GetPromptParams.arguments` is `map<string,string>` at the boundary. Handlers may convert internally to `Value` for rendering.
 - Tools: `ToolSchema` type is `object`; `properties`/`required` present when needed; `annotations` are optional hints.
 - Resources: `Resource`, `ResourceTemplate`, and results (`List*Result`, `ReadResourceResult`) follow TS names, including `nextCursor` and `_meta`.
@@ -143,7 +155,7 @@ _Rules below apply to `main` / the 2025-11-25 spec target. On the DRAFT-2026 bra
 
 ## Notifications Compliance (2025-11-25 baseline)
 
-_On the DRAFT-2026 branch the `notifications/initialized` rule does not apply — the handshake is gone. Per-request capability negotiation rides in `_meta`._
+_On the 2026-07-28 branch the `notifications/initialized` rule does not apply — the handshake is gone. Per-request capability negotiation rides in `_meta`._
 
 - `notifications/initialized`: in strict lifecycle mode, reject operations until client sends `notifications/initialized`; add E2E to verify gating and acceptance after. (2025-11-25 baseline only.)
 - `notifications/progress`: progress updates must include `progressToken`. Add at least one strict E2E that asserts ≥1 progress event and token match with tool response.
@@ -187,12 +199,12 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply �
 - Use `tests/shared` server manager; do not hardcode `current_dir` paths. Discover workspace root dynamically.
 - Add E2E for `resources/templates/list` (pagination, stable ordering, `_meta` round‑trip).
 - Add a strict SSE progress test validating at least one progress event and `progressToken` match.
-- Add strict lifecycle E2E gating with `notifications/initialized`. (2025-11-25 baseline only — DRAFT-2026 has no lifecycle to gate.)
+- Add strict lifecycle E2E gating with `notifications/initialized`. (2025-11-25 baseline only — 2026-07-28 has no lifecycle to gate.)
 - Assert initialize capability snapshot in each E2E suite.
 
 ## Commit & Pull Request Guidelines
 - Commits: imperative subject (≤72 chars), meaningful body; reference issues (`Fixes #123`).
-- Pre‑PR: `cargo fmt`, `cargo clippy -D warnings`, `cargo test --workspace`; update README/examples/docs when APIs change.
+- Pre‑PR: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `./scripts/ci-gates.sh`; update README/examples/docs when APIs change.
 - PRs: clear description, linked issues, testing notes (commands/output), risk/rollback.
 
 ## Security & Configuration Tips
@@ -201,7 +213,7 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply �
 
 ## Branch Lock: `2026-07-28-MCP-Specification`
 
-**This branch tracks adoption of the MCP 2026-07-28 release candidate** (see https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/). Headline changes the framework must absorb:
+**This branch tracks adoption of MCP 2026-07-28, now the released current specification** (see https://modelcontextprotocol.io/specification/2026-07-28 and its [changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog)). Headline changes the framework must absorb:
 
 - **Stateless protocol core**: `initialize`/`notifications/initialized` handshake removed; `Mcp-Session-Id` header removed; protocol version, client info, and capabilities travel in `_meta` on every request; new `server/discover` method.
 - **Server-to-client requests**: SSE no longer held open for elicitation — server returns `InputRequiredResult` with `inputRequests` + `requestState`; client re-issues original call with `inputResponses`.
@@ -220,11 +232,11 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply �
 - **DO NOT merge `2026-07-28-MCP-Specification` into `main` without the maintainer's express authority.** This applies to merge commits, fast-forward merges, rebase-onto-main, squash-merges, and merge PRs alike.
 - **DO NOT mark this branch "done," delete it, force-push it, or open a release/merge PR** without explicit maintainer authorization in the current session.
 - "All SEPs implemented," "all tests pass," and "conformance suite green" are necessary but **not sufficient** — disposition is the maintainer's call.
-- `main` remains on MCP 2025-11-25 throughout this work. Do not back-port 2026-07-28-only changes to `main` without explicit instruction.
+- `main` remains on MCP 2025-11-25 — now the *previous* spec, not the current one — throughout this work. Do not back-port 2026-07-28-only changes to `main` without explicit instruction.
 - Side-branches off `2026-07-28-MCP-Specification` may merge back into it freely; only the branch → `main` direction is locked.
 
 **Schema pin governance — MANDATORY:**
-- The 2026-07-28 schema is revised in place upstream and is about to finalize as the current spec. A crate that was compliant last week can be non-compliant today with no local change. **Check pin drift at the START of every 2026-07-28 slice** — before writing code, and before trusting a green suite.
+- **2026-07-28 has finalized.** The released schema lives at the immutable upstream path `schema/2026-07-28/schema.ts` (tag `2026-07-28`); upstream `schema/draft/` is now the *next* spec cycle's floating pointer and is no longer what this crate tracks. Any pin, fetch, or drift check still resolving against `schema/draft/` or against `main` will silently walk onto next-cycle content while claiming to implement 2026-07-28. **Verify the pin still names the released artifact at the START of every 2026-07-28 slice** — before writing code, and before trusting a green suite.
 - **Two artifacts are pinned and MUST name the same immutable upstream commit:** `PIN` in `crates/turul-mcp-protocol-2026-07-28/src/compliance/fetch.rs` (the example fixtures) and the provenance block in `schema/README.md` (the vendored `draft-schema.ts`). Re-vendor **by commit SHA, never `main`** — a `main`-sourced copy cannot be reproduced later. Leaving the two on different commits is a provenance defect, not a cosmetic mismatch.
 - **A green compliance run is only as strong as its `modeled=N` count.** Most upstream example directories are `Kind::NotModeled`, so the harness reports `failed=0` for changes it never looked at. Read the modeled count on every run. If a slice changes a type whose fixture directory is unmodeled, model it **in the same slice** — otherwise the fix ships with no fixture-level proof.
 - **Pin parity is a claim about a moment, not a standing property.** Any document asserting "no re-pin trigger exists" is dated the instant it is written; re-verify rather than citing it.
@@ -232,7 +244,7 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply �
 
 ## Agent-Specific Instructions
 - Scope: this file applies to the entire repository.
-- Role: act as a strict critic for the **active branch's spec target** — MCP 2025-11-25 on `main`, MCP DRAFT-2026-v1 on the `2026-07-28-MCP-Specification` branch (see §"Branch-Conditional Spec Guidance") — within the Turul MCP Framework; flag deviations and propose compliant fixes.
+- Role: act as a strict critic for the **active branch's spec target** — MCP 2025-11-25 on `main`, MCP 2026-07-28 on the `2026-07-28-MCP-Specification` branch (see §"Branch-Conditional Spec Guidance") — within the Turul MCP Framework; flag deviations and propose compliant fixes.
 - Do not relax security, logging, or API contracts to “make tests pass”; fix root causes while preserving spec compliance.
 - Boundaries: do not modify core framework areas unless explicitly requested. The ~9 areas are Tools, Resources, Prompts, Sampling, Completion, Logging, Roots, Elicitation, and Notifications.
  - Extensions: if introducing truly non-standard fields, document them clearly, keep optional, and ensure baseline compliance without them.
@@ -293,7 +305,7 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply �
 - Treat docs/examples/agent-instruction changes as potentially compliance-impacting:
   - Flag docs that advertise unsupported capabilities or incorrect defaults.
   - Flag examples that imply `listChanged`/subscription/progress/lifecycle support without matching implementation/tests.
-  - Flag spec-version drift relative to the active branch's spec target (MCP 2025-11-25 on `main`; MCP DRAFT-2026-v1 on the `2026-07-28-MCP-Specification` branch). On `main`, do not back-port draft-branch shapes; on the draft branch, do not preserve removed 2025-11-25 contracts (`initialize`/`notifications/initialized`/`Mcp-Session-Id`).
+  - Flag spec-version drift relative to the active branch's spec target (MCP 2025-11-25 on `main`; MCP 2026-07-28 on the `2026-07-28-MCP-Specification` branch). On `main`, do not back-port 2026-07-28 shapes; on the 2026-07-28 branch, do not preserve removed 2025-11-25 contracts (`initialize`/`notifications/initialized`/`Mcp-Session-Id`).
 - When reviewing client/server API guidance, verify it preserves typed error propagation and truthful capability advertisement.
 
 ### Workspace State Triage (Required Before Review Conclusions)
@@ -307,7 +319,7 @@ _On the DRAFT-2026 branch the `notifications/initialized` rule does not apply �
 ### Reviewer Focus Areas (Do Not Skip)
 - Architecture boundaries: examples and docs should not encourage bypassing crate layering (`protocol` vs `server` vs transport crates).
 - Capability truthfulness: docs/tests must not imply dynamic capabilities when the framework is static by default.
-- Lifecycle strictness: on the 2025-11-25 baseline, guidance must preserve `notifications/initialized` gating and correct error mapping semantics. On the DRAFT-2026 branch this rule is inapplicable (stateless core).
+- Lifecycle strictness: on the 2025-11-25 baseline, guidance must preserve `notifications/initialized` gating and correct error mapping semantics. On the 2026-07-28 branch this rule is inapplicable (stateless core).
 - Pagination/meta/schema accuracy: docs/examples must use `cursor`, `nextCursor`, and optional `_meta` consistently with the protocol crate.
 - Notifications naming: spec method names use snake_case path segments; capability keys remain camelCase.
 - Tool error semantics: do not normalize transport/framework errors into fake successful tool payloads.

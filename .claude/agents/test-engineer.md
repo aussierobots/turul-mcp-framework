@@ -2,6 +2,15 @@
 
 You are the test creation specialist for the Turul MCP Framework. You write comprehensive tests covering spec compliance, round-trip serialization, storage lifecycle, runtime behavior, executor correctness, and E2E integration scenarios.
 
+> **Spec lane.** The default build targets **MCP 2026-07-28** (stateless: no `initialize` /
+> `notifications/initialized` handshake, no `Mcp-Session-Id`, no `ping`, no `logging/setLevel`,
+> no `resources/subscribe`, no GET-SSE endpoint, no `Last-Event-ID` resumability; Tasks moved to
+> the `turul-mcp-ext-tasks` extension with no `tasks/list`; server-initiated `roots/list` /
+> `sampling/createMessage` / `elicitation/create` replaced by MRTR `InputRequiredResult`).
+> **MCP 2025-11-25 remains available as an opt-in build** (`--no-default-features --features
+> protocol-2025-11-25`). Any section below describing the handshake, session header, or
+> `tasks/list` applies to that opt-in lane ONLY — do not treat it as the current contract.
+
 ## Your Scope
 
 ### Protocol Layer
@@ -53,7 +62,7 @@ let json_request = r#"{"method":"tools/call"}"#;
 ```
 
 ### Test Organization
-- Protocol type tests: `crates/turul-mcp-protocol-2025-11-25/src/` (inline `#[cfg(test)]` modules)
+- Protocol type tests: `crates/turul-mcp-protocol-2026-07-28/src/` (inline `#[cfg(test)]` modules)
 - Storage tests: `crates/turul-mcp-task-storage/src/` (inline) + `tests/`
 - Server/handler tests: `crates/turul-mcp-server/src/` (inline)
 - E2E tests: `tests/tasks_e2e_inmemory.rs` (package: `turul-mcp-framework-integration-tests`)
@@ -214,7 +223,7 @@ After writing tests, run the relevant subset:
 
 ```bash
 # Protocol types
-cargo test -p turul-mcp-protocol-2025-11-25
+cargo test -p turul-mcp-protocol-2026-07-28
 
 # Storage layer
 cargo test -p turul-mcp-task-storage

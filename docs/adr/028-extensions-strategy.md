@@ -24,7 +24,7 @@ DRAFT-2026-v1 introduces the extensions framework (SEP-2133) and immediately exe
 - Methods: `tasks/get`, `tasks/update`, `tasks/cancel` (no `tasks/list` — schema removed it).
 - Server is the **sole decider** of when to materialize a task; clients do not request tasks per-call.
 - Result discrimination via `resultType: "task"` (extending the schema's `ResultType` union — schema-level extension point).
-- Server MUST return `-32003 MISSING_REQUIRED_CLIENT_CAPABILITY` if it cannot serve the request without producing a task and the client did not declare the extension capability.
+- Server MUST return `-32021 MISSING_REQUIRED_CLIENT_CAPABILITY` if it cannot serve the request without producing a task and the client did not declare the extension capability.
 
 The framework therefore needs to answer five questions about how it hosts extensions in Rust.
 

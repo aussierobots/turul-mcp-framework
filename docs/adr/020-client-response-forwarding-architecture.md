@@ -168,5 +168,9 @@ field for classification.
 
 ## See Also
 
-- [ADR-005: MCP Message Notifications Architecture](./005-mcp-message-notifications-architecture.md) — SSE notification delivery
+- [ADR-005: MCP Message Notifications Architecture](./005-mcp-message-notifications-architecture.md) — SSE notification delivery (superseded by ADR-023/ADR-006 — see ADR-005's Status)
 - [ADR-006: Streamable HTTP Compatibility](./006-streamable-http-compatibility.md) — SSE streaming and chunked transfer
+
+## Revision log
+
+- **2026-07-29 (2026-07-28 finalization)** — MCP 2026-07-28 has finalized and is now the released current specification (see ADR-027's revision log for the regeneration/re-pin history). This ADR's response-forwarding architecture is transport-layer and version-agnostic; no technical claim here changes as a result of finalization.
