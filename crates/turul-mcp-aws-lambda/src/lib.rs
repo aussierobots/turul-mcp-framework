@@ -39,7 +39,6 @@
 //! async fn main() -> Result<(), lambda_http::Error> {
 //!     let server = LambdaMcpServerBuilder::new()
 //!         .tool(ExampleTool::default())
-//!         .cors_allow_all_origins()
 //!         .build()
 //!         .await?;
 //!

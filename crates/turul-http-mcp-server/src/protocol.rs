@@ -3,7 +3,11 @@
 //! This module handles MCP protocol version detection from HTTP headers
 //! and provides feature flags for different protocol versions.
 
-/// Supported MCP protocol versions and features
+/// Supported MCP protocol versions and features.
+///
+/// This is the crate's single definition — the transport modules and the public
+/// prelude share it, so a version the transport accepts is one a consumer can
+/// also parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum McpProtocolVersion {
     /// Original protocol without streamable HTTP (introduced 2024-11-05)
@@ -14,27 +18,31 @@ pub enum McpProtocolVersion {
     V2025_06_18,
     /// Protocol with tasks, icons, URL elicitation, and sampling tools (introduced 2025-11-25)
     V2025_11_25,
+    /// Stateless core: `server/discover`, per-request `_meta`, no `Mcp-Session-Id` (2026-07-28)
+    V2026_07_28,
 }
 
 impl McpProtocolVersion {
-    /// Parses a version string like "2024-11-05", "2025-03-26", "2025-06-18", or "2025-11-25".
+    /// Parses a version string such as `"2026-07-28"` or `"2025-11-25"`.
     pub fn parse_version(s: &str) -> Option<Self> {
         match s {
-            "2024-11-05" => Some(McpProtocolVersion::V2024_11_05),
-            "2025-03-26" => Some(McpProtocolVersion::V2025_03_26),
-            "2025-06-18" => Some(McpProtocolVersion::V2025_06_18),
-            "2025-11-25" => Some(McpProtocolVersion::V2025_11_25),
+            "2024-11-05" => Some(Self::V2024_11_05),
+            "2025-03-26" => Some(Self::V2025_03_26),
+            "2025-06-18" => Some(Self::V2025_06_18),
+            "2025-11-25" => Some(Self::V2025_11_25),
+            "2026-07-28" => Some(Self::V2026_07_28),
             _ => None,
         }
     }
 
-    /// Converts this version to its string representation.
-    pub fn to_string(&self) -> &'static str {
+    /// The wire spelling of this version.
+    pub fn as_str(&self) -> &'static str {
         match self {
-            McpProtocolVersion::V2024_11_05 => "2024-11-05",
-            McpProtocolVersion::V2025_03_26 => "2025-03-26",
-            McpProtocolVersion::V2025_06_18 => "2025-06-18",
-            McpProtocolVersion::V2025_11_25 => "2025-11-25",
+            Self::V2024_11_05 => "2024-11-05",
+            Self::V2025_03_26 => "2025-03-26",
+            Self::V2025_06_18 => "2025-06-18",
+            Self::V2025_11_25 => "2025-11-25",
+            Self::V2026_07_28 => "2026-07-28",
         }
     }
 
@@ -42,9 +50,7 @@ impl McpProtocolVersion {
     pub fn supports_streamable_http(&self) -> bool {
         matches!(
             self,
-            McpProtocolVersion::V2025_03_26
-                | McpProtocolVersion::V2025_06_18
-                | McpProtocolVersion::V2025_11_25
+            Self::V2025_03_26 | Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
         )
     }
 
@@ -52,34 +58,49 @@ impl McpProtocolVersion {
     pub fn supports_meta_fields(&self) -> bool {
         matches!(
             self,
-            McpProtocolVersion::V2025_06_18 | McpProtocolVersion::V2025_11_25
+            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
+        )
+    }
+
+    /// Returns whether this version supports cursor-based pagination.
+    pub fn supports_cursors(&self) -> bool {
+        matches!(
+            self,
+            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
+        )
+    }
+
+    /// Returns whether this version supports progress tokens.
+    pub fn supports_progress_tokens(&self) -> bool {
+        matches!(
+            self,
+            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
         )
     }
 
     /// Returns whether this version supports the use of `progressToken` and `cursor` in `_meta`.
     pub fn supports_progress_and_cursor(&self) -> bool {
-        matches!(
-            self,
-            McpProtocolVersion::V2025_06_18 | McpProtocolVersion::V2025_11_25
-        )
+        self.supports_cursors() && self.supports_progress_tokens()
     }
 
     /// Returns whether this version supports structured user elicitation via JSON Schema.
+    /// Deprecated-but-present in 2026-07-28.
     pub fn supports_elicitation(&self) -> bool {
         matches!(
             self,
-            McpProtocolVersion::V2025_06_18 | McpProtocolVersion::V2025_11_25
+            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
         )
     }
 
-    /// Returns whether this version supports the task system (experimental).
+    /// Returns whether this version carries the task system in core. 2025-11-25 only —
+    /// SEP-2663 moved Tasks to the `io.modelcontextprotocol/tasks` extension.
     pub fn supports_tasks(&self) -> bool {
-        matches!(self, McpProtocolVersion::V2025_11_25)
+        matches!(self, Self::V2025_11_25)
     }
 
     /// Returns whether this version supports icons.
     pub fn supports_icons(&self) -> bool {
-        matches!(self, McpProtocolVersion::V2025_11_25)
+        matches!(self, Self::V2025_11_25 | Self::V2026_07_28)
     }
 
     /// Get a list of supported features for this protocol version
@@ -91,9 +112,11 @@ impl McpProtocolVersion {
         if self.supports_meta_fields() {
             features.push("_meta-fields");
         }
-        if self.supports_progress_and_cursor() {
-            features.push("progress-token");
-            features.push("cursor");
+        if self.supports_cursors() {
+            features.push("cursor-pagination");
+        }
+        if self.supports_progress_tokens() {
+            features.push("progress-tokens");
         }
         if self.supports_elicitation() {
             features.push("elicitation");
@@ -107,8 +130,18 @@ impl McpProtocolVersion {
         features
     }
 
-    /// The latest protocol version this server implements.
-    pub const LATEST: McpProtocolVersion = McpProtocolVersion::V2025_11_25;
+    /// The protocol version this build serves. A build enables exactly one spec
+    /// feature, so this tracks the enabled lane rather than the newest variant.
+    pub const LATEST: McpProtocolVersion = {
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            McpProtocolVersion::V2026_07_28
+        }
+        #[cfg(not(feature = "protocol-2026-07-28"))]
+        {
+            McpProtocolVersion::V2025_11_25
+        }
+    };
 }
 
 impl Default for McpProtocolVersion {
@@ -118,8 +151,10 @@ impl Default for McpProtocolVersion {
 }
 
 impl std::fmt::Display for McpProtocolVersion {
+    // Must call `as_str`, not `to_string` — the latter resolves back to
+    // `ToString::to_string`, which calls this impl.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.to_string())
+        f.write_str(self.as_str())
     }
 }
 
@@ -174,6 +209,10 @@ mod tests {
         assert_eq!(
             McpProtocolVersion::parse_version("2025-06-18"),
             Some(McpProtocolVersion::V2025_06_18)
+        );
+        assert_eq!(
+            McpProtocolVersion::parse_version("2026-07-28"),
+            Some(McpProtocolVersion::V2026_07_28)
         );
         assert_eq!(
             McpProtocolVersion::parse_version("2025-11-25"),

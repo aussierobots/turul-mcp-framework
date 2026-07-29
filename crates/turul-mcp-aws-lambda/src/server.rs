@@ -11,7 +11,7 @@ use tracing::{debug, info};
 use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
 use turul_mcp_server::{
-    McpCompletion, McpNotification, McpPrompt, McpResource, McpRoot, McpTool, handlers::McpHandler,
+    McpCompletion, McpNotification, McpPrompt, McpResource, McpTool, handlers::McpHandler,
     session::SessionManager,
 };
 #[cfg(feature = "protocol-2025-11-25")]
@@ -52,7 +52,6 @@ pub struct LambdaMcpServer {
     #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
     /// Registered root providers
-    root_providers: HashMap<String, Arc<dyn McpRoot>>,
     /// Registered notification providers
     notifications: HashMap<String, Arc<dyn McpNotification>>,
     /// Registered handlers
@@ -113,7 +112,6 @@ impl LambdaMcpServer {
         #[cfg(feature = "protocol-2025-11-25")] sampling: HashMap<String, Arc<dyn McpSampling>>,
         completions: Vec<Arc<dyn McpCompletion>>,
         #[cfg(feature = "protocol-2025-11-25")] loggers: HashMap<String, Arc<dyn McpLogger>>,
-        root_providers: HashMap<String, Arc<dyn McpRoot>>,
         notifications: HashMap<String, Arc<dyn McpNotification>>,
         handlers: HashMap<String, Arc<dyn McpHandler>>,
         roots: Vec<turul_mcp_protocol::roots::Root>,
@@ -179,7 +177,6 @@ impl LambdaMcpServer {
             completions,
             #[cfg(feature = "protocol-2025-11-25")]
             loggers,
-            root_providers,
             notifications,
             handlers,
             roots,

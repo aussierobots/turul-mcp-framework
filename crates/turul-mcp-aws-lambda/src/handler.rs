@@ -343,6 +343,8 @@ impl LambdaMcpHandler {
                     let (parts, body) = hyper_req.into_parts();
                     let boxed_req = hyper::Request::from_parts(parts, body.boxed_unsync());
                     let route_resp = route_handler.handle(boxed_req).await;
+                    // `mut` is only needed when the `cors` feature injects headers below.
+                    #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
                     let mut lambda_resp =
                         crate::adapter::hyper_to_lambda_response(route_resp).await?;
                     #[cfg(feature = "cors")]
@@ -359,6 +361,8 @@ impl LambdaMcpHandler {
                 Err(e) => {
                     debug!("Route validation error: {}", e);
                     let route_resp = e.into_response();
+                    // `mut` is only needed when the `cors` feature injects headers below.
+                    #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
                     let mut lambda_resp =
                         crate::adapter::hyper_to_lambda_response(route_resp).await?;
                     #[cfg(feature = "cors")]
@@ -393,6 +397,8 @@ impl LambdaMcpHandler {
             .map_err(|e| crate::error::LambdaError::McpFramework(e.to_string()))?;
 
         // 🚀 DELEGATION: Convert hyper response back to Lambda response
+        // `mut` is only needed when the `cors` feature injects headers below.
+        #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
         let mut lambda_resp = crate::adapter::hyper_to_lambda_response(hyper_resp).await?;
 
         // Apply CORS headers if configured (Lambda-specific logic)
@@ -465,6 +471,8 @@ impl LambdaMcpHandler {
                     use http_body_util::BodyExt;
                     let (parts, body) = hyper_req.into_parts();
                     let boxed_req = hyper::Request::from_parts(parts, body.boxed_unsync());
+                    // `mut` is only needed when the `cors` feature injects headers below.
+                    #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
                     let mut route_resp = route_handler.handle(boxed_req).await;
                     #[cfg(feature = "cors")]
                     if let Some(ref cors_config) = self.cors_config {
@@ -480,6 +488,8 @@ impl LambdaMcpHandler {
                 Ok(None) => {} // No match, continue to MCP handler
                 Err(e) => {
                     debug!("Route validation error (streaming): {}", e);
+                    // `mut` is only needed when the `cors` feature injects headers below.
+                    #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
                     let mut err_resp = e.into_response();
                     #[cfg(feature = "cors")]
                     if let Some(ref cors_config) = self.cors_config {
@@ -493,12 +503,17 @@ impl LambdaMcpHandler {
 
         // 🚀 PROTOCOL ROUTING: Check protocol version and route to appropriate handler
         use turul_http_mcp_server::protocol::McpProtocolVersion;
-        let protocol_version = hyper_req
+        // Absent and unrecognised are distinct: absent falls back to this build's
+        // lane, unrecognised must NOT be silently downgraded to a superseded spec
+        // — it goes to the streamable handler, which answers with the spec's
+        // UnsupportedProtocolVersion error rather than serving the request.
+        let raw_version = hyper_req
             .headers()
             .get("MCP-Protocol-Version")
-            .and_then(|h| h.to_str().ok())
-            .and_then(McpProtocolVersion::parse_version)
-            .unwrap_or(McpProtocolVersion::V2025_06_18);
+            .and_then(|h| h.to_str().ok());
+        let parsed_version = raw_version.and_then(McpProtocolVersion::parse_version);
+        let unrecognised_version = raw_version.is_some() && parsed_version.is_none();
+        let protocol_version = parsed_version.unwrap_or(McpProtocolVersion::LATEST);
 
         // A protocol-2026-07-28 build serves a single spec: route everything
         // to the streamable handler, whose Server Validation rejects
@@ -508,21 +523,22 @@ impl LambdaMcpHandler {
         #[cfg(feature = "protocol-2026-07-28")]
         let route_streamable = true;
         #[cfg(feature = "protocol-2025-11-25")]
-        let route_streamable = protocol_version.supports_streamable_http();
+        let route_streamable = unrecognised_version || protocol_version.supports_streamable_http();
 
         // Route based on protocol version
         let hyper_resp = if route_streamable {
-            // Use StreamableHttpHandler for MCP 2025-11-25 (proper headers, chunked SSE)
             debug!(
-                "Using StreamableHttpHandler for protocol {}",
-                protocol_version.to_string()
+                "Using StreamableHttpHandler for protocol {} (header={:?}, unrecognised={})",
+                protocol_version.as_str(),
+                raw_version,
+                unrecognised_version
             );
             self.streamable_handler.handle_request(hyper_req).await
         } else {
             // Legacy protocol: use SessionMcpHandler
             debug!(
                 "Using SessionMcpHandler for legacy protocol {}",
-                protocol_version.to_string()
+                protocol_version.as_str()
             );
             self.session_handler
                 .handle_mcp_request(hyper_req)
@@ -534,6 +550,8 @@ impl LambdaMcpHandler {
         };
 
         // 🚀 DELEGATION: Convert hyper response to Lambda streaming response (preserves streaming!)
+        // `mut` is only needed when the `cors` feature injects headers below.
+        #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
         let mut lambda_resp = crate::adapter::hyper_to_lambda_streaming(hyper_resp);
 
         // Apply CORS headers if configured (Lambda-specific logic)
@@ -546,7 +564,9 @@ impl LambdaMcpHandler {
         Ok(lambda_resp)
     }
 
-    /// Convert Lambda response to streaming format (helper for CORS preflight)
+    /// Convert Lambda response to streaming format (helper for CORS preflight).
+    /// Its only caller is the preflight branch, which is `cors`-gated.
+    #[cfg(feature = "cors")]
     fn convert_lambda_response_to_streaming(
         &self,
         lambda_response: LambdaResponse<LambdaBody>,

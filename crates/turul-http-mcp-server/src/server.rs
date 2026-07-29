@@ -18,7 +18,8 @@ use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
 use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 
-use crate::streamable_http::{McpProtocolVersion, StreamableHttpHandler};
+use crate::protocol::McpProtocolVersion;
+use crate::streamable_http::StreamableHttpHandler;
 use crate::{CorsLayer, Result, SessionMcpHandler, StreamConfig, StreamManager};
 
 /// Configuration for the HTTP MCP server
@@ -507,20 +508,23 @@ async fn handle_request(
     );
     let response = if path == handler.session_handler.config.mcp_path {
         debug!("Path match: Request routed to MCP handler");
-        // Extract MCP protocol version from headers
-        let protocol_version_str = req
+        // Absent and unrecognised are distinct: absent falls back to this build's
+        // lane, unrecognised must NOT be silently downgraded to a superseded spec
+        // — it is routed to the streamable handler, which answers with the
+        // spec's UnsupportedProtocolVersion error rather than serving the request.
+        let raw_version = req
             .headers()
             .get("MCP-Protocol-Version")
-            .and_then(|h| h.to_str().ok())
-            .unwrap_or("2025-11-25"); // Default to latest version (we only support the latest protocol)
-        debug!("Protocol version: {}", protocol_version_str);
-
-        let protocol_version = McpProtocolVersion::parse_version(protocol_version_str)
-            .unwrap_or(McpProtocolVersion::V2025_11_25);
+            .and_then(|h| h.to_str().ok());
+        let parsed_version = raw_version.and_then(McpProtocolVersion::parse_version);
+        let unrecognised_version = raw_version.is_some() && parsed_version.is_none();
+        let protocol_version = parsed_version.unwrap_or(McpProtocolVersion::LATEST);
 
         debug!(
-            "MCP request: protocol_version={}, method={}",
+            "MCP request: protocol_version={} (header={:?}, unrecognised={}), method={}",
             protocol_version.as_str(),
+            raw_version,
+            unrecognised_version,
             method
         );
 
@@ -543,8 +547,10 @@ async fn handle_request(
         // headers to the 2025-era session handler would bypass that contract.
         #[cfg(feature = "protocol-2026-07-28")]
         let route_streamable = true;
+        // An unrecognised version string is never treated as legacy: the session
+        // handler would serve it, hiding the version error the spec requires.
         #[cfg(feature = "protocol-2025-11-25")]
-        let route_streamable = protocol_version.supports_streamable_http();
+        let route_streamable = unrecognised_version || protocol_version.supports_streamable_http();
 
         if route_streamable {
             debug!(

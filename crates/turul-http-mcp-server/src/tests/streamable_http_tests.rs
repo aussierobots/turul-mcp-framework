@@ -12,7 +12,8 @@ use std::sync::Arc;
 use hyper::{Body, Method, Request, Response, StatusCode, Version};
 use serde_json::json;
 
-use crate::streamable_http::{StreamableHttpHandler, StreamableHttpContext, McpProtocolVersion};
+use crate::protocol::McpProtocolVersion;
+use crate::streamable_http::{StreamableHttpContext, StreamableHttpHandler};
 use crate::server::ServerConfig;
 use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 use turul_mcp_protocol::{JsonRpcRequest, JsonRpcResponse, JsonRpcError, McpError};

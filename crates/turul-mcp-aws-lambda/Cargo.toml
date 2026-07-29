@@ -73,6 +73,8 @@ serial_test = { workspace = true }
 [[bin]]
 name = "lambda-echo-server"
 path = "examples/lambda-echo-server.rs"
+# Demonstrates cors_allow_all_origins(), which only exists with the cors feature.
+required-features = ["cors"]
 
 # Note: autoexamples = false in [package] prevents duplicate target warnings
 

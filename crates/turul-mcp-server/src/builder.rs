@@ -10,7 +10,7 @@ use crate::handlers::*;
 use crate::resource::McpResource;
 #[cfg(feature = "protocol-2025-11-25")]
 use crate::tool::tool_to_descriptor;
-use crate::{McpCompletion, McpNotification, McpPrompt, McpRoot};
+use crate::{McpCompletion, McpNotification, McpPrompt};
 #[cfg(feature = "protocol-2025-11-25")]
 use crate::{McpElicitation, McpLogger, McpSampling};
 use crate::{McpServer, McpTool, Result};
@@ -64,7 +64,6 @@ pub struct McpServerBuilder {
     loggers: HashMap<String, Arc<dyn McpLogger>>,
 
     /// Root providers registered with the server
-    root_providers: HashMap<String, Arc<dyn McpRoot>>,
 
     /// Notification providers registered with the server
     notifications: HashMap<String, Arc<dyn McpNotification>>,
@@ -75,6 +74,8 @@ pub struct McpServerBuilder {
     /// Roots configured for the server
     // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
     #[allow(deprecated)]
+    /// 2025-11-25 only: the 2026 server never hosts an inbound `roots/list`.
+    #[cfg(feature = "protocol-2025-11-25")]
     roots: Vec<turul_mcp_protocol::roots::Root>,
 
     /// Optional instructions for clients
@@ -275,9 +276,9 @@ impl McpServerBuilder {
             ext_task_tools: std::collections::HashMap::new(),
             #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
-            root_providers: HashMap::new(),
             notifications: HashMap::new(),
             handlers,
+            #[cfg(feature = "protocol-2025-11-25")]
             roots: Vec::new(),
             instructions: None,
             session_timeout_minutes: None,
@@ -1033,24 +1034,6 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a root provider with the server
-    pub fn root_provider<R: McpRoot + 'static>(mut self, root: R) -> Self {
-        let key = format!("root_{}", self.root_providers.len());
-        self.root_providers.insert(key, Arc::new(root));
-        self
-    }
-
-    /// Register multiple root providers
-    pub fn root_providers<R: McpRoot + 'static, I: IntoIterator<Item = R>>(
-        mut self,
-        roots: I,
-    ) -> Self {
-        for root in roots {
-            self = self.root_provider(root);
-        }
-        self
-    }
-
     /// Register a notification provider with the server
     pub fn notification_provider<N: McpNotification + 'static>(mut self, notification: N) -> Self {
         let key = format!("notification_{}", self.notifications.len());
@@ -1252,15 +1235,20 @@ impl McpServerBuilder {
         self.handler(LoggingHandler)
     }
 
-    /// Add roots support
+    /// Add roots support.
+    ///
+    /// 2025-11-25 only: `roots/list` is not a member of the 2026-07-28
+    /// client-to-server request union, where roots are requested from the client
+    /// through an MRTR input request instead. Hosting it inbound on a 2026 build
+    /// would answer a method the spec requires to be a 404 with `-32601`.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_roots(self) -> Self {
-        // Note: roots is not part of standard server capabilities yet
-        // Could be added to experimental if needed
         self.handler(RootsHandler::new())
     }
 
     /// Add a single root directory
     #[allow(deprecated)]
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn root(mut self, root: turul_mcp_protocol::roots::Root) -> Self {
         self.roots.push(root);
         self
@@ -1692,6 +1680,7 @@ impl McpServerBuilder {
         // Auto-detect and configure server capabilities based on registered components
         let has_tools = !self.tools.is_empty();
         let has_prompts = !self.prompts.is_empty();
+        #[cfg(feature = "protocol-2025-11-25")]
         let has_roots = !self.roots.is_empty();
         #[cfg(feature = "protocol-2025-11-25")]
         let has_elicitations = !self.elicitations.is_empty();
@@ -1793,6 +1782,7 @@ impl McpServerBuilder {
         tracing::debug!("   - Tools: {}", has_tools);
         tracing::debug!("   - Resources: {}", has_resources);
         tracing::debug!("   - Prompts: {}", has_prompts);
+        #[cfg(feature = "protocol-2025-11-25")]
         tracing::debug!("   - Roots: {}", has_roots);
         #[cfg(feature = "protocol-2025-11-25")]
         tracing::debug!("   - Elicitation: {}", has_elicitations);

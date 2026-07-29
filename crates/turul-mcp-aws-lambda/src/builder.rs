@@ -9,7 +9,7 @@ use std::sync::Arc;
 use turul_http_mcp_server::{ServerConfig, StreamConfig};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
 use turul_mcp_server::handlers::{McpHandler, *};
-use turul_mcp_server::{McpCompletion, McpNotification, McpPrompt, McpResource, McpRoot, McpTool};
+use turul_mcp_server::{McpCompletion, McpNotification, McpPrompt, McpResource, McpTool};
 #[cfg(feature = "protocol-2025-11-25")]
 use turul_mcp_server::{McpElicitation, McpLogger, McpSampling};
 use turul_mcp_session_storage::BoxedSessionStorage;
@@ -57,7 +57,6 @@ use crate::cors::CorsConfig;
 ///         .version("1.0.0")
 ///         .tool(ExampleTool::default())
 ///         .storage(Arc::new(InMemorySessionStorage::new()))
-///         .cors_allow_all_origins()
 ///         .build()
 ///         .await?;
 ///
@@ -106,7 +105,6 @@ pub struct LambdaMcpServerBuilder {
     loggers: HashMap<String, Arc<dyn McpLogger>>,
 
     /// Root providers registered with the server
-    root_providers: HashMap<String, Arc<dyn McpRoot>>,
 
     /// Notification providers registered with the server
     notifications: HashMap<String, Arc<dyn McpNotification>>,
@@ -302,7 +300,6 @@ impl LambdaMcpServerBuilder {
             completions: Vec::new(),
             #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
-            root_providers: HashMap::new(),
             notifications: HashMap::new(),
             handlers,
             roots: Vec::new(),
@@ -525,24 +522,6 @@ impl LambdaMcpServerBuilder {
     ) -> Self {
         for logger in loggers {
             self = self.logger(logger);
-        }
-        self
-    }
-
-    /// Register a root provider with the server
-    pub fn root_provider<R: McpRoot + 'static>(mut self, root: R) -> Self {
-        let key = format!("root_{}", self.root_providers.len());
-        self.root_providers.insert(key, Arc::new(root));
-        self
-    }
-
-    /// Register multiple root providers
-    pub fn root_providers<R: McpRoot + 'static, I: IntoIterator<Item = R>>(
-        mut self,
-        roots: I,
-    ) -> Self {
-        for root in roots {
-            self = self.root_provider(root);
         }
         self
     }
@@ -1032,12 +1011,18 @@ impl LambdaMcpServerBuilder {
         // CORS config, the `SameOriginOrLoopback` default stands.
         if let Some(policy) = self.origin_policy.take() {
             self.server_config.origin_policy = policy;
-        } else if let Some(cors) = &self.cors_config {
-            self.server_config.origin_policy = if cors.allowed_origins.iter().any(|o| o == "*") {
-                turul_http_mcp_server::OriginPolicy::Disabled
-            } else {
-                turul_http_mcp_server::OriginPolicy::AllowList(cors.allowed_origins.clone())
-            };
+        } else {
+            // `cors_config` only exists when the `cors` feature is on; without it
+            // there is no operator origin declaration to derive a policy from and
+            // the SameOriginOrLoopback default stands.
+            #[cfg(feature = "cors")]
+            if let Some(cors) = &self.cors_config {
+                self.server_config.origin_policy = if cors.allowed_origins.iter().any(|o| o == "*") {
+                    turul_http_mcp_server::OriginPolicy::Disabled
+                } else {
+                    turul_http_mcp_server::OriginPolicy::AllowList(cors.allowed_origins.clone())
+                };
+            }
         }
 
         // Validate configuration (same as MCP server)
@@ -1243,7 +1228,6 @@ impl LambdaMcpServerBuilder {
             self.completions,
             #[cfg(feature = "protocol-2025-11-25")]
             self.loggers,
-            self.root_providers,
             self.notifications,
             handlers,
             self.roots,

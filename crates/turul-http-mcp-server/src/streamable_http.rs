@@ -24,127 +24,7 @@ use tracing::{debug, error, info, warn};
 use turul_mcp_session_storage::SessionView;
 
 use crate::ServerConfig;
-use crate::protocol::normalize_header_value;
-
-/// MCP Protocol versions
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum McpProtocolVersion {
-    /// Original protocol without streamable HTTP (2024-11-05)
-    V2024_11_05,
-    /// Protocol including streamable HTTP (2025-03-26)
-    V2025_03_26,
-    /// Protocol with structured _meta, cursor, progressToken, and elicitation (2025-06-18)
-    V2025_06_18,
-    /// Protocol with tasks, icons, URL elicitation, and sampling tools (2025-11-25)
-    #[cfg_attr(feature = "protocol-2025-11-25", default)]
-    V2025_11_25,
-    /// Stateless core: server/discover, per-request _meta, no Mcp-Session-Id (2026-07-28)
-    #[cfg_attr(feature = "protocol-2026-07-28", default)]
-    V2026_07_28,
-}
-
-impl McpProtocolVersion {
-    /// Parse from header string
-    pub fn parse_version(s: &str) -> Option<Self> {
-        match s {
-            "2024-11-05" => Some(Self::V2024_11_05),
-            "2025-03-26" => Some(Self::V2025_03_26),
-            "2025-06-18" => Some(Self::V2025_06_18),
-            "2025-11-25" => Some(Self::V2025_11_25),
-            "2026-07-28" => Some(Self::V2026_07_28),
-            _ => None,
-        }
-    }
-
-    /// Convert to string representation
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::V2024_11_05 => "2024-11-05",
-            Self::V2025_03_26 => "2025-03-26",
-            Self::V2025_06_18 => "2025-06-18",
-            Self::V2025_11_25 => "2025-11-25",
-            Self::V2026_07_28 => "2026-07-28",
-        }
-    }
-
-    /// Returns whether this version supports streamable HTTP
-    pub fn supports_streamable_http(&self) -> bool {
-        matches!(
-            self,
-            Self::V2025_03_26 | Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
-        )
-    }
-
-    /// Returns whether this version supports _meta fields
-    pub fn supports_meta_fields(&self) -> bool {
-        matches!(
-            self,
-            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
-        )
-    }
-
-    /// Returns whether this version supports cursor-based pagination
-    pub fn supports_cursors(&self) -> bool {
-        matches!(
-            self,
-            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
-        )
-    }
-
-    /// Returns whether this version supports progress tokens
-    pub fn supports_progress_tokens(&self) -> bool {
-        matches!(
-            self,
-            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
-        )
-    }
-
-    /// Returns whether this version supports elicitation (deprecated-but-present in 2026-07-28)
-    pub fn supports_elicitation(&self) -> bool {
-        matches!(
-            self,
-            Self::V2025_06_18 | Self::V2025_11_25 | Self::V2026_07_28
-        )
-    }
-
-    /// Returns whether this version supports the task system (2025-11-25 core only;
-    /// moved to an extension in 2026-07-28)
-    pub fn supports_tasks(&self) -> bool {
-        matches!(self, Self::V2025_11_25)
-    }
-
-    /// Returns whether this version supports icons
-    pub fn supports_icons(&self) -> bool {
-        matches!(self, Self::V2025_11_25 | Self::V2026_07_28)
-    }
-
-    /// Get list of supported features for this version
-    pub fn supported_features(&self) -> Vec<&'static str> {
-        let mut features = vec![];
-        if self.supports_streamable_http() {
-            features.push("streamable-http");
-        }
-        if self.supports_meta_fields() {
-            features.push("_meta-fields");
-        }
-        if self.supports_cursors() {
-            features.push("cursor-pagination");
-        }
-        if self.supports_progress_tokens() {
-            features.push("progress-tokens");
-        }
-        if self.supports_elicitation() {
-            features.push("elicitation");
-        }
-        if self.supports_tasks() {
-            features.push("tasks");
-        }
-        if self.supports_icons() {
-            features.push("icons");
-        }
-        features
-    }
-}
+use crate::protocol::{McpProtocolVersion, normalize_header_value};
 
 /// Streamable HTTP request context
 #[derive(Debug, Clone)]
@@ -223,36 +103,65 @@ impl StreamableHttpContext {
         self.wants_sse_stream
     }
 
-    /// Conservative transport heuristic for SSE vs JSON response framing.
+    /// Choose SSE vs JSON response framing for a single request.
     ///
-    /// **Not a spec requirement** — the MCP spec allows either format when
-    /// the client accepts both. This is a compatibility-driven default:
+    /// The server may answer a request with either a single JSON object or an
+    /// SSE stream, and the client must support both — so this is a choice, not
+    /// a conformance requirement:
     ///
     /// - Client only accepts `text/event-stream` → SSE
     /// - Client only accepts `application/json` → JSON
-    /// - Client accepts both → SSE for `tools/call`, `sampling/createMessage`,
-    ///   `elicitation/create`; JSON for everything else
+    /// - Client accepts both → SSE only when the request opted into
+    ///   request-scoped notifications, via `_meta.progressToken` or
+    ///   `_meta."io.modelcontextprotocol/logLevel"`
     ///
-    /// **Limitation (architectural, not fundamental):** the heuristic operates
-    /// at method granularity, not per-tool. Every `tools/call` under combined
-    /// Accept gets SSE — even simple tools that never call `notify_progress()`.
-    /// The transport layer does not currently have per-tool progress metadata;
-    /// plumbing that information from the tool registry would allow a finer
-    /// decision but is not implemented. Non-streaming `tools/call` responses
-    /// pay the SSE framing cost and may hit client/proxy SSE quirks as a
-    /// result of this tradeoff.
-    pub fn should_use_sse(&self, method: &str) -> bool {
+    /// Those two keys are the only per-request opt-ins for server→client
+    /// notifications on a response stream, and both are gated on the request
+    /// having asked: `ProgressNotificationParams.progressToken` is required and
+    /// must be the token given in the originating request, and a server must not
+    /// emit `notifications/message` for a request that declared no log level. A
+    /// request carrying neither cannot legally be sent either notification, so
+    /// SSE framing would buy it nothing while costing interoperability — plain
+    /// JSON is the broader-support path, and it is the only path that can carry
+    /// the `-32020`/`-32021` header/capability errors on HTTP 400 as their
+    /// schemas require (chunked SSE commits 200 before dispatch).
+    ///
+    /// `subscriptions/listen` is unaffected: it is handled on its own path,
+    /// which independently requires `Accept: text/event-stream`.
+    pub fn should_use_sse(&self, request: &turul_rpc::JsonRpcRequest) -> bool {
         if !self.wants_sse_stream {
             return false;
         }
         if !self.accepts_json {
             return true;
         }
-        // Conservative: assume any tools/call may emit mid-stream events
-        matches!(
-            method,
+        // 2025-11-25 keeps its historical method-name heuristic: that lane is a
+        // frozen spec snapshot and its clients were built against always-SSE
+        // `tools/call`. The per-request rule below is a 2026-07-28 change.
+        #[cfg(not(feature = "protocol-2026-07-28"))]
+        return matches!(
+            request.method.as_str(),
             "tools/call" | "sampling/createMessage" | "elicitation/create"
-        )
+        );
+
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+        let Some(meta) = request.get_param("_meta") else {
+            return false;
+        };
+        if meta.get("progressToken").is_some() {
+            return true;
+        }
+        // Per-request log level is a 2026-07-28 key; the 2025-11-25 lane sets
+        // levels with `logging/setLevel` instead, so there is nothing to opt in
+        // to here and the alias crate does not export the constant.
+        // The key is deprecated with the rest of the Logging surface, but a
+        // request that declares it must still be able to receive what it asked
+        // for while the feature remains in the spec.
+        #[allow(deprecated)]
+        let opted_in = meta.get(turul_mcp_protocol::META_KEY_LOG_LEVEL).is_some();
+        opted_in
+        }
     }
 
     /// Whether client wants streaming POST responses
@@ -1869,16 +1778,27 @@ impl StreamableHttpHandler {
                 let dispatcher = Arc::clone(&self.dispatcher);
                 let notification_clone = notification.clone();
 
-                // notifications/initialized MUST be processed synchronously before
+                // `notifications/initialized` must be dispatched synchronously before
                 // returning 202 — otherwise the next request (tools/list) can race
                 // ahead of the is_initialized state write. Other notifications are
                 // fire-and-forget and can be processed asynchronously.
                 //
-                // Per MCP spec, notifications always return 202 even on failure.
-                // If processing fails, we log the error — the next request will
-                // fail with "session not initialized" which points operators to
-                // the initialization failure in logs.
-                if notification_clone.method == "notifications/initialized" {
+                // This ordering constraint belongs to the 2025-11-25 handshake only.
+                // 2026-07-28 removed `initialize`/`notifications/initialized`, so there
+                // is no initialization state to order against and every notification
+                // takes the asynchronous path.
+                //
+                // Notifications always return 202 even on failure. If processing
+                // fails, we log the error — the next request will fail with
+                // "session not initialized" which points operators to the
+                // initialization failure in logs.
+                #[cfg(feature = "protocol-2025-11-25")]
+                let dispatch_synchronously =
+                    notification_clone.method == "notifications/initialized";
+                #[cfg(not(feature = "protocol-2025-11-25"))]
+                let dispatch_synchronously = false;
+
+                if dispatch_synchronously {
                     if let Err(e) = dispatcher
                         .handle_notification_with_context(notification_clone, Some(session_context))
                         .await
@@ -2236,7 +2156,7 @@ impl StreamableHttpHandler {
 
         // Register streaming POST connection with StreamManager for progress events
         // Transport policy: prefer JSON for non-streaming methods when client accepts both
-        let wants_sse = context.should_use_sse(&request.method);
+        let wants_sse = context.should_use_sse(&request);
         let connection_id = format!("post-{}", uuid::Uuid::now_v7().as_simple());
 
         // 2026 + JSON framing: dispatch inline so the HTTP status can reflect
