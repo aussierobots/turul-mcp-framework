@@ -1481,6 +1481,7 @@ mod tests {
             "server/discover",
             "resources/list",
             "resources/read",
+            "resources/templates/list",
             "prompts/list",
             "prompts/get",
             "notifications/cancelled",
@@ -1523,6 +1524,7 @@ mod tests {
             "ping",
             "resources/list",
             "resources/read",
+            "resources/templates/list",
             "prompts/list",
             "prompts/get",
             "logging/setLevel",
@@ -2555,12 +2557,11 @@ mod tests {
         );
     }
 
-    /// Verify resources/templates/list is NOT dispatched when no templates exist.
-    /// HTTP server only registers it conditionally — Lambda must match.
-    /// We prove absence by sending a request and verifying "method not found" (-32601).
+    /// resources/templates/list is registered unconditionally, matching the
+    /// local builder: a server with no templates reports an empty list.
     #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
-    async fn test_resources_templates_list_absent_without_templates() {
+    async fn test_resources_templates_list_answers_empty_without_templates() {
         use lambda_http::Body as LambdaBody;
 
         let server = LambdaMcpServerBuilder::new()
@@ -2603,8 +2604,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        // Send resources/templates/list — should get "method not found" (-32601)
-        // because no templates are registered
+        // resources/templates/list with no templates registered
         let tmpl_req = http::Request::builder()
             .method("POST")
             .uri("/mcp")
@@ -2623,15 +2623,18 @@ mod tests {
         let json: serde_json::Value = serde_json::from_str(&body)
             .unwrap_or_else(|e| panic!("Response must be valid JSON: {e}\nBody: {body}"));
 
-        // Must be method not found — handler should NOT be registered without templates
+        // An empty list, not -32601. A server that declares the resources
+        // capability and answers "method not found" tells a client the method
+        // does not exist, which is a different claim from "there are none" —
+        // and it is the one a capability-driven client acts on.
         assert!(
-            json["error"].is_object(),
-            "resources/templates/list should return error without templates: {json}"
+            json.get("error").is_none(),
+            "resources/templates/list must not error without templates: {json}"
         );
         assert_eq!(
-            json["error"]["code"].as_i64().unwrap(),
-            -32601,
-            "resources/templates/list must be method-not-found (-32601) without templates: {json}"
+            json["result"]["resourceTemplates"],
+            serde_json::json!([]),
+            "a server with no templates reports an empty list: {json}"
         );
     }
 }
