@@ -71,10 +71,9 @@ impl McpResource for ConfigResource {
             "features": ["function_resources", "constructor_functions", "auto_detection"]
         });
 
-        Ok(vec![ResourceContent::blob(
+        Ok(vec![ResourceContent::json(
             "file:///config.json",
             serde_json::to_string_pretty(&config).unwrap(),
-            "application/json".to_string(),
         )])
     }
 }
@@ -172,10 +171,9 @@ impl McpResource for UserProfileResource {
             }
         });
 
-        Ok(vec![ResourceContent::blob(
+        Ok(vec![ResourceContent::json(
             format!("file:///users/{}.json", user_id),
             serde_json::to_string_pretty(&profile).unwrap(),
-            "application/json".to_string(),
         )])
     }
 }
@@ -266,10 +264,9 @@ impl McpResource for SystemStatusResource {
             "next_maintenance": "2024-01-08T02:00:00Z"
         });
 
-        Ok(vec![ResourceContent::blob(
+        Ok(vec![ResourceContent::json(
             "system://status",
             serde_json::to_string_pretty(&status).unwrap(),
-            "application/json".to_string(),
         )])
     }
 }

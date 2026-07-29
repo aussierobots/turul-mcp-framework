@@ -1,4 +1,4 @@
-# Test client for lambda-mcp-server, which is PINNED to the 2025-11-25
+# Smoke client for lambda-mcp-server, which is PINNED to the 2025-11-25
 # stateful lane — the bilingual McpClient inside negotiates down to 2025
 # against it (initialize handshake + Mcp-Session-Id). For the 2026 stateless
 # client pattern see streamable-http-client.
@@ -6,7 +6,7 @@
 name = "lambda-turul-mcp-client"
 version = "0.4.0"
 edition.workspace = true
-description = "Comprehensive test client for lambda-turul-mcp-server validation and end-to-end testing"
+description = "Smoke client for lambda-turul-mcp-server (probe + interactive session)"
 license = "MIT"
 
 [[bin]]
@@ -15,43 +15,16 @@ name = "lambda-turul-mcp-client"
 path = "src/main.rs"
 
 [dependencies]
-# MCP client framework
 turul-mcp-client = { workspace = true }
-
-# HTTP client for MCP communication (still needed for direct requests during testing)
-reqwest = { workspace = true, features = ["json", "stream"] }
 tokio = { workspace = true, features = ["full"] }
-tokio-stream = { workspace = true }
-futures = { workspace = true }
 
-# JSON and serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
 
-# Error handling and logging
 anyhow = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-# Test framework
-tokio-test = { workspace = true }
-
-# Date/time handling
-chrono = { workspace = true }
-
-# CLI argument parsing
 clap.workspace = true
-
-# Progress bars and output formatting
-indicatif.workspace = true
 colored.workspace = true
-
-[dev-dependencies]
-tokio-test.workspace = true
-
-[features]
-default = ["client"]
-client = []
-integration-tests = []

@@ -146,7 +146,6 @@ impl McpMiddleware for AuthMiddleware {
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-
         // Extract X-API-Key from request metadata
         let api_key = ctx.metadata().get("x-api-key").and_then(|v| v.as_str());
 

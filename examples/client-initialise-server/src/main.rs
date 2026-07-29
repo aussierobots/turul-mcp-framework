@@ -8,14 +8,14 @@
 //!
 //! ## Usage
 //! ```bash
-//! # Start server on default port (8641)
+//! # Start server on default port (52940)
 //! cargo run --package client-initialise-server
 //! ```
 //!
 //! ## Test with Client
 //! ```bash
 //! # In another terminal:
-//! cargo run --package client-initialise-report -- --url http://127.0.0.1:8641/mcp
+//! cargo run --package client-initialise-report -- --url http://127.0.0.1:52940/mcp
 //! ```
 
 use anyhow::Result;
@@ -38,6 +38,17 @@ use turul_mcp_session_storage::{SqliteConfig, SqliteSessionStorage};
 /// Shared session storage accessible by tools via OnceLock
 static SESSION_STORAGE: OnceLock<Arc<turul_mcp_session_storage::BoxedSessionStorage>> =
     OnceLock::new();
+
+/// The backend actually selected by `--storage-backend` at startup. The
+/// inspection tools report this rather than a `cfg!(feature = ...)` guess:
+/// this package compiles every backend by default, so a compile-time check
+/// names whichever feature happens to be listed first regardless of what is
+/// running.
+static STORAGE_BACKEND: OnceLock<&'static str> = OnceLock::new();
+
+fn storage_type() -> &'static str {
+    STORAGE_BACKEND.get().copied().unwrap_or("InMemory")
+}
 
 /// Echo SSE tool that demonstrates MCP notifications via SessionContext
 #[derive(McpTool, Clone, Default, Deserialize)]
@@ -116,16 +127,7 @@ impl GetSessionDataTool {
             // Get session info from storage
             match storage.get_session(&session_ctx.session_id).await {
                 Ok(Some(session_info)) => {
-                    // Determine data source (direct from storage backend)
-                    let storage_type = if cfg!(feature = "dynamodb") {
-                        "DynamoDB"
-                    } else if cfg!(feature = "postgres") {
-                        "PostgreSQL"
-                    } else if cfg!(feature = "sqlite") {
-                        "SQLite"
-                    } else {
-                        "InMemory"
-                    };
+                    let storage_type = storage_type();
 
                     let session_data = json!({
                         "session_id": session_info.session_id,
@@ -216,16 +218,7 @@ impl GetSessionEventsTool {
                         })
                         .collect();
 
-                    // Determine data source (direct from storage backend)
-                    let storage_type = if cfg!(feature = "dynamodb") {
-                        "DynamoDB"
-                    } else if cfg!(feature = "postgres") {
-                        "PostgreSQL"
-                    } else if cfg!(feature = "sqlite") {
-                        "SQLite"
-                    } else {
-                        "InMemory"
-                    };
+                    let storage_type = storage_type();
 
                     let response = json!({
                         "session_id": session_ctx.session_id,
@@ -285,17 +278,7 @@ impl GetTableInfoTool {
 
         debug!("Using session storage for table info: {:p}", storage);
 
-        // Determine storage backend type and table information
-        let storage_type = if cfg!(feature = "dynamodb") {
-            "DynamoDB"
-        } else if cfg!(feature = "postgres") {
-            "PostgreSQL"
-        } else if cfg!(feature = "sqlite") {
-            "SQLite"
-        } else {
-            "InMemory"
-        };
-
+        let storage_type = storage_type();
         let table_info = json!({
             "storage_backend": storage_type,
             "session_table": {
@@ -365,7 +348,7 @@ async fn main() -> Result<()> {
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
-    let mut port = 8641;
+    let mut port = 52940;
     let mut storage_backend = "inmemory".to_string(); // Default to InMemory storage
     let mut create_tables = false; // Default to not creating tables
 
@@ -374,7 +357,7 @@ async fn main() -> Result<()> {
         match args[i].as_str() {
             "--port" => {
                 if i + 1 < args.len() {
-                    port = args[i + 1].parse().unwrap_or(8641);
+                    port = args[i + 1].parse().unwrap_or(52940);
                     i += 2;
                 } else {
                     i += 1;
@@ -398,6 +381,15 @@ async fn main() -> Result<()> {
 
     let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
     info!("   Binding to: http://{}/mcp", bind_address);
+
+    STORAGE_BACKEND
+        .set(match storage_backend.as_str() {
+            "sqlite" => "SQLite",
+            "postgres" => "PostgreSQL",
+            "dynamodb" => "DynamoDB",
+            _ => "InMemory",
+        })
+        .ok();
 
     // Build server using builder pattern with appropriate storage backend
     let server = match storage_backend.as_str() {

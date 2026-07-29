@@ -1,33 +1,41 @@
-//! # MCP 2025-11-25 Streamable HTTP Client Example
+//! # MCP 2025-11-25 Streamable HTTP — raw wire client
 //!
-//! This example demonstrates the CORRECT implementation of MCP Streamable HTTP
-//! using the turul-mcp-client crate with:
+//! **Deliberately pinned to the 2025-11-25 lane.** Everything it shows —
+//! the `initialize` handshake, the `Mcp-Session-Id` header carried on every
+//! subsequent request, and `DELETE` session termination — was REMOVED by the
+//! 2026-07-28 stateless core. For the 2026 equivalent see
+//! `streamable-http-client`, which uses the high-level `McpClient`.
 //!
-//! - ✅ Proper Accept header handling (`application/json, text/event-stream`)
-//! - ✅ Multi-threaded SSE stream processing for tool calls
-//! - ✅ Concurrent progress notification collection
-//! - ✅ Session management with header extraction
-//! - ✅ Real-time progress updates during tool execution
+//! This client speaks the wire directly with `reqwest` rather than through
+//! `turul-mcp-client`, so every byte the spec requires is visible in one
+//! file. That is the point: it is the reference for anyone debugging their
+//! own 2025-11-25 Streamable HTTP implementation.
+//!
+//! What it demonstrates:
+//!
+//! 1. **Session lifecycle** — `initialize` → read `Mcp-Session-Id` from the
+//!    RESPONSE HEADER → `notifications/initialized` (202) → header on every
+//!    later request → `DELETE` to terminate.
+//! 2. **Accept negotiation** — `application/json, text/event-stream` lets the
+//!    server choose; a tool that emits notifications answers with
+//!    `Content-Type: text/event-stream`.
+//! 3. **Progress opt-in** — `params._meta.progressToken`. Without it the
+//!    server has no token to echo and emits no progress.
+//! 4. **Concurrent SSE processing** — one task parses the event stream while
+//!    a second drains progress notifications, so updates are observed as
+//!    they arrive instead of after the final result.
 //!
 //! ## Usage
 //!
 //! ```bash
-//! # Start a server (in another terminal):
-//! cargo run --package tools-test-server -- --port 8080
+//! # Terminal 1 — a 2025-11-25 server exposing the `echo_sse` tool:
+//! cargo run -p client-initialise-server -- --port 52950
 //!
-//! # Run this client:
-//! cargo run --package streamable-http-client -- --url http://127.0.0.1:8080/mcp
+//! # Terminal 2:
+//! cargo run -p streamable-http-client-2025-11-25 -- --url http://127.0.0.1:52950/mcp
 //! ```
-//!
-//! ## What This Example Demonstrates
-//!
-//! 1. **Streamable HTTP Protocol**: POST requests with proper Accept headers
-//! 2. **Multi-threading**: Concurrent SSE stream processing
-//! 3. **Progress Notifications**: Real-time updates during tool execution
-//! 4. **Session Management**: Proper MCP session lifecycle
-//! 5. **Error Handling**: Robust connection and protocol error handling
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use futures::StreamExt;
 use reqwest::Client;
@@ -36,24 +44,27 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 use tracing::{debug, error, info, warn};
-use turul_mcp_client::prelude::*;
-use turul_mcp_client::{ClientConfig, transport::TransportFactory};
+
+const PROTOCOL_VERSION: &str = "2025-11-25";
+/// Opaque token the client picks; the server MUST echo it on every
+/// `notifications/progress` for this request.
+const PROGRESS_TOKEN: &str = "streamable-demo-1";
 
 #[derive(Parser)]
 #[command(
-    name = "streamable-http-client",
-    about = "MCP 2025-11-25 Streamable HTTP Client Example"
+    name = "streamable-http-client-2025-11-25",
+    about = "MCP 2025-11-25 Streamable HTTP raw-wire client"
 )]
 struct Args {
     /// MCP server URL
-    #[arg(short, long, default_value = "http://127.0.0.1:8080/mcp")]
+    #[arg(short, long, default_value = "http://127.0.0.1:52950/mcp")]
     url: String,
 
-    /// Tool to call for streaming demonstration
+    /// Tool to call for the streaming demonstration
     #[arg(short, long, default_value = "echo_sse")]
     tool: String,
 
-    /// Tool arguments (JSON string)
+    /// Tool arguments (JSON object)
     #[arg(
         short,
         long,
@@ -66,293 +77,326 @@ struct Args {
     verbose: bool,
 }
 
-/// Progress notification from SSE stream
+/// Progress notification observed on the SSE stream
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 struct ProgressUpdate {
     progress: Option<f64>,
     message: Option<String>,
     token: Option<String>,
-    timestamp: std::time::Instant,
 }
 
-/// Tool execution result with streaming data
+/// Outcome of one streamed `tools/call`
 #[derive(Debug)]
 struct StreamingToolResult {
     final_result: Value,
     progress_updates: Vec<ProgressUpdate>,
     total_events: usize,
+    /// True when the server answered `Content-Type: text/event-stream`
+    streamed: bool,
     duration: Duration,
 }
 
-/// Advanced MCP client with proper Streamable HTTP support
+/// Raw 2025-11-25 Streamable HTTP client: owns its session id and stamps it
+/// on every request after `initialize`.
 struct StreamableHttpMcpClient {
-    base_client: McpClient,
-    http_client: Client,
-    base_url: String,
+    http: Client,
+    url: String,
+    session_id: Option<String>,
+    next_id: u64,
 }
 
 impl StreamableHttpMcpClient {
-    /// Create a new streamable HTTP client
-    async fn new(url: &str) -> Result<Self> {
-        info!("🔗 Creating Streamable HTTP MCP client for: {}", url);
-
-        // Create the base MCP client using HTTP transport
-        let transport = TransportFactory::from_url(url)?;
-        let config = ClientConfig::default();
-        let client = McpClient::new(transport, config);
-
-        let http_client = Client::builder().timeout(Duration::from_secs(30)).build()?;
-
+    fn new(url: &str) -> Result<Self> {
         Ok(Self {
-            base_client: client,
-            http_client,
-            base_url: url.to_string(),
+            http: Client::builder().timeout(Duration::from_secs(30)).build()?,
+            url: url.to_string(),
+            session_id: None,
+            next_id: 1,
         })
     }
 
-    /// Connect and initialize session
-    async fn connect(&mut self) -> Result<Value> {
-        info!("📡 Connecting to MCP server with Streamable HTTP...");
-
-        self.base_client.connect().await?;
-
-        let negotiated = self.base_client.negotiated_version().await;
-        let server_info = serde_json::json!({
-            "negotiatedVersion": negotiated.map(|v| v.to_string()),
-        });
-        info!("✅ Connected successfully!");
-        info!(
-            "📋 Server info: {}",
-            serde_json::to_string_pretty(&server_info)?
-        );
-
-        Ok(server_info)
+    fn take_id(&mut self) -> u64 {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
     }
 
-    /// Call a tool with full Streamable HTTP processing
+    /// Apply the headers the spec requires on every request. `Mcp-Session-Id`
+    /// is absent only on `initialize`, which is what mints it.
+    fn request(&self, body: &Value) -> reqwest::RequestBuilder {
+        let mut req = self
+            .http
+            .post(&self.url)
+            .header("Content-Type", "application/json")
+            // Let the server pick: JSON for plain results, SSE when the call
+            // also carries notifications.
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", PROTOCOL_VERSION);
+        if let Some(sid) = &self.session_id {
+            req = req.header("Mcp-Session-Id", sid);
+        }
+        req.json(body)
+    }
+
+    /// `initialize` → capture `Mcp-Session-Id` from the response HEADER, then
+    /// `notifications/initialized` to enable the session.
+    async fn connect(&mut self) -> Result<Value> {
+        info!("📡 initialize (protocolVersion {PROTOCOL_VERSION})");
+
+        let id = self.take_id();
+        let response = self
+            .request(&json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "capabilities": {},
+                    "clientInfo": { "name": "streamable-http-client-2025-11-25", "version": "0.4.0" }
+                }
+            }))
+            .send()
+            .await
+            .context("initialize request failed")?;
+
+        if !response.status().is_success() {
+            bail!("initialize returned HTTP {}", response.status());
+        }
+
+        // The session id lives in the header, not the body.
+        let session_id = response
+            .headers()
+            .get("mcp-session-id")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+            .context("server did not return an Mcp-Session-Id header")?;
+        info!("🔑 Mcp-Session-Id: {session_id}");
+        self.session_id = Some(session_id);
+
+        let body: Value = response.json().await.context("initialize body")?;
+        if let Some(err) = body.get("error") {
+            bail!("initialize failed: {err}");
+        }
+        let result = body.get("result").cloned().unwrap_or(Value::Null);
+
+        // Until this lands the server rejects everything else on the session.
+        let status = self
+            .request(&json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }))
+            .send()
+            .await
+            .context("notifications/initialized failed")?
+            .status();
+        if status != reqwest::StatusCode::ACCEPTED {
+            warn!("⚠️  notifications/initialized returned {status}, expected 202 Accepted");
+        } else {
+            info!("✅ notifications/initialized accepted (202) — session enabled");
+        }
+
+        Ok(result)
+    }
+
+    async fn list_tools(&mut self) -> Result<Vec<String>> {
+        let id = self.take_id();
+        let body: Value = self
+            .request(&json!({"jsonrpc":"2.0","id":id,"method":"tools/list","params":{}}))
+            .send()
+            .await
+            .context("tools/list failed")?
+            .json()
+            .await?;
+        if let Some(err) = body.get("error") {
+            bail!("tools/list failed: {err}");
+        }
+        Ok(body
+            .pointer("/result/tools")
+            .and_then(Value::as_array)
+            .map(|tools| {
+                tools
+                    .iter()
+                    .filter_map(|t| t.get("name").and_then(Value::as_str))
+                    .map(str::to_string)
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    /// Call a tool, opting into progress, and process the SSE response with
+    /// two concurrent tasks.
     async fn call_tool_streaming(
         &mut self,
         tool_name: &str,
         args: Value,
     ) -> Result<StreamingToolResult> {
-        info!("🔧 Calling tool '{}' with Streamable HTTP", tool_name);
-
+        info!("🔧 tools/call '{tool_name}' (progressToken {PROGRESS_TOKEN})");
         let start_time = std::time::Instant::now();
 
-        // Create channels for multi-threaded processing
         let (progress_tx, mut progress_rx) = mpsc::unbounded_channel();
         let (result_tx, mut result_rx) = mpsc::unbounded_channel();
 
-        // Prepare the JSON-RPC request
-        let request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "tools/call",
-            "params": {
-                "name": tool_name,
-                "arguments": args
-            }
-        });
-
-        info!("📤 Sending streamable HTTP request...");
-
-        // Send request with CORRECT Accept header for MCP 2025-11-25
+        let request_id = self.take_id();
         let response = self
-            .http_client
-            .post(&self.base_url)
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json, text/event-stream") // 2025 Streamable HTTP: server may answer JSON or SSE
-            .header("MCP-Protocol-Version", "2025-11-25")
-            // Note: Session ID handling should be done by transport layer
-            .json(&request)
+            .request(&json!({
+                "jsonrpc": "2.0",
+                "id": request_id,
+                "method": "tools/call",
+                "params": {
+                    "name": tool_name,
+                    "arguments": args,
+                    // Progress is opt-in: no token, no notifications/progress.
+                    "_meta": { "progressToken": PROGRESS_TOKEN }
+                }
+            }))
             .send()
-            .await?;
+            .await
+            .context("tools/call request failed")?;
 
-        info!("📥 Response status: {}", response.status());
-
+        let status = response.status();
         let content_type = response
             .headers()
             .get("content-type")
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("unknown");
+            .unwrap_or("unknown")
+            .to_string();
+        info!("📥 HTTP {status} • Content-Type: {content_type}");
 
-        info!("📄 Content-Type: {}", content_type);
+        if !status.is_success() {
+            let body: Value = response.json().await.unwrap_or(Value::Null);
+            bail!("tools/call returned HTTP {status}: {body}");
+        }
 
-        if content_type.starts_with("text/event-stream") {
-            info!("📡 Server returned SSE stream - starting multi-threaded processing");
-
-            // ✅ THREAD 1: SSE Stream Parser
-            let stream_processor = {
-                let progress_tx = progress_tx.clone();
-                let result_tx = result_tx.clone();
-
-                tokio::spawn(async move {
-                    let mut stream = response.bytes_stream();
-                    let mut buffer = String::new();
-                    let mut event_count = 0;
-
-                    while let Some(chunk) = stream.next().await {
-                        match chunk {
-                            Ok(bytes) => {
-                                let text = String::from_utf8_lossy(&bytes);
-                                buffer.push_str(&text);
-
-                                // Process complete SSE events (terminated by \n\n)
-                                while let Some(pos) = buffer.find("\n\n") {
-                                    let event_text = buffer[..pos].to_string();
-                                    buffer = buffer[pos + 2..].to_string();
-
-                                    event_count += 1;
-                                    debug!(
-                                        "📡 Processing SSE event #{}: {}",
-                                        event_count,
-                                        event_text.replace('\n', "\\n")
-                                    );
-
-                                    if let Some(event_data) = Self::parse_sse_event(&event_text)
-                                        && let Ok(json_data) =
-                                            serde_json::from_str::<Value>(&event_data)
-                                    {
-                                        // Check if this is the final JSON-RPC response
-                                        if json_data.get("id").is_some()
-                                            && json_data.get("result").is_some()
-                                        {
-                                            info!("📦 Found final tool result in SSE stream");
-                                            let _ = result_tx.send(json_data);
-                                        }
-                                        // Check for progress notifications
-                                        else if let Some(method) =
-                                            json_data.get("method").and_then(|m| m.as_str())
-                                            && method.starts_with("notifications/")
-                                        {
-                                            let progress =
-                                                Self::parse_progress_notification(&json_data);
-                                            debug!("📈 Progress notification: {:?}", progress);
-                                            let _ = progress_tx.send(progress);
-                                        }
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                error!("❌ SSE stream error: {}", e);
-                                break;
-                            }
-                        }
-                    }
-
-                    info!(
-                        "📡 SSE stream processing completed. Total events: {}",
-                        event_count
-                    );
-                    event_count
-                })
-            };
-
-            // ✅ THREAD 2: Progress Collector
-            let progress_collector = tokio::spawn(async move {
-                let mut updates = Vec::new();
-
-                while let Some(progress) = progress_rx.recv().await {
-                    info!("📈 Progress update: {:?}", progress);
-                    updates.push(progress);
-
-                    // Prevent memory issues
-                    if updates.len() > 50 {
-                        warn!("⚠️  Progress update limit reached");
-                        break;
-                    }
-                }
-
-                info!(
-                    "📊 Progress collection completed: {} updates",
-                    updates.len()
-                );
-                updates
-            });
-
-            // ✅ MAIN THREAD: Wait for final result
-            info!("⏳ Waiting for final tool result...");
-            let final_result = timeout(Duration::from_secs(15), result_rx.recv())
-                .await
-                .map_err(|_| anyhow::anyhow!("Timeout waiting for tool result"))?
-                .ok_or_else(|| anyhow::anyhow!("No tool result received"))?;
-
-            info!("✅ Final result received!");
-
-            // Collect all data
-            let total_events = stream_processor.await?;
-            let progress_updates = timeout(Duration::from_secs(2), progress_collector)
-                .await
-                .unwrap_or_else(|_| {
-                    warn!("⚠️  Progress collection timed out");
-                    Ok(Vec::new())
-                })?;
-
-            let duration = start_time.elapsed();
-
-            Ok(StreamingToolResult {
-                final_result,
-                progress_updates,
-                total_events,
-                duration,
-            })
-        } else {
-            // Fallback to JSON response
-            warn!("📄 Server returned JSON instead of SSE stream");
+        if !content_type.starts_with("text/event-stream") {
+            // Legitimate: the spec lets the server answer plain JSON when the
+            // call carries no notifications.
+            info!("📄 Server answered JSON (no notifications for this call)");
             let result: Value = response.json().await?;
-            let duration = start_time.elapsed();
-
-            Ok(StreamingToolResult {
+            return Ok(StreamingToolResult {
                 final_result: result,
                 progress_updates: Vec::new(),
                 total_events: 0,
-                duration,
-            })
+                streamed: false,
+                duration: start_time.elapsed(),
+            });
         }
-    }
 
-    /// Parse SSE event data
-    fn parse_sse_event(event_text: &str) -> Option<String> {
-        for line in event_text.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                return Some(data.to_string());
+        info!("📡 SSE stream — starting concurrent processing");
+
+        // Task 1: parse SSE frames, routing the final response one way and
+        // notifications the other.
+        let stream_processor = tokio::spawn(async move {
+            let mut stream = response.bytes_stream();
+            let mut buffer = String::new();
+            let mut event_count = 0usize;
+
+            while let Some(chunk) = stream.next().await {
+                match chunk {
+                    Ok(bytes) => {
+                        buffer.push_str(&String::from_utf8_lossy(&bytes));
+                        while let Some(pos) = buffer.find("\n\n") {
+                            let event_text = buffer[..pos].to_string();
+                            buffer = buffer[pos + 2..].to_string();
+                            event_count += 1;
+                            debug!(
+                                "📡 SSE event #{event_count}: {}",
+                                event_text.replace('\n', "\\n")
+                            );
+
+                            if let Some(event_data) = parse_sse_event(&event_text)
+                                && let Ok(json_data) = serde_json::from_str::<Value>(&event_data)
+                            {
+                                if json_data.get("id").is_some()
+                                    && (json_data.get("result").is_some()
+                                        || json_data.get("error").is_some())
+                                {
+                                    info!("📦 Final JSON-RPC response received on the stream");
+                                    let _ = result_tx.send(json_data);
+                                } else if let Some(method) =
+                                    json_data.get("method").and_then(Value::as_str)
+                                    && method == "notifications/progress"
+                                {
+                                    let _ =
+                                        progress_tx.send(parse_progress_notification(&json_data));
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("❌ SSE stream error: {e}");
+                        break;
+                    }
+                }
             }
-        }
-        None
+            info!("📡 SSE stream ended after {event_count} events");
+            event_count
+        });
+
+        // Task 2: drain progress updates as they arrive.
+        let progress_collector = tokio::spawn(async move {
+            let mut updates = Vec::new();
+            while let Some(progress) = progress_rx.recv().await {
+                info!("📈 progress: {progress:?}");
+                updates.push(progress);
+                if updates.len() > 50 {
+                    warn!("⚠️  progress update limit reached");
+                    break;
+                }
+            }
+            updates
+        });
+
+        let final_result = timeout(Duration::from_secs(15), result_rx.recv())
+            .await
+            .map_err(|_| anyhow::anyhow!("timed out waiting for the tool result"))?
+            .ok_or_else(|| anyhow::anyhow!("stream closed before the tool result arrived"))?;
+
+        let total_events = stream_processor.await?;
+        let progress_updates = progress_collector.await?;
+
+        Ok(StreamingToolResult {
+            final_result,
+            progress_updates,
+            total_events,
+            streamed: true,
+            duration: start_time.elapsed(),
+        })
     }
 
-    /// Parse progress notification from JSON-RPC notification
-    fn parse_progress_notification(json: &Value) -> ProgressUpdate {
-        let default_params = json!({});
-        let params = json.get("params").unwrap_or(&default_params);
-
-        ProgressUpdate {
-            progress: params.get("progress").and_then(|p| p.as_f64()),
-            message: params
-                .get("message")
-                .or_else(|| params.get("data"))
-                .and_then(|m| m.as_str())
-                .map(|s| s.to_string()),
-            token: params
-                .get("progressToken")
-                .and_then(|t| t.as_str())
-                .map(|s| s.to_string()),
-            timestamp: std::time::Instant::now(),
-        }
-    }
-
-    /// List available tools
-    async fn list_tools(&self) -> Result<Vec<String>> {
-        let tools = self.base_client.list_tools().await?;
-        Ok(tools.into_iter().map(|t| t.name).collect())
-    }
-
-    /// Disconnect cleanly
+    /// `DELETE` with the session header terminates the session server-side.
     async fn disconnect(&mut self) -> Result<()> {
-        self.base_client.disconnect().await?;
-        info!("👋 Disconnected from MCP server");
+        let Some(session_id) = self.session_id.take() else {
+            return Ok(());
+        };
+        let status = self
+            .http
+            .delete(&self.url)
+            .header("MCP-Protocol-Version", PROTOCOL_VERSION)
+            .header("Mcp-Session-Id", &session_id)
+            .send()
+            .await
+            .context("session DELETE failed")?
+            .status();
+        info!("👋 DELETE session {session_id} → HTTP {status}");
         Ok(())
+    }
+}
+
+fn parse_sse_event(event_text: &str) -> Option<String> {
+    event_text
+        .lines()
+        .find_map(|line| line.strip_prefix("data: ").map(str::to_string))
+}
+
+fn parse_progress_notification(json: &Value) -> ProgressUpdate {
+    let params = json.get("params").cloned().unwrap_or(Value::Null);
+    ProgressUpdate {
+        progress: params.get("progress").and_then(Value::as_f64),
+        message: params
+            .get("message")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        token: params
+            .get("progressToken")
+            .and_then(Value::as_str)
+            .map(str::to_string),
     }
 }
 
@@ -360,13 +404,11 @@ impl StreamableHttpMcpClient {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    // Initialize logging
     let log_level = if args.verbose {
         tracing::Level::DEBUG
     } else {
         tracing::Level::INFO
     };
-
     tracing_subscriber::fmt()
         .with_max_level(log_level)
         .with_env_filter(
@@ -374,101 +416,100 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    info!("🚀 MCP 2025-11-25 Streamable HTTP Client Example");
-    info!("═══════════════════════════════════════════════════");
-    info!("📡 Target URL: {}", args.url);
-    info!("🔧 Tool to test: {}", args.tool);
-    info!("📝 Tool arguments: {}", args.args);
+    info!("🚀 MCP {PROTOCOL_VERSION} Streamable HTTP — raw wire client");
+    info!("📡 Target: {}", args.url);
 
-    // Parse tool arguments
     let tool_args: Value =
-        serde_json::from_str(&args.args).context("Invalid JSON in tool arguments")?;
+        serde_json::from_str(&args.args).context("--args must be a JSON object")?;
 
-    // Create and connect client
-    let mut client = StreamableHttpMcpClient::new(&args.url).await?;
-    let _server_info = client.connect().await?;
+    let mut client = StreamableHttpMcpClient::new(&args.url)?;
+    let init_result = client.connect().await?;
+    if let Some(version) = init_result.get("protocolVersion").and_then(Value::as_str) {
+        info!("🤝 Server negotiated protocolVersion: {version}");
+        if version != PROTOCOL_VERSION {
+            warn!("⚠️  Expected {PROTOCOL_VERSION} — this client only speaks that lane");
+        }
+    }
 
     info!("");
-    info!("🔍 Step 1: Server Discovery");
-    info!("═══════════════════════════");
-
-    // List available tools
+    info!("🔍 Step 1: tools/list");
     let available_tools = client.list_tools().await?;
-    info!("🛠️  Available tools: {:?}", available_tools);
+    info!("🛠️  Tools: {available_tools:?}");
 
-    // Use the requested tool when the server has it; otherwise fall back to
-    // the first advertised tool so the streaming demo always runs.
     let selected_tool = if available_tools.contains(&args.tool) {
         args.tool.clone()
     } else {
         warn!(
-            "⚠️  Tool '{}' not found. Available: {:?}",
-            args.tool, available_tools
+            "⚠️  '{}' not found; using the first tool instead",
+            args.tool
         );
-        info!("🔄 Trying first available tool instead...");
         available_tools
             .first()
             .cloned()
-            .ok_or_else(|| anyhow::anyhow!("No tools available on server"))?
-    };
-
-    let first_tool = &selected_tool;
-    info!("🔧 Using tool: {}", first_tool);
-
-    // Adjust args for common tools
-    let adjusted_args = if first_tool == "echo" {
-        json!({"message": "Hello from Streamable HTTP!"})
-    } else {
-        tool_args
+            .ok_or_else(|| anyhow::anyhow!("server advertises no tools"))?
     };
 
     info!("");
-    info!("🌊 Step 2: Streamable HTTP Tool Execution");
-    info!("═══════════════════════════════════════════");
-
+    info!("🌊 Step 2: streamed tools/call — {selected_tool}");
     let result = client
-        .call_tool_streaming(first_tool, adjusted_args)
+        .call_tool_streaming(&selected_tool, tool_args)
         .await?;
 
     info!("");
-    info!("📊 Step 3: Results Analysis");
-    info!("═══════════════════════════");
-    info!("⏱️  Total duration: {:?}", result.duration);
-    info!("📡 SSE events processed: {}", result.total_events);
+    info!("📊 Step 3: results");
+    info!("⏱️  Duration: {:?}", result.duration);
+    info!("📡 SSE events: {}", result.total_events);
     info!("📈 Progress updates: {}", result.progress_updates.len());
+    info!(
+        "📋 Final result: {}",
+        serde_json::to_string(&result.final_result)?
+    );
 
+    for (i, update) in result.progress_updates.iter().enumerate() {
+        info!(
+            "  {}. progress={:?} token={:?} message={:?}",
+            i + 1,
+            update.progress,
+            update.token,
+            update.message
+        );
+    }
+
+    // One verdict for the run, evaluated after everything is collected.
     info!("");
-    info!("📋 Final Tool Result:");
-    info!("{}", serde_json::to_string_pretty(&result.final_result)?);
-
-    if !result.progress_updates.is_empty() {
-        info!("");
-        info!("📈 Progress Updates:");
-        for (i, update) in result.progress_updates.iter().enumerate() {
-            info!("  {}. {:?}", i + 1, update);
-
-            info!("");
-            if result.total_events > 0 && !result.progress_updates.is_empty() {
-                info!("🎉 SUCCESS: MCP 2025-11-25 Streamable HTTP working perfectly!");
-                info!("✅ Multi-threaded SSE processing verified");
-                info!("✅ Progress notifications received");
-                info!("✅ Final result delivered");
-            } else if result.total_events > 0 {
-                info!("✅ SUCCESS: Streamable HTTP working (SSE stream detected)");
-                warn!(
-                    "⚠️  Note: No progress notifications received (may be expected for this tool)"
-                );
-            } else {
-                warn!("⚠️  FALLBACK: Server returned JSON instead of SSE stream");
-                info!("📋 This may indicate Streamable HTTP is disabled for compatibility");
-            }
+    if !result.streamed {
+        warn!("⚠️  Server answered JSON, not SSE — no stream to process");
+    } else if result.progress_updates.is_empty() {
+        info!("✅ Streamable HTTP verified (SSE stream + final result)");
+        warn!("⚠️  No progress notifications — expected unless the tool emits them");
+    } else {
+        info!("🎉 Streamable HTTP verified end to end");
+        info!("✅ Concurrent SSE processing");
+        info!(
+            "✅ {} progress notification(s)",
+            result.progress_updates.len()
+        );
+        let echoed = result
+            .progress_updates
+            .iter()
+            .all(|u| u.token.as_deref() == Some(PROGRESS_TOKEN));
+        if echoed {
+            info!("✅ Server echoed our progressToken '{PROGRESS_TOKEN}'");
+        } else {
+            // The spec requires the token from params._meta.progressToken to
+            // come back unchanged, so a mismatch is the server's bug.
+            warn!(
+                "⚠️  Server did NOT echo progressToken '{PROGRESS_TOKEN}' — saw {:?}",
+                result
+                    .progress_updates
+                    .iter()
+                    .filter_map(|u| u.token.clone())
+                    .collect::<Vec<_>>()
+            );
         }
     }
 
-    // Clean disconnection
     client.disconnect().await?;
-
-    info!("");
-    info!("🏁 Streamable HTTP client example completed!");
+    info!("🏁 Done");
     Ok(())
 }

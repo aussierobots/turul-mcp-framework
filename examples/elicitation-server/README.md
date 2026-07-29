@@ -1,346 +1,91 @@
-# MCP Elicitation Server Example
+# Customer Onboarding and Data Collection Platform
 
-This example demonstrates the Model Context Protocol (MCP) elicitation functionality for structured user input collection via JSON Schema. Elicitation enables servers to request structured data from users through interactive forms, confirmations, and input dialogs rendered by MCP clients.
+Five tools that read workflow, compliance-form, preference and survey
+definitions out of `data/`, turn each set of field definitions into a JSON
+Schema, and return a description of the form the caller should render.
 
-## Overview
+## This is not the elicitation protocol
 
-The MCP elicitation protocol allows servers to:
-- Request structured user input using JSON Schema definitions
-- Present interactive forms, confirmations, and validation dialogs
-- Track progress through multi-step workflows
-- Handle errors, cancellations, and timeouts gracefully
-- Collect typed data with client-side validation
+Despite the package name, **no MCP elicitation happens here**. Nothing is
+server-initiated: `elicitation/create` is never issued, and each generated form
+travels back inside an ordinary `tools/call` result. What the example actually
+demonstrates is config-driven JSON Schema generation and validation-rule
+loading from external files.
 
-This server demonstrates 7 different elicitation patterns covering the most common use cases.
+For real user-input round trips see **`examples/mrtr-elicitation-server`** — on
+the 2026-07-28 stateless core a tool returns `InputRequiredResult` and the
+client retries the original call carrying `inputResponses` plus the echoed
+`requestState`.
 
-## Features Demonstrated
+The package's main job is being the fixture behind `tests/elicitation`
+(`cargo test -p mcp-elicitation-tests`), which drives it over `tools/list` and
+`tools/call`.
 
-### 1. Simple Text Input (`simple_text_input`)
-Basic text field collection with schema validation:
-- Single text field with description
-- Required field validation
-- Title and context description
+## Spec lane
 
-### 2. Number Input with Validation (`number_input_validation`)
-Numeric input with constraints and defaults:
-- Min/max value validation (age 13-120)
-- Default value provision (25)
-- Client-side validation before submission
+Pinned to **2025-11-25** in `Cargo.toml` (`protocol-2025-11-25` on every
+framework dependency), independent of the workspace 2026-07-28 default. It
+therefore uses the stateful lane's `initialize` → `notifications/initialized` →
+`Mcp-Session-Id` handshake.
 
-### 3. Choice Selection (`choice_selection`)
-Enum-based selection from predefined options:
-- Multiple choice from 8 programming languages
-- String enum schema generation
-- Default selection (Rust)
-- Various UI presentation options (dropdown, radio buttons, etc.)
+## Tools (as registered by `src/main.rs`)
 
-### 4. Boolean Confirmation (`confirmation_dialog`)
-Critical action confirmation dialogs:
-- Yes/No confirmation for destructive operations
-- Progress token tracking
-- No default value (forces explicit choice)
-- Modal dialog presentation
+| Tool | Key arguments | Returns |
+|---|---|---|
+| `start_onboarding_workflow` | `workflow_type`, `step_index?` | The step's fields, generated schema, and position in the workflow |
+| `compliance_form` | `form_type` | GDPR/CCPA form fields and the regulatory framework they map to |
+| `collect_user_preferences` | `collection_type` | Notification / accessibility preference categories and settings |
+| `customer_satisfaction_survey` | `survey_type` | Survey questions plus scoring and follow-up metadata |
+| `data_validation_demo` | field values | Validation outcome against `data/validation_rules.yaml` |
 
-### 5. Complex Multi-Field Forms (`complex_form`)
-Sophisticated forms with multiple field types:
-- 6 different field types (string, email, number, enum, boolean, textarea)
-- Required vs optional field distinction
-- Mixed validation rules (age 18-100, country selection)
-- Default values and advanced form patterns
+`tools/list` is authoritative — run it rather than trusting this table if the
+code has moved on.
 
-### 6. Progress-Tracked Workflows (`progress_elicitation`)
-Multi-step workflows with progress indication:
-- Progress token for step correlation
-- Workflow step indication (Step 1 of 3)
-- Complex guided user interactions
-- Cancellation handling throughout process
+## Data files
 
-### 7. Error Handling Scenarios (`elicitation_error_handling`)
-Comprehensive error and edge case handling:
-- **Validation Errors**: Client-side schema validation
-- **User Cancellation**: Graceful cancellation with notifications
-- **Timeout Scenarios**: Time-limited input handling
-- **Invalid Schema**: Schema validation before UI presentation
+| File | Drives |
+|---|---|
+| `data/onboarding_workflows.json` | Workflow steps, compliance forms, preference sets, survey templates |
+| `data/validation_rules.yaml` | Field-type rules, age verification, KYC requirements |
+| `data/reference_data.md` | Geographic and industry reference lists |
 
-## Running the Server
+The data directory is resolved relative to the working directory, falling back
+to `examples/elicitation-server/data` and `../elicitation-server/data` so the
+E2E harness can start the server from the workspace root.
+
+## Run
 
 ```bash
-# From the workspace root
-cargo run -p elicitation-server
-
-# Or with custom logging
-RUST_LOG=debug cargo run -p elicitation-server
+# --port 0 (the default) takes an ephemeral port from the OS; the chosen
+# port is printed at startup
+cargo run -p elicitation-server -- --port 8053
 ```
 
-The server runs at `http://127.0.0.1:8053/mcp` and logs all available tools on startup.
+## Try it (2025-11-25 stateful)
 
-## JSON Schema Patterns
-
-### Text Input Schema
-```json
-{
-  "type": "object",
-  "properties": {
-    "full_name": {
-      "type": "string",
-      "description": "Your full name (first and last name)"
-    }
-  },
-  "required": ["full_name"]
-}
-```
-
-### Number Input with Constraints
-```json
-{
-  "type": "object", 
-  "properties": {
-    "age": {
-      "type": "number",
-      "description": "Your age in years",
-      "minimum": 13,
-      "maximum": 120
-    }
-  },
-  "required": ["age"]
-}
-```
-
-### Choice/Enum Selection
-```json
-{
-  "type": "object",
-  "properties": {
-    "preferred_language": {
-      "type": "string",
-      "description": "Your preferred programming language",
-      "enum": ["Rust", "Python", "JavaScript", "TypeScript", "Go", "Java", "C++", "Swift"]
-    }
-  },
-  "required": ["preferred_language"]
-}
-```
-
-### Boolean Confirmation
-```json
-{
-  "type": "object",
-  "properties": {
-    "confirmed": {
-      "type": "boolean",
-      "description": "User confirmation"
-    }
-  },
-  "required": ["confirmed"]
-}
-```
-
-### Complex Multi-Field Form
-```json
-{
-  "type": "object",
-  "properties": {
-    "full_name": {"type": "string", "description": "Your full name"},
-    "email": {"type": "string", "description": "Your email address"},
-    "age": {"type": "number", "minimum": 18, "maximum": 100},
-    "country": {"type": "string", "enum": ["United States", "Canada", ...]},
-    "newsletter": {"type": "boolean", "description": "Subscribe to newsletter"},
-    "bio": {"type": "string", "description": "Brief bio (max 500 characters)"}
-  },
-  "required": ["full_name", "email", "age", "country"]
-}
-```
-
-## Testing Examples
-
-### Simple Text Input
 ```bash
+# 1. handshake — capture Mcp-Session-Id from the response headers
+curl -i -X POST http://127.0.0.1:8053/mcp \
+  -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"curl","version":"1.0"}}}'
+
+# 2. enable the session
 curl -X POST http://127.0.0.1:8053/mcp \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "method": "tools/call",
-    "params": {
-      "name": "simple_text_input",
-      "arguments": {}
-    }
-  }'
+  -H 'Content-Type: application/json' -H 'Mcp-Session-Id: SESSION_ID' \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+
+# 3. start a workflow
+curl -s -X POST http://127.0.0.1:8053/mcp \
+  -H 'Content-Type: application/json' -H 'Mcp-Session-Id: SESSION_ID' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"start_onboarding_workflow","arguments":{"workflow_type":"personal_account","step_index":0}}}'
+
+# 4. an out-of-range step → -32602
+curl -s -X POST http://127.0.0.1:8053/mcp \
+  -H 'Content-Type: application/json' -H 'Mcp-Session-Id: SESSION_ID' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"start_onboarding_workflow","arguments":{"workflow_type":"personal_account","step_index":99}}}'
 ```
 
-### Number Input with Validation
-```bash
-curl -X POST http://127.0.0.1:8053/mcp \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "method": "tools/call", 
-    "params": {
-      "name": "number_input_validation",
-      "arguments": {}
-    }
-  }'
-```
+## See also
 
-### Error Handling Demo
-```bash
-curl -X POST http://127.0.0.1:8053/mcp \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "method": "tools/call",
-    "params": {
-      "name": "elicitation_error_handling", 
-      "arguments": {
-        "scenario": "validation_error"
-      }
-    }
-  }'
-```
-
-## Elicitation Builder Utility
-
-The `ElicitationBuilder` provides convenient methods for common patterns:
-
-```rust
-// Simple text input
-let elicitation = ElicitationBuilder::text_input(
-    "Enter your username",
-    "username", 
-    "Your unique username"
-);
-
-// Number input with constraints  
-let elicitation = ElicitationBuilder::number_input(
-    "Enter your age",
-    "age",
-    "Your age in years", 
-    Some(13.0), // min
-    Some(120.0) // max
-);
-
-// Choice selection
-let choices = vec!["Rust".to_string(), "Python".to_string()];
-let elicitation = ElicitationBuilder::choice_input(
-    "Choose language",
-    "language",
-    "Preferred language",
-    choices
-);
-
-// Boolean confirmation
-let elicitation = ElicitationBuilder::confirm(
-    "Are you sure you want to delete all files?"
-);
-
-// Complex multi-field form
-let fields = vec![
-    ("name".to_string(), JsonSchema::string()),
-    ("age".to_string(), JsonSchema::number().with_minimum(18.0)),
-];
-let required = vec!["name".to_string()];
-let elicitation = ElicitationBuilder::form(
-    "Complete your profile", 
-    fields,
-    required
-);
-```
-
-## MCP Client Integration
-
-In a real MCP client implementation, elicitation requests would:
-
-1. **Parse JSON Schema**: Extract field definitions and validation rules
-2. **Generate UI**: Create forms, dialogs, and input controls dynamically
-3. **Client-side Validation**: Validate user input against schema before submission
-4. **Progress Tracking**: Show workflow progress and step indicators
-5. **Error Handling**: Display validation errors and handle cancellations
-6. **Response Submission**: Send structured data back to server
-
-## Key Benefits
-
-### ✨ Schema-Driven UI Generation
-- Automatic form generation from JSON Schema
-- Consistent validation and presentation rules
-- Type safety and data integrity
-
-### 🔒 Client-Side Input Validation  
-- Immediate feedback for validation errors
-- No server round-trips for basic validation
-- Better user experience with real-time validation
-
-### 🎨 Flexible UI Presentation Options
-- Multiple ways to present same schema (dropdowns, radio buttons, etc.)
-- Client can choose optimal UI patterns
-- Responsive and accessible form generation
-
-### 📊 Progress Tracking for Complex Flows
-- Multi-step workflow coordination
-- Progress tokens for step correlation
-- Cancellation handling at any step
-
-### 🛡️ Robust Error Handling
-- Graceful handling of user cancellations
-- Timeout protection for long operations  
-- Clear error messages and recovery options
-
-## Protocol Details
-
-### Elicitation Request
-```json
-{
-  "method": "elicitation/request",
-  "params": {
-    "schema": { /* JSON Schema */ },
-    "prompt": "Please enter your information",
-    "title": "User Information",
-    "description": "Additional context...",
-    "defaults": { "field": "default_value" },
-    "required": false,
-    "progressToken": "unique_token_123"
-  }
-}
-```
-
-### Elicitation Response  
-```json
-{
-  "result": {
-    "data": { /* User input matching schema */ },
-    "completed": true,
-    "message": "Thank you for your input"
-  }
-}
-```
-
-### Cancellation Notification
-```json
-{
-  "method": "notifications/elicitation/cancelled",
-  "params": {
-    "reason": "User cancelled the operation",
-    "progressToken": "unique_token_123"
-  }
-}
-```
-
-## Architecture Integration
-
-This elicitation server integrates with the MCP framework using:
-
-- **`ElicitationHandler`**: Core handler for `elicitation/request` endpoint
-- **`.with_elicitation()`**: Builder method to enable elicitation capability  
-- **`ElicitationBuilder`**: Utility for common elicitation patterns
-- **Protocol Types**: Complete type definitions for requests/responses
-- **Progress Tokens**: Workflow tracking and correlation
-- **Meta Support**: MCP `_meta` field integration
-
-The implementation follows MCP 2025-11-25 specification for maximum client compatibility.
-
-## Next Steps
-
-To extend this example:
-
-1. **Add Custom Validation**: Implement custom JSON Schema validation patterns
-2. **Multi-Step Workflows**: Create complex guided workflows with branching logic
-3. **Conditional Fields**: Implement schema fields that appear/disappear based on other inputs
-4. **File Upload**: Add file selection and upload elicitation patterns  
-5. **Real-time Updates**: Integrate with SSE for real-time form updates
-6. **Database Integration**: Connect elicitation results to persistent storage
-7. **Authentication**: Add user authentication and session-aware elicitation
+- `examples/mrtr-elicitation-server` — the actual user-input round trip
+- `crates/turul-mcp-server/tests/mrtr_2026.rs` — its wire contract tests

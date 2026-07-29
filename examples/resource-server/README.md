@@ -6,12 +6,12 @@ tuple struct serving log text.
 
 ## Resources (as registered by `src/main.rs`)
 
-| Resource | URI | Shape |
-|---|---|---|
-| `config` | `file:///tmp/config.json` | Struct with `#[content]` JSON field |
-| `system_status` | `system://status` | Unit struct, default implementation |
-| `user_profile` | `data://user-profile` | Multiple content fields |
-| `app_log` | `file:///tmp/app.log` | Tuple struct serving text |
+| Resource | URI | `mimeType` | Shape |
+|---|---|---|---|
+| `config` | `file:///tmp/config.json` | `application/json` | Named-field struct |
+| `system_status` | `system://status` | `application/json` | Unit struct |
+| `user_profile` | `data://user-profile` | `application/json` | Returns two `contents[]` entries |
+| `app_log` | `file:///tmp/app.log` | `text/plain` | Tuple struct |
 
 ## Run
 
@@ -47,18 +47,37 @@ curl -s -X POST http://127.0.0.1:8007/mcp \
 #[resource(
     name = "config",
     uri = "file:///tmp/config.json",
-    description = "Main application configuration file"
+    description = "Main application configuration file",
+    mime_type = "application/json"
 )]
 struct ConfigResource {
-    #[content]
-    settings: serde_json::Value,
+    config_data: String,
+}
+
+#[async_trait]
+impl McpResource for ConfigResource {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>)
+        -> McpResult<Vec<ResourceContent>>
+    {
+        Ok(vec![ResourceContent::json(self.uri(), self.config_data.clone())])
+    }
 }
 ```
 
-- `#[resource(name, uri, description)]` declares the resource metadata
-- `#[content]` marks the field served as the resource body
+- `#[resource(name, uri, description, mime_type)]` generates the `Has*`
+  metadata traits — that is *all* the derive does. It does not read the
+  struct's fields, so `read()` is always hand-written.
+- `mime_type` is what `resources/list` advertises. Make `read()` agree:
+  `ResourceContent::json()` for JSON, `ResourceContent::text()` for
+  `text/plain`, and `ResourceContent::text(..).with_mime_type(..)` for
+  anything else — `text()` alone always reports `text/plain`.
+- `ResourceContent::blob()` is for **base64** payloads. Passing raw text to it
+  produces a `blob` field that is not base64, which the schema requires.
 - Register with `McpServer::builder().resource(...)` — no separate
   `.with_resources()` call is needed
+
+`user_profile` shows that one `resources/read` may return several
+`contents[]` entries, each with its own URI and `mimeType`.
 
 ## See also
 

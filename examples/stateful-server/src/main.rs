@@ -332,11 +332,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(ShoppingCartTool::default())
         .tool(UserPreferencesTool::default())
         .tool(SessionInfoTool::default())
-        .bind_address("127.0.0.1:8006".parse()?)
+        .bind_address("127.0.0.1:8011".parse()?)
         .sse(true)
         .build()?;
 
-    println!("Stateful server running at: http://127.0.0.1:8006/mcp");
+    println!("Stateful server running at: http://127.0.0.1:8011/mcp");
     println!("\\nAvailable tools:");
     println!("  - shopping_cart: Manage a persistent shopping cart (add, remove, list, clear)");
     println!("  - user_preferences: Manage user preferences (set, get, list, reset)");

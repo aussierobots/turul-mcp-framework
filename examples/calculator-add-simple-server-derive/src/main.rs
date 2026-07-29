@@ -1,24 +1,13 @@
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::info;
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, McpServer};
 
+/// The sum of the two operands. schemars carries this doc comment into the
+/// tool's `outputSchema` as the type's `description`.
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct AdditionResult {
     sum: f64,
-}
-
-impl turul_mcp_protocol::schema::JsonSchemaGenerator for AdditionResult {
-    fn json_schema() -> turul_mcp_protocol::tools::ToolSchema {
-        use turul_mcp_protocol::schema::JsonSchema;
-        turul_mcp_protocol::tools::ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([(
-                "sum".to_string(),
-                JsonSchema::number(),
-            )])))
-            .with_required(vec!["sum".to_string()])
-    }
 }
 
 #[derive(McpTool, Clone)]

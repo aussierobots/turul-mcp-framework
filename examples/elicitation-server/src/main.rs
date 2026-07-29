@@ -1,17 +1,25 @@
 //! # Customer Onboarding and Data Collection Platform
 //!
-//! This server provides a comprehensive customer onboarding system using MCP elicitation
-//! to collect structured customer data, handle compliance forms, manage user preferences,
-//! and conduct surveys. It demonstrates real-world patterns for data collection workflows,
-//! regulatory compliance, and user experience optimization.
+//! A customer-onboarding surface built entirely from **tools**: each tool reads a
+//! workflow, compliance form, preference set or survey out of `data/`, turns its
+//! field definitions into a JSON Schema, and returns a description of the form the
+//! caller should render. It is the E2E fixture the `mcp-elicitation-tests` suite
+//! drives.
+//!
+//! **It does not use the MCP elicitation protocol.** No `elicitation/create` is
+//! issued, and nothing here is server-initiated — the form travels back inside an
+//! ordinary `tools/call` result. For the real thing on the 2026-07-28 stateless
+//! core, see `examples/mrtr-elicitation-server`, where a tool returns
+//! `InputRequiredResult` and the client retries with `inputResponses`.
+//!
+//! Pinned to the 2025-11-25 lane (see `Cargo.toml`).
 //!
 //! Features:
 //! - Multi-step customer onboarding flows (personal & business)
 //! - GDPR/CCPA compliance forms and data subject requests
 //! - User preference collection and management
 //! - Customer satisfaction surveys and feedback collection
-//! - Comprehensive validation with external reference data
-//! - Accessibility compliance and internationalization support
+//! - Field definitions and validation rules loaded from external data files
 
 use clap::Parser;
 use serde::Deserialize;
@@ -489,7 +497,6 @@ impl StartOnboardingWorkflowTool {
                 schema.properties.as_ref().map_or(0, |p| p.len())
             );
 
-            // Simplified elicitation demonstration (complex API migration in progress)
             let progress_token = format!("onboarding_{}_{}", self.workflow_type, Uuid::new_v4());
 
             let result = json!({
@@ -503,11 +510,6 @@ impl StartOnboardingWorkflowTool {
                     "total_steps": workflow.steps.len()
                 },
                 "progress_token": progress_token,
-                "elicitation_request": {
-                    "title": "Demo Elicitation",
-                    "prompt": "Simplified demonstration",
-                    "schema": "Form schema demo"
-                },
                 "field_count": current_step.fields.len(),
                 "required_fields": current_step.fields.iter().filter(|f| f.required).count(),
                 "next_step_available": step_index + 1 < workflow.steps.len(),
@@ -627,11 +629,6 @@ impl ComplianceFormTool {
                 "form_type": self.form_type,
                 "form_name": compliance_form.name,
                 "request_id": Uuid::new_v4().to_string(),
-                "elicitation_request": {
-                    "title": "Demo Elicitation",
-                    "prompt": "Simplified demonstration",
-                    "schema": "Form schema demo"
-                },
                 "regulatory_framework": match self.form_type.as_str() {
                     "gdpr_data_request" => "GDPR (General Data Protection Regulation)",
                     "ccpa_opt_out" => "CCPA (California Consumer Privacy Act)",
@@ -730,11 +727,6 @@ impl PreferenceCollectionTool {
                 "categories": preference_collection.categories.len(),
                 "total_settings": preference_collection.categories.iter().map(|c| c.settings.len()).sum::<usize>(),
                 "request_id": Uuid::new_v4().to_string(),
-                "elicitation_request": {
-                    "title": "Demo Elicitation",
-                    "prompt": "Simplified demonstration",
-                    "schema": "Form schema demo"
-                },
                 "category_details": preference_collection.categories.iter().map(|cat| {
                     json!({
                         "category": cat.category,
@@ -808,11 +800,6 @@ impl CustomerSurveyTool {
                     "new_customer" => "$5 account credit",
                     "at_risk_customer" => "Priority support upgrade",
                     _ => "Entry into monthly prize drawing"
-                },
-                "elicitation_request": {
-                    "title": "Demo Elicitation",
-                    "prompt": "Simplified demonstration",
-                    "schema": "Form schema demo"
                 },
                 "analytics_tracking": {
                     "nps_calculation": true,
@@ -973,13 +960,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("customer-onboarding-platform")
         .version("2.0.0")
         .title("Customer Onboarding and Data Collection Platform")
-        .instructions("This platform provides comprehensive customer onboarding workflows, compliance forms, preference collection, and survey capabilities using MCP elicitation. All workflows are driven by external configuration files and demonstrate real-world data collection patterns.")
+        .instructions("This platform provides customer onboarding workflows, compliance forms, preference collection, and survey capabilities. Every tool returns a JSON Schema describing the form the caller should render; the MCP elicitation protocol is not used. All workflows are driven by external configuration files.")
         .tool(StartOnboardingWorkflowTool::default())
         .tool(ComplianceFormTool::default())
         .tool(PreferenceCollectionTool::default())
         .tool(CustomerSurveyTool::default())
         .tool(DataValidationTool::default())
-        .with_elicitation() // Enable elicitation support
         .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
 

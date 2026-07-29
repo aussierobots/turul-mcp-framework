@@ -1,8 +1,12 @@
 //! # SQLite Pagination Server Example
 //!
-//! This example demonstrates comprehensive MCP pagination functionality using SQLite database
-//! for realistic large dataset handling. It shows proper database pagination patterns,
-//! connection management, and setup/teardown lifecycle.
+//! Cursor pagination *inside a tool's own result payload*, backed by a SQLite
+//! table of 10,000 rows. The cursor is an offset the tool mints and the caller
+//! echoes back in the next `tools/call`.
+//!
+//! This is not the protocol-level `cursor`/`nextCursor` that paginates
+//! `tools/list` and `resources/list` — those are framework-owned and appear on
+//! list results, not on tool payloads.
 
 use chrono::{DateTime, Utc};
 use clap::Parser;
@@ -769,8 +773,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = McpServer::builder()
         .name("pagination-server")
         .version("2.0.0")
-        .title("SQLite MCP Pagination Server")
-        .instructions("This server demonstrates comprehensive MCP pagination functionality using SQLite database with realistic large dataset handling, connection management, and dynamic operations.")
+        .title("SQLite Pagination Server")
+        .instructions("Tools that paginate their own SQLite-backed result sets. Pass the pagination.next_cursor value from one call as the cursor argument of the next.")
         .tool(ListUsersTool::default())
         .tool(SearchUsersTool::default())
         .tool(RefreshDataTool::default())

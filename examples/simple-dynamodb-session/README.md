@@ -12,7 +12,7 @@ stateful session model lives on the opt-in lane (see `stateful-server`).
 
 ## Features
 
-- **Session-scoped storage**: Each MCP session gets isolated key-value storage in DynamoDB
+- **Backend API surface**: the demo drives `set_session_state`/`get_session_state` directly against a per-run record
 - **Automatic table creation**: Tables are created automatically when `verify_tables: true, create_tables: true`
 - **TTL cleanup**: Sessions and events automatically expire based on configured TTL
 - **AWS native**: Uses AWS SDK with proper IAM integration
@@ -59,7 +59,7 @@ The setup utility creates both required tables:
 
 The server runs at `http://127.0.0.1:8062/mcp` and provides these tools:
 
-### Store Value in Session
+### Store a value
 ```json
 {
   "jsonrpc": "2.0",
@@ -75,7 +75,7 @@ The server runs at `http://127.0.0.1:8062/mcp` and provides these tools:
 }
 ```
 
-### Get Value from Session
+### Read it back
 ```json
 {
   "jsonrpc": "2.0",
@@ -90,7 +90,7 @@ The server runs at `http://127.0.0.1:8062/mcp` and provides these tools:
 }
 ```
 
-### Session Information
+### Backend statistics
 ```json
 {
   "jsonrpc": "2.0",
@@ -109,12 +109,14 @@ The server runs at `http://127.0.0.1:8062/mcp` and provides these tools:
 - **`get_value`** - Read it back (within this run)
 - **`storage_info`** - Backend stats; counts accumulate across restarts
 
-## Session Storage Behavior
+## Storage Behavior
 
-- **Session-scoped**: Data is isolated per session ID
 - **Durable**: rows outlive the process — restart and watch `storage_info` counts grow
-- **TTL cleanup**: Sessions expire after 24 hours by default
+- **TTL cleanup**: Records expire after 24 hours by default
 - **Automatic scaling**: DynamoDB scales based on demand
+- **Per-run record**: each server start creates a fresh demo record, so
+  `store_value`/`get_value` round-trip within one run only. What survives a
+  restart is the *rows*, not the demo record id — see the walkthrough below.
 
 ## Configuration
 
@@ -163,15 +165,19 @@ Your AWS credentials need these DynamoDB permissions:
 }
 ```
 
-## Example Session
+## Durability walkthrough
 
 1. **Create tables**: `MCP_SESSION_TABLE=my-sessions cargo run --bin dynamodb-setup`
 2. **Start server**: `MCP_SESSION_TABLE=my-sessions cargo run --bin simple-dynamodb-session`
-3. **Store data**: `store_value(key='user_id', value=123)`
-4. **Restart server**: prior rows persist in the backend — `storage_info` shows the accumulated count
-5. **Retrieve data**: `get_value(key='user_id')` returns `123`
-
-Each session maintains its own isolated storage space in the DynamoDB tables.
+3. **Baseline**: `storage_info()` → note `stored_records`
+4. **Round-trip**: `store_value(key='user_id', value=123)` then
+   `get_value(key='user_id')` → `123`
+5. **Restart server** against the same `MCP_SESSION_TABLE`
+6. **Proof**: `storage_info()` → `stored_records` has **grown**; the prior
+   run's rows are still in DynamoDB.
+   `get_value(key='user_id')` → `null`, because this run created a *new*
+   demo record. Durability is in the accumulated row count, not in the demo
+   record id, which the process does not carry across restarts.
 
 ## Cleanup
 

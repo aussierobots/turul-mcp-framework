@@ -75,7 +75,7 @@ struct LanguageConfig {
     file_extension: String,
     common_derives: Option<Vec<String>>,
     attribute_syntax: Option<String>,
-    visibility: Vec<String>,
+    visibility: Option<Vec<String>>,
     interface_template: Option<String>,
     type_template: Option<String>,
     dataclass_template: Option<String>,
@@ -85,8 +85,9 @@ struct LanguageConfig {
 
 #[derive(Debug, Deserialize)]
 struct ValidationSchemas {
+    // Two levels deep in the YAML: category -> subject -> schema.
     #[allow(dead_code)] // TODO: Implement validation schema integration
-    validation_schemas: HashMap<String, ValidationCategory>,
+    validation_schemas: HashMap<String, HashMap<String, ValidationCategory>>,
     #[allow(dead_code)] // TODO: Implement data format validation
     data_format_validation: HashMap<String, FormatValidation>,
     #[allow(dead_code)] // TODO: Implement testing standards validation
@@ -536,55 +537,19 @@ impl TestGeneratorTool {
 
 // Helper functions for code generation and validation
 
+// The data files are embedded at compile time. Reading them from a relative
+// path would resolve against the process CWD, so `cargo run -p
+// derive-macro-server` from the workspace root would find nothing and every
+// template lookup would fail at runtime.
+const CODE_TEMPLATES_JSON: &str = include_str!("../data/code_templates.json");
+const VALIDATION_SCHEMAS_YAML: &str = include_str!("../data/validation_schemas.yaml");
+
 fn load_code_templates() -> Result<CodeTemplates, Box<dyn std::error::Error>> {
-    let path = "data/code_templates.json";
-    if Path::new(path).exists() {
-        let content = fs::read_to_string(path)?;
-        Ok(serde_json::from_str(&content)?)
-    } else {
-        // Return minimal fallback templates
-        Ok(CodeTemplates {
-            code_generation_templates: HashMap::new(),
-            validation_rules: ValidationRules {
-                rust_naming: NamingRules {
-                    struct_name: "PascalCase".to_string(),
-                    enum_name: "PascalCase".to_string(),
-                    field_name: "snake_case".to_string(),
-                    function_name: "snake_case".to_string(),
-                    constant_name: "SCREAMING_SNAKE_CASE".to_string(),
-                },
-                code_quality: QualityRules {
-                    max_function_length: 50,
-                    max_struct_fields: 20,
-                    required_derives: vec!["Debug".to_string()],
-                    documentation_required: true,
-                    error_handling: "Use Result for fallible operations".to_string(),
-                },
-                security: SecurityRules {
-                    avoid_unsafe: true,
-                    input_validation: "Always validate external input".to_string(),
-                    sql_injection: "Use parameterized queries".to_string(),
-                    sensitive_data: "Mark sensitive fields appropriately".to_string(),
-                },
-            },
-            transformation_patterns: HashMap::new(),
-            language_support: HashMap::new(),
-        })
-    }
+    Ok(serde_json::from_str(CODE_TEMPLATES_JSON)?)
 }
 
 fn load_validation_schemas() -> Result<ValidationSchemas, Box<dyn std::error::Error>> {
-    let path = "data/validation_schemas.yaml";
-    if Path::new(path).exists() {
-        let content = fs::read_to_string(path)?;
-        Ok(serde_yml::from_str(&content)?)
-    } else {
-        Ok(ValidationSchemas {
-            validation_schemas: HashMap::new(),
-            data_format_validation: HashMap::new(),
-            testing_standards: HashMap::new(),
-        })
-    }
+    Ok(serde_yml::from_str(VALIDATION_SCHEMAS_YAML)?)
 }
 
 // Simplified code generation functions (in a real implementation, these would use a proper template engine)

@@ -12,8 +12,8 @@ stateful session model lives on the opt-in lane (see `stateful-server`).
 
 ## Features
 
-- **Session-scoped storage**: Each MCP session gets isolated key-value storage in PostgreSQL
-- **Multi-instance sharing**: Multiple server instances can share the same PostgreSQL database
+- **Backend API surface**: the demo drives `set_session_state`/`get_session_state` directly against a per-run record
+- **Shared database**: multiple server instances can point at the same PostgreSQL database
 - **Automatic table creation**: Tables are created automatically when `verify_tables: true, create_tables: true`
 - **ACID transactions**: PostgreSQL provides reliable data consistency
 
@@ -54,7 +54,7 @@ The setup utility creates the required PostgreSQL tables with proper schema and 
 
 The server runs at `http://127.0.0.1:8060/mcp` and provides these tools:
 
-### Store Value in Session
+### Store a value
 ```json
 {
   "jsonrpc": "2.0",
@@ -70,7 +70,7 @@ The server runs at `http://127.0.0.1:8060/mcp` and provides these tools:
 }
 ```
 
-### Get Value from Session
+### Read it back
 ```json
 {
   "jsonrpc": "2.0",
@@ -85,7 +85,7 @@ The server runs at `http://127.0.0.1:8060/mcp` and provides these tools:
 }
 ```
 
-### Session Information
+### Backend statistics
 ```json
 {
   "jsonrpc": "2.0",
@@ -104,12 +104,14 @@ The server runs at `http://127.0.0.1:8060/mcp` and provides these tools:
 - **`get_value`** - Read it back (within this run)
 - **`storage_info`** - Backend stats; counts accumulate across restarts
 
-## Session Storage Behavior
+## Storage Behavior
 
-- **Session-scoped**: Data is isolated per session ID
 - **Durable**: rows outlive the process — restart and watch `storage_info` counts grow
 - **Multi-instance**: Multiple servers can share the same database
 - **ACID compliance**: PostgreSQL ensures data consistency
+- **Per-run record**: each server start creates a fresh demo record, so
+  `store_value`/`get_value` round-trip within one run only. What survives a
+  restart is the *rows*, not the demo record id — see the walkthrough below.
 
 ## Configuration
 
@@ -121,29 +123,30 @@ DATABASE_URL=postgres://mcp:mcp_pass@localhost:5432/mcp_sessions
 
 ## Multi-Instance Setup
 
-To share sessions across multiple server instances:
-
-1. **Start PostgreSQL** (shared database)
-2. **Start multiple servers** with the same `DATABASE_URL`
-3. **Sessions are shared** between all server instances
+Multiple server instances pointing at the same `DATABASE_URL` share one row
+space — `storage_info` counts on either instance reflect writes from both.
+This example hardcodes `127.0.0.1:8060` and takes no CLI arguments, so run a
+second instance from a copy with a different `bind_address` if you want two
+live at once.
 
 ```bash
-# Terminal 1
-DATABASE_URL="postgres://mcp:pass@db.example.com:5432/shared_sessions" cargo run --bin simple-postgres-session
-
-# Terminal 2 (different port, same database)
-DATABASE_URL="postgres://mcp:pass@db.example.com:5432/shared_sessions" cargo run --bin simple-postgres-session -- --port 8061
+DATABASE_URL="postgres://mcp:pass@db.example.com:5432/shared_sessions" \
+  cargo run --bin simple-postgres-session
 ```
 
-## Example Session
+## Durability walkthrough
 
 1. **Create tables**: `DATABASE_URL="postgres://..." cargo run --bin postgres-setup`
 2. **Start server**: `DATABASE_URL="postgres://..." cargo run --bin simple-postgres-session`
-3. **Store data**: `store_value(key='user_id', value=123)`
-4. **Restart server**: prior rows persist in the backend — `storage_info` shows the accumulated count
-5. **Retrieve data**: `get_value(key='user_id')` returns `123`
-
-Each session maintains its own isolated storage space in the PostgreSQL database.
+3. **Baseline**: `storage_info()` → note `stored_records`
+4. **Round-trip**: `store_value(key='user_id', value=123)` then
+   `get_value(key='user_id')` → `123`
+5. **Restart server** against the same `DATABASE_URL`
+6. **Proof**: `storage_info()` → `stored_records` has **grown**; the prior
+   run's rows are still in PostgreSQL.
+   `get_value(key='user_id')` → `null`, because this run created a *new*
+   demo record. Durability is in the accumulated row count, not in the demo
+   record id, which the process does not carry across restarts.
 
 ## Cleanup
 

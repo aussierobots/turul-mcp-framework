@@ -70,24 +70,32 @@ impl McpResource for ProjectDocumentationResource {
         if readme_path.exists() {
             match fs::read_to_string(readme_path) {
                 Ok(content) => {
-                    contents.push(ResourceContent::text(
-                        "file:///docs/project.md",
-                        format!("# Main Project Documentation\n\n{}", content),
-                    ));
+                    contents.push(
+                        ResourceContent::text(
+                            "file:///docs/project.md",
+                            format!("# Main Project Documentation\n\n{}", content),
+                        )
+                        .with_mime_type("text/markdown"),
+                    );
                 }
                 Err(_) => {
-                    contents.push(ResourceContent::text(
-                        "file:///docs/project.md",
-                        "# Project Documentation\n\nMain README file not accessible".to_string(),
-                    ));
+                    contents.push(
+                        ResourceContent::text(
+                            "file:///docs/project.md",
+                            "# Project Documentation\n\nMain README file not accessible"
+                                .to_string(),
+                        )
+                        .with_mime_type("text/markdown"),
+                    );
                 }
             }
         }
 
         // Add project structure overview
-        contents.push(ResourceContent::text(
-            "file:///docs/project.md",
-            "# MCP Framework Project Structure\n\n\
+        contents.push(
+            ResourceContent::text(
+                "file:///docs/project.md",
+                "# MCP Framework Project Structure\n\n\
              ## Core Crates\n\
              - `mcp-server/` - Main MCP server framework\n\
              - `mcp-protocol/` - Protocol definitions and types\n\
@@ -104,8 +112,10 @@ impl McpResource for ProjectDocumentationResource {
              3. Run comprehensive test suite\n\
              4. Update documentation and examples\n\
              5. Performance testing and validation"
-                .to_string(),
-        ));
+                    .to_string(),
+            )
+            .with_mime_type("text/markdown"),
+        );
 
         // Add architectural overview
         contents.push(ResourceContent::text("file:///docs/project.md",
@@ -126,7 +136,7 @@ impl McpResource for ProjectDocumentationResource {
              2. **Derive Macros**: Automatic schema generation from structs\n\
              3. **Function Macros**: Natural function-based tool definitions\n\
              4. **Declarative Macros**: Ultra-concise tool creation".to_string()
-        ));
+        ).with_mime_type("text/markdown"));
 
         Ok(contents)
     }
@@ -180,12 +190,16 @@ impl McpResource for ApiDocumentationResource {
         let api_docs_path = Path::new("data/api_docs.md");
 
         match fs::read_to_string(api_docs_path) {
-            Ok(content) => Ok(vec![ResourceContent::text("file:///docs/api.md", content)]),
+            Ok(content) => Ok(vec![
+                ResourceContent::text("file:///docs/api.md", content)
+                    .with_mime_type("text/markdown"),
+            ]),
             Err(_) => {
                 // Fallback content if file is not accessible
-                Ok(vec![ResourceContent::text(
-                    "file:///docs/api.md",
-                    "# API Documentation\n\n\
+                Ok(vec![
+                    ResourceContent::text(
+                        "file:///docs/api.md",
+                        "# API Documentation\n\n\
                          Documentation file not found at data/api_docs.md\n\n\
                          This resource loads API documentation from external markdown files,\n\
                          demonstrating how production systems maintain documentation\n\
@@ -198,8 +212,10 @@ impl McpResource for ApiDocumentationResource {
                          - Request/response examples\n\
                          - SDK and client library information\n\
                          - Error handling guidelines"
-                        .to_string(),
-                )])
+                            .to_string(),
+                    )
+                    .with_mime_type("text/markdown"),
+                ])
             }
         }
     }
@@ -259,13 +275,13 @@ impl McpResource for ConfigurationResource {
                 // Parse and pretty-print the JSON for better readability
                 match serde_json::from_str::<serde_json::Value>(&config_content) {
                     Ok(config_json) => {
-                        contents.push(ResourceContent::text(
+                        contents.push(ResourceContent::json(
                             "file:///config/app.json",
                             serde_json::to_string_pretty(&config_json).unwrap(),
                         ));
                     }
                     Err(_) => {
-                        contents.push(ResourceContent::text(
+                        contents.push(ResourceContent::json(
                             "file:///config/app.json",
                             config_content,
                         ));
@@ -273,9 +289,10 @@ impl McpResource for ConfigurationResource {
                 }
             }
             Err(_) => {
-                contents.push(ResourceContent::text(
-                    "file:///config/app.json",
-                    "# Application Configuration\n\n\
+                contents.push(
+                    ResourceContent::text(
+                        "file:///config/app.json",
+                        "# Application Configuration\n\n\
                      Configuration file not found at data/app_config.json\n\n\
                      This resource demonstrates production configuration management\n\
                      where configuration is externalized from code for:\n\n\
@@ -291,15 +308,18 @@ impl McpResource for ConfigurationResource {
                      - Feature flags\n\
                      - Monitoring and observability\n\
                      - External service integrations"
-                        .to_string(),
-                ));
+                            .to_string(),
+                    )
+                    .with_mime_type("text/markdown"),
+                );
             }
         }
 
         // Add environment variables documentation
-        contents.push(ResourceContent::text(
-            "file:///config/app.json",
-            "# Environment Variables Guide\n\n\
+        contents.push(
+            ResourceContent::text(
+                "file:///config/app.json",
+                "# Environment Variables Guide\n\n\
              ## Security Best Practices\n\
              Never commit sensitive values to configuration files. Use environment variables:\n\n\
              ```bash\n\
@@ -320,8 +340,10 @@ impl McpResource for ConfigurationResource {
              3. **Production**: Secure secret management systems\n\
              4. **Docker**: Environment variables in compose files\n\
              5. **Kubernetes**: ConfigMaps and Secrets"
-                .to_string(),
-        ));
+                    .to_string(),
+            )
+            .with_mime_type("text/markdown"),
+        );
 
         Ok(contents)
     }
@@ -340,7 +362,7 @@ impl HasResourceMetadata for DatabaseSchemaResource {
 
 impl HasResourceUri for DatabaseSchemaResource {
     fn uri(&self) -> &str {
-        "file:///schema/database.json"
+        "file:///schema/database.sql"
     }
 }
 
@@ -351,8 +373,13 @@ impl HasResourceDescription for DatabaseSchemaResource {
 }
 
 impl HasResourceMimeType for DatabaseSchemaResource {
+    /// `text/plain`, not `application/sql`: the builder's auto-generated
+    /// resource MIME allowlist is derived from registered URI file extensions
+    /// (`.md`, `.json`, `.txt`, ...) and has no `.sql` entry, so a declared
+    /// `application/sql` is advertised by `resources/list` and then rejected
+    /// by `resources/read` with `-32602`.
     fn mime_type(&self) -> Option<&str> {
-        Some("application/sql")
+        Some("text/plain")
     }
 }
 
@@ -379,13 +406,13 @@ impl McpResource for DatabaseSchemaResource {
         match fs::read_to_string(schema_path) {
             Ok(schema_content) => {
                 contents.push(ResourceContent::text(
-                    "file:///schema/database.json",
+                    "file:///schema/database.sql",
                     schema_content,
                 ));
             }
             Err(_) => {
                 contents.push(ResourceContent::text(
-                    "file:///schema/database.json",
+                    "file:///schema/database.sql",
                     "-- Database Schema\n\
                      -- Schema file not found at data/database_schema.sql\n\n\
                      /*\n\
@@ -412,9 +439,10 @@ impl McpResource for DatabaseSchemaResource {
         }
 
         // Add database documentation
-        contents.push(ResourceContent::text(
-            "file:///schema/database.json",
-            "# Database Architecture Guide\n\n\
+        contents.push(
+            ResourceContent::text(
+                "file:///schema/database.sql",
+                "# Database Architecture Guide\n\n\
              ## Schema Management Best Practices\n\n\
              ### 1. Migration Strategy\n\
              - **Version Control**: All schema changes in SQL files\n\
@@ -436,8 +464,10 @@ impl McpResource for DatabaseSchemaResource {
              - **Point-in-time Recovery**: Transaction log backups\n\
              - **Disaster Recovery**: Cross-region replication\n\
              - **Testing**: Regular restore testing"
-                .to_string(),
-        ));
+                    .to_string(),
+            )
+            .with_mime_type("text/markdown"),
+        );
 
         Ok(contents)
     }
@@ -532,7 +562,7 @@ impl McpResource for SystemStatusResource {
         });
 
         Ok(vec![
-            ResourceContent::text(
+            ResourceContent::json(
                 "file:///status/system.json",
                 serde_json::to_string_pretty(&status).unwrap(),
             ),
@@ -556,7 +586,8 @@ impl McpResource for SystemStatusResource {
                  ### Alerts\n\
                  No active alerts or warnings."
                     .to_string(),
-            ),
+            )
+            .with_mime_type("text/markdown"),
         ])
     }
 }
@@ -584,11 +615,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Development resource server running at: http://127.0.0.1:8041/mcp");
     info!("Real-world team resources available:");
-    info!("  - docs://project: Comprehensive project documentation and architecture");
-    info!("  - docs://api: Complete API documentation loaded from external markdown");
-    info!("  - config://app: Production configuration management with security best practices");
-    info!("  - schema://database: Database schema and migration management");
-    info!("  - status://system: Real-time system monitoring and health metrics");
+    info!("  - file:///docs/project.md   (text/markdown)  project documentation and architecture");
+    info!("  - file:///docs/api.md       (text/markdown)  API docs loaded from data/api_docs.md");
+    info!(
+        "  - file:///config/app.json   (application/json) config loaded from data/app_config.json"
+    );
+    info!(
+        "  - file:///schema/database.sql (text/plain)     schema loaded from data/database_schema.sql"
+    );
+    info!("  - file:///status/system.json (application/json) generated system health metrics");
     info!("External data files: data/api_docs.md, data/app_config.json, data/database_schema.sql");
 
     server.run().await?;

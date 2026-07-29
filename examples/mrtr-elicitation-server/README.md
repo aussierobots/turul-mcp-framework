@@ -49,7 +49,9 @@ client                                         server
 
 ## See also
 
-- `elicitation-server` — the 2025-11-25 session-stream elicitation idiom this
-  pattern replaces (kept on the pinned 2025 lane)
+- `elicitation-server` — despite its name, form-schema generation over plain
+  `tools/call`, not the elicitation protocol; it is the E2E fixture for
+  `tests/elicitation`. No example implements the 2025-11-25 session-stream
+  `elicitation/create` idiom this pattern replaces.
 - `crates/turul-mcp-server/tests/mrtr_2026.rs` — the wire contract tests,
   including sub-capability gating (`elicitation.url`, `sampling.tools`)

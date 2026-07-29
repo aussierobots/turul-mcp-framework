@@ -43,7 +43,7 @@ The setup utility creates the SQLite database file with all required tables and 
 
 The server runs at `http://127.0.0.1:8061/mcp` and provides these tools:
 
-### Store Value in Session
+### Store a value
 ```json
 {
   "jsonrpc": "2.0",
@@ -59,7 +59,7 @@ The server runs at `http://127.0.0.1:8061/mcp` and provides these tools:
 }
 ```
 
-### Get Value from Session
+### Read it back
 ```json
 {
   "jsonrpc": "2.0",
@@ -74,7 +74,7 @@ The server runs at `http://127.0.0.1:8061/mcp` and provides these tools:
 }
 ```
 
-### Session Information
+### Backend statistics
 ```json
 {
   "jsonrpc": "2.0",
@@ -93,12 +93,14 @@ The server runs at `http://127.0.0.1:8061/mcp` and provides these tools:
 - **`get_value`** - Read it back (within this run)
 - **`storage_info`** - Backend stats; counts accumulate across restarts (the durability proof)
 
-## Session Storage Behavior
+## Storage Behavior
 
-- **Durable**: rows outlive the process — restart and watch `storage_info` counts grow
 - **Durable**: rows outlive the process — restart and watch `storage_info` counts grow
 - **File-based**: Data stored in local SQLite database file
 - **Single-process**: SQLite is designed for single-process access
+- **Per-run record**: each server start creates a fresh demo record, so
+  `store_value`/`get_value` round-trip within one run only. What survives a
+  restart is the *rows*, not the demo record id — see the walkthrough below.
 
 ## Configuration
 
@@ -116,15 +118,19 @@ Perfect for:
 - **Single-instance deployments**: Simple deployments without database servers
 - **Local persistence**: Any scenario requiring lightweight, local data storage
 
-## Example Session
+## Durability walkthrough (verified)
 
 1. **Create database**: `SQLITE_PATH="./my-sessions.db" cargo run --bin sqlite-setup`
 2. **Start server**: `SQLITE_PATH="./my-sessions.db" cargo run --bin simple-sqlite-session`
-3. **Store data**: `store_value(key='user_id', value=123)`
-4. **Restart server**: prior rows persist in the SQLite file — `storage_info` shows the accumulated count
-5. **Retrieve data**: `get_value(key='user_id')` returns `123`
-
-Each session maintains its own isolated storage space in the SQLite database file.
+3. **Baseline**: `storage_info()` → note `stored_records`
+4. **Round-trip**: `store_value(key='user_id', value=123)` then
+   `get_value(key='user_id')` → `123`
+5. **Restart server** (Ctrl+C, re-run with the same `SQLITE_PATH`)
+6. **Proof**: `storage_info()` → `stored_records` has **grown**; the prior
+   run's rows are still in the file.
+   `get_value(key='user_id')` → `null`, because this run created a *new*
+   demo record. Durability is in the accumulated row count, not in the demo
+   record id, which the process does not carry across restarts.
 
 ## Cleanup
 

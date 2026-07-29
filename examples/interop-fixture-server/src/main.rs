@@ -101,9 +101,9 @@ impl HasPromptDescription for GreetingPrompt {
 impl HasPromptArguments for GreetingPrompt {
     fn arguments(&self) -> Option<&Vec<PromptArgument>> {
         static ARGS: OnceLock<Vec<PromptArgument>> = OnceLock::new();
-        Some(ARGS.get_or_init(|| {
-            vec![PromptArgument::new("name").with_description("Who to greet")]
-        }))
+        Some(
+            ARGS.get_or_init(|| vec![PromptArgument::new("name").with_description("Who to greet")]),
+        )
     }
 }
 impl HasPromptAnnotations for GreetingPrompt {}

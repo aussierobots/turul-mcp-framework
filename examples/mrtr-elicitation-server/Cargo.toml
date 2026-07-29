@@ -5,6 +5,9 @@
 name = "mrtr-elicitation-server"
 version = "0.4.0"
 edition.workspace = true
+# Two bins in this package; without this, the documented
+# `cargo run -p mrtr-elicitation-server` cannot pick one and fails.
+default-run = "mrtr-elicitation-server"
 authors.workspace = true
 license.workspace = true
 

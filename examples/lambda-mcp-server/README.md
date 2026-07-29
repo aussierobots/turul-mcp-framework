@@ -9,6 +9,18 @@ A **cost-optimized** serverless Model Context Protocol (MCP) server built with R
 - 🔧 **Advanced Session Management**: DynamoDB-backed stateless Lambda with pk/sk schema  
 - ⚡ **Performance Optimized**: OnceCell global state, connection pooling, ARM64 support
 
+
+> ## Which spec lane, and why
+>
+> **This example is deliberately pinned to MCP 2025-11-25** (see `Cargo.toml`:
+> every framework dependency carries `features = ["protocol-2025-11-25"]`).
+> Its entire subject is DynamoDB-backed **sessions** and SSE streaming, and
+> the 2026-07-28 stateless core removed both: `initialize`,
+> `notifications/initialized`, the `Mcp-Session-Id` header and GET SSE are all
+> gone from that spec. Porting this example to 2026 would delete what it
+> teaches. For the 2026 server pattern see `minimal-server` and
+> `notification-server`; for the 2026 client see `streamable-http-client`.
+
 ## 🏗️ Clean Notification Architecture
 
 ### **Two-Tier Event System**
@@ -172,61 +184,36 @@ The setup script creates:
 # Start the server (hot reload)
 cargo lambda watch
 
-# In another terminal, run comprehensive tests
-cd ../lambda-mcp-client
+# In another terminal, smoke-probe it: handshake, tools/list, and one
+# tools/call per advertised tool. Exits non-zero if the handshake or
+# tools/list fails.
+cargo run -p lambda-turul-mcp-client -- probe --url http://127.0.0.1:9000
 
-# Test the new streaming architecture
-cargo run -- test --url http://127.0.0.1:9000 --test-sse-streaming
-
-# Test multiple concurrent connections (verifies tokio broadcast)
-cargo run -- test --url http://127.0.0.1:9000 --suite streaming --concurrency 3
-
-# Test all features comprehensively
-cargo run -- test --url http://127.0.0.1:9000 --suite all --detailed-report
-
-# Interactive testing session
-cargo run -- connect --url http://127.0.0.1:9000 --debug
+# Interactive prompt for poking at individual tools
+cargo run -p lambda-turul-mcp-client -- connect --url http://127.0.0.1:9000 --debug
 ```
 
-### **🧪 Testing the New Architecture**
+### **🧪 Exercising the SSE and session behaviour**
 
-#### **SSE Streaming Tests**
+There is no automated assertion suite for the streaming behaviour below —
+verify it by hand against a running `cargo lambda watch`, or point the
+raw-wire client at it:
+
 ```bash
-# Test basic SSE streaming (MCP 2025-11-25 compliance)
-cargo run -- test --url http://127.0.0.1:9000 --suite streaming
-
-# What this tests:
-# ✅ Server-Sent Events streaming
-# ✅ Multiple concurrent SSE connections  
-# ✅ tokio broadcast event distribution
-# ✅ Session isolation and targeting
-# ✅ MCP JSON-RPC 2.0 notification format
-# ✅ Global event broadcasting
+# Every required 2025-11-25 header and envelope, printed as it goes:
+cargo run -p streamable-http-client-2025-11-25 -- --url http://127.0.0.1:9000/mcp
 ```
 
-#### **Multi-Client Connection Testing**
-```bash
-# Test multiple clients sharing events via tokio broadcast
-cargo run -- test --url http://127.0.0.1:9000 --suite streaming --concurrency 5
+What to look for:
 
-# This verifies:
-# ✅ All 5 connections receive the same internal events
-# ✅ No message competition (unlike old SQS polling)
-# ✅ Session-specific events only go to correct connections
-# ✅ Performance under concurrent load
-```
+- POST `/mcp` answers `Content-Type: text/event-stream` when the call carries
+  notifications, `application/json` otherwise.
+- The `Mcp-Session-Id` response header on `initialize`, echoed as a request
+  header thereafter.
+- GET `/mcp` returns a snapshot of recent events and then closes — this
+  deployment is **not** a long-lived stream (see the SSE Mode caveat above).
+- `DELETE /mcp` with the session header terminates the session.
 
-#### **HTTP Methods Testing**
-```bash
-# Test both POST and GET according to MCP specification
-cargo run -- test --url http://127.0.0.1:9000 --suite protocol
-
-# Validates:
-# ✅ POST /mcp for JSON-RPC tool calls
-# ✅ GET /mcp for SSE streaming  
-# ✅ Proper CORS headers
-# ✅ Session header handling (Mcp-Session-Id)
-```
 
 ### **☁️ AWS Deployment**
 ```bash
@@ -460,8 +447,7 @@ This implementation demonstrates how **modern Rust** + **tokio broadcast channel
 cargo lambda watch
 
 # Test multi-client streaming (in another terminal)
-cd ../lambda-mcp-client
-cargo run -- test --url http://127.0.0.1:9000 --test-sse-streaming
+cargo run -p lambda-turul-mcp-client -- probe --url http://127.0.0.1:9000
 ```
 
 **⭐ What This Achieves:**
@@ -469,7 +455,7 @@ cargo run -- test --url http://127.0.0.1:9000 --test-sse-streaming
 - ✅ **True Multi-Client**: ALL connected clients receive ALL events via tokio broadcast  
 - ✅ **No Message Competition**: Eliminates SQS polling loops and message competition
 - ✅ **Clean Architecture**: Internal tokio channels + optional external SNS integration
-- ✅ **Production Ready**: Comprehensive testing with lambda-mcp-client
+- ✅ **Smoke-checkable**: `lambda-turul-mcp-client probe` verifies handshake, tools/list and tool reachability
 
 **🔧 Implementation Status:**
 - ✅ **Multi-Client Notifications**: FIXED - Uses tokio broadcast for perfect fan-out

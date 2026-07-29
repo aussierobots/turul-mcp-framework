@@ -56,11 +56,10 @@ impl McpResource for SessionAwareProfileResource {
             serde_json::to_string_pretty(&profile).unwrap()
         };
 
-        Ok(vec![ResourceContent::blob(
-            self.uri().to_string(),
-            content,
-            "application/json".to_string(),
-        )])
+        // `json` and not `blob`: `BlobResourceContents.blob` is base64-encoded
+        // binary, so handing it a raw JSON string emits contents a client
+        // cannot decode. Text with `mimeType: application/json` is the shape.
+        Ok(vec![ResourceContent::json(self.uri().to_string(), content)])
     }
 }
 
@@ -151,10 +150,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions("This server demonstrates session-aware resources. Resources can access session context to provide personalized content based on user state and preferences.")
         .resource(SessionAwareProfileResource)
         .resource(SessionActivityResource)
-        .bind_address("127.0.0.1:8008".parse()?)
+        .bind_address("127.0.0.1:8010".parse()?)
         .build()?;
 
-    println!("Session-aware resource server running at: http://127.0.0.1:8008/mcp");
+    println!("Session-aware resource server running at: http://127.0.0.1:8010/mcp");
     println!("\nFeatures Demonstrated:");
     println!("  1. SessionAwareProfileResource - Adapts content based on session state");
     println!("  2. SessionActivityResource - Maintains session-specific activity logs");
