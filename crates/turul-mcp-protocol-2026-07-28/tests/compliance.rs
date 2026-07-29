@@ -1,6 +1,6 @@
 //! MCP TypeScript Specification Compliance Tests
 //!
-//! Tests verify Rust types serialize to JSON shapes matching `schema/draft-schema.ts`
+//! Tests verify Rust types serialize to JSON shapes matching `schema/schema.ts`
 //! at the vendored ETag. When the schema is re-vendored, these tests are the
 //! contract that must keep passing.
 //!
@@ -1781,7 +1781,7 @@ mod capabilities_shape {
 /// declares (cross-checked against the `removed_methods` module and the
 /// positive list from `docs/plans/2026-07-28-migration-diff.md`). Three guarantees:
 ///
-/// 1. Every method in the list appears in the vendored `schema/draft-schema.ts`
+/// 1. Every method in the list appears in the vendored `schema/schema.ts`
 ///    (positive cross-check — catches typos in the list).
 /// 2. The schema declares exactly this set — no more, no less (count pin).
 /// 3. For each method, the Rust type that binds it emits the correct method
@@ -1790,7 +1790,7 @@ mod capabilities_shape {
 mod method_strings {
     use serde_json::Value;
 
-    const SCHEMA_TS: &str = include_str!("../schema/draft-schema.ts");
+    const SCHEMA_TS: &str = include_str!("../schema/schema.ts");
 
     /// The canonical list of method strings 2026-07-28 declares.
     /// Sorted alphabetically for stability.
@@ -1825,7 +1825,7 @@ mod method_strings {
             assert!(
                 SCHEMA_TS.contains(&pat),
                 "method `{}` is in our canonical list but absent from \
-                 schema/draft-schema.ts — re-vendor or fix the list",
+                 schema/schema.ts — re-vendor or fix the list",
                 m
             );
         }
@@ -2007,7 +2007,7 @@ mod method_strings {
 
 /// Schema-drift detector for removed methods.
 ///
-/// Reads the vendored `schema/draft-schema.ts` at compile time and asserts that
+/// Reads the vendored `schema/schema.ts` at compile time and asserts that
 /// the methods removed from 2026-07-28 (per the migration diff) do NOT
 /// appear in the schema's method-string declarations. This is the test that
 /// proves "these methods are gone" against the actual upstream contract.
@@ -2017,7 +2017,7 @@ mod method_strings {
 #[cfg(test)]
 mod removed_methods {
     /// The schema file vendored at the crate's ETag-pinned snapshot.
-    const SCHEMA_TS: &str = include_str!("../schema/draft-schema.ts");
+    const SCHEMA_TS: &str = include_str!("../schema/schema.ts");
 
     /// Asserts that `needle` does not appear inside any `method:` declaration
     /// in the schema. We grep for the literal `method: "<needle>"` pattern,

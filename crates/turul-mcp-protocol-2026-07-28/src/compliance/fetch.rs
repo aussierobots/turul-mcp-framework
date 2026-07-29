@@ -22,7 +22,7 @@ pub const PIN: Pin = Pin {
     // `subpath`. `refresh --write` rewrites this line and nothing else, so keep
     // any capture-specific detail out of this comment — it would go stale on
     // the next bump without anyone noticing. The same commit pins
-    // `schema/draft-schema.ts`; see `schema/README.md`.
+    // `schema/schema.ts`; see `schema/README.md`.
     sha: "271ecc9accafdd9b83a3c869fa67c22953b2af80",
     subpath: "schema/2026-07-28/examples",
 };

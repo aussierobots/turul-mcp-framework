@@ -57,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Schema re-pinned from the pre-release draft path to the released one.** Upstream published
   2026-07-28 and moved the schema from `schema/draft/schema.ts` to the immutable dated
-  `schema/2026-07-28/schema.ts`. `schema/draft-schema.ts` is now vendored from commit
+  `schema/2026-07-28/schema.ts`. The vendored copy is now `schema/schema.ts` (renamed from
+  `draft-schema.ts`, whose prefix survived finalization and stopped describing the file), taken from commit
   `271ecc9accafdd9b83a3c869fa67c22953b2af80` (content sha256
   `742750af0bb8c716e7030c4977c992b55d1adc4407e9e66997db5846baedc2cd`, blob `9b55feeb…`);
   `PIN` in `src/compliance/fetch.rs` and `schema/EXAMPLES_PIN.md` moved with it to

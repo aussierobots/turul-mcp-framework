@@ -36,7 +36,7 @@ cargo run -p turul-mcp-protocol-2026-07-28 --bin mcp-compliance-2026-07-28 \
     --features compliance -- refresh          # dry-run; --write only once green
 
 # 2. Has the vendored schema itself drifted from its pinned commit?
-shasum -a 256 crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts
+shasum -a 256 crates/turul-mcp-protocol-2026-07-28/schema/schema.ts
 #    compare against the Content sha256 in schema/README.md, then diff that
 #    commit against the released tag 2026-07-28 — never against upstream main
 ```

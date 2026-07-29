@@ -83,7 +83,7 @@ drift-check every slice.
 - [ ] Re-vendor the schema file **first**, then re-derive every provenance value from the file
       actually on disk (never copy a hash forward):
       ```bash
-      curl -fsSL "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts" -o crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts
+      curl -fsSL "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts" -o crates/turul-mcp-protocol-2026-07-28/schema/schema.ts
       ```
 - [ ] `schema/README.md` — update `Upstream source`, `Raw URL used`, commit pin, `Content
       sha256`, blob sha, ETag. **Rewrite only lines 18–25** (the `⚠ DRAFT-PATH WARNING`
@@ -377,7 +377,7 @@ earliest-removal of 2027-07-28. The protocol-crate types do carry
 
 ## 4. Nice-to-have
 
-- [ ] **4.1** Rename the vendored `draft-schema.ts` — now a misnomer. Blast radius is
+- [ ] **4.1** Rename the vendored `schema.ts` — now a misnomer. Blast radius is
       contained: 2 `include_str!` sites plus 42 prose references, all enumerated. Sequence
       *after* §1.1, which already rewrites the file.
 - [ ] **4.2** Example `.version("x.y.z")` strings are inconsistent — 24 at `0.4.0`, 20 at
@@ -432,7 +432,7 @@ Recorded so a later pass does not resurrect them.
    lines 27–67 are the re-vendor revision log. Deleting the section destroys 41 lines of
    durable provenance history.
 4. **"`SubscriptionsListenResult` is the one genuinely new type in the released schema."**
-   False — it is already in our vendored draft copy at `draft-schema.ts:1349`. The genuinely
+   False — it is already in our vendored draft copy at `schema.ts:1349`. The genuinely
    new type is `SubscriptionsListenResultResponse`. The teardown gap is a pre-existing
    draft-era caveat, spec-legal (the schema permits never emitting it), already tracked in
    `COMPLIANCE.md` — informational, not should-fix.

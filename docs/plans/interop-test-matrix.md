@@ -88,7 +88,7 @@ The TypeScript SDK **v2.0.0-beta.1** cannot complete `connect()` against a
 2026-07-28 turul server. Its `DiscoverResultSchema` still requires a top-level
 `serverInfo`, which the **released** schema removed — identity now travels in
 `_meta["io.modelcontextprotocol/serverInfo"]`. Verified directly against the
-pinned artifact: `DiscoverResult` in `schema/draft-schema.ts` declares
+pinned artifact: `DiscoverResult` in `schema/schema.ts` declares
 `supportedVersions`, `capabilities` and `instructions` only, and the sole
 `serverInfo` occurrence in the whole schema is the `_meta` key.
 

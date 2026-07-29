@@ -25,7 +25,7 @@
 #   - J2 (read surface): resources/list -> resources/read ->
 #     resources/templates/list -> prompts/list -> prompts/get ->
 #     completion/complete all returned resultType, and the six methods whose
-#     result type extends CacheableResult in schema/draft-schema.ts
+#     result type extends CacheableResult in schema/schema.ts
 #     (server/discover, tools/list, resources/list, resources/read,
 #     resources/templates/list, prompts/list) all carried ttlMs + cacheScope.
 #   - J5 (negative paths, driven with raw HTTP — the Go SDK will not emit a

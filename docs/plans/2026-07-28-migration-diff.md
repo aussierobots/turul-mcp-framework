@@ -1,6 +1,6 @@
 # Migration Diff: 2025-11-25 → 2026-07-28
 
-Derived from `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts` (vendored 2026-05-24, ETag `8bdd4ae5...`). This document maps every TS symbol to its Rust counterpart and flags what's NEW, REMOVED, or CHANGED. Compliance work was driven from this diff via the (since executed and deleted) phase plan; current tracking is `docs/plans/2026-07-28-spec-compliance.md`.
+Derived from `crates/turul-mcp-protocol-2026-07-28/schema/schema.ts` (vendored 2026-05-24, ETag `8bdd4ae5...`). This document maps every TS symbol to its Rust counterpart and flags what's NEW, REMOVED, or CHANGED. Compliance work was driven from this diff via the (since executed and deleted) phase plan; current tracking is `docs/plans/2026-07-28-spec-compliance.md`.
 
 **Convention:** schema line refs are `[L<n>]`. Existing Rust files refer to `crates/turul-mcp-protocol-2026-07-28/src/`.
 

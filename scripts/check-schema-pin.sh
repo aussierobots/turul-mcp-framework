@@ -14,7 +14,7 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 
 CRATE=crates/turul-mcp-protocol-2026-07-28
-SCHEMA=$CRATE/schema/draft-schema.ts
+SCHEMA=$CRATE/schema/schema.ts
 README=$CRATE/schema/README.md
 FETCH=$CRATE/src/compliance/fetch.rs
 PINDOC=$CRATE/schema/EXAMPLES_PIN.md

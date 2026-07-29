@@ -1,13 +1,13 @@
 //! # Model Context Protocol (MCP) — 2026-07-28
 //!
 //! Faithful 1:1 Rust implementation of the upstream MCP schema
-//! ([`schema.ts` vendored at `schema/draft-schema.ts`](../../../schema/draft-schema.ts)).
+//! ([`schema.ts` vendored at `schema/schema.ts`](../../../schema/schema.ts)).
 //! Wire-version string is [`MCP_VERSION`] = `"2026-07-28"`. It is the only
 //! version literal this crate emits or accepts; the pre-finalization draft
 //! literal is rejected (see [`version::McpVersion`]).
 //!
 //! Every `export interface`/`export type`/`export const` in the vendored
-//! `schema/draft-schema.ts` has a corresponding Rust binding here. Every
+//! `schema/schema.ts` has a corresponding Rust binding here. Every
 //! binding has a compliance test in `tests/compliance.rs`. The full
 //! authoritative coverage source is `docs/plans/2026-07-28-spec-compliance.md`.
 //!
@@ -53,7 +53,7 @@
 //!   [`HTTP_HEADER_METHOD`], [`HTTP_HEADER_NAME`], [`HTTP_HEADER_PARAM_PREFIX`].
 //!
 //! The upstream `schema.ts` has finalized its wire-version literal, and the
-//! vendored `schema/draft-schema.ts` is taken from the released
+//! vendored `schema/schema.ts` is taken from the released
 //! `schema/2026-07-28/` upstream path. That directory receives only errata
 //! against the released spec; `schema/README.md` records the pin provenance
 //! and the re-pin procedure.

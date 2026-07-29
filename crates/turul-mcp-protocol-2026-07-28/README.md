@@ -6,12 +6,12 @@
 Model Context Protocol (MCP) specification implementation for the **2026-07-28** schema.
 
 - Wire-version string: **`2026-07-28`** (the `LATEST_PROTOCOL_VERSION` value in upstream `schema.ts`). This is the only version literal the crate emits or accepts; the pre-finalization `DRAFT-2026-v1` literal is rejected.
-- Vendored upstream schema: [`schema/draft-schema.ts`](schema/draft-schema.ts) (pinned by commit SHA, shared with the example fixtures; see [`schema/README.md`](schema/README.md)).
+- Vendored upstream schema: [`schema/schema.ts`](schema/schema.ts) (pinned by commit SHA, shared with the example fixtures; see [`schema/README.md`](schema/README.md)).
 - Spec on the web: <https://modelcontextprotocol.io/specification/2026-07-28>.
 
 ## What's in this crate
 
-A faithful 1:1 mapping of `schema/draft-schema.ts`. Every TS interface, type, and method-string in the schema has a Rust binding; every binding has a compliance test asserting wire shape.
+A faithful 1:1 mapping of `schema/schema.ts`. Every TS interface, type, and method-string in the schema has a Rust binding; every binding has a compliance test asserting wire shape.
 
 **Core protocol surface**:
 
@@ -79,7 +79,7 @@ tests/
   compliance.rs      — 19+ named test modules (integration tests via public API)
   upstream_fixtures.rs — Pinned upstream-example roundtrip harness
 schema/
-  draft-schema.ts    — Vendored upstream schema (commit-pinned)
+  schema.ts    — Vendored upstream schema (commit-pinned)
   README.md          — Provenance + regeneration instructions
 ```
 

@@ -126,7 +126,7 @@ Per SEP-2133 §Evolution: "All extensions evolve independently of the core proto
 
 ### Good
 
-- **Spec-pure protocol crate.** `turul-mcp-protocol-2026-07-28` stays a faithful 1:1 mapping of `schema/draft-schema.ts` with no extension-specific types leaking in.
+- **Spec-pure protocol crate.** `turul-mcp-protocol-2026-07-28` stays a faithful 1:1 mapping of `schema/schema.ts` with no extension-specific types leaking in.
 - **Independent release cadence.** Tasks can ship a `0.1.x` patch tomorrow without bumping the protocol crate. The protocol crate can move to `2027-NN-NN` without forcing every extension to immediately migrate.
 - **Opt-in by Cargo dependency.** Consumers add `turul-mcp-ext-tasks = "0.1"` to get task support. Consumers that don't need tasks have a smaller dependency tree and a smaller wire surface.
 - **Matches upstream governance.** When MCP creates `modelcontextprotocol/ext-tasks` as a separate repo, we mirror with a separate crate. Easier for downstream readers to find the corresponding crate from a SEP link.

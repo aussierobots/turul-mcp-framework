@@ -13,9 +13,9 @@ names the test that asserts it.
 | Extensions | [extensions.md](extensions.md) |
 
 Spec: <https://modelcontextprotocol.io/specification/2026-07-28>.
-Pinned schema: `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`
-(the released `schema/2026-07-28/schema.ts`; the filename is legacy). Provenance
-is enforced by `scripts/check-schema-pin.sh`.
+Pinned schema: `crates/turul-mcp-protocol-2026-07-28/schema/schema.ts`, vendored
+from the released `schema/2026-07-28/schema.ts`. Provenance is enforced by
+`scripts/check-schema-pin.sh`.
 
 ---
 

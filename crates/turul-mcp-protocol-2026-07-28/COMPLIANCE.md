@@ -6,7 +6,7 @@
 ## Pin
 
 - **Schema source**: `modelcontextprotocol/modelcontextprotocol` @ `schema/2026-07-28/schema.ts`
-- **Vendored copy**: `crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts`
+- **Vendored copy**: `crates/turul-mcp-protocol-2026-07-28/schema/schema.ts`
 - **Fixture pin (commit SHA)**: `271ecc9accafdd9b83a3c869fa67c22953b2af80` — see `schema/EXAMPLES_PIN.md`
 - **Captured**: 2026-07-29 (re-vendored from the released `schema/2026-07-28/` path; no wire-format change. Prior cuts: 2026-07-28, 2026-07-02, 2026-06-10, 2026-06-07, 2026-05-24)
 - **Schema content sha256**: `742750af0bb8c716e7030c4977c992b55d1adc4407e9e66997db5846baedc2cd` (was `c56f0ad2395f9f7109a903a304344a61c65555cb0b2d28c1635cc32497221c87`)
@@ -148,7 +148,7 @@ Spot-checked high-risk fields — all serde renames match schema exactly:
 
 ## Spec `@see` anchor coverage
 
-8 `@see` block-tags in `schema/draft-schema.ts`:
+8 `@see` block-tags in `schema/schema.ts`:
 
 | # | Schema anchor | Rust binding | Status |
 |---|---|---|---|

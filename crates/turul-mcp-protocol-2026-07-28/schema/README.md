@@ -1,10 +1,10 @@
 # Vendored MCP 2026-07-28 Schema
 
-This directory vendors the upstream MCP specification TypeScript schema **for offline reference**. The Rust types in this crate must serialize to JSON shapes that match `draft-schema.ts` exactly. Tests in `tests/compliance.rs` enforce this.
+This directory vendors the upstream MCP specification TypeScript schema **for offline reference**. The Rust types in this crate must serialize to JSON shapes that match `schema.ts` exactly. Tests in `tests/compliance.rs` enforce this.
 
 ## Provenance
 
-- **File**: `draft-schema.ts`
+- **File**: `schema.ts`
 - **Upstream source**: <https://github.com/modelcontextprotocol/modelcontextprotocol/blob/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts>
 - **Raw URL used**: `https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/<commit>/schema/2026-07-28/schema.ts` — fetched by commit, never `main` (see §Regenerating).
 - **Vendored on**: 2026-07-29 (re-vendored from the released dated path — `SubscriptionsListenResultMeta` renamed to `…MetaObject`, new `SubscriptionsListenResultResponse`, `@see` anchors repointed; previously 2026-07-28, 2026-07-02, 2026-06-10, 2026-06-07, 2026-05-24)
@@ -16,6 +16,12 @@ This directory vendors the upstream MCP specification TypeScript schema **for of
 - **License**: MIT (matches turul-mcp-framework dual MIT-or-Apache-2.0 licensing)
 
 ## Vendored from the released dated path
+
+The vendored file is `schema.ts`, matching the upstream filename. It was
+`draft-schema.ts` until 2026-07-29: that prefix came from the pre-release
+`schema/draft/` source path and stopped describing the file once the spec
+finalized and the pin moved to `schema/2026-07-28/`.
+
 
 The spec has finalized. `LATEST_PROTOCOL_VERSION` is the stable date literal
 `"2026-07-28"` (was `"DRAFT-2026-v1"` pre-finalization), and the crate's
@@ -93,7 +99,7 @@ land on one commit:
 SHA=271ecc9accafdd9b83a3c869fa67c22953b2af80
 curl -fsSL \
   "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/$SHA/schema/2026-07-28/schema.ts" \
-  -o crates/turul-mcp-protocol-2026-07-28/schema/draft-schema.ts
+  -o crates/turul-mcp-protocol-2026-07-28/schema/schema.ts
 
 # Then update the commit/sha256/date above and re-run:
 cargo test -p turul-mcp-protocol-2026-07-28
