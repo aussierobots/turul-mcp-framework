@@ -1,10 +1,12 @@
 # Cross-Implementation Interop Test Plan
 
-> **Purpose.** Every green result in this repo except one is our code on both ends of the
-> wire. This plan replaces that closed loop with a matrix of independent implementations,
-> in both roles — turul as server *and* turul as client.
+> **Purpose.** Almost every green result in this repo is our code on both ends of
+> the wire. This plan replaces that closed loop with a matrix of independent
+> implementations, in both roles — turul as server *and* turul as client.
 >
-> **Status: proposed.** Only cell **P→R** exists today (`scripts/interop-fastmcp.sh`).
+> **Status: partially delivered.** Cells P→R and R→P pass against a real peer;
+> R→R is the control. Probes for the Go and TypeScript SDKs are authored but
+> their results are not yet recorded here.
 
 ---
 
@@ -34,39 +36,70 @@ because they asserted the framing we had chosen.
 | **R** | turul (this repo, Rust) | client + server | local | yes (default lane) |
 | **P** | FastMCP (Python) | client + server | `fastmcp==4.0.0b1` via `uv`, PyPI pre-release | yes |
 | **T** | MCP TypeScript SDK | client + server | `v2.0.0-beta.1` **git tag only — not on npm** | yes ("modern era") |
+| **G** | MCP Go SDK | client + server | `v1.7.0`, released 2026-07-28 | yes — **the only stable peer** |
 
-Both peers are **betas**. That is a real constraint, not a footnote: it dictates that these
-run as a pre-release manual gate, never as a blocking per-push CI check (see §6).
+The Go SDK matters disproportionately: it is the sole peer that is not a
+pre-release. Its release notes describe the same rewrite this framework
+implements — stateless model, per-request `_meta`, `server/discover` replacing
+the handshake, MRTR replacing server-initiated calls, unified
+`subscriptions/listen` — so it is the strongest available independent check.
 
-Known peer defects to design around, both already measured:
+Known peer defects to design around, both measured:
 
-- FastMCP 4.0.0b1 segfaults inside CPython 3.14's asyncio C module *after* completing the
-  exchange. Reproduced with FastMCP's **own** server as the peer, so it is not ours. The
-  existing script tries 3.14 then falls back to 3.12.
-- The TS SDK v2 beta is unpublished; it must be built from the tag, which is slower than an
-  install and can break on upstream refactors.
+- FastMCP 4.0.0b1 segfaults inside CPython 3.14's asyncio C module *after*
+  completing the exchange. Reproduced with FastMCP's **own** server as the peer,
+  so it is not ours. The scripts try 3.14, then fall back to 3.12.
+- The TS SDK v2 beta is unpublished; it must be built from the tag, which is
+  slower than an install and can break on upstream refactors.
 
----
+## 2a. The shared fixture
+
+Every probe runs against `examples/interop-fixture-server`, whose surface is the
+contract: tools `echo`/`add`, resource `file:///fixture/readme.md`, no templates,
+prompt `greeting(name)`, and a completion provider for that prompt's argument.
+Before it existed the probes ran against `minimal-server`, which exposes a single
+tool — that alone capped interop at 3 of 22 methods. A shared fixture also means
+a difference between two cells is a difference between the clients, not between
+the servers they happened to be pointed at.
+
+`examples/interop-client-probe` is the mirror image: it drives a *foreign* server
+with `turul-mcp-client` and reports per-leg results without aborting, so a peer
+that lacks prompts shows up as one failed leg rather than a probe that stopped.
 
 ## 3. The matrix
 
-Rows are clients, columns are servers. **R↔R is the control** — if a cell fails but R↔R
-passes for the same journey, the fault is at the boundary, not in our logic.
+Rows are clients, columns are servers. **R→R is the control** — if a cell fails
+but R→R passes for the same journey, the fault is at the boundary, not in our
+logic.
 
-| client ↓ / server → | **R** (turul) | **P** (FastMCP) | **T** (TS SDK) |
-|---|---|---|---|
-| **R** (turul) | control — existing E2E | **R→P** — gap | **R→T** — gap |
-| **P** (FastMCP) | **P→R** — *exists, 3 methods* | peer control | n/a |
-| **T** (TS SDK) | **T→R** — gap | n/a | peer control |
+| client ↓ / server → | **R** (turul) | **P** (FastMCP) | **T** (TS SDK) | **G** (Go SDK) |
+|---|---|---|---|---|
+| **R** (turul) | control — **pass** | **R→P — pass, 8 methods** | R→T — not built | R→G — not built |
+| **P** (FastMCP) | **P→R — pass, 9 methods + 5 negatives** | peer control | n/a | n/a |
+| **T** (TS SDK) | **T→R — fails at `connect()`** (see below) | n/a | peer control | n/a |
+| **G** (Go SDK) | G→R — probe authored, result not yet recorded | n/a | n/a | peer control |
 
-**The most valuable missing row is R→\*.** `turul-mcp-client` has never been pointed at a
-foreign server. It exposes ~30 public methods (`list_tools`, `call_tool`,
-`call_tool_with_progress`, `call_tool_with_input_responses`, `read_resource`, `get_prompt`,
-paginated variants, task methods…) and every one of them is validated only against our own
-server. ADR-030 makes it deliberately *bilingual*, which is precisely the behaviour most
-likely to disagree with a real peer.
+Scripts: `interop-fastmcp.sh` (P→R), `interop-turul-client.sh` (R→R control and
+R→P), `interop-typescript-sdk.sh` (T→R), `interop-go-sdk.sh` (G→R).
 
-Peer-to-peer cells (P↔T) are out of scope — not our contract to verify.
+### T→R: a real wire disagreement
+
+The TypeScript SDK **v2.0.0-beta.1** cannot complete `connect()` against a
+2026-07-28 turul server. Its `DiscoverResultSchema` still requires a top-level
+`serverInfo`, which the **released** schema removed — identity now travels in
+`_meta["io.modelcontextprotocol/serverInfo"]`. Verified directly against the
+pinned artifact: `DiscoverResult` in `schema/draft-schema.ts` declares
+`supportedVersions`, `capabilities` and `instructions` only, and the sole
+`serverInfo` occurrence in the whole schema is the `_meta` key.
+
+The SDK's probe classifier treats the failed parse as "not modern evidence" and
+falls back to the `initialize` handshake, which a 2026-only server rejects. So
+the failure cascades from one stale field to a full connection failure.
+
+**Disposition: no change on our side.** The beta predates the schema correction.
+Re-run when the SDK moves; do not loosen the server to accommodate it.
+
+Peer-to-peer cells are out of scope — not our contract to verify.
 
 ---
 
@@ -115,15 +148,20 @@ Coverage today: **J1 only, in one cell.** 3 of 22 methods, one happy path, zero 
 
 ## 5. Phasing
 
-Ordered by evidence-per-unit-effort. Each phase is independently landable.
-
-| Phase | Work | Closes |
+| Phase | Work | State |
 |---|---|---|
-| **1** | Extend `interop-fastmcp.sh` from J1 to J1+J2+J5 | Method coverage 3/22 → ~12/22 in the one cell that exists |
-| **2** | `scripts/interop-typescript-sdk.sh` — build the client from the `v2.0.0-beta.1` tag, run J1+J2+J5+**J6** | Adds the *reference* implementation; first external test of bilingual negotiation |
-| **3** | `R→P` and `R→T`: stand up FastMCP and TS SDK **servers**, drive them with `turul-mcp-client` | The entirely untested row — our client against foreign servers |
-| **4** | J3 (MRTR) and J4 (subscriptions/progress) across all live cells | The two headline 2026 features, currently self-verified only |
-| **5** | Harness consolidation: one runner, one matrix report, per-cell skip when a peer is unavailable | Makes it maintainable rather than three ad-hoc scripts |
+| **1** | Extend `interop-fastmcp.sh` from J1 to J1+J2+J5 | **done** — 3 methods → 9, plus 5 negatives |
+| **1a** | A shared fixture server so every peer hits one surface | **done** — `examples/interop-fixture-server` |
+| **2** | `scripts/interop-typescript-sdk.sh`, J1+J2+J5+J6 | **done, cell fails** — the SDK beta's stale `DiscoverResult` schema blocks `connect()` |
+| **3** | R→P: drive a FastMCP server with `turul-mcp-client` | **done** — 8 methods, with an R→R control |
+| **3a** | G→R: the Go SDK v1.7.0, the only stable peer | probe authored; result not yet recorded |
+| **4** | J3 (MRTR) and J4 (subscriptions/progress) across live cells | not started — the two headline 2026 features remain self-verified only |
+| **5** | One runner, one matrix report, per-cell skip when a peer is unavailable | not started — currently four ad-hoc scripts |
+
+Coverage today, measured rather than estimated: **9 of 22 methods** exercised by
+an independent client (P→R), **8** driven by our client against an independent
+server (R→P), 5 negative paths, and zero coverage of MRTR, subscriptions or
+progress by any peer.
 
 ---
 

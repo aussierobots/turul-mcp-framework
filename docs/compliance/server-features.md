@@ -12,10 +12,18 @@ Test paths are relative to the repo root. `c/` abbreviates `crates/`.
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
 | Answers without a session, replacing `initialize` | MUST | Implemented | `c/turul-mcp-server/src/server.rs:1336` | `discover_stateless_2026.rs::server_discover_answers_without_a_session` | pass | pass | — | — |
-| `serverInfo` rides in `_meta`, never as a top-level field | MUST | Implemented | `server.rs:1371` stamps it once at dispatch | `discover_stateless_2026.rs::server_discover_answers_without_a_session` (asserts the raw body has no bare `"serverInfo":`) | pass | pass | — | — |
+| `serverInfo` rides in `_meta`, never as a top-level field | MUST | Implemented | `server.rs:1371` stamps it once at dispatch | `discover_stateless_2026.rs::server_discover_answers_without_a_session` (asserts the raw body has no bare `"serverInfo":`) | pass | pass | **fail — peer is stale** | — |
 | Capabilities reflect only wired features | MUST | Implemented | `server.rs:1336-1386` | `discover_stateless_2026.rs::discover_advertises_registered_feature_capabilities`, `::discover_advertises_the_prompts_capability_with_truthful_list_changed`, `subscriptions_listen_2026.rs::resources_subscribe_capability_is_advertised_truthfully` | pass | — | — | — |
 | Result is cacheable (`ttlMs`/`cacheScope`) | MUST | Implemented | `discover.rs` | `discover.rs::discover_result_round_trips` (unit); wire-asserted by `scripts/interop-fastmcp.sh` | pass | **pass** | — | — |
 | `instructions` reaches the wire when set | MAY | **Partial** | `discover.rs:127`, wired at `server.rs:1376` | `discover.rs::discover_result_serializes_instructions_when_present` — **serialization only**, no server e2e | — | — | — | — |
+
+**The TypeScript SDK v2.0.0-beta.1 disagrees here, and it is wrong.** Its
+`DiscoverResultSchema` still requires a top-level `serverInfo`; the released
+schema removed it, and `DiscoverResult` in the pinned artifact declares only
+`supportedVersions`, `capabilities` and `instructions`. The SDK's classifier
+reads the failed parse as "not a modern server" and falls back to `initialize`,
+which a 2026-only server rejects — so one stale field costs the whole
+connection. Recorded as a peer defect; the server is not being loosened for it.
 
 ## 2. Tools
 

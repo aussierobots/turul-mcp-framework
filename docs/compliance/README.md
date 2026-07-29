@@ -62,8 +62,17 @@ journey against this framework:
 |---|---|---|---|---|---|
 | FastMCP (Python) | 4.0.0b1 | beta | peer → turul | 9 + 5 negatives | `scripts/interop-fastmcp.sh` |
 | FastMCP (Python) | 4.0.0b1 | beta | turul → peer | 8 | `scripts/interop-turul-client.sh` |
-| MCP Go SDK | v1.7.0 | **stable** | peer → turul | see [interop matrix](../plans/interop-test-matrix.md) | `scripts/interop-go-sdk.sh` |
-| MCP TypeScript SDK | v2.0.0-beta.1 | beta | peer → turul | see interop matrix | `scripts/interop-typescript-sdk.sh` |
+| MCP Go SDK | v1.7.0 | **stable** | peer → turul | not yet recorded | `scripts/interop-go-sdk.sh` |
+| MCP TypeScript SDK | v2.0.0-beta.1 | beta | peer → turul | **0 — fails at `connect()`** | `scripts/interop-typescript-sdk.sh` |
+
+The TypeScript cell is a **finding, not a defect on our side**. That SDK's
+`DiscoverResultSchema` still requires a top-level `serverInfo`, which the
+released schema removed — identity moved into
+`_meta["io.modelcontextprotocol/serverInfo"]`. Its probe classifier reads the
+failed parse as "not a modern server" and falls back to the `initialize`
+handshake, which a 2026-only server rejects. Verified against the pinned
+artifact; see [the interop matrix](../plans/interop-test-matrix.md) §3. Do not
+loosen the server to accommodate a stale beta.
 
 A third measure sits behind both: **12 of 88 upstream fixture directories are
 modeled** (13.6%). The fixtures are the only externally-authored bytes in the
