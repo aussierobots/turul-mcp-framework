@@ -4,9 +4,11 @@
 > the wire. This plan replaces that closed loop with a matrix of independent
 > implementations, in both roles — turul as server *and* turul as client.
 >
-> **Status: partially delivered.** Cells P→R and R→P pass against a real peer;
-> R→R is the control. Probes for the Go and TypeScript SDKs are authored but
-> their results are not yet recorded here.
+> **Status: partially delivered.** Four cells pass against real peers — P→R,
+> T→R, G→R and R→P — with R→R as the control. The Go and TypeScript results are
+> recorded in §3 (an earlier revision of this banner said they were not).
+> Uncovered: MRTR (J3), subscriptions and progress (J4), and the legacy leg of
+> J6.
 
 ---
 
@@ -14,9 +16,12 @@
 
 Two facts bound the value of the current suite:
 
-- **1276 + 423 + 400 tests pass, and all of them are self-referential.** The framework's own
+- **The whole local suite passes, and all of it is self-referential.** The framework's own
   client talks to the framework's own server, or to wiremock. A contract both sides get
   wrong the same way is indistinguishable from a contract both sides get right.
+  (The per-lane counts previously quoted here — 1276 + 423 + 400 — predate several
+  behaviour slices and are not restated; the current figure belongs in
+  `docs/compliance/README.md` §Scorecard, from one `ci-gates.sh all` run.)
 - **Only 12 of 88 upstream fixture directories are modeled** (13.6%). The fixtures are the
   sole externally-authored bytes in the loop, and 86% of them are unexamined.
 
@@ -77,7 +82,7 @@ logic.
 
 | client ↓ / server → | **R** (turul) | **P** (FastMCP) | **T** (TS SDK) | **G** (Go SDK) |
 |---|---|---|---|---|
-| **R** (turul) | control — **pass** | **R→P — pass, 8 methods** | R→T — not built | R→G — not built |
+| **R** (turul) | control — **pass** | **R→P — pass, 8 methods** (9 now reachable — see below) | R→T — not built | R→G — not built |
 | **P** (FastMCP) | **P→R — pass, 9 methods + 5 negatives** | peer control | n/a | n/a |
 | **T** (TS SDK) | **T→R — pass, 9 methods + 5 negatives** | n/a | peer control | n/a |
 | **G** (Go SDK) | **G→R — pass, 9 methods + 5 negatives** | n/a | n/a | peer control |
@@ -103,6 +108,27 @@ superseded pre-release and never checking whether it was still current. That is
 why every probe now asserts its pinned peer version against the registry's
 `dist-tags.latest` (§6).
 
+### R→P: the client gained two methods the probe cannot yet drive
+
+`turul-mcp-client` grew `complete()` and `cancel_request()` on 2026-07-29.
+`completion/complete` was previously recorded as UNSUPPORTED in the R→P leg
+because **no client method existed** — that was our gap, not the peer's, and it
+is now closed on our side. The 8-method R→P result predates both methods and has
+not been re-run, so this section records what is *reachable*, not what passed:
+
+- **`completion/complete` — now fillable.** Extending `examples/interop-client-probe`
+  with a completion leg would take R→P from 8 to 9 methods, matching the 9 the
+  three foreign clients drive against us. Nothing blocks it but the run.
+- **`notifications/cancelled` — reachable, and outside the ladder.** J1–J6 have
+  no cancellation journey. Adding one would be new scope, not a re-run.
+
+Separately, the GET SSE defect that FastMCP surfaced (`docs/compliance/client-features.md`
+§4 — the client issued a GET the revision removed and took a 405 on every
+connection) is fixed. **The probe has not been re-run against the fixed client**,
+so the interop cell recording it reads `—`, not `pass`. Re-running
+`scripts/interop-turul-client.sh` is the cheapest outstanding interop action in
+this document: it would confirm one fix and fill one cell in a single pass.
+
 Peer-to-peer cells are out of scope — not our contract to verify.
 
 ---
@@ -120,7 +146,16 @@ on every request; assert **absence** of `initialize`, `notifications/initialized
 **J2 — full read surface**
 `resources/list` → `resources/read` → `resources/templates/list` → `prompts/list` →
 `prompts/get` → `completion/complete`. Assert `resultType` on every result, and `ttlMs` +
-`cacheScope` present on all five cacheable results.
+`cacheScope` present on the **four** cacheable results in this journey —
+`resources/list`, `resources/read`, `resources/templates/list`, `prompts/list`.
+`GetPromptResult` and `CompleteResult` do not extend `CacheableResult`; the other
+two of the spec's six (`DiscoverResult`, `ListToolsResult`) are asserted in J1.
+An earlier revision said "all five", which matched neither set.
+
+Also assert that `resources/read` reports the same `mimeType` the listing
+advertised for that URI. The shared fixture declared `text/markdown` and read back
+`text/plain` until 2026-07-29 and carried the mismatch as a documented known
+discrepancy — a probe author who trusted the fixture would have encoded the bug.
 
 **J3 — MRTR round trip**
 Tool returns `resultType: "input_required"` with `inputRequests`; client retries the
@@ -146,7 +181,10 @@ Point it at a turul **2026** server → expect era `modern`. Point it at a turul
 `legacy`. This is the only external test of ADR-030's bilingual contract, and nothing in
 the repo tests the fallback direction against foreign code.
 
-Coverage today: **J1 only, in one cell.** 3 of 22 methods, one happy path, zero negatives.
+Coverage today: **J1, J2 and J5 across four cells** — see §5 for the measured
+numbers. J3, J4 and J6's legacy leg are untouched by any peer. (An earlier
+revision of this line still read "J1 only, in one cell — 3 of 22 methods", which
+described the state before Phase 1.)
 
 ---
 
@@ -167,7 +205,9 @@ each of three independent clients (FastMCP, the Go SDK and the TypeScript SDK),
 **8** driven by our client against an independent server (R→P), 5 negative paths
 confirmed three times over, and **zero** coverage of MRTR, subscriptions or
 progress by any peer. A fourth peer, the Python SDK `mcp==2.0.0`, is available
-and untested.
+and untested. The R→P 8 is now a *stale* measurement rather than a ceiling:
+`completion/complete` became reachable from `turul-mcp-client` on 2026-07-29
+(§3), so a re-run with a completion leg should read 9.
 
 ---
 
@@ -206,7 +246,11 @@ Standing checks worth automating cheaply, because both peers are moving:
 
 - Every live cell passes J1 and J5, with assertions on proxy-captured bytes.
 - `turul-mcp-client` has completed a full journey against **at least one** foreign server —
-  currently zero.
+  met by R→P (8 methods against FastMCP, with an R→R control). An earlier
+  revision of this line still read "currently zero", contradicting §3 and §5 in
+  the same document. The remaining shortfall is scope, not existence: R→P covers
+  8 of the 9 methods the foreign clients drive against us, and `completion/complete`
+  — the ninth — became reachable from our client on 2026-07-29.
 - J6 passes both directions (modern and legacy fallback) against the TS SDK.
 - Each script exits non-zero on failure, names the cell and journey, and prints the wire
   capture on both success and failure.

@@ -15,7 +15,7 @@ Test paths are relative to the repo root. `c/` abbreviates `crates/`.
 | `serverInfo` rides in `_meta`, never as a top-level field | MUST | Implemented | `server.rs:1371` stamps it once at dispatch | `discover_stateless_2026.rs::server_discover_answers_without_a_session` (asserts the raw body has no bare `"serverInfo":`) | pass | pass | pass | pass |
 | Capabilities reflect only wired features | MUST | Implemented | `server.rs:1336-1386` | `discover_stateless_2026.rs::discover_advertises_registered_feature_capabilities`, `::discover_advertises_the_prompts_capability_with_truthful_list_changed`, `subscriptions_listen_2026.rs::resources_subscribe_capability_is_advertised_truthfully` | pass | — | — | — |
 | Result is cacheable (`ttlMs`/`cacheScope`) | MUST | Implemented | `discover.rs` | `discover.rs::discover_result_round_trips` (unit); wire-asserted by `scripts/interop-fastmcp.sh` | pass | **pass** | pass | pass |
-| `instructions` reaches the wire when set | MAY | **Partial** | `discover.rs:127`, wired at `server.rs:1376` | `discover.rs::discover_result_serializes_instructions_when_present` — **serialization only**, no server e2e | — | — | — | — |
+| `instructions` reaches the wire when set | MAY | Implemented | `discover.rs:127`, wired at `server.rs:1376` | `e2e_2026_real_server.rs::progress_feed_and_discovered_server_accessors` — builder `.instructions(…)` → `server/discover` → `McpClient::server_instructions()`, asserted verbatim; unit backstop `discover.rs::discover_result_serializes_instructions_when_present` | pass | — | — | — |
 
 This row was briefly recorded as a TypeScript disagreement. It was measured
 against `v2.0.0-beta.1`, whose `DiscoverResultSchema` still required a top-level
@@ -39,7 +39,7 @@ peer is a claim about the outside world that goes stale silently.
 | `notifications/tools/list_changed` only when a dynamic source exists | SHOULD | Implemented | `c/turul-mcp-server/src/tool_registry.rs:192-203` | `tool_registry.rs` in-crate tests | pass | — | — | — |
 | `x-mcp-header` mirrors an argument into an HTTP header | MAY | Implemented | see Base Protocol §6 | `mcp_param_2026.rs::*` | pass | — | — | — |
 | Tool `annotations` (readOnly/destructive/idempotent/openWorld) reach the wire | MAY | **Implemented, untested** | `tools.rs:195` | **NOT FOUND** | — | — | — | — |
-| Domain failure returns `isError: true` rather than a JSON-RPC error | MUST | **Implemented, untested** | `tools.rs` `CallToolResult::error` | **NOT FOUND** — only the unknown-tool protocol-error path is asserted | — | — | — | — |
+| Domain failure returns `isError: true` rather than a JSON-RPC error | MUST | Implemented | `tools.rs` `CallToolResult::error` | `error_mapping_2026.rs::tool_domain_failure_is_is_error_not_a_json_rpc_error` — `isError: true` with **no** `error` member, asserted back to back with the unknown-tool `-32602` contrast on the same server | pass | — | — | — |
 
 `Tool.execution` / task support is **not** a 2026-07-28 field; the 2026 `Tool`
 interface has no `execution?:`. Async tools live in the Tasks extension — see
@@ -57,9 +57,23 @@ interface has no `execution?:`. Async tools live in the Tasks extension — see
 | Resource links carry `size`/`icons`/`annotations` without duplicate wire keys | MUST | Implemented | `content.rs` `ResourceReference` | `content.rs::test_resource_link_round_trips_size_and_icons`, `::test_resource_reference_serialization_with_annotations_and_meta` | pass | — | — | — |
 | `resources.subscribe` advertised truthfully | MUST | Implemented | `server.rs` `DiscoverHandler` | `subscriptions_listen_2026.rs::resources_subscribe_capability_is_advertised_truthfully` | pass | — | — | — |
 | `resources/list` and `resources/read` cacheable | MUST | Implemented | `resources.rs` | `discover_stateless_2026.rs::resources_list_dispatches_statelessly_with_cacheable_result`; `resources/read` wire-asserted by `scripts/interop-fastmcp.sh` | pass | **pass** | pass | pass |
-| `resources/list` pagination | SHOULD | **Partial** | `handlers/mod.rs:817` | **NOT FOUND** — no cursor walk | — | — | — | — |
+| `resources/read` reports the same `mimeType` `resources/list` advertised | MUST | Implemented | `ResourceContent::with_mime_type` (`c/turul-mcp-protocol-2026-07-28/src/resources.rs:449`) lets a provider set a content mime type other than `ResourceContent::text`'s `text/plain` default | `resource_mime_type_2026.rs::read_reports_the_mime_type_that_list_advertises` — every URI in `resources/list` is read back and compared, across a `text/markdown` override and a `application/json` body | pass | — | — | — |
+| `resources/list` and `resources/templates/list` pagination | SHOULD | Implemented | `handlers/mod.rs:817` | `list_pagination_2026.rs::resources_list_paginates_and_rejects_an_invalid_cursor`, `::resource_templates_list_paginates_and_rejects_an_invalid_cursor`, `::the_two_resource_listings_do_not_overlap` | pass | — | — | — |
 
-**Fixed this slice.** `resources/templates/list` was registered only when
+**Fixed this slice: `resources/read` mislabelled every text body `text/plain`.**
+`ResourceContent::text()` hardcodes `text/plain` and offered no way to set
+another, so a resource declaring `text/markdown` in `resources/list` reported
+`text/plain` on read — one property of one resource, two contradictory answers,
+and no way for a client to tell which is authoritative. The interop fixture
+server carried the mismatch as a documented "known discrepancy"; it is now a
+single `FIXTURE_MIME` constant feeding both sides. `with_mime_type` is a builder
+method on a concrete spec type implementing the schema's existing optional
+`mimeType` field — no new contract. The handler deliberately does **not**
+back-fill the resource-level declaration into content that omits one: a content
+item may legitimately carry a different type from the resource that lists it
+(embedded sub-resources), so filling it in would be a guess.
+
+**Fixed in an earlier slice.** `resources/templates/list` was registered only when
 template resources existed, so a server declaring the resources capability
 answered `-32601` for a core method — telling a client the method does not
 exist, which is a different claim from "there are none", and the one a
@@ -77,8 +91,8 @@ verified.
 | `Mcp-Name` on `prompts/get` must equal `params.name` | MUST | Implemented | `streamable_http.rs:1380` | `wire_edges_2026.rs::prompt_descriptors_and_error_codes` | pass | pass | pass | pass |
 | `prompts/list` cacheable | MUST | Implemented | `prompts.rs` | `discover_stateless_2026.rs::prompts_list_dispatches_statelessly_with_cacheable_result` | pass | **pass** | pass | pass |
 | `notifications/prompts/list_changed` advertised only when dynamic | SHOULD | Implemented | `builder.rs:228` | `discover_stateless_2026.rs::discover_advertises_the_prompts_capability_with_truthful_list_changed` | pass | — | — | — |
-| `arguments` is `map<string,string>` and substitutes into the render | MUST | **Implemented, untested** | `prompts.rs:240` | **NOT FOUND** in the 2026 lane — exercised only by `scripts/interop-fastmcp.sh` and `scripts/interop-turul-client.sh`, which render `greeting(name="Ada")` | — | **pass** | pass | pass |
-| `prompts/list` pagination | SHOULD | **Partial** | `handlers/mod.rs:529` | **NOT FOUND** — no cursor walk | — | — | — | — |
+| `arguments` is `map<string,string>` and substitutes into the render | MUST | Implemented | `prompts.rs:240` | `wire_edges_2026.rs::prompts_get_substitutes_the_supplied_argument` — the argument is advertised in `prompts/list`, substituted in `prompts/get`, and omitting it yields the provider default rather than an unresolved placeholder | pass | **pass** | pass | pass |
+| `prompts/list` pagination | SHOULD | Implemented | `handlers/mod.rs:529` | `list_pagination_2026.rs::prompts_list_paginates_and_rejects_an_invalid_cursor` | pass | — | — | — |
 
 ## 5. Completion
 
@@ -124,17 +138,22 @@ deprecation window.
 
 ## Gap register
 
-1. **`tools/call` domain failure (`isError: true`) has no wire test.** Only the
-   unknown-tool protocol-error path is asserted, and the two are exactly what a
-   client must tell apart.
-2. **Tool `annotations` are never asserted on the `tools/list` wire.**
-3. **Pagination cursor walks exist for `tools/list` only** — `resources/list`,
-   `resources/templates/list` and `prompts/list` have none.
-4. **`SubscriptionsListenResult` teardown is unimplemented** — no shutdown
+1. **Tool `annotations` are never asserted on the `tools/list` wire.**
+   `readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint` are bound at
+   `tools.rs:195` and nothing checks they survive to a listing.
+2. **`SubscriptionsListenResult` teardown is unimplemented** — no shutdown
    signal exists in the transport to emit it from. Spec-legal (SHOULD), already
    logged as a known gap in the crate's own COMPLIANCE.md.
-5. **`instructions` is never asserted end-to-end** from builder to
-   `server/discover` response.
-6. **`completion/complete` `context.arguments` is bound but unexercised.**
-7. **Prompt argument substitution has no 2026-lane test** — the only evidence is
-   the two interop probes.
+3. **`completion/complete` `context.arguments` is unexercised on the server
+   side.** The client now drives it
+   (`completion_and_cancellation_2026.rs::complete_passes_the_context_arguments_through`
+   asserts the provider receives it), but no server-lane test asserts the
+   server's own handling in isolation. Narrower than it was, not closed.
+4. **`resources/templates/list` is covered for listing and pagination only** —
+   no test reads a templated URI back through `resources/read`.
+
+**Closed this slice:** `tools/call` domain-failure `isError` wire test; cursor
+walks for `resources/list`, `resources/templates/list` and `prompts/list`;
+`instructions` end-to-end; prompt argument substitution on the 2026 lane; and
+the `resources/list` ↔ `resources/read` `mimeType` disagreement (a behaviour
+fix, not just coverage).

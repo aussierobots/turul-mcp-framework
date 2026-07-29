@@ -8,8 +8,9 @@ Test paths are relative to the repo root. `c/` abbreviates `crates/`.
 Extensions are **off by default** in this framework: `ext-tasks` is a non-default
 Cargo feature, and `turul-mcp-ext-apps` is not wired into any crate. That matches
 the spec's rule that SDKs must not enable an extension unless the operator opted
-in — but it is a structural guarantee (the code is not compiled) rather than a
-runtime-asserted one.
+in, and since this slice it is asserted at runtime as well as guaranteed
+structurally — a default build is checked to advertise no `extensions` map and to
+answer 404 for every `tasks/*` method.
 
 ---
 
@@ -20,7 +21,7 @@ runtime-asserted one.
 | Server advertises extensions in `server/discover` capabilities | MUST | Implemented | `c/turul-mcp-server/src/builder.rs:1925` inserts the tasks identifier | `ext_tasks_2026.rs::discover_advertises_the_tasks_extension` | pass | — | — | — |
 | Client declares extension support in `_meta.clientCapabilities.extensions` | MUST | Implemented | `c/turul-mcp-client/src/protocol/v2026_07_28.rs:42-47` | `ext_tasks_e2e_2026.rs::undeclared_client_gets_synchronous_outcome` (declared/undeclared behaviour) | pass | — | — | — |
 | Extension identifiers validated at the negotiation boundary (SEP-2133) | SHOULD | Implemented | `c/turul-mcp-ext-tasks/src/v2026_07_28/capability.rs:47-60` | `capability.rs` in-crate tests | pass | — | — | — |
-| Extensions disabled unless opted in | MUST | Implemented (structural) | `ext-tasks` is a non-default Cargo feature | — | — | — | — | — |
+| Extensions disabled unless opted in | MUST | Implemented | `ext-tasks` is a non-default Cargo feature | `discover_stateless_2026.rs::a_default_build_advertises_no_extensions` — `capabilities.extensions` absent on a default build, and `tasks/get`/`update`/`cancel` answer 404 + `-32601`; the positive counterpart is `ext_tasks_2026.rs::discover_advertises_the_tasks_extension` under `--features ext-tasks` | pass | — | — | — |
 | A third-party extension can be added without touching the protocol crate | SHOULD | Implemented (by construction) | the protocol crate's only extension surface is an opaque `HashMap<String, Value>` | — | — | — | — | — |
 
 ## 2. Tasks (SEP-2663) — `io.modelcontextprotocol/tasks`
@@ -53,30 +54,63 @@ turul-on-turul.
 | Client `mimeTypes` capability including `text/html;profile=mcp-app` | MUST | **Not implemented** | `capability.rs` | crate-internal only | — | — | — | — |
 | Host↔view iframe protocol (`ui/*` over postMessage) | MUST | **Out of scope** | belongs to app/host SDKs, not a server framework | n/a | n/a | n/a | n/a | n/a |
 
-**`turul-mcp-ext-apps` is unwired.** A repo-wide grep finds the crate referenced
-only by its own files and the workspace member list — zero references from
-`turul-mcp-server` or `turul-mcp-client`. It defines and self-tests the wire
-shapes and nothing consumes them: no server-side capability advertisement, no
-client-side `_meta.ui` handling. It is a published crate that cannot currently be
-used through the framework.
+**`turul-mcp-ext-apps` is unwired, and now says so.** A repo-wide grep finds the
+crate referenced only by its own files, the workspace member list and
+documentation — zero references from `turul-mcp-server` or `turul-mcp-client`. It
+defines and self-tests the wire shapes and nothing consumes them: no server-side
+capability advertisement, no client-side `_meta.ui` handling; `tools/list` does
+not hide non-`model` tools and `tools/call` does not reject app-only calls, both
+Apps-spec MUSTs. The crate's `README.md` now states this in its own words, lists
+the five things a consumer must build, and notes that `ClientCapabilities` has to
+be read from `_meta["io.modelcontextprotocol/clientCapabilities"]` because
+2026-07-28 is stateless and there is no handshake to read them from. The
+disclosure does not make the extension usable — it stops someone adding the
+dependency expecting it to be.
+
+**The vendored spec was the wrong artifact and is now the right one.** The crate
+shipped `apps-draft.mdx`, a byte-exact copy of upstream `specification/draft/apps.mdx`
+at `ca1d2989` — proven by re-fetching that path at that commit and hashing it,
+not inferred from a size difference. It is replaced by `apps-2026-01-26.mdx` from
+the released dated path `specification/2026-01-26/apps.mdx` at
+`298e884ec3f02daba085acdb02042d73bd00b355` (tag `v1.0.0`), the commit that created
+the file and which upstream has never modified since — so the pin is immutable by
+construction, not merely by SHA. `spec.types.ts` moved to `v1.7.5` and is recorded
+as a **convenience reference, not authority**; where it and the dated `.mdx`
+disagree, the `.mdx` wins. All six bound interfaces were diffed between the two
+commits: identical property sets and types, JSDoc prose only.
+
+**The Rust types were correct; one doc claim was not.** `UiResourceMeta` asserted
+that "when present on both, the content-item value wins; hosts MUST check both
+locations." That MUST exists only in the *draft*'s "Metadata Location" section —
+the released 2026-01-26 spec has no such section. The invented normativity is
+removed. `scripts/check-schema-pin.sh` now covers this crate and rejects any
+`*.mdx` row whose upstream source is not a dated `specification/<YYYY-MM-DD>/`
+path, so an honestly-recorded pin at a floating path fails the gate.
 
 ---
 
 ## Gap register
 
-1. **`turul-mcp-ext-apps` is pinned to a floating draft while a released dated
-   spec exists.** Its README declares "Apps protocol version: `2026-01-26`", but
-   `apps-draft.mdx` was vendored from upstream `specification/draft/`, not from
-   `specification/2026-01-26/`. Measured against upstream: the released file is
-   59,181 bytes, current draft is 90,146, ours is 89,256 — **902 lines different
-   from the spec the crate claims to implement**. `scripts/check-schema-pin.sh`
-   guards only the core schema, so nothing caught it.
-2. **`turul-mcp-ext-apps` is not wired into the server or the client.** Either
-   wire it or state plainly in its README that it is a types-only crate, so
-   nobody adds the dependency expecting the extension to work.
-3. **No peer has exercised the Tasks extension.** Its coverage is thorough and
+1. **`turul-mcp-ext-apps` is not wired into the server or the client.** It is a
+   types-only crate. That is now disclosed in its README rather than discovered,
+   but the extension still cannot be used through the framework: wiring it is a
+   design decision nobody has taken.
+2. **No peer has exercised the Tasks extension.** Its coverage is thorough and
    entirely self-referential. Three peers now drive the core surface — the Go
    SDK, the TypeScript SDK and FastMCP — and none of them touches the extension,
    so the harness to close this already exists.
-4. **"Extensions off unless opted in" is structural, not asserted.** Nothing
-   fails if a future change starts advertising an extension by default.
+3. **The Tasks extension's `taskId` is a bearer token with no owner binding.**
+   Recorded in full in [base-protocol.md](base-protocol.md) §12; named here
+   because it is an extension defect, not a core one — `tasks/get`/`update`/`cancel`
+   take no principal, so possession of the handle is the entire access check.
+4. **`spec.types.ts` and `apps-2026-01-26.mdx` are pinned to different upstream
+   commits** (`v1.7.5` and `v1.0.0`). The core crate's rule is one immutable
+   commit for both artifacts. The split is deliberate and argued — upstream
+   publishes no dated `spec.types.ts`, and the bound field sets are identical at
+   both commits — but it is a deviation from the house rule, and it is reversible
+   by re-fetching `src/spec.types.ts@298e884` and updating one table row.
+
+**Closed this slice:** the floating-draft misvendoring (re-pinned to the released
+dated path, with a gate that now catches the class of defect rather than the
+instance) and "extensions off unless opted in" being structural — it is asserted
+now, in both directions.

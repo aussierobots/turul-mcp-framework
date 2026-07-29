@@ -9,6 +9,142 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### Fixed (2026-07-29, client could not list tools from our own server)
+
+- **`list_tools()` failed outright on a JSON Schema 2020-12 composition.** The client's
+  public vocabulary is the frozen `turul-mcp-protocol-2025-11-25` types, whose `JsonSchema`
+  is an internally-tagged enum on `"type"` with no fallback arm. A property written
+  `{"oneOf": […]}` — legal on 2026 `inputSchema` per SEP-2106, and exactly what this
+  framework's own server emits for a `#[serde(tag = "kind")]` tagged union — had no
+  representation, and because the parser collected into a `Result`, **one** such tool errored
+  the **entire** listing. Turul-client could not list tools from turul-server on the
+  revision's headline schema change. The frozen crate cannot be widened, so the conversion is
+  now infallible by construction: direct remap first, then a field-by-field rebuild that
+  drops only the individual parts that cannot cross, each named in a `tracing::warn!`. The
+  cost is stated rather than hidden — `Tool.input_schema` may be missing properties while
+  `required` still names them — and it is recoverable: `McpClient::tool_input_schema(name)`
+  returns the untruncated advertised schema, and the caveat is documented on `list_tools`,
+  `refresh_tools` and `list_tools_paginated`. Dropping a valid, callable tool silently is the
+  worse failure, because the caller cannot tell it happened. Exclusion stays reserved for
+  definitions a client MUST NOT act on: an `x-mcp-header` placement violation (SEP-2243) or
+  a dialect-invalid schema.
+- **The client opened a GET SSE stream the revision deleted.** `connect()` spawned the
+  listener before negotiation resolved, so every 2026 connection issued a GET, took HTTP 405,
+  and logged two warnings naming `initialize` and session ids — concepts 2026-07-28 removed.
+  The listener now starts after `negotiate_protocol()` and returns early on 2026-07-28, and
+  the transport refuses independently. Deferring it also closed a **pre-existing 2025-lane
+  race** the old ordering only compensated for with a compare-and-swap: reverting the fix
+  fails in both directions, the 2026 connection issuing a GET and the 2025 GET going out
+  without the session id the handshake had just produced.
+- **`resources/read` mislabelled every text body `text/plain`.** `ResourceContent::text()`
+  hardcodes that type and offered no way to set another, so a resource advertising
+  `text/markdown` in `resources/list` reported `text/plain` on read — two contradictory
+  answers about one property of one resource, with no way for a client to know which is
+  authoritative. `ResourceContent::with_mime_type` (a builder method on a concrete spec type,
+  implementing the schema's existing optional field) closes it, and the interop fixture server
+  now drives both sides from one constant instead of documenting the mismatch as a known
+  discrepancy a probe author was expected to work around.
+- **Auth challenges were never checked for `Cache-Control: no-store`.** ADR-021 claimed it;
+  no test looked, and the compliance register carried it as "Unknown — not located in code".
+  The header was in fact always emitted by the shared challenge builder. Now asserted on the
+  three statuses that builder reaches on the 2026 path (401 missing bearer, 401
+  `invalid_token`, 400 `invalid_request`).
+- **`turul-mcp-ext-apps` vendored the wrong spec artifact.** It shipped a byte-exact copy of
+  upstream `specification/draft/apps.mdx` while declaring "Apps protocol version 2026-01-26"
+  — misvendoring proven by re-fetching that path at that commit and hashing it, not inferred
+  from a size difference. Replaced with `specification/2026-01-26/apps.mdx` at the commit that
+  created it and which upstream has never touched since, so the pin is immutable by
+  construction. The Rust types were correct at both commits; one **doc claim** was not —
+  `UiResourceMeta` asserted a "hosts MUST check both locations" precedence rule that exists
+  only in the draft's Metadata Location section, which the released spec does not have. The
+  comment was importing draft normativity into a released binding.
+
+### Removed (2026-07-29)
+
+- **Phantom `stdio` and `all-transports` Cargo features on `turul-mcp-client`.** Both were
+  declared in the manifest with no stdio module behind them; enabling either compiled and
+  provided nothing. `detect_transport_type` already returned `Unsupported` for `stdio://`, so
+  nothing regresses — the crate simply stops advertising a transport it does not have.
+
+### Changed (2026-07-29, error-code policy: keep the legacy codes, name the deviation)
+
+- **The error-code guard was asserting the opposite of the spec.** 2026-07-28 partitions the
+  JSON-RPC server-error range: `-32020..-32099` is spec-reserved, and `-32000..-32019` is
+  **legacy** — "New codes MUST NOT be allocated in this sub-range, and new implementations
+  SHOULD NOT use codes from this sub-range at all." The existing test asserted every
+  framework code *was inside* `-32000..-32019`, which would have passed a brand-new
+  allocation there — the exact thing the MUST forbids. It is replaced by a frozen
+  `LEGACY_ALLOCATIONS` set plus "outside the reserved range", so a new code in the legacy
+  sub-range now fails. A matching guard freezes the three middleware codes.
+- **The 14 pre-policy codes are retained, and that is recorded as a deviation rather than
+  quietly kept.** Relocating them is *blocked*, not deferred: both
+  `map_middleware_error_to_jsonrpc` sites build their object through
+  `JsonRpcErrorObject::server_error`, whose `assert!` panics for any code outside
+  `-32099..=-32000` — so the spec's recommended destination is unreachable through that
+  constructor. Reproduced, not assumed: setting a code to `-33014` panics inside
+  `turul-rpc-core 0.2.3`.
+- **`-32002` is a live MUST NOT violation and is now registered as one.** The spec forbids
+  implementations of this version from emitting it; `error_codes::UNAUTHORIZED` is `-32002`
+  and maps `MiddlewareError::Unauthorized`. `turul-mcp-client::is_resource_not_found` matches
+  `-32602 | -32002`, so turul-on-turul reports a permission denial as a missing resource. The
+  earlier framing of this area as "`-32001`/`-32003` were vacated" was wrong on the facts:
+  those renumbered to `-32020`/`-32021`, and `-32002` is the code the spec singles out.
+
+### Added (2026-07-29, coverage for requirements that had none)
+
+- **State Handle Hijacking audited for the first time.** The 2026-07-28 security page replaced
+  2025-11-25's Session Hijacking section, and the original compliance sweep had no row for it.
+  Three turul-issued identifiers were assessed. The Tasks extension's `taskId` is the only one
+  that is a state handle in the spec's sense: unguessable v4 ids satisfy the RNG SHOULD, but
+  there is **no owner binding at all** — every `TaskStore` method keys on `task_id` alone,
+  `TaskState` has no owner field, and `tasks/get`/`update`/`cancel` implement a handler
+  signature carrying no session or auth context. A turul server with OAuth wired *cannot*
+  satisfy "MUST NOT treat possession of a state handle as authentication" even if the operator
+  wants to. `subscriptions/listen`'s subscription id is argued not-applicable (it is the
+  client's own request id, emit-only, never an inbound lookup key); MRTR's `requestState` is
+  Unknown at framework level, because the framework is a pure conduit and nothing documents
+  that binding is the tool author's obligation.
+- **Eight wire tests for requirements that were previously structural, inferred, or covered
+  only by an interop probe**: batch-array rejection; the handler-level HTTP 200 error path
+  asserted against the 404 branch on the same server; `tools/call` domain failure returning
+  `isError: true` with no `error` member; cursor walks for `resources/list`,
+  `resources/templates/list` and `prompts/list` (each proving the walk reproduces the
+  unpaginated listing *and* takes exactly `len()` pages, so a server ignoring `limit` fails);
+  invalid-cursor `-32602` on all three; the `.well-known` Origin exemption asserted alongside
+  the MCP endpoint still answering 403 to the same hostile header; a default build advertising
+  no `extensions` and answering 404 for `tasks/*`; and prompt argument substitution on the
+  2026 lane, which until now had no evidence outside two interop probes.
+- **`completion/complete` and `notifications/cancelled` are reachable from `McpClient`.**
+  `complete()` routes bilingually, building its result field by field because `total` is `f64`
+  on the 2026 wire and `u32` in the public vocabulary — an integral `100.0` would not survive
+  a serde round trip. `cancel_request()` is spec-neutral. `SubscriptionStream::request_id()`
+  was added so a caller has at least one request id it can legitimately name; without it
+  `cancel_request` would be decorative. This also makes the `completion/complete` interop cell
+  fillable from our side for the first time — previously recorded UNSUPPORTED because no
+  client method existed.
+- **`scripts/check-schema-pin.sh` now covers `turul-mcp-ext-apps`** and rejects any `*.mdx`
+  provenance row whose upstream source is not a dated `specification/<YYYY-MM-DD>/` path. The
+  revert-and-fail run included a **well-formed** table honestly pointing at
+  `specification/draft/` — the gate rejects it, which is the point: it catches the defect
+  class, not the one instance. `ext-tasks` gets the checksum arm only, because upstream
+  `modelcontextprotocol/ext-tasks` has no tags and only `schema/draft/`, so the dated-path
+  rule genuinely cannot apply there.
+
+### Fixed (2026-07-29, test-suite hygiene)
+
+- **A port-binding race across 30 reservation sites in 21 server suites.** `build()` does not
+  bind; the real bind happens later in `run()`, leaving the reserved port free in between and
+  two tests able to claim it. A binary-wide mutex now spans the whole reserve→bind window.
+  This is a workaround at the test layer: the window closes properly only with a
+  `McpServerBuilder::listener(TcpListener)` API letting a test bind once and hand the live
+  listener over, which is a framework change and is not made here.
+- **Internal gap-register identifiers removed from test names and files.** Three test files
+  carrying `bp3` / `gap_cf9` tracking IDs are renamed after their subject, 25 `verify_rN_*`
+  function names are de-tagged, and the dev-log narration in their module docs is replaced by
+  the spec requirement each asserts. Those IDs are how a fix is *tracked*, not what the code
+  *is*; they belong in the compliance matrix, not in source. `docs/plans/2026-07-28-spec-compliance.md`
+  still cites the three old filenames in its evidence cells and needs the same pass.
+
 ### Fixed (2026-07-29, found by cross-implementation interop)
 
 - **`resources/templates/list` answered `-32601` when no templates were registered.** The

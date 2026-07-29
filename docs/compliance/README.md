@@ -40,6 +40,12 @@ the wire. Values:
 | `—` | Not exercised. **This is not a pass.** |
 | `n/a` | Not applicable to that peer's role |
 
+**A fix does not upgrade an interop cell.** When code changes so that a recorded
+`fail` should no longer occur, the cell becomes `—` (not exercised since the
+fix), never `pass`. Only a re-run probe can write `pass`. Applied in
+[client-features.md](client-features.md) §4, where the GET SSE row's `fail`
+cells were retired without being promoted.
+
 `turul` is a **self**-column: our client against our server. It is recorded for
 completeness but proves nothing about the wire contract, because both halves
 share our assumptions. Only python/typescript/go columns are external evidence.
@@ -50,10 +56,13 @@ share our assumptions. Only python/typescript/go columns are external evidence.
 
 Two numbers matter and they are deliberately kept apart.
 
-**Self-verified.** The suite is green: **64 gates, 3213 tests**, across the
-default 2026-07-28 lane, the 2025-11-25 opt-in lane, the Lambda Runtime API
-gate, the spec-mutex gate and the docs gate, via `scripts/ci-gates.sh all`.
-Every one of those has turul code on both ends of the wire.
+**Self-verified.** The suite is green across the default 2026-07-28 lane, the
+2025-11-25 opt-in lane, the Lambda Runtime API gate, the spec-mutex gate and the
+docs gate, via `scripts/ci-gates.sh all`. Every one of those has turul code on
+both ends of the wire.
+
+**Measured 2026-07-29 by one `scripts/ci-gates.sh all` run: 68 gates, 3258 tests,
+0 failures.** Up from 64 gates / 3213 tests before that day's behaviour slices.
 
 **Externally verified.** Independent implementations that have completed a real
 journey against this framework:
