@@ -155,6 +155,14 @@ impl McpServerBuilder {
             "resources/read".to_string(),
             Arc::new(ResourcesReadHandler::new()),
         );
+        // Registered unconditionally, like the other two resource methods: a
+        // server that declares the resources capability but happens to have no
+        // templates must answer with an empty list, not -32601. build() swaps in
+        // a populated handler when templates were configured.
+        handlers.insert(
+            "resources/templates/list".to_string(),
+            Arc::new(ResourceTemplatesHandler::new()),
+        );
         handlers.insert(
             "prompts/list".to_string(),
             Arc::new(PromptsListHandler::new()),
@@ -174,7 +182,6 @@ impl McpServerBuilder {
             "sampling/createMessage".to_string(),
             Arc::new(SamplingHandler),
         );
-        // Note: resources/templates/list is only registered if template resources are configured (see build method)
         #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "elicitation/create".to_string(),
@@ -1836,7 +1843,7 @@ impl McpServerBuilder {
             handlers.insert("prompts/get".to_string(), Arc::new(prompts_get_handler));
         }
 
-        // Add ResourceTemplatesHandler if template resources were configured
+        // Replace the empty default with the configured templates.
         if !self.template_resources.is_empty() {
             let resource_templates_handler =
                 ResourceTemplatesHandler::new().with_templates(self.template_resources.clone());

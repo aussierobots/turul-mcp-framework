@@ -319,6 +319,31 @@ async fn resources_list_dispatches_statelessly_with_cacheable_result() {
     );
 }
 
+/// A server that declares the resources capability must answer
+/// `resources/templates/list` even when it registered no templates. Answering
+/// -32601 tells a client the method does not exist, which is a different claim
+/// from "there are none" — and it is the one a capability-driven client acts on
+/// by giving up on templates entirely.
+#[tokio::test]
+async fn resources_templates_list_answers_empty_rather_than_method_not_found() {
+    let url = start_server().await;
+    let body = list_request(&url, "resources/templates/list").await;
+    assert!(
+        body.get("error").is_none(),
+        "resources/templates/list errored: {body}"
+    );
+    assert_eq!(body["result"]["resultType"], "complete");
+    assert!(
+        body["result"]["cacheScope"].is_string(),
+        "missing cacheScope: {body}"
+    );
+    assert_eq!(
+        body["result"]["resourceTemplates"],
+        serde_json::json!([]),
+        "a server with no templates reports an empty list: {body}"
+    );
+}
+
 #[tokio::test]
 async fn prompts_list_dispatches_statelessly_with_cacheable_result() {
     let url = start_server().await;
