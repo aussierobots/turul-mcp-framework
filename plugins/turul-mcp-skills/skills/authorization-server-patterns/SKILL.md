@@ -17,7 +17,7 @@ description: >
 
 # Authorization Server Patterns — Demo / Reference
 
-**Spec lane: applies to both 2026-07-28 and 2025-11-25**, with two 2026-07-28-specific notes: DCR is now deprecated (12-month window) in favor of CIMD, and CIMD gains a changed `.well-known` suffix (SEP-2351) and stricter issuer binding (SEP-2352) — see the DCR and CIMD sections below.
+**Spec lane: applies to both 2026-07-28 and 2025-11-25**, with two 2026-07-28-specific notes: DCR is now deprecated (12-month window) in favor of Client ID Metadata Documents (CIMD, SEP-991), and DCR-obtained/pre-registered client credentials must now be bound to the issuing authorization server (SEP-2352) — CIMD client IDs are explicitly exempted from that binding requirement. See the DCR and CIMD sections below.
 
 > **This skill teaches demo-grade patterns only.** The examples here are
 > useful for local development, demos, PoCs, and interoperability testing.
@@ -104,7 +104,7 @@ let clients = HashMap::from([(
 
 ### Dynamic Client Registration (DCR)
 
-> **Deprecated in MCP 2026-07-28** (12-month window). DCR (RFC 7591) remains functional but is no longer the recommended client-identification path — CIMD is the standards-preferred direction (see below). If you keep DCR, 2026-07-28 additionally expects registration requests to declare an OIDC `application_type` (SEP-837); this skill's example does not implement that yet. Don't present DCR as the recommended choice for new work.
+> **Deprecated in MCP 2026-07-28** (12-month window). DCR (RFC 7591) remains functional but is no longer the recommended client-identification path — CIMD is the standards-preferred direction (see below). If you keep DCR, 2026-07-28 additionally requires registration requests to specify an `application_type` at all (SEP-837, MUST) — the choice between `"native"` and `"web"` is only a SHOULD; this skill's example does not implement either yet. Don't present DCR as the recommended choice for new work.
 
 Clients register themselves at runtime via `POST /register` (RFC 7591):
 
@@ -118,7 +118,7 @@ Clients register themselves at runtime via `POST /register` (RFC 7591):
 
 ### Client Identification via Metadata Document (CIMD)
 
-CIMD inverts the model: instead of registering at the AS, clients publish their own metadata document at a well-known URL, and the AS fetches it during authorization. MCP 2025-11-25 specifies CIMD as a supported client identification mechanism alongside DCR; 2026-07-28 keeps CIMD as the standards-preferred direction now that DCR is deprecated, and layers on two additions this skill's examples do not implement — a changed `.well-known` discovery suffix convention (SEP-2351) and stricter issuer binding for the fetched metadata (SEP-2352). Re-verify both against the AS metadata discovery flow before treating a CIMD implementation here as 2026-07-28-complete.
+CIMD inverts the model: instead of registering at the AS, clients publish their own metadata document at a stable HTTPS URL — that URL *is* the `client_id`, not a `.well-known` discovery path — and the AS fetches it during authorization. CIMD is governed by its own SEP (SEP-991, "Enable URL-based Client Registration using OAuth Client ID Metadata Documents", Final); it is not a byproduct of SEP-2351 or SEP-2352, both of which govern unrelated things: SEP-2351 confirms MCP's *authorization-server* metadata discovery uses the default RFC 8414 `oauth-authorization-server` well-known suffix, and SEP-2352 requires *DCR-obtained or pre-registered* client credentials to be bound to the issuing authorization server. The 2026-07-28 spec explicitly exempts CIMD from that binding requirement — CIMD client IDs are "portable across authorization servers, since they are self-hosted HTTPS URLs resolved by the authorization server on demand. No re-registration is needed when the authorization server changes." The genuine 2026-07-28-relevant gap for this skill's examples is CIMD's own security hardening (SSRF protection, localhost-impersonation warnings, size/cache limits — see Security considerations below), not a well-known suffix or issuer-binding change.
 
 ```
 Client models (simplest → most dynamic):

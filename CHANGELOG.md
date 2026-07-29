@@ -41,12 +41,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with `turul-mcp-client` and reports per-leg results without aborting.
 - **Four interop probes, with measured results.** FastMCP 4.0.0b1: 9 methods and 5 negative
   paths (`interop-fastmcp.sh`), and 8 methods driven by our client against a FastMCP server
-  with an R→R control (`interop-turul-client.sh`). **MCP Go SDK v1.7.0** (`interop-go-sdk.sh`):
-  9 methods and 5 negatives, no wire disagreement — the strongest external evidence available,
-  because it is the only peer that is not a pre-release. MCP TypeScript SDK v2.0.0-beta.1
-  (`interop-typescript-sdk.sh`): **fails at `connect()`**, and the failure is the peer's — its
-  `DiscoverResultSchema` still requires a top-level `serverInfo` that the released schema
-  removed. Recorded, not accommodated.
+  with an R→R control (`interop-turul-client.sh`). **MCP Go SDK v1.7.0** (`interop-go-sdk.sh`)
+  and **MCP TypeScript SDK 2.0.0** (`interop-typescript-sdk.sh`): 9 methods and 5 negatives
+  each, no wire disagreement from either. Both are stable releases, so their agreement is not
+  qualified by "the peer may still move".
+- **Corrected two published claims about the outside world, and the mechanism that produced
+  them.** This entry previously recorded the TypeScript cell as failing at `connect()` and
+  called the Go SDK the only peer that is not a pre-release. Both were wrong. The v2 line
+  ships on npm as `@modelcontextprotocol/{core,client,server}` — `@modelcontextprotocol/sdk`,
+  which the freshness watch pointed at, carries only the 1.x line — so the probe pinned a
+  superseded `v2.0.0-beta.1` git tag while `2.0.0` was already published, and the watch was
+  structurally incapable of noticing. Re-run against the published build, the cell passes and
+  identity in `_meta` is accepted. `mcp==2.0.0` (PyPI) is a further stable peer, still
+  untested. Every probe now asserts its pinned peer version against the registry's
+  `dist-tags.latest`.
 - **`docs/compliance/`** — per-spec-area records naming, for each requirement, the test that
   asserts it and which independent implementation has exercised it. Self-verified and
   externally verified totals are kept apart on purpose, and "not exercised" is a distinct

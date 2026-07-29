@@ -16,7 +16,7 @@ description: >
   building an Authorization Server — see authorization-server-patterns.
 ---
 
-**Spec lane: applies to both 2026-07-28 and 2025-11-25.** The RS-side OAuth 2.1 mechanics below (RFC 9728 PRM, RFC 8707 resource binding, JWT/JWKS validation) are unchanged by the 2026-07-28 spec revision and `turul-mcp-oauth` is not spec-version-gated. **2026-07-28 also adds several auth-hardening requirements this crate does not implement yet** — RFC 9207 `iss` validation, OIDC `application_type` on DCR, issuer binding, refresh token requests, scope accumulation, and the `.well-known` discovery suffix change. See [2026-07-28 Auth Hardening — Not Yet Implemented](#2026-07-28-auth-hardening--not-yet-implemented) near the end before relying on this crate for a 2026-07-28-compliant deployment.
+**Spec lane: applies to both 2026-07-28 and 2025-11-25.** The RS-side OAuth 2.1 mechanics below (RFC 9728 PRM, RFC 8707 resource binding, JWT/JWKS validation) are unchanged by the 2026-07-28 spec revision and `turul-mcp-oauth` is not spec-version-gated. **2026-07-28 also adds several auth-hardening requirements this crate does not fully implement yet** — RFC 9207 `iss` validation, OIDC `application_type` on DCR, authorization-server binding of persisted client credentials, scope accumulation, and the `.well-known` discovery suffix change for authorization-server metadata. (Refresh-token request guidance is a partial exception — this crate already implements the resource-server-facing half.) See [2026-07-28 Auth Hardening — Not Yet Implemented](#2026-07-28-auth-hardening--not-yet-implemented) near the end before relying on this crate for a 2026-07-28-compliant deployment.
 
 # Auth Patterns — Turul MCP Framework
 
@@ -454,18 +454,18 @@ When `scopes_supported` is configured, `scope="mcp:read mcp:write"` is included 
 
 ## 2026-07-28 Auth Hardening — Not Yet Implemented
 
-Verified by grep against `crates/turul-mcp-oauth/src/`: none of the following 2026-07-28 auth-hardening additions appear in the crate today. Don't assume a deployment built on this skill satisfies them — they need separate work (in your own middleware layer, or upstream in `turul-mcp-oauth`) before you can call a 2026-07-28 deployment compliant on these points.
+Verified by grep against `crates/turul-mcp-oauth/src/`: most of the following 2026-07-28 auth-hardening additions don't appear in the crate today. Don't assume a deployment built on this skill satisfies them — they need separate work (in your own middleware layer, or upstream in `turul-mcp-oauth`) before you can call a 2026-07-28 deployment compliant on these points. One exception is called out below.
 
 | Addition | SEP | What it requires |
 |---|---|---|
-| RFC 9207 `iss` validation | SEP-2468 | Validate the authorization response's `iss` parameter against the expected issuer, to prevent mix-up attacks across multiple ASes |
-| OIDC `application_type` on DCR | SEP-837 | Dynamic Client Registration requests should declare `application_type` |
-| Issuer binding | SEP-2352 | Bind tokens more strictly to the issuing AS |
-| Refresh token requests | SEP-2207 | Handling for refresh-token grant requests |
-| Scope accumulation | SEP-2350 | Rules for how scopes accumulate across incremental authorization |
-| `.well-known` discovery suffix | SEP-2351 | A change to the discovery URL suffix convention |
+| RFC 9207 `iss` validation | SEP-2468 | MCP clients validate the authorization response's `iss` parameter against the expected issuer, to prevent mix-up attacks across multiple ASes — client-side, out of scope for this RS-only crate |
+| OIDC `application_type` on DCR | SEP-837 | MCP clients MUST specify an `application_type` during Dynamic Client Registration (SHOULD applies only to the choice of `"native"` vs `"web"`) — client-side, out of scope for this RS-only crate |
+| Authorization server binding | SEP-2352 | Clients MUST bind *persisted client credentials* (client_id/secret from pre-registration or DCR) to the issuing authorization server, keyed by its issuer identifier — client-side, out of scope for this RS-only crate |
+| Refresh token requests | SEP-2207 | **Partially implemented.** The Refresh Tokens section places requirements on both MCP Clients and MCP Servers (Protected Resources). This crate implements the RS-facing half: `ProtectedResourceMetadata::with_scopes()` filters `offline_access` out of advertised scopes with a warning (`metadata.rs`, `offline_access_is_filtered_from_scopes` test) — resource servers SHOULD NOT advertise it. The client-facing requirements (advertising `refresh_token` in `grant_types`, requesting `offline_access`) are out of scope for this RS-only crate |
+| Scope accumulation | SEP-2350 | Rules for how scopes accumulate across incremental authorization — client-side, out of scope for this RS-only crate |
+| `.well-known` discovery suffix | SEP-2351 | Confirms MCP uses the default `oauth-authorization-server` well-known URI suffix (RFC 8414 §3.1) for authorization-server metadata discovery — AS-side, out of scope for this RS-only crate |
 
-`turul-mcp-oauth` has no feature flags gating any of this in or out — it's simply not there yet in either lane.
+`turul-mcp-oauth` has no feature flags gating any of this in or out.
 
 ## Beyond This Skill
 

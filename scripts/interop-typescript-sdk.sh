@@ -19,13 +19,13 @@
 #       2025-11-25 lane server, which this script does not stand up — see the
 #       explicit SKIP at the end.
 #
-# The peer is the v2 line of the TypeScript SDK, which is NOT published to
-# npm as of this pin (npm `latest` is 1.x and predates 2026-07-28) — it is
-# built from source at the git tag below.
+# The peer is the v2 line of the TypeScript SDK, published to npm under new
+# scoped package names (`@modelcontextprotocol/core`, `@modelcontextprotocol/
+# client`, `@modelcontextprotocol/server`) — NOT under `@modelcontextprotocol/
+# sdk`, which still carries only the 1.x line.
 #
-# Not wired into the blocking gate: it needs network access and clones +
-# builds a pre-release SDK. Run it by hand before a release, and re-run
-# whenever the pinned tag moves.
+# Not wired into the blocking gate: it needs network access to npm. Run it by
+# hand before a release, and re-run whenever the pinned version moves.
 #
 #   scripts/interop-typescript-sdk.sh [PORT]
 set -uo pipefail
@@ -34,43 +34,35 @@ cd "$(dirname "$0")/.."
 PORT="${1:-8710}"
 PROXY_PORT=$((PORT + 1))
 WORK="${TMPDIR:-/tmp}/turul-interop-ts"
-SDK_REPO="https://github.com/modelcontextprotocol/typescript-sdk.git"
-SDK_TAG="v2.0.0-beta.1"   # first TS SDK tag with 2026-07-28 era negotiation; unpublished on npm
-SDK_DIR="$WORK/sdk"
+CLIENT_PKG="@modelcontextprotocol/client"
+PINNED_VERSION="2.0.0"   # first TS SDK npm release with 2026-07-28 era negotiation
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 command -v node >/dev/null || fail "node not found"
-command -v git >/dev/null || fail "git not found"
+command -v npm >/dev/null || fail "npm not found"
 command -v jq >/dev/null || fail "jq not found"
 
-mkdir -p "$WORK"
-
-echo "=== fetching MCP TypeScript SDK $SDK_TAG (not on npm — built from source) ==="
-if [ -d "$SDK_DIR/.git" ]; then
-  echo "  (reusing existing clone at $SDK_DIR)"
-else
-  rm -rf "$SDK_DIR"
-  git clone --quiet --depth 1 --branch "$SDK_TAG" "$SDK_REPO" "$SDK_DIR" \
-    || fail "could not clone $SDK_REPO at $SDK_TAG"
+# Pin-currency check: this replaces a stale watch that pointed at
+# `@modelcontextprotocol/sdk` (1.x only) and could never see the v2 line move.
+LATEST_VERSION=$(npm view "$CLIENT_PKG" dist-tags.latest 2>/dev/null) || fail "npm view $CLIENT_PKG failed — network or registry issue"
+if [ "$LATEST_VERSION" != "$PINNED_VERSION" ]; then
+  echo "WARN: $CLIENT_PKG dist-tags.latest is $LATEST_VERSION, script is pinned to $PINNED_VERSION — re-pin and re-run before trusting this result" >&2
 fi
-cd "$SDK_DIR"
-ACTUAL_REF=$(git describe --tags --always 2>/dev/null || echo "unknown")
-echo "  checked out: $ACTUAL_REF"
 
-command -v pnpm >/dev/null || npm install -g pnpm --silent >/dev/null 2>&1
-command -v pnpm >/dev/null || fail "pnpm not found and could not be installed"
+mkdir -p "$WORK"
+cd "$WORK"
 
-echo "=== installing + building @modelcontextprotocol/core + client ($SDK_TAG) ==="
-pnpm install --frozen-lockfile --silent >/dev/null 2>&1 \
-  || fail "pnpm install failed for the TS SDK workspace"
-pnpm --filter @modelcontextprotocol/core --filter @modelcontextprotocol/client run build >/dev/null 2>&1 \
-  || fail "pnpm build failed for @modelcontextprotocol/core or @modelcontextprotocol/client"
+echo "=== installing $CLIENT_PKG@$PINNED_VERSION from npm ==="
+rm -rf node_modules package.json package-lock.json
+npm install --no-save --no-audit --no-fund "$CLIENT_PKG@$PINNED_VERSION" >/dev/null 2>&1 \
+  || fail "npm install failed for $CLIENT_PKG@$PINNED_VERSION"
 
-CLIENT_PKG_VERSION=$(node -p "require('./packages/client/package.json').version")
-echo "  built: @modelcontextprotocol/client $CLIENT_PKG_VERSION @ $ACTUAL_REF"
+CLIENT_PKG_VERSION=$(node -p "require('./node_modules/@modelcontextprotocol/client/package.json').version")
+CORE_PKG_VERSION=$(node -p "require('./node_modules/@modelcontextprotocol/core/package.json').version")
+echo "  installed: @modelcontextprotocol/client $CLIENT_PKG_VERSION, @modelcontextprotocol/core $CORE_PKG_VERSION"
 
-mkdir -p "$SDK_DIR/interop-probe"
-cat > "$SDK_DIR/interop-probe/probe.mjs" <<'NODEEOF'
+mkdir -p "$WORK/interop-probe"
+cat > "$WORK/interop-probe/probe.mjs" <<'NODEEOF'
 // TS SDK v2 client -> logging proxy -> turul server. Asserts on captured bytes.
 import { createServer } from 'node:http';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -390,8 +382,8 @@ j5 "unknown resource uri" 200 -32602 \
 
 # --- J1 + J2 + J6 (modern leg): the SDK client, through the logging proxy --
 echo
-echo "=== J1+J2+J6(modern): MCP TypeScript SDK $SDK_TAG (@modelcontextprotocol/client $CLIENT_PKG_VERSION) ==="
-FIXTURE_PORT="$PORT" PROXY_PORT="$PROXY_PORT" node "$SDK_DIR/interop-probe/probe.mjs"
+echo "=== J1+J2+J6(modern): MCP TypeScript SDK npm @modelcontextprotocol/client $CLIENT_PKG_VERSION ==="
+FIXTURE_PORT="$PORT" PROXY_PORT="$PROXY_PORT" node "$WORK/interop-probe/probe.mjs"
 NODE_STATUS=$?
 
 echo

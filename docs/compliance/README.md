@@ -62,28 +62,28 @@ journey against this framework:
 |---|---|---|---|---|---|
 | FastMCP (Python) | 4.0.0b1 | beta | peer → turul | 9 + 5 negatives | `scripts/interop-fastmcp.sh` |
 | FastMCP (Python) | 4.0.0b1 | beta | turul → peer | 8 | `scripts/interop-turul-client.sh` |
-| MCP Go SDK | v1.7.0 | **stable** | peer → turul | **9 + 5 negatives** | `scripts/interop-go-sdk.sh` |
-| MCP TypeScript SDK | v2.0.0-beta.1 | beta | peer → turul | **0 — fails at `connect()`** | `scripts/interop-typescript-sdk.sh` |
+| MCP Go SDK | v1.7.0 | **stable** | peer → turul | 9 + 5 negatives | `scripts/interop-go-sdk.sh` |
+| MCP TypeScript SDK | 2.0.0 (npm) | **stable** | peer → turul | 9 + 5 negatives | `scripts/interop-typescript-sdk.sh` |
 
-The **Go SDK result is the strongest external evidence in the repo**, because
-that peer is the only one that is not a pre-release. Its client completed
-`server/discover`, `tools/list`, `tools/call` (twice), `resources/list`,
-`resources/read`, `resources/templates/list`, `prompts/list`, `prompts/get` and
-`completion/complete` — every request carrying `MCP-Protocol-Version:
-2026-07-28` and correct `Mcp-Method`/`Mcp-Name` headers, with no `initialize`
-and no session id anywhere — plus all five negative paths. No wire disagreement
-was found.
+**Two stable peers now agree with this framework on the same 14 checks** — the
+Go SDK and the TypeScript SDK each drove `server/discover`, `tools/list`,
+`tools/call`, `resources/list`, `resources/read`, `resources/templates/list`,
+`prompts/list`, `prompts/get` and `completion/complete`, every request carrying
+`MCP-Protocol-Version: 2026-07-28` and correct `Mcp-Method`/`Mcp-Name` headers,
+with no `initialize` and no session id anywhere, plus all five negative paths.
+Neither found a wire disagreement.
 
-The TypeScript cell is a **finding, not a defect on our side**. That SDK's
-`DiscoverResultSchema` still requires a top-level `serverInfo`, which the
-released schema removed — identity moved into
-`_meta["io.modelcontextprotocol/serverInfo"]`. Its probe classifier reads the
-failed parse as "not a modern server" and falls back to the `initialize`
-handshake, which a 2026-only server rejects. Verified against the pinned
-artifact; see [the interop matrix](../plans/interop-test-matrix.md) §3. Do not
-loosen the server to accommodate a stale beta.
+An earlier revision of this file recorded the TypeScript cell as failing and
+called the Go SDK "the only stable peer". Both were wrong, from one cause: the
+probe pinned a superseded `v2.0.0-beta.1` git tag while `@modelcontextprotocol/client@2.0.0`
+was already published, and the freshness watch pointed at
+`@modelcontextprotocol/sdk`, which carries only the 1.x line. Each probe now
+asserts its pin against the registry.
 
-A third measure sits behind both: **12 of 88 upstream fixture directories are
+A fourth stable peer is available and **untested**: the Python SDK,
+`mcp==2.0.0`.
+
+A third measure sits behind all of it: **12 of 88 upstream fixture directories are
 modeled** (13.6%). The fixtures are the only externally-authored bytes in the
 compliance harness, and 86% of them are unexamined. A green suite does not
 speak to those.

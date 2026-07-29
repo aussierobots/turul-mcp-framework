@@ -75,7 +75,8 @@ used through the framework.
    wire it or state plainly in its README that it is a types-only crate, so
    nobody adds the dependency expecting the extension to work.
 3. **No peer has exercised the Tasks extension.** Its coverage is thorough and
-   entirely self-referential. The Go SDK v1.7.0 is the most promising peer for
-   closing this, being the only stable 2026-07-28 implementation.
+   entirely self-referential. Three peers now drive the core surface — the Go
+   SDK, the TypeScript SDK and FastMCP — and none of them touches the extension,
+   so the harness to close this already exists.
 4. **"Extensions off unless opted in" is structural, not asserted.** Nothing
    fails if a future change starts advertising an extension by default.

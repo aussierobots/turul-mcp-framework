@@ -35,14 +35,17 @@ because they asserted the framing we had chosen.
 |---|---|---|---|---|
 | **R** | turul (this repo, Rust) | client + server | local | yes (default lane) |
 | **P** | FastMCP (Python) | client + server | `fastmcp==4.0.0b1` via `uv`, PyPI pre-release | yes |
-| **T** | MCP TypeScript SDK | client + server | `v2.0.0-beta.1` **git tag only — not on npm** | yes ("modern era") |
-| **G** | MCP Go SDK | client + server | `v1.7.0`, released 2026-07-28 | yes — **the only stable peer** |
+| **T** | MCP TypeScript SDK | client + server | `@modelcontextprotocol/client@2.0.0` on npm | yes — **stable** |
+| **G** | MCP Go SDK | client + server | `v1.7.0`, released 2026-07-28 | yes — **stable** |
 
-The Go SDK matters disproportionately: it is the sole peer that is not a
-pre-release. Its release notes describe the same rewrite this framework
-implements — stateless model, per-request `_meta`, `server/discover` replacing
-the handshake, MRTR replacing server-initiated calls, unified
-`subscriptions/listen` — so it is the strongest available independent check.
+Two of the three tested peers are stable releases, not pre-releases: the Go
+SDK v1.7.0 and the TypeScript SDK 2.0.0. A fourth stable peer exists and is
+**not yet tested** — the MCP Python SDK, `mcp==2.0.0` on PyPI.
+
+An earlier revision of this document called the Go SDK "the only stable peer".
+That was false when written: `@modelcontextprotocol/core@2.0.0` (npm,
+2026-07-27) and `mcp==2.0.0` (PyPI, 2026-07-28) both predate it. The error came
+from watching the wrong npm package — see §6.
 
 Known peer defects to design around, both measured:
 
@@ -76,28 +79,29 @@ logic.
 |---|---|---|---|---|
 | **R** (turul) | control — **pass** | **R→P — pass, 8 methods** | R→T — not built | R→G — not built |
 | **P** (FastMCP) | **P→R — pass, 9 methods + 5 negatives** | peer control | n/a | n/a |
-| **T** (TS SDK) | **T→R — fails at `connect()`** (see below) | n/a | peer control | n/a |
+| **T** (TS SDK) | **T→R — pass, 9 methods + 5 negatives** | n/a | peer control | n/a |
 | **G** (Go SDK) | **G→R — pass, 9 methods + 5 negatives** | n/a | n/a | peer control |
 
 Scripts: `interop-fastmcp.sh` (P→R), `interop-turul-client.sh` (R→R control and
 R→P), `interop-typescript-sdk.sh` (T→R), `interop-go-sdk.sh` (G→R).
 
-### T→R: a real wire disagreement
+### T→R: a resolved disagreement, and the lesson from it
 
-The TypeScript SDK **v2.0.0-beta.1** cannot complete `connect()` against a
-2026-07-28 turul server. Its `DiscoverResultSchema` still requires a top-level
-`serverInfo`, which the **released** schema removed — identity now travels in
-`_meta["io.modelcontextprotocol/serverInfo"]`. Verified directly against the
-pinned artifact: `DiscoverResult` in `schema/schema.ts` declares
-`supportedVersions`, `capabilities` and `instructions` only, and the sole
-`serverInfo` occurrence in the whole schema is the `_meta` key.
+The probe originally ran against git tag `v2.0.0-beta.1` and **failed at
+`connect()`**: that beta's `DiscoverResultSchema` required a top-level
+`serverInfo` which the released schema had removed, and its classifier read the
+failed parse as "not a modern server" and fell back to the `initialize`
+handshake a 2026-only server rejects. One stale field cost the whole connection.
 
-The SDK's probe classifier treats the failed parse as "not modern evidence" and
-falls back to the `initialize` handshake, which a 2026-only server rejects. So
-the failure cascades from one stale field to a full connection failure.
+The disposition then was "no change on our side, re-run when the SDK moves". The
+SDK had already moved — **`@modelcontextprotocol/client@2.0.0` was on npm before
+that measurement was taken**. Re-run against it: `connect()` succeeds,
+`getProtocolEra()` reports `modern`, and all 9 methods plus 5 negatives pass.
 
-**Disposition: no change on our side.** The beta predates the schema correction.
-Re-run when the SDK moves; do not loosen the server to accommodate it.
+The failure was never the peer's *current* behaviour; it was ours for pinning a
+superseded pre-release and never checking whether it was still current. That is
+why every probe now asserts its pinned peer version against the registry's
+`dist-tags.latest` (§6).
 
 Peer-to-peer cells are out of scope — not our contract to verify.
 
@@ -152,16 +156,18 @@ Coverage today: **J1 only, in one cell.** 3 of 22 methods, one happy path, zero 
 |---|---|---|
 | **1** | Extend `interop-fastmcp.sh` from J1 to J1+J2+J5 | **done** — 3 methods → 9, plus 5 negatives |
 | **1a** | A shared fixture server so every peer hits one surface | **done** — `examples/interop-fixture-server` |
-| **2** | `scripts/interop-typescript-sdk.sh`, J1+J2+J5+J6 | **done, cell fails** — the SDK beta's stale `DiscoverResult` schema blocks `connect()` |
+| **2** | `scripts/interop-typescript-sdk.sh`, J1+J2+J5+J6 | **done** — 9 methods + 5 negatives against npm `@modelcontextprotocol/client@2.0.0`; J6 modern leg passes, legacy leg untested |
 | **3** | R→P: drive a FastMCP server with `turul-mcp-client` | **done** — 8 methods, with an R→R control |
 | **3a** | G→R: the Go SDK v1.7.0, the only stable peer | **done** — J1+J2+J5 green, no wire disagreement |
 | **4** | J3 (MRTR) and J4 (subscriptions/progress) across live cells | not started — the two headline 2026 features remain self-verified only |
 | **5** | One runner, one matrix report, per-cell skip when a peer is unavailable | not started — currently four ad-hoc scripts |
 
 Coverage today, measured rather than estimated: **9 of 22 methods** exercised by
-each of two independent clients (FastMCP and the Go SDK), **8** driven by our
-client against an independent server (R→P), 5 negative paths confirmed twice
-over, and **zero** coverage of MRTR, subscriptions or progress by any peer.
+each of three independent clients (FastMCP, the Go SDK and the TypeScript SDK),
+**8** driven by our client against an independent server (R→P), 5 negative paths
+confirmed three times over, and **zero** coverage of MRTR, subscriptions or
+progress by any peer. A fourth peer, the Python SDK `mcp==2.0.0`, is available
+and untested.
 
 ---
 
@@ -181,8 +187,14 @@ tiers 1 and 2 *structurally cannot* — assumptions baked into both ends of our 
 
 Standing checks worth automating cheaply, because both peers are moving:
 
-- `npm view @modelcontextprotocol/sdk version` and the `dist-tags` — when v2 leaves beta and
-  reaches npm, phase 2 gets simpler and this becomes the primary peer.
+- **Each probe now asserts its own pin.** Every interop script checks that its
+  pinned peer version still equals the registry's `dist-tags.latest` and says so
+  when it does not. This replaces a watch on `npm view @modelcontextprotocol/sdk`
+  that was structurally blind: the v2 line ships as `@modelcontextprotocol/core`,
+  `/client` and `/server`, and `@modelcontextprotocol/sdk` carries only 1.x. That
+  one wrong package name produced two false published claims — "not on npm" and
+  "the Go SDK is the only stable peer" — and neither was catchable by any test in
+  this repo.
 - `pip index versions fastmcp --pre` — when FastMCP 4 goes stable, the Python 3.14 fallback
   in the script should be re-tested and probably removed.
 

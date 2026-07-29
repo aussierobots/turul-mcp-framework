@@ -11,32 +11,31 @@ Test paths are relative to the repo root. `c/` abbreviates `crates/`.
 
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
-| Answers without a session, replacing `initialize` | MUST | Implemented | `c/turul-mcp-server/src/server.rs:1336` | `discover_stateless_2026.rs::server_discover_answers_without_a_session` | pass | pass | — | pass |
-| `serverInfo` rides in `_meta`, never as a top-level field | MUST | Implemented | `server.rs:1371` stamps it once at dispatch | `discover_stateless_2026.rs::server_discover_answers_without_a_session` (asserts the raw body has no bare `"serverInfo":`) | pass | pass | **fail — peer is stale** | pass |
+| Answers without a session, replacing `initialize` | MUST | Implemented | `c/turul-mcp-server/src/server.rs:1336` | `discover_stateless_2026.rs::server_discover_answers_without_a_session` | pass | pass | pass | pass |
+| `serverInfo` rides in `_meta`, never as a top-level field | MUST | Implemented | `server.rs:1371` stamps it once at dispatch | `discover_stateless_2026.rs::server_discover_answers_without_a_session` (asserts the raw body has no bare `"serverInfo":`) | pass | pass | pass | pass |
 | Capabilities reflect only wired features | MUST | Implemented | `server.rs:1336-1386` | `discover_stateless_2026.rs::discover_advertises_registered_feature_capabilities`, `::discover_advertises_the_prompts_capability_with_truthful_list_changed`, `subscriptions_listen_2026.rs::resources_subscribe_capability_is_advertised_truthfully` | pass | — | — | — |
-| Result is cacheable (`ttlMs`/`cacheScope`) | MUST | Implemented | `discover.rs` | `discover.rs::discover_result_round_trips` (unit); wire-asserted by `scripts/interop-fastmcp.sh` | pass | **pass** | — | pass |
+| Result is cacheable (`ttlMs`/`cacheScope`) | MUST | Implemented | `discover.rs` | `discover.rs::discover_result_round_trips` (unit); wire-asserted by `scripts/interop-fastmcp.sh` | pass | **pass** | pass | pass |
 | `instructions` reaches the wire when set | MAY | **Partial** | `discover.rs:127`, wired at `server.rs:1376` | `discover.rs::discover_result_serializes_instructions_when_present` — **serialization only**, no server e2e | — | — | — | — |
 
-**The TypeScript SDK v2.0.0-beta.1 disagrees here, and it is wrong.** Its
-`DiscoverResultSchema` still requires a top-level `serverInfo`; the released
-schema removed it, and `DiscoverResult` in the pinned artifact declares only
-`supportedVersions`, `capabilities` and `instructions`. The SDK's classifier
-reads the failed parse as "not a modern server" and falls back to `initialize`,
-which a 2026-only server rejects — so one stale field costs the whole
-connection. Recorded as a peer defect; the server is not being loosened for it.
+This row was briefly recorded as a TypeScript disagreement. It was measured
+against `v2.0.0-beta.1`, whose `DiscoverResultSchema` still required a top-level
+`serverInfo`; the released npm build `2.0.0` accepts identity in `_meta` and
+drives the row green. The lesson is in
+[the interop matrix](../plans/interop-test-matrix.md) §3 — a pinned pre-release
+peer is a claim about the outside world that goes stale silently.
 
 ## 2. Tools
 
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
-| `tools/list` is deterministic across connections | MUST | Implemented | `server.rs` `ListToolsHandler` | `wire_edges_2026.rs::tools_list_is_deterministic_paginated_and_cacheable`, `::tools_list_is_invariant_across_independent_connections`, `::tools_list_is_unchanged_by_an_intervening_unrelated_request` | pass | pass | — | pass |
+| `tools/list` is deterministic across connections | MUST | Implemented | `server.rs` `ListToolsHandler` | `wire_edges_2026.rs::tools_list_is_deterministic_paginated_and_cacheable`, `::tools_list_is_invariant_across_independent_connections`, `::tools_list_is_unchanged_by_an_intervening_unrelated_request` | pass | pass | pass | pass |
 | `inputSchema` supports full JSON Schema 2020-12 (`oneOf`, `$defs`, `$ref`) — SEP-2106 | MUST | Implemented | `c/turul-mcp-protocol-2026-07-28/src/tools.rs:189` | `schema_fidelity_2026.rs::tools_list_carries_the_full_2020_12_schema` | pass | — | — | — |
 | `outputSchema` unrestricted | MUST | Implemented | `tools.rs:192` | `schema_fidelity_2026.rs::structured_content_matches_the_advertised_output_schema` | pass | — | — | — |
 | `structuredContent` present whenever `outputSchema` is declared | MUST | Implemented | `handlers/mod.rs` tool dispatch | `schema_fidelity_2026.rs::structured_content_matches_the_advertised_output_schema` | pass | — | — | — |
-| `tools/call` returns `content[]`, optional `isError`, optional `_meta` | MUST | Implemented | `tools.rs` `CallToolResult` | `discover_stateless_2026.rs::tools_call_result_carries_server_info_meta` | pass | pass | — | pass |
+| `tools/call` returns `content[]`, optional `isError`, optional `_meta` | MUST | Implemented | `tools.rs` `CallToolResult` | `discover_stateless_2026.rs::tools_call_result_carries_server_info_meta` | pass | pass | pass | pass |
 | Unknown tool → `-32602`, not a fabricated success | MUST | Implemented | `server.rs` `ToolCallHandler` | `wire_edges_2026.rs::unknown_tool_is_invalid_params_on_the_wire` | pass | — | — | — |
 | `tools/list` pagination; invalid cursor → `-32602` | MUST | Implemented | `server.rs` `ListToolsHandler` | `wire_edges_2026.rs::tools_list_is_deterministic_paginated_and_cacheable` | pass | — | — | — |
-| `tools/list` is cacheable | MUST | Implemented | `tools.rs:313` | `wire_edges_2026.rs::tools_list_is_deterministic_paginated_and_cacheable` | pass | **pass** | — | pass |
+| `tools/list` is cacheable | MUST | Implemented | `tools.rs:313` | `wire_edges_2026.rs::tools_list_is_deterministic_paginated_and_cacheable` | pass | **pass** | pass | pass |
 | `notifications/tools/list_changed` only when a dynamic source exists | SHOULD | Implemented | `c/turul-mcp-server/src/tool_registry.rs:192-203` | `tool_registry.rs` in-crate tests | pass | — | — | — |
 | `x-mcp-header` mirrors an argument into an HTTP header | MAY | Implemented | see Base Protocol §6 | `mcp_param_2026.rs::*` | pass | — | — | — |
 | Tool `annotations` (readOnly/destructive/idempotent/openWorld) reach the wire | MAY | **Implemented, untested** | `tools.rs:195` | **NOT FOUND** | — | — | — | — |
@@ -50,14 +49,14 @@ interface has no `execution?:`. Async tools live in the Tasks extension — see
 
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
-| `resources/list` returns stable, absolute URIs | MUST | Implemented | `handlers/mod.rs:817` | `discover_stateless_2026.rs::resources_list_dispatches_statelessly_with_cacheable_result` | pass | pass | — | pass |
-| `resources/read` returns `contents[]` with uri/mimeType/text-or-blob | MUST | Implemented | `handlers/mod.rs:918-1141` | `mrtr_2026.rs::mrtr_round_trip_on_resources_read` | pass | pass | — | pass |
-| Missing resource → `-32602` (HTTP 200, error in body) | MUST | Implemented | `handlers/mod.rs` | `wire_edges_2026.rs::nonexistent_resource_is_invalid_params_on_the_wire`; status pinned by `scripts/interop-fastmcp.sh` J5 | pass | **pass** | — | pass |
+| `resources/list` returns stable, absolute URIs | MUST | Implemented | `handlers/mod.rs:817` | `discover_stateless_2026.rs::resources_list_dispatches_statelessly_with_cacheable_result` | pass | pass | pass | pass |
+| `resources/read` returns `contents[]` with uri/mimeType/text-or-blob | MUST | Implemented | `handlers/mod.rs:918-1141` | `mrtr_2026.rs::mrtr_round_trip_on_resources_read` | pass | pass | pass | pass |
+| Missing resource → `-32602` (HTTP 200, error in body) | MUST | Implemented | `handlers/mod.rs` | `wire_edges_2026.rs::nonexistent_resource_is_invalid_params_on_the_wire`; status pinned by `scripts/interop-fastmcp.sh` J5 | pass | **pass** | pass | pass |
 | Non-base64 blob from a provider is an error, not a silent payload | MUST | Implemented | `handlers/mod.rs` | `wire_edges_2026.rs::invalid_base64_blob_is_rejected` | pass | — | — | — |
-| `resources/templates/list` answers even with no templates registered | MUST | **Implemented — fixed this slice** | `builder.rs` now registers the handler unconditionally | `discover_stateless_2026.rs::resources_templates_list_answers_empty_rather_than_method_not_found` | pass | **pass** | — | pass |
+| `resources/templates/list` answers even with no templates registered | MUST | **Implemented — fixed this slice** | `builder.rs` now registers the handler unconditionally | `discover_stateless_2026.rs::resources_templates_list_answers_empty_rather_than_method_not_found` | pass | **pass** | pass | pass |
 | Resource links carry `size`/`icons`/`annotations` without duplicate wire keys | MUST | Implemented | `content.rs` `ResourceReference` | `content.rs::test_resource_link_round_trips_size_and_icons`, `::test_resource_reference_serialization_with_annotations_and_meta` | pass | — | — | — |
 | `resources.subscribe` advertised truthfully | MUST | Implemented | `server.rs` `DiscoverHandler` | `subscriptions_listen_2026.rs::resources_subscribe_capability_is_advertised_truthfully` | pass | — | — | — |
-| `resources/list` and `resources/read` cacheable | MUST | Implemented | `resources.rs` | `discover_stateless_2026.rs::resources_list_dispatches_statelessly_with_cacheable_result`; `resources/read` wire-asserted by `scripts/interop-fastmcp.sh` | pass | **pass** | — | pass |
+| `resources/list` and `resources/read` cacheable | MUST | Implemented | `resources.rs` | `discover_stateless_2026.rs::resources_list_dispatches_statelessly_with_cacheable_result`; `resources/read` wire-asserted by `scripts/interop-fastmcp.sh` | pass | **pass** | pass | pass |
 | `resources/list` pagination | SHOULD | **Partial** | `handlers/mod.rs:817` | **NOT FOUND** — no cursor walk | — | — | — | — |
 
 **Fixed this slice.** `resources/templates/list` was registered only when
@@ -73,19 +72,19 @@ verified.
 
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
-| `prompts/list` returns descriptors with title/icons/`_meta` | MUST | Implemented | `handlers/mod.rs:529` | `wire_edges_2026.rs::prompt_descriptors_and_error_codes` | pass | pass | — | pass |
-| `prompts/get` returns `messages[]`; unknown prompt → `-32602` | MUST | Implemented | `handlers/mod.rs:670` | `wire_edges_2026.rs::prompt_descriptors_and_error_codes`, `mrtr_2026.rs::mrtr_round_trip_on_prompts_get` | pass | pass | — | pass |
-| `Mcp-Name` on `prompts/get` must equal `params.name` | MUST | Implemented | `streamable_http.rs:1380` | `wire_edges_2026.rs::prompt_descriptors_and_error_codes` | pass | pass | — | pass |
-| `prompts/list` cacheable | MUST | Implemented | `prompts.rs` | `discover_stateless_2026.rs::prompts_list_dispatches_statelessly_with_cacheable_result` | pass | **pass** | — | pass |
+| `prompts/list` returns descriptors with title/icons/`_meta` | MUST | Implemented | `handlers/mod.rs:529` | `wire_edges_2026.rs::prompt_descriptors_and_error_codes` | pass | pass | pass | pass |
+| `prompts/get` returns `messages[]`; unknown prompt → `-32602` | MUST | Implemented | `handlers/mod.rs:670` | `wire_edges_2026.rs::prompt_descriptors_and_error_codes`, `mrtr_2026.rs::mrtr_round_trip_on_prompts_get` | pass | pass | pass | pass |
+| `Mcp-Name` on `prompts/get` must equal `params.name` | MUST | Implemented | `streamable_http.rs:1380` | `wire_edges_2026.rs::prompt_descriptors_and_error_codes` | pass | pass | pass | pass |
+| `prompts/list` cacheable | MUST | Implemented | `prompts.rs` | `discover_stateless_2026.rs::prompts_list_dispatches_statelessly_with_cacheable_result` | pass | **pass** | pass | pass |
 | `notifications/prompts/list_changed` advertised only when dynamic | SHOULD | Implemented | `builder.rs:228` | `discover_stateless_2026.rs::discover_advertises_the_prompts_capability_with_truthful_list_changed` | pass | — | — | — |
-| `arguments` is `map<string,string>` and substitutes into the render | MUST | **Implemented, untested** | `prompts.rs:240` | **NOT FOUND** in the 2026 lane — exercised only by `scripts/interop-fastmcp.sh` and `scripts/interop-turul-client.sh`, which render `greeting(name="Ada")` | — | **pass** | — | pass |
+| `arguments` is `map<string,string>` and substitutes into the render | MUST | **Implemented, untested** | `prompts.rs:240` | **NOT FOUND** in the 2026 lane — exercised only by `scripts/interop-fastmcp.sh` and `scripts/interop-turul-client.sh`, which render `greeting(name="Ada")` | — | **pass** | pass | pass |
 | `prompts/list` pagination | SHOULD | **Partial** | `handlers/mod.rs:529` | **NOT FOUND** — no cursor walk | — | — | — | — |
 
 ## 5. Completion
 
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
-| `completion/complete` routes to registered providers | MUST | Implemented | `handlers/mod.rs:329` | `discover_stateless_2026.rs::completion_complete_routes_to_registered_provider` | pass | pass | — | pass |
+| `completion/complete` routes to registered providers | MUST | Implemented | `handlers/mod.rs:329` | `discover_stateless_2026.rs::completion_complete_routes_to_registered_provider` | pass | pass | pass | pass |
 | Unsupported (no providers) → `-32601` rather than an empty success | SHOULD | Implemented | `handlers/mod.rs` | `wire_edges_2026.rs::completion_unsupported_is_method_not_found` | pass | — | — | — |
 | Values capped at 100, with `hasMore`/`total` reflecting truncation | MUST | Implemented | `completion.rs` | `discover_stateless_2026.rs::completion_values_are_capped_at_100` | pass | — | — | — |
 | Malformed params → `-32602` | MUST | Implemented | `handlers/mod.rs` | `discover_stateless_2026.rs::malformed_completion_params_are_rejected_with_32602` | pass | — | — | — |
