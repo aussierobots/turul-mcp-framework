@@ -2026,8 +2026,11 @@ async fn test_after_dispatch_error_propagation_streamable() {
     );
     assert_eq!(
         body["error"]["code"].as_i64().unwrap(),
-        -32002,
-        "Unauthorized MiddlewareError should produce -32002 error code"
+        -32005,
+        "Unauthorized MiddlewareError should produce -32005; it was -32002 until \
+         2026-07-29, which means resource-not-found on this spec revision and is \
+         forbidden outright on 2026-07-28. The value is pinned by \
+         error.rs::middleware_codes_are_frozen_legacy_allocations."
     );
     assert!(
         body["error"]["message"]
@@ -2071,8 +2074,11 @@ async fn test_after_dispatch_error_propagation_legacy() {
     );
     assert_eq!(
         body["error"]["code"].as_i64().unwrap(),
-        -32002,
-        "Unauthorized MiddlewareError should produce -32002 error code"
+        -32005,
+        "Unauthorized MiddlewareError should produce -32005; it was -32002 until \
+         2026-07-29, which means resource-not-found on this spec revision and is \
+         forbidden outright on 2026-07-28. The value is pinned by \
+         error.rs::middleware_codes_are_frozen_legacy_allocations."
     );
     assert!(
         body["error"]["message"]
