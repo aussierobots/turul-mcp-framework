@@ -1,5 +1,7 @@
 # Test Utilities Reference
 
+**Spec lane: 2025-11-25 only.** `McpTestClient` and `TestFixtures` below assume the `initialize`/`Mcp-Session-Id` handshake, which 2026-07-28's stateless core removes. `TestServerManager` (process lifecycle, port allocation) is spec-agnostic and reusable. See the parent `SKILL.md`'s "2026-07-28 E2E Testing" section for the current-lane approach (driving `turul-mcp-client` directly).
+
 Complete API reference for `McpTestClient`, `TestServerManager`, and `TestFixtures` from the `mcp-e2e-shared` crate (`mcp_e2e_shared` lib name).
 
 ## McpTestClient

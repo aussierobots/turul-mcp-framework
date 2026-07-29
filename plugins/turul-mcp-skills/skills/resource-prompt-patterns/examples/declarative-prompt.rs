@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Prompt Pattern 2: Declarative Macro prompt!{}
 // Generates a full struct + all traits + McpPrompt impl from a closure.
 // Good for inline one-off prompts.

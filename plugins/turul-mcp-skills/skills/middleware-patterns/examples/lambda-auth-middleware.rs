@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Lambda auth middleware: extract identity from API Gateway authorizer headers
 
 use async_trait::async_trait;
@@ -16,11 +16,6 @@ impl McpMiddleware for LambdaAuthMiddleware {
         _session: Option<&dyn SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip auth for initialize
-        if ctx.method() == "initialize" {
-            return Ok(());
-        }
-
         // API Gateway Lambda authorizer forwards its custom context fields as
         // x-authorizer-* headers (snake_cased). Use the fields YOUR authorizer
         // Lambda returns under `context: {...}` — for example, user_id, sub,

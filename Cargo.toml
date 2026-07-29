@@ -180,7 +180,7 @@ homepage = "https://github.com/aussierobots/turul-mcp-framework"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 schemars = "1.2"
-# BP-3 (JSON Schema 2020-12 dialect validation for tool inputSchema). No
+# JSON Schema 2020-12 dialect validation for tool inputSchema. No
 # default features: excludes reqwest/resolve-file/resolve-http/tls-* so
 # remote/local $ref fetching is impossible to compile in, independent of the
 # in-process `Retrieve` guard the validator also installs.

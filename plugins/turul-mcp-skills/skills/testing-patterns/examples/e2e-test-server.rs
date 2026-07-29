@@ -1,6 +1,8 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // E2E test using TestServerManager + McpTestClient
 // This pattern starts a real HTTP server and sends requests over the network.
+// Spec lane: 2025-11-25 only (McpTestClient assumes the initialize/Mcp-Session-Id
+// handshake). For 2026-07-28, drive turul-mcp-client directly — see ../SKILL.md.
 
 use serde_json::json;
 

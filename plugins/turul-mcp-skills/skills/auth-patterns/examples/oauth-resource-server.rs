@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // OAuth 2.1 Resource Server — single Authorization Server
 //
 // Cargo.toml dependencies:

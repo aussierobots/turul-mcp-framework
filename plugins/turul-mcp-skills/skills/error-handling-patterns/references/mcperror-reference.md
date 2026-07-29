@@ -1,6 +1,6 @@
 # McpError Reference
 
-Complete reference for all 22 `McpError` variants, constructors, error codes, and `From` implementations.
+**Spec lane: MCP 2026-07-28 (current default).** Complete reference for all `McpError` variants, constructors, error codes, and `From` implementations. Codes below reflect 2026-07-28's renumbering: the schema reserves `-32020..-32099` for its own sequential allocations, so framework-internal codes moved to `-32000..-32019`, and not-found errors moved to the JSON-RPC standard `-32602`.
 
 ## Import
 
@@ -60,27 +60,30 @@ Rarely used in handlers — this is for malformed JSON-RPC requests.
 
 ## Not Found Errors
 
-### ToolNotFound (code: -32001)
+All three map to the JSON-RPC standard `-32602` (Invalid Params) — 2026-07-28 treats an unknown tool/resource/prompt name as an invalid parameter, not a custom MCP error.
+
+### ToolNotFound (code: -32602)
 
 ```rust
 McpError::ToolNotFound(String)
 ```
-Wire: `"Tool not found: {name}"`
+Wire: `"Unknown tool: {name}"`
 Used by the framework dispatcher. Rarely needed in handler code.
 
-### ResourceNotFound (code: -32002)
+### ResourceNotFound (code: -32602)
 
 ```rust
 McpError::ResourceNotFound(String)
 ```
-Wire: `"Resource not found: {uri}"`
+Wire: `"Unknown resource: {uri}"`
+**Breaking change from 2025-11-25**, which used a dedicated `-32002`.
 
-### PromptNotFound (code: -32003)
+### PromptNotFound (code: -32602)
 
 ```rust
 McpError::PromptNotFound(String)
 ```
-Wire: `"Prompt not found: {name}"`
+Wire: `"Unknown prompt: {name}"`
 
 ## Execution Errors
 
@@ -118,7 +121,7 @@ Wire: `"Prompt execution failed: Template rendering failed"`
 
 ## Validation Errors
 
-### ValidationError (code: -32020)
+### ValidationError (code: -32014)
 
 ```rust
 McpError::ValidationError(String)
@@ -126,14 +129,14 @@ McpError::validation("Email format invalid")
 ```
 Wire: `"Validation error: Email format invalid"`
 
-### InvalidCapability (code: -32021)
+### InvalidCapability (code: -32015)
 
 ```rust
 McpError::InvalidCapability(String)
 ```
 Wire: `"Invalid capability: {cap}"`
 
-### VersionMismatch (code: -32022)
+### VersionMismatch (code: -32016)
 
 ```rust
 McpError::VersionMismatch { expected: String, actual: String }
@@ -142,7 +145,7 @@ Wire: `"Protocol version mismatch: expected {expected}, got {actual}"`
 
 ## Configuration/Session Errors
 
-### ConfigurationError (code: -32030)
+### ConfigurationError (code: -32017)
 
 ```rust
 McpError::ConfigurationError(String)
@@ -150,7 +153,7 @@ McpError::configuration("Missing DATABASE_URL environment variable")
 ```
 Wire: `"Configuration error: Missing DATABASE_URL environment variable"`
 
-### SessionError (code: -32031)
+### SessionError (code: -32018)
 
 ```rust
 McpError::SessionError(String)
@@ -159,7 +162,7 @@ Wire: `"Session error: {msg}"`
 
 ## Transport/Protocol Errors
 
-### TransportError (code: -32040)
+### TransportError (code: -32019)
 
 ```rust
 McpError::TransportError(String)
@@ -167,13 +170,43 @@ McpError::transport("Connection reset")
 ```
 Wire: `"Transport error: Connection reset"`
 
-### JsonRpcProtocolError (code: -32041)
+### JsonRpcProtocolError (code: -32000)
 
 ```rust
 McpError::JsonRpcProtocolError(String)
 McpError::json_rpc_protocol("Invalid JSON-RPC version")
 ```
 Wire: `"JSON-RPC protocol error: Invalid JSON-RPC version"`
+
+## Spec-Assigned Errors (2026-07-28)
+
+2026-07-28 reserves `-32020..-32099` for its own sequential allocations. The framework currently uses two of them:
+
+### MissingRequiredClientCapability (code: -32021)
+
+```rust
+McpError::MissingRequiredClientCapability { required: serde_json::Value }
+```
+Wire: `"Missing required client capability"`, `data: {"requiredCapabilities": <ClientCapabilities>}`.
+The client didn't declare a capability (in `clientCapabilities`) that the server requires to process the request.
+
+### UnsupportedProtocolVersion (code: -32022)
+
+```rust
+McpError::UnsupportedProtocolVersion { supported: Vec<String>, requested: String }
+```
+Wire: `"Unsupported protocol version"`, `data: {"supported": [..], "requested": ".."}`.
+
+A third spec-assigned code, `-32020` (header/body protocol-version disagreement), is surfaced directly from the header-validation layer as `crate::headers::ERROR_CODE_HEADER_MISMATCH` — not through a named `McpError` variant.
+
+## MRTR (Multi-Round Tool Response)
+
+### InputRequired
+
+```rust
+McpError::InputRequired { /* fields carrying the input request(s) and retry state */ }
+```
+Not a wire error code — the `tools/call` handler intercepts this variant and converts it to an `InputRequiredResult` before dispatch ever serializes an error. Reaching `to_error_object()` with this variant (a method with no MRTR conversion) is a handler bug and surfaces as an internal error.
 
 ## Internal Errors (code: -32603)
 

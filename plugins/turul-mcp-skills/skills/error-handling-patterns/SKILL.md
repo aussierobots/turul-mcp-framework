@@ -12,6 +12,8 @@ description: >
   the Turul MCP Framework (Rust).
 ---
 
+**Spec lane: MCP 2026-07-28 (current default).** The 3-layer architecture and `McpError` constructors below are unchanged from 2025-11-25, but the **JSON-RPC Error Code Table further down was fully renumbered** — 2026-07-28 reserves `-32020..-32099` for spec-assigned codes (`MissingRequiredClientCapability` = -32021, `UnsupportedProtocolVersion` = -32022, a header-mismatch code = -32020), so the framework's own implementation-defined codes were moved down into `-32000..-32019` to get out of the way. Not-found errors (`ToolNotFound`/`ResourceNotFound`/`PromptNotFound`) also moved from their own codes to the JSON-RPC standard `-32602` (Invalid Params).
+
 # Error Handling Patterns — Turul MCP Framework
 
 The framework uses a 3-layer error architecture. Handlers return domain errors; the framework converts them to JSON-RPC wire format automatically. You never need to construct JSON-RPC errors directly.
@@ -74,7 +76,7 @@ What went wrong?
 All three parameter error constructors map to JSON-RPC code **-32602** (Invalid params):
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_server::prelude::*;
 
 #[mcp_tool(name = "search", description = "Search with filters")]
@@ -109,7 +111,7 @@ async fn search(
 Use the handler-specific execution error for the context you're in:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_server::prelude::*;
 
 // In a tool handler — use tool_execution (-32010)
@@ -173,32 +175,38 @@ let row = sqlx::query("SELECT 1").fetch_one(&pool).await
 
 ## JSON-RPC Error Code Table
 
+The schema reserves `-32000..-32019` as implementation-defined and `-32020..-32099` for its own sequential allocations. Framework codes below stay under `-32020` to leave the spec's range alone.
+
 | McpError Variant | Code | Category |
 |---|---|---|
-| `MissingParameter` | -32602 | Invalid params |
-| `InvalidParameterType` | -32602 | Invalid params |
-| `ParameterOutOfRange` | -32602 | Invalid params |
-| `InvalidParameters` | -32602 | Invalid params |
-| `InvalidRequest` | -32602 | Invalid params |
-| `ToolNotFound` | -32001 | Not found |
-| `ResourceNotFound` | -32002 | Not found |
-| `PromptNotFound` | -32003 | Not found |
+| `MissingParameter` | -32602 | Invalid params (JSON-RPC standard) |
+| `InvalidParameterType` | -32602 | Invalid params (JSON-RPC standard) |
+| `ParameterOutOfRange` | -32602 | Invalid params (JSON-RPC standard) |
+| `InvalidParameters` | -32602 | Invalid params (JSON-RPC standard) |
+| `InvalidRequest` | -32602 | Invalid params (JSON-RPC standard) |
+| `ToolNotFound` | -32602 | Invalid params (JSON-RPC standard) — unknown tool/prompt/resource names are "invalid parameters," not custom MCP errors |
+| `ResourceNotFound` | -32602 | Invalid params (JSON-RPC standard) — **breaking change from 2025-11-25**, which used -32002 |
+| `PromptNotFound` | -32602 | Invalid params (JSON-RPC standard) |
 | `ToolExecutionError` | -32010 | Execution |
 | `ResourceAccessDenied` | -32011 | Execution |
 | `ResourceExecutionError` | -32012 | Execution |
 | `PromptExecutionError` | -32013 | Execution |
-| `ValidationError` | -32020 | Validation |
-| `InvalidCapability` | -32021 | Validation |
-| `VersionMismatch` | -32022 | Validation |
-| `ConfigurationError` | -32030 | Config/Session |
-| `SessionError` | -32031 | Config/Session |
-| `TransportError` | -32040 | Transport |
-| `JsonRpcProtocolError` | -32041 | Transport |
-| `IoError` | -32603 | Internal |
-| `SerializationError` | -32603 | Internal |
-| `JsonRpcError` | custom | Pass-through |
+| `ValidationError` | -32014 | Validation |
+| `InvalidCapability` | -32015 | Validation |
+| `VersionMismatch` | -32016 | Validation |
+| `ConfigurationError` | -32017 | Config/Session |
+| `SessionError` | -32018 | Config/Session |
+| `TransportError` | -32019 | Transport |
+| `JsonRpcProtocolError` | -32000 | Transport |
+| `IoError` | -32603 | Internal (JSON-RPC standard internal error) |
+| `SerializationError` | -32603 | Internal (JSON-RPC standard internal error) |
+| `MissingRequiredClientCapability` | -32021 | Spec-assigned (2026-07-28) — client didn't declare a capability the server requires |
+| `UnsupportedProtocolVersion` | -32022 | Spec-assigned (2026-07-28) — request's protocol version unsupported |
+| `JsonRpcError { code, .. }` | pass-through | Preserves the original code/message/data verbatim (e.g. `tasks/result` reproducing the task's original error) |
 
-**See:** `references/mcperror-reference.md` for all 22 variants with full constructor signatures.
+Header/body protocol-version disagreement uses a separate spec-assigned constant, `ERROR_CODE_HEADER_MISMATCH = -32020` (not a named `McpError` variant — surfaced directly from the header-validation layer).
+
+**See:** `references/mcperror-reference.md` for all variants with full constructor signatures.
 
 ## Common Mistakes
 

@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Auth middleware: validate API key from transport metadata, inject user state
 
 use async_trait::async_trait;
@@ -20,11 +20,6 @@ impl McpMiddleware for ApiKeyAuth {
         _session: Option<&dyn SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip auth for initialize (session doesn't exist yet) and ping
-        if ctx.method() == "initialize" || ctx.method() == "ping" {
-            return Ok(());
-        }
-
         // Extract API key from transport metadata (HTTP header: x-api-key)
         let key = ctx
             .metadata()

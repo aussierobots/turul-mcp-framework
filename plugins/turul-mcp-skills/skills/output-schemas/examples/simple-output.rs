@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Simple output schema — derive macro with schemars auto-detection
 //
 // Demonstrates the basic pattern: derive JsonSchema on output type,

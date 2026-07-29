@@ -18,7 +18,7 @@ Deep-dive reference for all four resource creation patterns. See the `resource-p
 Template variables in the URI (`{id}`) are extracted from `params["template_variables"]["id"]`. The function macro auto-generates extraction code for typed parameters:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 #[mcp_resource(uri = "file:///data/{id}.json", name = "data_item")]
 async fn data_item(id: String) -> McpResult<Vec<ResourceContent>> {
     // `id` is auto-extracted from params.template_variables.id

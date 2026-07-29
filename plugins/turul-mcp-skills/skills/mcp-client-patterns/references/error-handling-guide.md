@@ -28,7 +28,7 @@ Deep-dive reference for MCP client error types, retryability, and recovery patte
 | `UnsupportedVersion(String)` | Server protocol version incompatible |
 | `MethodNotFound(String)` | Server doesn't support the method |
 | `InvalidParams(String)` | Wrong parameters for method |
-| `NegotiationFailed(String)` | Initialize handshake failed |
+| `NegotiationFailed(String)` | Wire-spec negotiation failed — `server/discover` probe errored ambiguously, or the 2025-11-25 `initialize` fallback failed |
 | `CapabilityMismatch(String)` | Server doesn't support required capability |
 
 ### Session Errors
@@ -76,7 +76,7 @@ error.error_code()         // Some(i32) for ServerError, None otherwise
 `RetryConfig` provides built-in delay calculation:
 
 ```rust
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 use turul_mcp_client::config::RetryConfig;
 
 let retry = RetryConfig::default(); // max_attempts: 3, initial_delay: 100ms, backoff: 2.0x
@@ -107,7 +107,7 @@ for attempt in 0..retry.max_attempts {
 ## Wrapping in Application Errors
 
 ```rust
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 use turul_mcp_client::McpClientError;
 
 #[derive(Debug, thiserror::Error)]

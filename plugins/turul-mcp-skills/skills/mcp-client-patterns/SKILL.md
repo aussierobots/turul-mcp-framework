@@ -16,14 +16,16 @@ description: >
 
 # Turul MCP Client Patterns
 
+**Spec lane: MCP 2026-07-28 (current default, `client-bilingual` feature).** `turul-mcp-client` links both versioned protocol crates and negotiates the wire spec **per connection**, at `connect()` time — it is not a build-time choice between two clients. `--no-default-features --features client-2025-11-25-only` or `client-2026-07-28-only` narrow a build to exactly one wire spec if you need that. Everything below describes bilingual (default) behavior; where the two lanes diverge, both are called out.
+
 ## Transport Selection
 
-Transport is auto-detected from the URL:
+Transport is auto-detected from the URL. Transport and wire-spec negotiation are independent: `HttpTransport` carries either 2025-11-25 (Streamable HTTP, stateful) or 2026-07-28 (stateless core) depending on what `connect()` negotiates.
 
 ```
 McpClientBuilder::new().with_url(url)?
-├─ URL contains /sse or ?transport=sse ──→ SseTransport (Legacy HTTP+SSE, MCP 2024-11-05)
-└─ Otherwise (default) ─────────────────→ HttpTransport (Streamable HTTP, MCP 2025-11-25)
+├─ URL contains /sse or ?transport=sse ──→ SseTransport (Legacy HTTP+SSE, MCP 2024-11-05 — no 2026-07-28 support)
+└─ Otherwise (default) ─────────────────→ HttpTransport (negotiates 2026-07-28 or 2025-11-25 at connect() time)
 ```
 
 Or build explicitly:
@@ -32,26 +34,26 @@ Or build explicitly:
 // Auto-detect (recommended)
 McpClientBuilder::new().with_url("http://host/mcp")?
 
-// Explicit HTTP (Streamable HTTP, MCP 2025-11-25)
+// Explicit HTTP (negotiates 2026-07-28 stateless core, or falls back to 2025-11-25 Streamable HTTP)
 McpClientBuilder::new().with_transport(Box::new(HttpTransport::new("http://host/mcp")?))
 
-// Explicit SSE (Legacy HTTP+SSE, MCP 2024-11-05)
+// Explicit SSE (Legacy HTTP+SSE, MCP 2024-11-05 only — never negotiates 2026-07-28)
 McpClientBuilder::new().with_transport(Box::new(SseTransport::new("http://host/sse")?))
 ```
 
 | Feature | `HttpTransport` | `SseTransport` |
 |---|---|---|
-| Protocol | MCP 2025-11-25 (Streamable HTTP) | MCP 2024-11-05 (Legacy HTTP+SSE) |
+| Protocol | 2026-07-28 (stateless core) or 2025-11-25 (Streamable HTTP), negotiated per connection | MCP 2024-11-05 (Legacy HTTP+SSE) only |
 | Server events | SSE streaming on response | Separate SSE endpoint |
-| Session management | `Mcp-Session-Id` header | `Mcp-Session-Id` header |
-| Recommended for | New servers | Legacy servers only |
+| Session management | `Mcp-Session-Id` header on 2025-11-25 connections only; absent entirely on 2026-07-28 | `Mcp-Session-Id` header |
+| Recommended for | New servers | Legacy 2024-11-05 servers only |
 
 See [references/transport-guide.md](references/transport-guide.md) for full details.
 
 ## Quick Start
 
 ```rust
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 use turul_mcp_client::{McpClientBuilder, McpClientResult};
 use serde_json::json;
 
@@ -62,15 +64,19 @@ async fn main() -> McpClientResult<()> {
         .with_url("http://localhost:8080/mcp")?
         .build();
 
-    // Connect (performs initialize handshake)
+    // Connect — negotiates the wire spec: probes `server/discover` first;
+    // a 2026-07-28 server answers and the connection stays stateless (no
+    // initialize, no Mcp-Session-Id). If the probe indicates a legacy
+    // server, the client falls back to the 2025-11-25 initialize handshake.
     client.connect().await?;
 
-    // Use the client
+    // Use the client — identical call surface regardless of which spec was negotiated
     let tools = client.list_tools().await?;
     let result = client.call_tool("add", json!({"a": 1, "b": 2})).await?;
     println!("{result:?}");
 
-    // Clean up (sends DELETE to server)
+    // Clean up. Sends DELETE only if a session was established (2025-11-25
+    // fallback); a no-op on the wire for a 2026-07-28 stateless connection.
     client.disconnect().await?;
     Ok(())
 }
@@ -79,7 +85,7 @@ async fn main() -> McpClientResult<()> {
 For custom client identity, build a `ClientConfig`:
 
 ```rust
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 use turul_mcp_client::config::{ClientConfig, ClientInfo};
 
 let config = ClientConfig {
@@ -127,7 +133,7 @@ Additional methods: `list_resources_paginated()`, `list_resource_templates_pagin
 `call_tool_with_task()` returns a `ToolCallResponse` enum — either the result immediately or a task handle for long-running operations.
 
 ```rust
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 use turul_mcp_client::ToolCallResponse;
 use turul_mcp_protocol::TaskStatus;
 
@@ -177,7 +183,7 @@ See [examples/task-workflow.rs](examples/task-workflow.rs) for a complete exampl
 `ClientConfig` is a nested struct — all fields have sensible defaults.
 
 ```rust
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 use turul_mcp_client::config::*;
 use std::time::Duration;
 
@@ -236,7 +242,7 @@ Pass via `.with_config(config)` on `McpClientBuilder`.
 
 Use `RetryConfig::delay_for_attempt(n)` to calculate backoff delay with jitter.
 
-**Session status codes (MCP 2025-11-25 Streamable HTTP):**
+**Session status codes — 2025-11-25 fallback connections only.** These only apply once a connection has negotiated down to 2025-11-25 Streamable HTTP; a 2026-07-28 stateless connection has no `Mcp-Session-Id` and no session-expiry 404 to recover from.
 
 | HTTP Status | Meaning | Client Action |
 |---|---|---|
@@ -244,7 +250,9 @@ Use `RetryConfig::delay_for_attempt(n)` to calculate backoff delay with jitter.
 | **404** | Session ID not found or terminated | Start fresh `initialize` handshake (do NOT re-authenticate) |
 | **500** | Server internal error | Retry with backoff |
 
-The 401 vs 404 distinction matters: 404 means "your session is gone, create a new one" — not an auth problem.
+The 401 vs 404 distinction matters: 404 means "your session is gone, create a new one" — not an auth problem. `McpClient` handles this automatically on 2025-11-25 connections: `is_session_expired()` resets local session state, clears the stale `Mcp-Session-Id`, re-runs `initialize`, and retries the original request.
+
+**Missing-resource error code.** 2026-07-28 reuses the JSON-RPC standard `-32602` for "not found" where 2025-11-25 used `-32002`. `McpClientError::is_resource_not_found()` accepts both codes so the same client code works against either lane.
 
 See [references/error-handling-guide.md](references/error-handling-guide.md) for full variant catalog and retry patterns.
 
@@ -253,7 +261,7 @@ See [references/error-handling-guide.md](references/error-handling-guide.md) for
 When a server uses `ToolChangeMode::Dynamic`, clients receive `notifications/tools/list_changed`. The client caches tools and auto-invalidates on notification:
 
 ```rust
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 // list_tools() returns cached tools; refresh_tools() forces a fresh tools/list call
 let tools = client.list_tools().await?;         // Cached (fast)
 let tools = client.refresh_tools().await?;      // Forces fresh fetch
@@ -266,9 +274,9 @@ For a complete dynamic tools E2E example, see `examples/dynamic-tools-test-clien
 
 ## Common Mistakes
 
-1. **Forgetting `client.connect().await?` before operations** — session not initialized, all calls fail with `SessionError::NotInitialized`
-2. **Not calling `client.disconnect().await?`** — server session leaks (Drop spawns cleanup but is best-effort)
-3. **Using `SseTransport` for MCP 2025-11-25 servers** — wrong protocol; use `HttpTransport` or let `with_url()` auto-detect
+1. **Forgetting `client.connect().await?` before operations** — negotiation never ran, all calls fail with `SessionError::NotInitialized`
+2. **Not calling `client.disconnect().await?`** — on a 2025-11-25 fallback connection the server session leaks (Drop spawns cleanup but is best-effort); on 2026-07-28 there's no server-side session to leak, but local resources (event listener task) still need tearing down
+3. **Using `SseTransport` against a 2026-07-28 server** — `SseTransport` only speaks legacy 2024-11-05 and never negotiates 2026-07-28 or 2025-11-25; use `HttpTransport` or let `with_url()` auto-detect
 4. **Not handling `ToolCallResponse::TaskCreated`** — `call_tool_with_task()` can return a task handle instead of immediate result
 5. **Not checking `error.is_retryable()`** — retrying non-retryable errors wastes time and hides bugs
 6. **Hardcoding URLs** — make server endpoint configurable via environment or config
@@ -294,7 +302,7 @@ The `turul-mcp-client` crate handles transport and session lifecycle. Token acqu
 Per MCP authorization, the bearer token MUST be present on **every** HTTP request a client makes — that includes the POST request stream, the GET SSE listener, and the DELETE cleanup. A long-lived client that holds a token across rotations needs to swap the token in place rather than rebuild the whole client (which would drop the connection pool).
 
 ```rust
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 // Rotate the bearer on a long-lived client without losing the connection pool.
 // All five outbound surfaces (POST, GET SSE, DELETE, send_request_with_headers,
 // send_notification) pick up the new token immediately.
@@ -308,7 +316,7 @@ client.disconnect().await?;  // DELETE goes out with the fresh bearer
 |---|---|
 | `disconnect()` is idempotent | Safe to call multiple times; also fires implicitly from `Drop`. After explicit `disconnect()`, the implicit `Drop` is a no-op (no duplicate DELETE). |
 | Concurrent `call_tool` on `Arc<McpClient>` runs in parallel | `Transport` trait takes `&self` on hot paths; reqwest's connection pool serves concurrent requests. No outer `Mutex`. |
-| SSE GET 4xx is terminal | The background SSE listener treats any 4xx on the GET stream as a permanent failure, clears the cached session ID, and exits. The next `connect()` re-establishes from a fresh `initialize`. |
+| SSE GET 4xx is terminal (2025-11-25 fallback only) | The background SSE listener treats any 4xx on the GET stream as a permanent failure, clears the cached session ID, and exits. The next `connect()` re-establishes from a fresh `initialize`. The standalone GET SSE endpoint this depends on is removed entirely in 2026-07-28 — on a negotiated 2026-07-28 connection, server-initiated messages ride the response stream of the originating request instead. |
 | `set_bearer(None)` falls back to default headers | Useful for clearing an override and reverting to whatever was baked into `ClientBuilder::default_headers()`. |
 
 Common rotation pattern for OAuth `client_credentials` deployments:
@@ -326,6 +334,6 @@ loop {
 - **Server-side tool creation** — use the `tool-creation-patterns` skill
 - **Output schemas and structuredContent** — use the `output-schemas` skill
 - **Server configuration and builder** — see [CLAUDE.md — Basic Server](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#basic-server)
-- **MCP protocol compliance** — see [CLAUDE.md — MCP 2025-11-25 Compliance](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#mcp-2025-11-25-compliance)
+- **MCP protocol compliance** — see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md`
 - **OAuth RS validation** — see the `auth-patterns` skill for `JwtValidator`, audience validation, and RFC 9728 metadata
 - **Demo Authorization Server** — see the `authorization-server-patterns` skill for building a test AS

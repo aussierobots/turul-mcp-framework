@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Lambda MCP server with real-time SSE streaming
 //
 // Cargo.toml dependencies:

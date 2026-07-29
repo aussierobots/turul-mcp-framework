@@ -14,6 +14,8 @@ description: >
   DynamoDB storage, CORS, middleware, tasks, dynamic tools, and logging.
 ---
 
+**Spec lane: MCP 2026-07-28 (current default).** The builder mechanics (cold-start caching, CORS, middleware) apply on both lanes. Session persistence and task support differ sharply — see the DynamoDB Session Storage and Adding Task Support sections below.
+
 # Lambda Deployment — Turul MCP Framework
 
 Deploy MCP servers on AWS Lambda using `LambdaMcpServerBuilder`. The Lambda crate mirrors `McpServer::builder()` but adapts for serverless: cold-start caching, DynamoDB session persistence, CORS for browser clients, and optional real-time SSE streaming.
@@ -34,7 +36,7 @@ Where does your MCP server run?
 The smallest working Lambda MCP server:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use lambda_http::{Body, Error, Request, run, service_fn};
 use std::sync::Arc;
 use tokio::sync::OnceCell;
@@ -107,11 +109,13 @@ Need real-time SSE streaming?
 |---|---|---|
 | **Runtime** | `run(service_fn(...))` | `run_streaming(handler)` or `run_streaming_with(dispatch)` |
 | **Handler** | `handle()` | `handle_streaming()` (called internally by `run_streaming`) |
-| **GET /mcp** | 405 Method Not Allowed | Real-time SSE event stream |
-| **Response body** | `LambdaBody` (buffered) | `UnsyncBoxBody<Bytes, hyper::Error>` (streaming) |
+| **GET /mcp** | 405 Method Not Allowed | 405 Method Not Allowed (see note below) |
+| **POST /mcp response** | Buffered `LambdaBody` — one JSON body per request | SSE-streamed `UnsyncBoxBody<Bytes, hyper::Error>` — progress notifications then the final result, on the same response |
 | **Cargo feature** | default features sufficient | `streaming` feature required |
 | **Lambda cost** | Standard pricing | Higher (streaming response duration) |
 | **Completion invocations** | Handled by `lambda_http` | Handled gracefully (no ERROR logs) |
+
+**GET /mcp is always 405 on 2026-07-28**, in both modes — the standalone GET SSE listener endpoint (and DELETE for session termination) is removed entirely from the stateless core (Streamable HTTP §Backward Compatibility), ahead of and independent of `.sse()`. `.sse(true)`/`enable_get_sse` still control real-time streaming, but exclusively on the **POST /mcp response** — a single request's progress notifications and final result arriving as SSE frames on that request's own response stream, not a separate long-lived GET connection. (`enable_get_sse` itself is a 2025-lane-only knob on this branch — a harmless no-op under 2026-07-28.)
 
 **Two streaming entry points (v0.3+):**
 - `run_streaming(handler)` — pass a `LambdaMcpHandler` directly (standard path; handles `.well-known` and other registered routes via the built-in route registry)
@@ -121,14 +125,16 @@ Both handle API Gateway streaming completion invocations gracefully — no ERROR
 
 **Important nuances:**
 - `.sse(true)` with `handle()` works but returns SSE snapshots, not real-time streams
-- `handle_streaming()` with `.sse(false)` works but GET /mcp returns 405 (SSE endpoints disabled)
+- `handle_streaming()` with `.sse(false)` still works, and GET /mcp still returns 405 regardless — on 2026-07-28 that's true unconditionally, not a consequence of disabling SSE
 - For **real-time SSE**, you need: `.sse(true)` + `run_streaming()` or `run_streaming_with()` + `streaming` Cargo feature
 
 **See:** `references/streaming-modes-guide.md` for the full streaming deep-dive.
 
 ## DynamoDB Session Storage
 
-Lambda invocations are stateless — InMemory storage loses sessions when containers recycle. Use DynamoDB for production:
+**On 2026-07-28, session storage is not about cross-invocation persistence anymore.** The stateless core has no `Mcp-Session-Id` handshake — each request gets a fresh, ephemeral session minted internally (never read back, never echoed to the client) purely to keep the dispatch pipeline's `SessionContext` plumbing unchanged. There is no session for a warm/cold container to lose, so the classic "InMemory loses state on recycle, use DynamoDB" argument doesn't apply to session storage the way it used to. `InMemorySessionStorage` is a reasonable default even in Lambda production on this lane.
+
+A server build targets exactly one protocol version (`protocol-2026-07-28` XOR `protocol-2025-11-25` — a Lambda server is not bilingual the way `turul-mcp-client` is). DynamoDB session storage still matters on a `--no-default-features --features protocol-2025-11-25` build, where sessions are real and must survive container recycling. For that lane, use DynamoDB for production:
 
 ```rust
 // Default table name "mcp-sessions" (hardcoded in DynamoDbConfig::default())
@@ -172,7 +178,7 @@ Browser-based MCP clients need CORS headers. The `cors` feature is on by default
 Same `McpMiddleware` trait as HTTP servers. Wrap in `Arc`:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use std::sync::Arc;
 
 let server = LambdaMcpServerBuilder::new()
@@ -189,10 +195,12 @@ Execution order: forward for `before_dispatch`, reverse for `after_dispatch` —
 
 ## Adding Task Support
 
-Long-running tools need durable task storage. DynamoDB is recommended for Lambda:
+**On 2026-07-28, `LambdaMcpServerBuilder` does not yet wire the Tasks extension.** Tasks moved to `turul-mcp-ext-tasks` (SEP-2663) in 2026-07-28, but `LambdaMcpServerBuilder` has no `.with_ext_tasks()` / `.ext_task_tool()` equivalent of the HTTP server's builder methods today — this is a real gap, not a documentation omission. Long-running tools on Lambda under 2026-07-28 currently have no task-execution path through this crate.
+
+`with_task_storage()` (below) is `#[cfg(feature = "protocol-2025-11-25")]`-gated — it configures the frozen in-core task system, not the extension, and only exists on a `--no-default-features --features protocol-2025-11-25` build:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4 (protocol-2025-11-25 build only)
 use turul_mcp_task_storage::DynamoDbTaskStorage;
 
 let task_storage = Arc::new(DynamoDbTaskStorage::new().await?);
@@ -209,14 +217,14 @@ Custom table name: `DynamoDbTaskStorage::with_config(DynamoDbTaskConfig { table_
 
 On cold start, the handler automatically recovers stuck tasks (default timeout: 5 minutes). Configure with `.task_recovery_timeout_ms(600_000)`.
 
-**See:** the `task-patterns` skill for task state machine, `task_support` attribute, and cancellation details.
+**See:** the `task-patterns` skill for both the 2026-07-28 Tasks extension model and the frozen 2025-11-25 in-core system.
 
 ## Dynamic Tool Activation (Lambda)
 
 Lambda participates in `ToolChangeMode::Dynamic` via request-time change detection (no background polling):
 
 ```rust
-// turul-mcp-server v0.3 (requires `dynamic-tools` feature)
+// turul-mcp-server v0.4 (requires `dynamic-tools` feature)
 use turul_mcp_server::ToolChangeMode;
 use turul_mcp_server_state_storage::DynamoDbServerStateStorage;
 
@@ -305,7 +313,7 @@ let server = LambdaMcpServerBuilder::new()
 
 ## Common Mistakes
 
-1. **Using `InMemorySessionStorage` in production Lambda** — Sessions are lost when containers recycle. Use `DynamoDbSessionStorage` for persistence across invocations.
+1. **Assuming `InMemorySessionStorage` is unsafe in production Lambda on 2026-07-28** — it isn't. Sessions are ephemeral per-request under the stateless core regardless of backend; there's nothing to lose on container recycle. This concern is real only on a 2025-11-25 build, where `DynamoDbSessionStorage` is needed for persistence across invocations.
 
 2. **Using `handle()` with `.sse(true)` expecting real-time streaming** — `handle()` returns SSE snapshots, not real-time streams. For real-time SSE, use `run_streaming(handler)` or `run_streaming_with(dispatch)` + the `streaming` Cargo feature.
 
@@ -321,11 +329,9 @@ let server = LambdaMcpServerBuilder::new()
 
 **Middleware details?** → See the `middleware-patterns` skill for `McpMiddleware` trait, error variants, and session injection.
 
-**Task state machine?** → See the `task-patterns` skill for task lifecycle, `task_support` declaration, and cancellation.
+**Task lifecycle?** → See the `task-patterns` skill for the 2026-07-28 Tasks extension and the frozen 2025-11-25 in-core system.
 
 **Storage backend config?** → See the `storage-backend-matrix` reference for DynamoDB/SQLite/PostgreSQL feature flags and Cargo.toml patterns.
-
-**Session storage architecture?** → See the `session-storage-backends` skill for the SessionStorage trait, backend decision tree, event management, and error types.
 
 **Error handling in tools?** → See the `error-handling-patterns` skill for `McpError` variants and decision tree.
 

@@ -1,4 +1,4 @@
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 // Error handling: match on McpClientError, retry with backoff, graceful degradation.
 
 use serde_json::{json, Value};

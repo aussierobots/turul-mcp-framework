@@ -1,4 +1,4 @@
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 // Minimal MCP client: connect, list tools, call a tool, disconnect.
 
 use serde_json::json;
@@ -11,7 +11,8 @@ async fn main() -> McpClientResult<()> {
         .with_url("http://localhost:8080/mcp")?
         .build();
 
-    // Connect performs the MCP initialize handshake
+    // Connect negotiates the wire spec (server/discover probe, falling back
+    // to the 2025-11-25 initialize handshake against legacy servers)
     client.connect().await?;
     println!("Connected: {}", client.is_ready().await);
 

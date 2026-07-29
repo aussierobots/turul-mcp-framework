@@ -1,5 +1,7 @@
 # Task Runtime Guide
 
+**Spec lane: 2025-11-25 in-core tasks only** (`--no-default-features --features protocol-2025-11-25`). `TaskRuntime`/`with_task_storage`/`with_task_runtime` are `#[cfg(feature = "protocol-2025-11-25")]`-gated and do not exist in a default 2026-07-28 build. For the current default lane's Tasks extension (SEP-2663), see the parent `SKILL.md`.
+
 Reference for `TaskRuntime`, `TaskExecutor`, `TokioTaskExecutor`, and cancellation handling.
 
 ## Import

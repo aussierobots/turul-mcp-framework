@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Parameter validation: missing_param, invalid_param_type, param_out_of_range
 
 use turul_mcp_derive::mcp_tool;

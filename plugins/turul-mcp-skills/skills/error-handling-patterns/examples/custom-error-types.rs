@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Custom error types: From<MyError> for McpError
 
 use turul_mcp_derive::mcp_tool;

@@ -119,7 +119,7 @@ See: [CLAUDE.md — JSON Naming: camelCase ONLY](https://github.com/aussierobots
 
 ## Vec\<T\> Output — Use Wrapper Structs
 
-**Do NOT use `schema_for!(Vec<T>)` with `ToolSchema::from_schemars()`.** Schemars 1.x generates a root array schema (`{"type": "array", ...}`) but `from_schemars()` requires `type: "object"` at root — it will reject the schema.
+**Do NOT use `schema_for!(Vec<T>)` with `ToolSchema::from_schemars()`, on either spec lane.** Schemars generates a root array schema (`{"type": "array", ...}`) but `from_schemars()` requires `type: "object"` at root — it will reject the schema. This holds under 2026-07-28 too: the wire-level `outputSchema` is unrestricted (`ToolOutputSchema`), but the derive/function macro output-schema path still funnels through the object-root-constrained `ToolSchema`.
 
 **Always wrap `Vec<T>` in a response struct:**
 

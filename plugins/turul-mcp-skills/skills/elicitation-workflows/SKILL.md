@@ -13,7 +13,9 @@ description: >
 
 # Elicitation Workflows — Turul MCP Framework
 
-Elicitation lets the server request structured input from the user/client. The server sends a schema-driven form; the client presents it and returns the response. This is an MCP 2025-11-25 feature — schemas are restricted to **primitive types only** (no nesting).
+**Spec lane: MCP 2026-07-28 (current default).** The elicitation *schema* (primitive-only fields, `ElicitationBuilder`'s field methods, `ElicitResult`/`ElicitAction`) is unchanged from 2025-11-25 and works on both lanes. **The transport mechanism is completely different**: 2025-11-25 held the connection open for a synchronous server→client `elicitation/create` request (`ElicitationProvider` trait, `.with_elicitation()`); 2026-07-28's stateless core has no connection to hold open, so it uses MRTR (Multi-Round-Trip, SEP-2322) instead — the server returns `InputRequiredResult` from the *original* request, and the client re-issues that same call with `inputResponses`. `ElicitationProvider`/`.with_elicitation()`/`.with_elicitation_provider()` are `#[cfg(feature = "protocol-2025-11-25")]`-gated and don't exist on a default 2026-07-28 build — see the MRTR sections below for the replacement, and the tail of this skill for the frozen 2025-11-25 mechanism.
+
+Elicitation lets the server request structured input from the user/client. Schemas are restricted to **primitive types only** (no nesting).
 
 ## When to Use Elicitation
 
@@ -47,7 +49,7 @@ MCP elicitation schemas are restricted to flat objects with primitive fields. No
 The builder constructs `ElicitCreateRequest` objects with validated schemas.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_builders::ElicitationBuilder;
 use turul_mcp_protocol::elicitation::StringFormat;
 
@@ -84,17 +86,17 @@ let request = ElicitationBuilder::new("Please provide your contact details")
 | `.enum_field_with_names(name, desc, values, display_names)` | Enum with display labels |
 | `.require_field(name)` / `.require_fields(names)` | Mark fields as required |
 | `.meta_value(key, value)` | Add metadata key-value pair |
-| `.build()` | Build `ElicitCreateRequest` |
-| `.build_dynamic()` | Build `DynamicElicitation` (with validation traits) |
+| `.build()` | Build `ElicitCreateRequest` — **2025-11-25 only** (`#[cfg(feature = "protocol-2025-11-25")]`); doesn't exist on 2026-07-28 |
+| `.build_dynamic()` | Build `DynamicElicitation` (with validation traits) — works on both lanes; use `.message()` / `.requested_schema()` (from `HasElicitationMetadata`/`HasElicitationSchema`) to feed a 2026-07-28 `ElicitRequest::new_form()` — see [MRTR](#mrtr-multi-round-trip-2026-07-28) below |
 
 **See:** `references/elicitation-builder-reference.md` for the full API reference.
 
 ## Convenience Constructors
 
-One-liner shortcuts for common patterns:
+One-liner shortcuts for common patterns. **The `.build()` calls below are 2025-11-25 only** — on 2026-07-28, swap the trailing `.build()` for `.build_dynamic()` and feed `.message()`/`.requested_schema()` into `ElicitRequest::new_form()` (see [MRTR](#mrtr-multi-round-trip-2026-07-28)).
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_builders::ElicitationBuilder;
 
 // Simple text input (required)
@@ -133,7 +135,7 @@ let req = ElicitationBuilder::form("Complete your profile")
 `ElicitResult` has three actions: `Accept` (user provided input), `Decline` (user refused), `Cancel` (user cancelled).
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_protocol::elicitation::{ElicitResult, ElicitAction};
 
 fn handle_elicitation_result(result: ElicitResult) -> McpResult<String> {
@@ -170,108 +172,62 @@ let decline = ElicitResultBuilder::decline();
 let cancel = ElicitResultBuilder::cancel();
 ```
 
-## Server Setup
+## MRTR (Multi-Round-Trip, 2026-07-28)
 
-Enable elicitation on the server builder:
-
-```rust
-// turul-mcp-server v0.3
-use turul_mcp_server::McpServer;
-
-// Development/testing — uses MockElicitationProvider
-// Auto-accepts, declines if message contains "decline", cancels if "cancel"
-let server = McpServer::builder()
-    .name("my-server")
-    .with_elicitation()  // Mock provider
-    .tool(MyTool::default())
-    .build()?;
-
-// Production — custom provider for real UI
-let server = McpServer::builder()
-    .name("my-server")
-    .with_elicitation_provider(MyCustomProvider)
-    .tool(MyTool::default())
-    .build()?;
-```
-
-## Custom ElicitationProvider
-
-Implement the `ElicitationProvider` trait to present custom UI for elicitation requests.
+No server builder opt-in is needed — MRTR is core dispatcher behavior on `tools/call`, `resources/read`, and `prompts/get`. A tool that needs input returns `Err(McpError::InputRequired { .. })`; the dispatcher converts that into a successful `InputRequiredResult` for the client, after checking the client declared the matching capability in `_meta.clientCapabilities` (undeclared → `-32021 MissingRequiredClientCapability`).
 
 ```rust
-// turul-mcp-server v0.3
-use turul_mcp_server::handlers::ElicitationProvider;
-use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitResult};
+// turul-mcp-server v0.4 (feature = "protocol-2026-07-28")
+use turul_mcp_builders::ElicitationBuilder;
+use turul_mcp_protocol::input_required::{InputRequest, InputRequests, InputResponse};
+use turul_mcp_protocol::elicitation::{ElicitRequest, ElicitAction};
 use turul_mcp_protocol::McpError;
-use async_trait::async_trait;
-
-struct WebFormProvider {
-    base_url: String,
-}
-
-#[async_trait]
-impl ElicitationProvider for WebFormProvider {
-    async fn elicit(
-        &self,
-        request: &ElicitCreateRequest,
-    ) -> Result<ElicitResult, McpError> {
-        // Present the form via your UI mechanism
-        // Return the user's response as ElicitResult
-        let response = present_web_form(&self.base_url, request).await
-            .map_err(|e| McpError::tool_execution(e.to_string()))?;
-        Ok(response)
-    }
-}
-```
-
-**See:** `examples/custom-elicitation-provider.rs` for a complete example.
-
-## Multi-Step Workflows
-
-Chain elicitations by accumulating state between steps using session state.
-
-```rust
-// turul-mcp-server v0.3 — Pattern: multi-step elicitation
-// Step 1: Collect basic info → store in session → Step 2: Collect details
+use std::collections::HashMap;
 
 async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
-    let session = session.ok_or(McpError::tool_execution("Session required"))?;
+    let session = session.ok_or_else(|| McpError::tool_execution("Session required"))?;
 
-    // Check which step we're on
-    let step: u32 = session.get_typed_state("onboarding_step").await
-        .unwrap_or(1);
-
-    match step {
-        1 => {
-            // First elicitation: collect name + email
-            let request = ElicitationBuilder::form("Enter your basic information")
-                .string_field("name", "Full name")
-                .string_field_with_format("email", "Email", StringFormat::Email)
-                .require_fields(vec!["name".into(), "email".into()])
-                .build();
-
-            // ... send request, handle response, store in session
-            session.set_typed_state("onboarding_step", 2).await?;
-            Ok("Step 1 complete. Run again for step 2.".to_string())
-        }
-        2 => {
-            // Second elicitation: collect role + preferences
-            let request = ElicitationBuilder::form("Choose your preferences")
-                .enum_field("role", "Role", vec!["admin".into(), "user".into()])
-                .boolean_field_with_default("notifications", "Enable notifications", true)
-                .require_field("role")
-                .build();
-
-            // ... send request, handle response
-            session.set_typed_state("onboarding_step", 3).await?;
-            Ok("Onboarding complete!".to_string())
-        }
-        _ => Ok("Already completed onboarding.".to_string()),
+    // Retry leg: the client already answered — inputResponses is present.
+    if let Some(mut responses) = session.input_responses() {
+        let name = match responses.remove("contact_form") {
+            Some(InputResponse::Elicit(result)) if result.action == ElicitAction::Accept => {
+                result.content
+                    .and_then(|c| c.get("name").and_then(|v| v.as_str()).map(str::to_string))
+                    .unwrap_or_else(|| "unknown".to_string())
+            }
+            _ => return Ok("User declined or cancelled.".to_string()),
+        };
+        return Ok(format!("Hello, {name}!"));
     }
+
+    // First leg: build the schema (spec-agnostic), then wrap it in a 2026-07-28
+    // ElicitRequest — build_dynamic()/.message()/.requested_schema() work on
+    // both lanes; .build() (→ ElicitCreateRequest) does not.
+    let elicitation = ElicitationBuilder::new("Please provide your contact details")
+        .string_field("name", "Your full name")
+        .require_fields(vec!["name".into()])
+        .build_dynamic();
+
+    let request = ElicitRequest::new_form(
+        elicitation.message().to_string(),
+        elicitation.requested_schema().clone(),
+    );
+
+    let mut input_requests = HashMap::new();
+    input_requests.insert("contact_form".to_string(), InputRequest::Elicit(request));
+
+    Err(McpError::InputRequired {
+        input_requests: Some(InputRequests(input_requests)),
+        request_state: None, // Some(opaque_state) to carry your own state through the retry
+    })
 }
 ```
 
-**See:** `examples/multi-step-workflow.rs` for a complete example.
+**Reading `request_state` back**: `session.mrtr_request_state() -> Option<String>` on the retry leg — the client echoes it verbatim. Treat it as attacker-controlled (verify integrity, e.g. HMAC, before letting it influence authorization decisions) — it never touches server-side storage.
+
+**Multi-step forms**: chain by encoding a step marker into `request_state` rather than session state — each retry is a fresh request against a (possibly different) server instance; there is no cross-request session to accumulate state in the way 2025-11-25's session-state pattern did.
+
+**Sampling and roots too**: `InputRequest` is `Elicit(ElicitRequest) | CreateMessage(CreateMessageRequest) | ListRoots(ListRootsRequest)` — the same MRTR mechanism replaces server-initiated sampling and roots requests, not just elicitation. (`CreateMessage`/`ListRoots` are themselves deprecated per SEP-2577, but remain valid `InputRequest` variants during the 12-month migration window.)
 
 ## Validation
 
@@ -281,7 +237,7 @@ async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
 - **`process_content(content)`** — Validates + normalizes (enforces length constraints, range limits)
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 let elicitation = ElicitationBuilder::new("Create account")
     .string_field_with_length("username", "Username", Some(3), Some(20))
     .number_field_with_range("age", "Age", Some(18.0), Some(120.0))
@@ -301,13 +257,15 @@ assert!(result.is_err());  // "Field 'username' must be at least 3 characters lo
 
 1. **Nested schemas** — MCP spec restricts elicitation to primitive types only. No nested objects, arrays, or `$ref`. Use multiple sequential elicitations for complex data.
 
-2. **Forgetting `.with_elicitation()` on server builder** — Without it, elicitation requests have no provider and will fail at runtime. Add `.with_elicitation()` (dev) or `.with_elicitation_provider(custom)` (prod).
+2. **Reaching for `.with_elicitation()` / `ElicitationProvider` on 2026-07-28** — neither exists on a default build (`#[cfg(feature = "protocol-2025-11-25")]`-gated). MRTR needs no server-builder opt-in; a tool returning `McpError::InputRequired` is sufficient.
 
 3. **Reading `content` without checking `action`** — `content` is only `Some` when `action == Accept`. Always match on the action first.
 
 4. **Using raw protocol types instead of builder** — `ElicitationBuilder` handles schema construction, required fields, and format constraints. Don't construct `ElicitationSchema` manually unless you need trait-level control.
 
-5. **Not testing decline/cancel paths** — `MockElicitationProvider` can simulate all three actions. Test all paths: messages containing "decline" trigger `Decline`, "cancel" triggers `Cancel`, everything else triggers `Accept`.
+5. **Accumulating multi-step state in session state under 2026-07-28** — there is no cross-request session on the stateless core. Encode step state into MRTR's `request_state` instead (integrity-checked, since the client echoes it back verbatim).
+
+6. **Forgetting the capability-declaration check** — a client that didn't declare `elicitation` (or `sampling`/`roots` for those `InputRequest` variants) in `_meta.clientCapabilities` gets `-32021 MissingRequiredClientCapability`, not the elicitation prompt. This is dispatcher-enforced, not something you check manually.
 
 ## Beyond This Skill
 
@@ -320,3 +278,16 @@ assert!(result.is_err());  // "Field 'username' must be at least 3 characters lo
 **Creating the tool that uses elicitation?** → See the `tool-creation-patterns` skill for `#[mcp_tool]`, `#[derive(McpTool)]`, and `ToolBuilder`.
 
 **Builder API reference?** → See `references/elicitation-builder-reference.md` for the complete `ElicitationBuilder` and `ElicitResultBuilder` API.
+
+---
+
+## 2025-11-25 Synchronous Elicitation (frozen, `--no-default-features --features protocol-2025-11-25`)
+
+The pre-MRTR mechanism: the server holds the connection and sends a synchronous `elicitation/create` request; the client answers on the same connection.
+
+- Server opt-in: `.with_elicitation()` (mock provider — auto-accepts, declines if the message contains "decline", cancels if "cancel") or `.with_elicitation_provider(MyProvider)` (custom `ElicitationProvider` trait impl) on `McpServer::builder()`. Both are `#[cfg(feature = "protocol-2025-11-25")]`-gated.
+- `ElicitationProvider` trait: `async fn elicit(&self, request: &ElicitCreateRequest) -> Result<ElicitResult, McpError>` — present the form via your UI, return the response.
+- `ElicitationBuilder::build()` (also 2025-11-25-only) produces the `ElicitCreateRequest` this trait consumes.
+- Multi-step forms: accumulate state across steps via `session.get_typed_state()`/`set_typed_state()` — valid because a 2025-11-25 session persists across requests, unlike 2026-07-28's ephemeral per-request session.
+
+**See:** `examples/custom-elicitation-provider.rs` and `examples/multi-step-workflow.rs` for worked examples of this frozen mechanism.

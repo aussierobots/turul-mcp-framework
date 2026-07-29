@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Vec<T> output — ALWAYS wrap in a response struct
 //
 // Bare Vec<T> has schema issues with schemars 1.x:

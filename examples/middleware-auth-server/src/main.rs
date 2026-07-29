@@ -63,11 +63,6 @@ impl McpMiddleware for AuthMiddleware {
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip authentication for ping health checks only
-        if ctx.method() == "ping" {
-            tracing::debug!("Skipping auth for {} method", ctx.method());
-            return Ok(());
-        }
 
         // Extract X-API-Key from request metadata (HTTP headers are stored here)
         let api_key = ctx.metadata().get("x-api-key").and_then(|v| v.as_str());

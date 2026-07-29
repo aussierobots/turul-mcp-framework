@@ -17,6 +17,8 @@ description: >
 
 # Authorization Server Patterns — Demo / Reference
 
+**Spec lane: applies to both 2026-07-28 and 2025-11-25**, with two 2026-07-28-specific notes: DCR is now deprecated (12-month window) in favor of CIMD, and CIMD gains a changed `.well-known` suffix (SEP-2351) and stricter issuer binding (SEP-2352) — see the DCR and CIMD sections below.
+
 > **This skill teaches demo-grade patterns only.** The examples here are
 > useful for local development, demos, PoCs, and interoperability testing.
 > They are **not** production identity infrastructure. For production,
@@ -102,6 +104,8 @@ let clients = HashMap::from([(
 
 ### Dynamic Client Registration (DCR)
 
+> **Deprecated in MCP 2026-07-28** (12-month window). DCR (RFC 7591) remains functional but is no longer the recommended client-identification path — CIMD is the standards-preferred direction (see below). If you keep DCR, 2026-07-28 additionally expects registration requests to declare an OIDC `application_type` (SEP-837); this skill's example does not implement that yet. Don't present DCR as the recommended choice for new work.
+
 Clients register themselves at runtime via `POST /register` (RFC 7591):
 
 ```rust
@@ -114,13 +118,13 @@ Clients register themselves at runtime via `POST /register` (RFC 7591):
 
 ### Client Identification via Metadata Document (CIMD)
 
-CIMD inverts the model: instead of registering at the AS, clients publish their own metadata document at a well-known URL, and the AS fetches it during authorization. MCP 2025-11-25 specifies CIMD as a supported client identification mechanism alongside DCR.
+CIMD inverts the model: instead of registering at the AS, clients publish their own metadata document at a well-known URL, and the AS fetches it during authorization. MCP 2025-11-25 specifies CIMD as a supported client identification mechanism alongside DCR; 2026-07-28 keeps CIMD as the standards-preferred direction now that DCR is deprecated, and layers on two additions this skill's examples do not implement — a changed `.well-known` discovery suffix convention (SEP-2351) and stricter issuer binding for the fetched metadata (SEP-2352). Re-verify both against the AS metadata discovery flow before treating a CIMD implementation here as 2026-07-28-complete.
 
 ```
 Client models (simplest → most dynamic):
 ├─ Pre-registered ── hardcoded or config-loaded (this skill)
-├─ DCR ──────────── client self-registers at /register endpoint (this skill, optional)
-└─ CIMD ─────────── client publishes metadata, AS fetches it (this skill, optional)
+├─ DCR ──────────── client self-registers at /register endpoint (this skill, optional — deprecated in 2026-07-28)
+└─ CIMD ─────────── client publishes metadata, AS fetches it (this skill, optional — standards-preferred for 2026-07-28)
 ```
 
 **When to use:** production deployments where clients manage their own identity, or environments where a central registration endpoint is undesirable. CIMD and DCR can coexist — an AS can support both with a resolution precedence (e.g., pre-registered → CIMD → DCR fallback).
@@ -378,7 +382,7 @@ The RS validates tokens using JWKS from the demo AS. The audience in issued toke
 
 5. **Skipping resource/audience validation at /authorize and /token** — The `resource` parameter tells the AS which RS the token is for. The AS must validate this against its known resources and set the `aud` claim accordingly. Without this, tokens issued by your AS could be valid for unintended resource servers. This is especially important for MCP interop where multiple RS instances may share an AS.
 
-6. **Assuming DCR is the only client model** — Pre-registered clients are simpler and sufficient for most demos. DCR adds complexity. CIMD is the emerging standards-preferred direction. Choose the model that fits your scenario.
+6. **Reaching for DCR as the default on new 2026-07-28 work** — Pre-registered clients are simpler and sufficient for most demos. DCR is deprecated (12-month window) as of 2026-07-28; CIMD is the standards-preferred direction going forward. Choose the model that fits your scenario, but don't present DCR as the recommended path for new builds.
 
 7. **Generating signing keys at startup without documenting the consequence** — If you generate a new RSA key pair on every startup, all previously issued tokens become invalid. Either use a static demo key or clearly document this behavior.
 

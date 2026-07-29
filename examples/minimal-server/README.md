@@ -72,7 +72,7 @@ curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
   -H "Mcp-Method: tools/call" \
-  -H "Mcp-Name: test-client" \
+  -H "Mcp-Name: echo" \
   -d '{
     "jsonrpc": "2.0",
     "id": 3,

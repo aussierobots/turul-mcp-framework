@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Shared Application State — OnceLock pattern for database access
 //
 // This is the framework-idiomatic pattern for tools that need shared

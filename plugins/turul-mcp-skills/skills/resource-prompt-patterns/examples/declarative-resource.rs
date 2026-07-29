@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Resource Pattern 3: Declarative Macro resource!{}
 // Generates a full struct + all traits + McpResource impl from a closure.
 // Good for inline one-off resources.

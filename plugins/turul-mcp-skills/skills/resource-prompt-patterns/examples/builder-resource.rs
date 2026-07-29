@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Resource Pattern 4: ResourceBuilder
 // For resources whose definitions are loaded at runtime (config, DB, etc.).
 

@@ -1,4 +1,4 @@
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 // Custom configuration: client info, timeouts, retries, explicit transport.
 
 use serde_json::json;

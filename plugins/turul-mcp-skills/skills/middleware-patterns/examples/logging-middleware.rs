@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Logging/timing middleware: request duration tracking with tracing
 
 use async_trait::async_trait;

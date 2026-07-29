@@ -16,6 +16,8 @@ description: >
 
 # Tool Creation Patterns — Turul MCP Framework
 
+**Spec lane: applies to both 2026-07-28 and 2025-11-25.** Macro/builder authoring mechanics (function macro, derive macro, `ToolBuilder`, annotations, icons, dynamic tool activation) don't touch `initialize`, sessions, or SSE, so they're unchanged across the spec revision. The one cross-reference to note: the [Task Support](#task-support-per-tool) subsection below hands off to `task-patterns`, which now documents the 2026-07-28 Tasks extension (SEP-2663) as primary — the `task_support` attribute shown here still works, but only wires up under the frozen 2025-11-25 in-core task system.
+
 The framework provides three approaches to creating MCP tools, organized by complexity. Choose the simplest one that meets your requirements.
 
 ## Decision Flowchart
@@ -35,7 +37,7 @@ Need a tool?
 **Best for:** Most tools. Simple, stateless functions with typed parameters.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpResult, McpServer};
 
@@ -72,7 +74,7 @@ let server = McpServer::builder()
 **Best for:** Tools that need session access, complex state, or custom output types.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, McpServer, SessionContext};
 
@@ -117,7 +119,7 @@ let server = McpServer::builder()
 **Best for:** Tools whose definitions are unknown at compile time (loaded from config files, databases, or plugin systems). Do NOT use Builder just because a tool needs a database connection — use `OnceLock` with macros instead.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use serde_json::json;
 use turul_mcp_server::{McpServer, ToolBuilder};
 
@@ -156,7 +158,7 @@ let server = McpServer::builder()
 **Most tools need shared dependencies** — database connections, API clients, configuration. Use `OnceLock<T>` for this. Do NOT use ToolBuilder just because a tool needs a database pool.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use std::sync::OnceLock;
 use std::sync::Arc;
 use sea_orm::DatabaseConnection;
@@ -325,10 +327,10 @@ let tool = ToolBuilder::new("slow_tool")
 
 ## Server Identity (Icons)
 
-MCP clients (e.g., Claude Desktop) display server icons from `serverInfo.icons` in the initialize response. Use `.icons()` on the builder:
+MCP clients (e.g., Claude Desktop) display server icons from `serverInfo.icons`. Use `.icons()` on the builder — the wire location differs by spec lane: on 2025-11-25 it's a top-level field of the `initialize` response; on 2026-07-28 there is no `initialize` response, so it rides under `_meta["io.modelcontextprotocol/serverInfo"]` on `server/discover` results instead.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_server::prelude::*;
 
 // URL icon (requires hosting)
@@ -353,7 +355,7 @@ Works on both `McpServer::builder()` and `LambdaMcpServer::builder()`. SVG data 
 Tools registered at build time can be activated/deactivated at runtime using `ToolChangeMode::Dynamic`. Connected clients receive `notifications/tools/list_changed` automatically.
 
 ```rust
-// turul-mcp-server v0.3 (requires `dynamic-tools` feature)
+// turul-mcp-server v0.4 (requires `dynamic-tools` feature)
 use turul_mcp_server::{McpServer, ToolChangeMode};
 
 let server = McpServer::builder()
@@ -386,7 +388,7 @@ registry.activate_tool("multiply").await?;     // Broadcasts notifications/tools
 
 **Middleware (auth, rate limiting, logging)?** → See the `middleware-patterns` skill for `McpMiddleware`, `RequestContext`, `SessionInjection`, and `MiddlewareError`.
 
-**Error handling (McpError variants, decision tree)?** → See the `error-handling-patterns` skill for all 22 variants, error codes, and `From` conversions.
+**Error handling (McpError variants, decision tree)?** → See the `error-handling-patterns` skill for all McpError variants, error codes, and `From` conversions.
 
 **Task support (long-running tools)?** → See the `task-patterns` skill for `TaskRuntime`, `TaskStorage`, state machine, and `task_support` attribute.
 

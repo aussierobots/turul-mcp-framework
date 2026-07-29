@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Simple API key authentication middleware
 //
 // Cargo.toml dependencies:

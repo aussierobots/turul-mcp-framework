@@ -82,7 +82,9 @@ let builder = LambdaMcpServerBuilder::default();
 |---|---|---|
 | `.middleware()` | `fn middleware(self, mw: Arc<dyn McpMiddleware>) -> Self` | Add middleware. FIFO before, LIFO after. |
 
-### Task Support
+### Task Support (2025-11-25 only — `#[cfg(feature = "protocol-2025-11-25")]`)
+
+These methods don't exist on a default 2026-07-28 build. `LambdaMcpServerBuilder` has no equivalent of the HTTP server's `.with_ext_tasks()`/`.ext_task_tool()` for the 2026-07-28 Tasks extension yet — see the `task-patterns` skill.
 
 | Method | Signature | Notes |
 |---|---|---|

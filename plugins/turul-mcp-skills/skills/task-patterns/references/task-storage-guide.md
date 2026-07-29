@@ -1,5 +1,7 @@
 # Task Storage Guide
 
+**Spec lane: 2025-11-25 in-core tasks only** (`--no-default-features --features protocol-2025-11-25`). The `turul-mcp-task-storage` crate and its SQLite/Postgres/DynamoDB backends back the frozen in-core task system, not the 2026-07-28 Tasks extension (which ships only `InMemoryTaskStore` today — see the parent `SKILL.md`).
+
 Reference for the `TaskStorage` trait, `TaskRecord`, `TaskOutcome`, and backend configurations.
 
 ## Import

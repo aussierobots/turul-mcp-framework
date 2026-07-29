@@ -1,6 +1,6 @@
 # Storage Backend Matrix
 
-Decision matrix for session and task storage backends in the Turul MCP Framework. All backends share the same builder API (`.with_session_storage()` / `.with_task_storage()`); only the config struct and feature flags differ.
+Decision matrix for session and task storage backends in the Turul MCP Framework. Backends share a builder API, but the method name differs by target: `turul-mcp-server` uses `.with_session_storage()` / `.with_task_storage()`, while `turul-mcp-aws-lambda`'s builder uses `.storage()`. Only the config struct and feature flags differ beyond that.
 
 All backends pass the same parity test suite ensuring session isolation, TTL enforcement, and state machine correctness. See: [CLAUDE.md — Session Management](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#session-management)
 

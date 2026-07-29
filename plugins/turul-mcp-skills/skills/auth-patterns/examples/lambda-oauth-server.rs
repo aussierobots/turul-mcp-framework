@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Lambda MCP server with OAuth 2.1 RS
 //
 // Cargo.toml dependencies:

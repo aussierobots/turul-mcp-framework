@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Production-ready Lambda MCP server with auth middleware, env CORS, and logging
 //
 // Cargo.toml dependencies:
@@ -38,11 +38,6 @@ impl McpMiddleware for LambdaAuthMiddleware {
         _session: Option<&dyn SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip auth for initialize and ping
-        if ctx.method() == "initialize" || ctx.method() == "ping" {
-            return Ok(());
-        }
-
         // API Gateway authorizer's custom context fields land as x-authorizer-*
         // headers. Use whatever identity field your authorizer Lambda returns
         // (e.g. user_id, sub, account_id). `principalId` is NOT forwarded — it

@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Level 1: Function Macro (#[mcp_tool]) — simplest tool pattern
 //
 // Source: examples/calculator-add-function-server/src/main.rs

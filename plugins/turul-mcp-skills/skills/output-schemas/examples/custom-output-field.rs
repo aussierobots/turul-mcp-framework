@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Custom output_field — control the JSON key name in structuredContent
 //
 // By default, tool results are wrapped in {"result": <value>}.

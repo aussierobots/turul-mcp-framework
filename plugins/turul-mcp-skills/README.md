@@ -2,23 +2,24 @@
 
 Skills and tools for building MCP servers and clients with the [Turul MCP Framework](https://github.com/aussierobots/turul-mcp-framework) (Rust).
 
-## What's Included (v0.6.3)
+## What's Included (v0.7.0)
+
+Skills target **MCP 2026-07-28** (current default) unless noted; several also document the frozen 2025-11-25 opt-in lane (`--no-default-features --features protocol-2025-11-25`) where the two diverge.
 
 | Component | Type | Purpose |
 |---|---|---|
 | `tool-creation-patterns` | Skill | Decision tree: function macro vs derive vs builder |
 | `resource-prompt-patterns` | Skill | Resource creation (4 patterns) and prompt creation (3 patterns) with decision flowcharts |
-| `output-schemas` | Skill | The `output = Type` requirement, schemars, Vec\<T\>, structuredContent |
-| `mcp-client-patterns` | Skill | Transport selection, connection lifecycle, tool invocation, task workflows, error handling |
-| `middleware-patterns` | Skill | McpMiddleware trait, auth/rate-limit/logging/Lambda middleware, SessionInjection, error handling |
-| `error-handling-patterns` | Skill | McpError decision tree, 22 variants, error codes, From conversions, common mistakes |
-| `task-patterns` | Skill | Task state machine, TaskRuntime, TaskStorage backends, task\_support attribute, cancellation |
-| `lambda-deployment` | Skill | LambdaMcpServerBuilder, cold-start caching, streaming vs snapshot, DynamoDB, CORS, middleware, tasks |
-| `testing-patterns` | Skill | Unit tests, E2E tests, compliance tests, McpTestClient, TestServerManager, doctest strategy |
-| `elicitation-workflows` | Skill | ElicitationBuilder, schema primitives, multi-step workflows, ElicitationProvider, validation |
-| `session-storage-backends` | Skill | SessionStorage trait, backend decision tree, event management, SSE resumability, error types |
+| `output-schemas` | Skill | The `output = Type` requirement, schemars, Vec\<T\>, structuredContent, JSON Schema 2020-12 |
+| `mcp-client-patterns` | Skill | Bilingual client negotiation (`server/discover` vs `initialize` fallback), transport selection, tool invocation, error handling |
+| `middleware-patterns` | Skill | McpMiddleware trait, auth/rate-limit/logging/Lambda middleware, SessionInjection, per-request ephemeral sessions |
+| `error-handling-patterns` | Skill | McpError decision tree, error codes (renumbered for 2026-07-28), From conversions, common mistakes |
+| `task-patterns` | Skill | 2026-07-28 Tasks extension (SEP-2663: TaskStore, ext_task_tool, poll-based lifecycle) + frozen 2025-11-25 in-core tasks |
+| `lambda-deployment` | Skill | LambdaMcpServerBuilder, cold-start caching, streaming vs snapshot, DynamoDB, CORS, middleware |
+| `testing-patterns` | Skill | Unit tests (spec-agnostic), 2025-11-25 E2E harness, 2026-07-28 E2E via turul-mcp-client, compliance tests |
+| `elicitation-workflows` | Skill | MRTR (InputRequiredResult/inputResponses) + frozen 2025-11-25 synchronous ElicitationProvider |
 | `auth-patterns` | Skill | OAuth 2.1 RS, JWT validation, API key middleware, Lambda authorizer, RFC 9728 metadata |
-| `authorization-server-patterns` | Skill | Demo OAuth 2.1 AS: PKCE flow, JWKS, token issuance, DCR, MCP interop (demo-grade) |
+| `authorization-server-patterns` | Skill | Demo OAuth 2.1 AS: PKCE flow, JWKS, token issuance, DCR (deprecated 2026-07-28), CIMD, MCP interop (demo-grade) |
 | `/new-mcp-server` | Command | Scaffold a Turul MCP server project with storage backend selection and dual validation |
 | `/validate-mcp-server` | Command | Validate an existing Turul MCP server for correctness, compliance, and best practices |
 | `server-patterns-index` | Reference | Pointer index to CLAUDE.md/AGENTS.md authoritative sections |
@@ -49,34 +50,33 @@ Triggers on: "middleware", "McpMiddleware", "before_dispatch", "after_dispatch",
 
 Guides you through creating HTTP middleware for cross-cutting concerns:
 - **Auth middleware** — API key validation, session injection, Lambda authorizer extraction
-- **Rate limiting** — Per-session counters with configurable windows and `retry_after`
+- **Rate limiting** — Per-caller counters keyed on API key/bearer subject (not `session_id`, which is a fresh throwaway per request on 2026-07-28)
 - **Logging/timing** — Request duration tracking with `before_dispatch`/`after_dispatch`
-- **Error handling** — 6 `MiddlewareError` variants with JSON-RPC code mapping
-- Execution order, session injection lifecycle, common mistakes
+- **Error handling** — `MiddlewareError` variants with JSON-RPC code mapping
+- Execution order, ephemeral-session semantics on 2026-07-28, common mistakes
 
 ### error-handling-patterns
 
 Triggers on: "error handling", "McpError", "McpResult", "tool_execution", "missing_param", "invalid_param_type", "param_out_of_range", "JsonRpcError", "error code", "error conversion"
 
-Covers the 3-layer error architecture and all 22 `McpError` variants:
+Covers the 3-layer error architecture and `McpError` variants:
 - **Decision tree** — Choose the right error variant based on what went wrong
-- **Parameter errors** — `missing_param`, `invalid_param_type`, `param_out_of_range` (all -32602)
-- **Execution errors** — `tool_execution` (-32010), `resource_execution` (-32012), `prompt_execution` (-32013)
+- **Parameter and not-found errors** — all map to the JSON-RPC standard `-32602` on 2026-07-28 (not-found errors moved off their own codes — breaking change from 2025-11-25's `-32002`)
+- **Execution/validation/config codes** — renumbered into `-32000..-32019` to leave the spec's `-32020..-32099` reserved range alone
+- **Spec-assigned codes (2026-07-28)** — `MissingRequiredClientCapability` (-32021), `UnsupportedProtocolVersion` (-32022)
 - **String conversion** — `From<String>` and `From<&str>` → `ToolExecutionError` (with warnings)
 - **`?` operator** — Which types have `From` impls, which need `.map_err()`
-- Full JSON-RPC error code table, common mistakes
+- Full JSON-RPC error code table (verified against `turul-mcp-protocol-2026-07-28`), common mistakes
 
 ### task-patterns
 
-Triggers on: "task support", "TaskRuntime", "TaskStorage", "task_support attribute", "long-running tool", "CancellationHandle", "tasks/get", "tasks/list", "tasks/cancel", "tasks/result", "InMemoryTaskStorage"
+Triggers on: "task support", "TaskStore", "InMemoryTaskStore", "with_ext_tasks", "ext_task_tool", "Tasks extension", "SEP-2663", "tasks/get", "tasks/update", "tasks/cancel", "long-running tool"
 
-Covers MCP task support for long-running tools:
-- **State machine** — Working/InputRequired/Completed/Failed/Cancelled with valid transitions
-- **Server setup** — `.with_task_storage()`, `.with_task_runtime()`, `TaskRuntime::in_memory()`
-- **Tool declaration** — `task_support = "optional"/"required"/"forbidden"` on all three macro patterns
-- **Storage backends** — InMemory, SQLite, PostgreSQL, DynamoDB (brief table, hand-off to storage-backend-matrix)
-- **Cancellation** — How TokioTaskExecutor handles cancellation transparently
-- **Capability truthfulness** — Server strips `execution` when no runtime; `required` without runtime errors at build time
+Covers the 2026-07-28 Tasks extension (SEP-2663) for long-running tools, plus the frozen 2025-11-25 in-core system:
+- **2026-07-28 lifecycle** — poll-based (`tasks/get`), no `tasks/list`, no blocking `tasks/result`; `tasks/update` delivers input responses
+- **Server setup** — `.with_ext_tasks(store)` + `.ext_task_tool()` / `.ext_task_tool_required()` (progressive enhancement, opt-in `ext-tasks` feature)
+- **TaskStore trait** — `InMemoryTaskStore` is the only backend shipped today (no SQLite/Postgres/DynamoDB yet)
+- **2025-11-25 in-core tasks (frozen)** — `task_support` attribute, `TaskRuntime`, `.with_task_storage()`, `tasks/list`/`tasks/result`, state machine, cancellation, SQLite/Postgres/DynamoDB backends
 
 ### lambda-deployment
 
@@ -85,10 +85,11 @@ Triggers on: "lambda", "LambdaMcpServerBuilder", "Lambda deployment", "lambda MC
 Guides you through deploying MCP servers on AWS Lambda:
 - **Builder** — `LambdaMcpServerBuilder` with all builder methods, feature flags, convenience presets
 - **Cold-start caching** — `OnceCell<LambdaMcpHandler>` pattern for handler reuse
-- **Streaming vs snapshot** — 4 handler/runtime combinations, when to use each
-- **DynamoDB storage** — Session and task persistence across Lambda invocations
+- **Streaming vs snapshot** — 4 handler/runtime combinations; GET /mcp is unconditionally 405 on 2026-07-28 regardless of mode (the standalone GET SSE listener is removed)
+- **Session storage** — ephemeral per-request on 2026-07-28 (DynamoDB not needed for session continuity); real cross-invocation sessions only on a 2025-11-25 build
+- **Task support** — no Tasks-extension wiring yet for 2026-07-28; `.with_task_storage()`/DynamoDB task persistence is 2025-11-25-only
 - **CORS** — `cors_allow_all_origins()`, `cors_from_env()`, `cors_allow_origins()`
-- **Middleware, tasks, logging** — Same traits as HTTP servers, CloudWatch-optimized
+- **Middleware, logging** — Same traits as HTTP servers, CloudWatch-optimized
 - Common mistakes, environment variables, API Gateway authorizer integration
 
 ### resource-prompt-patterns
@@ -124,12 +125,11 @@ Covers the most common gotchas with MCP tool output:
 
 Triggers on: "MCP client", "McpClient", "McpClientBuilder", "connect to MCP server", "HttpTransport", "SseTransport", "client session", "ToolCallResponse"
 
-Covers building MCP client applications with `turul-mcp-client`:
-- Transport selection (auto-detect, HttpTransport, SseTransport)
-- Connection lifecycle (connect, disconnect, session states)
+Covers building MCP client applications with `turul-mcp-client` (bilingual by default):
+- Transport selection (auto-detect, HttpTransport, SseTransport) and per-connection wire-spec negotiation (`server/discover` probe, `initialize` fallback)
+- Connection lifecycle (connect, disconnect, connection states) — no server-side session on a negotiated 2026-07-28 connection
 - Tool/resource/prompt invocation from the client side
-- Task workflows (call_tool_with_task, polling, all TaskStatus variants)
-- Error handling (McpClientError variants, retryability, backoff)
+- Error handling (McpClientError variants, retryability, backoff; `is_resource_not_found()` accepts both -32602 and legacy -32002)
 - Configuration (ClientConfig, timeouts, retries, connection settings)
 
 ### testing-patterns
@@ -137,10 +137,11 @@ Covers building MCP client applications with `turul-mcp-client`:
 Triggers on: "testing", "test patterns", "write tests", "unit test", "e2e test", "integration test", "McpTestClient", "TestServerManager", "compliance test", "test server", "test fixture", "doctest", "cargo test"
 
 Covers three testing layers for MCP servers:
-- **Unit testing** — `tool.call()` with framework-native API, `#[tokio::test]`
-- **E2E testing** — `TestServerManager::start()` + `McpTestClient` for full HTTP round-trips
+- **Unit testing** — `tool.call()` with framework-native API, `#[tokio::test]` (spec-agnostic)
+- **2025-11-25 E2E testing** — `TestServerManager::start()` + `McpTestClient` for full HTTP round-trips (session handshake-based)
+- **2026-07-28 E2E testing** — drive `turul-mcp-client` (bilingual) against a `TestServerManager`-started server; no equivalent of `McpTestClient` exists yet for the stateless core
 - **Compliance testing** — 4 compliance modules (JSON-RPC format, capabilities, behavior, tools)
-- **SSE testing** — `call_tool_with_sse()`, event parsing, `Last-Event-ID` replay
+- **SSE testing (2025-11-25 only)** — `call_tool_with_sse()`, event parsing, `Last-Event-ID` replay; the GET SSE listener this targets is unconditionally 405 on 2026-07-28
 - Test organization (consolidated binaries, `autotests = false`), doctest strategy, common mistakes
 
 ### elicitation-workflows
@@ -148,23 +149,11 @@ Covers three testing layers for MCP servers:
 Triggers on: "elicitation", "ElicitationBuilder", "elicit", "ElicitResult", "ElicitAction", "ElicitationProvider", "PrimitiveSchemaDefinition", "ElicitationSchema", "with_elicitation"
 
 Covers MCP elicitation for collecting structured user input:
-- **Schema primitives** — StringSchema, NumberSchema, BooleanSchema, EnumSchema (no nesting)
+- **Schema primitives** — StringSchema, NumberSchema, BooleanSchema, EnumSchema (no nesting) — unchanged across spec lanes
 - **ElicitationBuilder** — Field methods, convenience constructors (`text_input`, `confirm`, `choice`)
-- **Response handling** — `ElicitAction::Accept`/`Decline`/`Cancel`, `ElicitResultBuilder`
-- **Server setup** — `.with_elicitation()` (mock) vs `.with_elicitation_provider(custom)`
-- **Multi-step workflows** — Sequential elicitations with session state accumulation
+- **MRTR (2026-07-28)** — `McpError::InputRequired`, `session.input_responses()`/`mrtr_request_state()`, `ElicitRequest::new_form()` — no server builder opt-in needed
+- **Synchronous elicitation (frozen 2025-11-25)** — `.with_elicitation()` (mock) vs `.with_elicitation_provider(custom)`, session-state multi-step workflows
 - Validation via `DynamicElicitation`, common mistakes
-
-### session-storage-backends
-
-Triggers on: "session storage", "SessionStorage trait", "SqliteSessionStorage", "PostgresSessionStorage", "DynamoDbSessionStorage", "InMemorySessionStorage", "session backend", "session persistence", "SSE reconnection storage"
-
-Covers the SessionStorage trait and backend architecture:
-- **Backend decision tree** — InMemory → SQLite → PostgreSQL → DynamoDB based on persistence/scaling needs
-- **SessionStorage trait** — Session lifecycle, state management, event management for SSE resumability
-- **Event management** — `store_event()`, `get_events_after()`, `Last-Event-ID` replay
-- **Backend-specific gotchas** — DynamoDB 5-min TTL, SQLite `:memory:` pool isolation, PostgreSQL optimistic locking
-- Error types (`SessionStorageError`), background cleanup patterns, common mistakes
 
 ### auth-patterns
 
@@ -187,7 +176,7 @@ Triggers on: "authorization server", "OAuth AS", "token issuer", "PKCE", "author
 Demo-grade patterns for building a standalone OAuth 2.1 Authorization Server:
 - **AS vs RS role separation** — what each side does, how they connect
 - **Required endpoints** — AS metadata, JWKS, /authorize, /token
-- **Client models** — pre-registered, DCR, CIMD (MCP 2025-11-25 supported)
+- **Client models** — pre-registered, DCR (deprecated 2026-07-28, 12-month window), CIMD (standards-preferred direction for 2026-07-28, adds `.well-known` suffix + issuer-binding requirements)
 - **PKCE flow** — authorization code + S256 challenge/verifier
 - **Token issuance** — JWT access tokens, opaque refresh tokens, audience/scope validation
 - **Signing key management** — static demo key vs ephemeral (restart consequences)
@@ -216,9 +205,15 @@ Validates an existing Turul MCP server project:
 
 ## Version Compatibility
 
-This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
+This plugin targets **turul-mcp-server v0.4**, current default spec **MCP 2026-07-28**. The frozen **MCP 2025-11-25** lane remains available as an opt-in build (`--no-default-features --features protocol-2025-11-25`) and is documented where skills diverge between the two.
 
 ## Changelog
+
+### v0.7.0
+- **Deleted**: `session-storage-backends` skill. Its entire subject — session persistence and SSE-reconnection resumability keyed by `Mcp-Session-Id`/`Last-Event-ID` — is removed by 2026-07-28's stateless core.
+- **Rewritten for 2026-07-28**: `output-schemas` (JSON Schema 2020-12; Vec\<T\> wrapper-struct requirement re-verified as still necessary — the framework's derive/function-macro output-schema path is still object-root-constrained even though the wire-level `outputSchema` is now unrestricted), `mcp-client-patterns` (bilingual negotiation via `server/discover`, no `initialize` on 2026-07-28), `middleware-patterns` (dropped the `initialize`/`ping` skip — both removed methods; documented that `session` is a fresh per-request ephemeral session, not `None`, on 2026-07-28), `error-handling-patterns` (full error-code table renumbering verified against `turul-mcp-protocol-2026-07-28`), `task-patterns` (2026-07-28 Tasks extension, SEP-2663, is a different API from the frozen 2025-11-25 in-core system — both documented), `lambda-deployment` (GET /mcp unconditionally 405 on 2026-07-28; ephemeral sessions; no Tasks-extension wiring yet), `elicitation-workflows` (MRTR replaces synchronous `ElicitationProvider`), `auth-patterns` (added a "Not Yet Implemented" section for 2026-07-28 auth-hardening SEPs), `authorization-server-patterns` (DCR deprecation banner, CIMD 2026-07-28 additions).
+- **Lane-scoped**: every surviving `SKILL.md` now states its spec lane up front. `tool-creation-patterns` and `resource-prompt-patterns` kept as-is (pure compile-time authoring mechanics, verified to not reference `initialize`/session/SSE/tasks/elicitation).
+- **Version bump**: `turul-mcp-server v0.3` → `v0.4` and `turul-mcp-client v0.3` → `v0.4` across SKILL.md, examples, and references.
 
 ### v0.6.3
 - **Fixed**: `task-patterns` dead constructors — `SqliteTaskStorage::new("…")`, `PostgresTaskStorage::new("…")`, `DynamoDbTaskStorage::new("…")` did not compile against the current API. All three now use `with_config(<BackendConfig>{...})` form, matching `lambda-deployment`. Also corrected the stale "auto-creates tables on connect" note in `references/task-storage-guide.md` (tables are migrated only when `verify_tables = true`).

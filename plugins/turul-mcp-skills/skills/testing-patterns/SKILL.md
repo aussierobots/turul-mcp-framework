@@ -15,7 +15,9 @@ description: >
 
 # Testing Patterns — Turul MCP Framework
 
-The framework uses three testing layers: **unit tests** for individual components, **E2E tests** for full HTTP round-trips via `McpTestClient` + `TestServerManager`, and **compliance tests** for MCP specification conformance. All share common utilities from the `mcp-e2e-shared` crate.
+**Spec lane: Unit testing is spec-agnostic and applies to both lanes. The E2E harness (`tests/shared`'s `McpTestClient` + `TestServerManager`) is 2025-11-25-only** — verified by exhaustive grep, there is zero `2026-07-28`/`2026_07_28` reference anywhere under `tests/`, and `McpTestClient::initialize()` hardcodes the `initialize`/`Mcp-Session-Id` handshake this branch's stateless core removed. For 2026-07-28 E2E coverage today, drive a `TestServerManager`-started server with the production `turul_mcp_client::McpClientBuilder` (bilingual, negotiates via `server/discover`) instead — see [2026-07-28 E2E Testing](#2026-07-28-e2e-testing) below. The compliance suite (`crates/turul-mcp-protocol-2026-07-28/src/compliance/`) is separate again — schema/fixture conformance, not a live-server E2E harness.
+
+The framework uses three testing layers: **unit tests** for individual components, **E2E tests** for full HTTP round-trips, and **compliance tests** for MCP specification conformance.
 
 ## When to Write Tests
 
@@ -34,7 +36,7 @@ What are you testing?
 Unit tests exercise tools, resources, and prompts directly — no HTTP server needed.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use serde_json::json;
 use turul_mcp_server::prelude::*;
 
@@ -70,7 +72,7 @@ async fn test_double_tool() {
 
 ### Asserting Tool Annotations in `tools/list`
 
-Tool annotations (MCP 2025-11-25) serialize with camelCase keys and are omitted when unset. Test both presence and absence to prevent wire-shape regressions:
+Tool annotations serialize with camelCase keys and are omitted when unset — unchanged between 2025-11-25 and 2026-07-28. Test both presence and absence to prevent wire-shape regressions:
 
 ```rust
 use turul_mcp_server::prelude::*;
@@ -111,9 +113,9 @@ async fn test_annotations_wire_shape() {
 
 > **Note:** `ToolAnnotations` uses `skip_serializing_if = "Option::is_none"` on all fields, so unset hints don't appear in the JSON at all. This is distinct from resource/prompt `Annotations` (which have `audience`/`priority` fields).
 
-## E2E Testing Architecture
+## E2E Testing Architecture (2025-11-25 — `tests/shared`)
 
-E2E tests start a real HTTP server and send requests via `McpTestClient`.
+E2E tests start a real HTTP server and send requests via `McpTestClient`. This entire harness targets 2025-11-25's stateful handshake.
 
 ```
 TestServerManager::start("tools-test-server")
@@ -129,13 +131,13 @@ McpTestClient::new(port)
     → list_tools() / call_tool()      # POST with session header
 ```
 
-The `TestServerManager` auto-kills the server process on `Drop`.
+`TestServerManager` itself (port allocation, binary build, process spawn/kill-on-`Drop`) is spec-agnostic and reusable for a 2026-07-28 E2E test — swap only the client. See [2026-07-28 E2E Testing](#2026-07-28-e2e-testing) below.
 
-**See:** `examples/e2e-test-server.rs` for a complete example.
+**See:** `examples/e2e-test-server.rs` for a complete 2025-11-25 example.
 
-## McpTestClient API
+## McpTestClient API (2025-11-25 — `tests/shared`)
 
-The test client manages session state (session ID capture, header injection) automatically.
+The test client manages session state (session ID capture, header injection) automatically. This API assumes the 2025-11-25 handshake throughout.
 
 | Method | Purpose |
 |---|---|
@@ -147,12 +149,32 @@ The test client manages session state (session ID capture, header injection) aut
 | `call_tool_with_sse(name, args)` | Invoke a tool with `Accept: text/event-stream` for progress |
 | `read_resource(uri)` | Read a resource by URI |
 | `get_prompt(name, args)` | Get a prompt with optional arguments |
-| `connect_sse()` | Open a GET SSE stream for real-time notifications |
+| `connect_sse()` | Open a GET SSE stream for real-time notifications — the endpoint this targets is unconditionally 405 on 2026-07-28 |
 | `make_request(method, params, id)` | Generic JSON-RPC request |
 | `send_notification(notification)` | Send a notification (no response expected) |
 | `session_id()` | Get the current session ID |
 
 **See:** `references/test-utilities-reference.md` for the full API with signatures and return types.
+
+## 2026-07-28 E2E Testing
+
+No equivalent of `McpTestClient` exists for the stateless core yet. Use the production `turul-mcp-client` crate (bilingual by default) against a `TestServerManager`-started server — it correctly negotiates 2026-07-28 via `server/discover` rather than assuming `initialize`:
+
+```rust
+// turul-mcp-server v0.4 / turul-mcp-client v0.4
+use turul_mcp_client::McpClientBuilder;
+
+let server = TestServerManager::start("tools-test-server").await?; // spec-agnostic
+let client = McpClientBuilder::new()
+    .with_url(&format!("http://127.0.0.1:{}/mcp", server.port()))?
+    .build();
+
+client.connect().await?; // negotiates 2026-07-28; no initialize, no Mcp-Session-Id
+let tools = client.list_tools().await?;
+let result = client.call_tool("add", serde_json::json!({"a": 1, "b": 2})).await?;
+```
+
+See the `mcp-client-patterns` skill for the full client API and negotiation details.
 
 ## Compliance Test Suite
 
@@ -186,10 +208,12 @@ cargo test --test compliance test_runtime_capability_truthfulness
 
 ## SSE Testing
 
+**2025-11-25 only** — this section (including `connect_sse()` reconnection/`Last-Event-ID` replay testing) targets the standalone GET SSE listener, which is removed entirely in 2026-07-28 (GET /mcp is unconditionally 405). On 2026-07-28, real-time SSE lives on the POST response of the originating request — test it by asserting on the streamed frames of a single `call_tool`/streaming request, not a separate GET connection.
+
 Test SSE streaming behavior for progress notifications and real-time events.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Call tool with SSE Accept header — returns raw Response for event parsing
 let response = client.call_tool_with_sse("slow_operation", json!({"input": "test"})).await?;
 
@@ -205,7 +229,7 @@ for line in body.lines() {
 }
 ```
 
-**SSE reconnection testing**: Use `connect_sse()` to open a GET stream, then verify `Last-Event-ID` replay by disconnecting and reconnecting with the last seen event ID.
+**SSE reconnection testing (2025-11-25 only)**: Use `connect_sse()` to open a GET stream, then verify `Last-Event-ID` replay by disconnecting and reconnecting with the last seen event ID. Not applicable on 2026-07-28 — there is no GET stream to reconnect to.
 
 ## Test Organization
 
@@ -249,7 +273,7 @@ Three tiers of documentation tests, balancing coverage vs speed:
 
 **Rule**: Every ` ```rust ` block in doc comments MUST compile. Use `no_run` for examples that need external resources, `ignore` for truly expensive tests. Never use ` ```text ` for Rust code — it hides compilation errors.
 
-## TestFixtures Helpers
+## TestFixtures Helpers (2025-11-25 — `tests/shared`)
 
 `TestFixtures` provides pre-built capability objects and assertion helpers:
 
@@ -258,7 +282,7 @@ Three tiers of documentation tests, balancing coverage vs speed:
 | `resource_capabilities()` | `{"resources": {"subscribe": true, "listChanged": false}}` |
 | `tools_capabilities()` | `{"tools": {"listChanged": false}}` |
 | `prompts_capabilities()` | `{"prompts": {"listChanged": false}}` |
-| `verify_initialization_response(result)` | Assert valid init response with `protocolVersion: "2025-11-25"` |
+| `verify_initialization_response(result)` | Assert valid init response — hardcodes `protocolVersion: "2025-11-25"`; there is no `initialize` response to assert on 2026-07-28 |
 | `verify_error_response(result)` | Assert JSON-RPC error structure |
 | `verify_resource_list_response(result)` | Assert valid `resources/list` response |
 | `verify_resource_content_response(result)` | Assert valid `resources/read` response |
@@ -276,7 +300,7 @@ Three tiers of documentation tests, balancing coverage vs speed:
 
 4. **Missing `Accept` header** — Streamable HTTP requires `Accept: application/json`, `text/event-stream`, or `*/*`. Omitting it causes request rejection.
 
-5. **Forgetting `send_initialized_notification()`** — In strict lifecycle mode, the server rejects all requests before the `notifications/initialized` handshake. Always call `client.send_initialized_notification()` after `initialize()`.
+5. **Forgetting `send_initialized_notification()` on a 2025-11-25 test server** — In strict lifecycle mode, the server rejects all requests before the `notifications/initialized` handshake. Always call `client.send_initialized_notification()` after `initialize()`. Not applicable to a 2026-07-28 test server — there is no handshake to complete.
 
 6. **Testing with raw JSON instead of framework APIs** — Use `tool.call(json!({...}), None)` for unit tests and `McpTestClient` for E2E. Avoid manually constructing JSON-RPC request objects.
 
@@ -297,7 +321,7 @@ To test auth behavior, use the E2E testing pattern (`McpTestClient`) with `OAuth
 
 **Middleware testing?** → See the `middleware-patterns` skill for `McpMiddleware` trait and integration with auth/rate-limit middleware.
 
-**Task lifecycle testing?** → See the `task-patterns` skill for task state machine assertions and `TaskRuntime` configuration.
+**Task lifecycle testing?** → See the `task-patterns` skill for the 2026-07-28 Tasks extension and the frozen 2025-11-25 in-core `TaskRuntime`.
 
 **Lambda testing?** → See the `lambda-deployment` skill for local Lambda testing and DynamoDB test setup.
 

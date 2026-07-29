@@ -14,6 +14,8 @@ description: >
   this skill covers the McpMiddleware trait plumbing only.
 ---
 
+**Spec lane: MCP 2026-07-28 (current default).** The `McpMiddleware` trait, `RequestContext`, `SessionInjection`, and `MiddlewareError` are framework plumbing and apply on both spec lanes. 2026-07-28's stateless core removes `initialize` and `ping` as protocol methods — there is no bootstrapping method left to special-case, so middleware runs uniformly on every request. On a 2025-11-25 build (`--no-default-features --features protocol-2025-11-25`), reinstate an `initialize`/`ping` skip if your middleware requires a session, since `session` is `None` during that handshake.
+
 # Middleware Patterns — Turul MCP Framework
 
 Middleware intercepts MCP requests before/after dispatch for cross-cutting concerns: authentication, rate limiting, logging, and auditing. Middleware is transport-agnostic — the same `McpMiddleware` trait works across HTTP and Lambda.
@@ -31,7 +33,7 @@ Where does this logic belong?
 ## The McpMiddleware Trait
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_http_mcp_server::middleware::{
     McpMiddleware, RequestContext, SessionInjection, MiddlewareError, DispatcherResult,
 };
@@ -46,7 +48,7 @@ impl McpMiddleware for MyMiddleware {
     async fn before_dispatch(
         &self,
         ctx: &mut RequestContext<'_>,     // method, params, metadata
-        session: Option<&dyn SessionView>, // None for `initialize`
+        session: Option<&dyn SessionView>, // see note below on 2026-07-28 semantics
         injection: &mut SessionInjection,  // write-only session state injection
     ) -> Result<(), MiddlewareError> {
         Ok(())
@@ -66,15 +68,17 @@ impl McpMiddleware for MyMiddleware {
 **Key types:**
 - `RequestContext<'a>` — method name (`ctx.method()`), params (`ctx.params()`), transport metadata (`ctx.metadata()`)
 - `SessionInjection` — write-only: `injection.set_state(key, value)`, `injection.set_metadata(key, value)`
-- `SessionView` — read-only session access (None during `initialize`)
+- `SessionView` — read-only session access
 - `DispatcherResult` — `Success(Value)` or `Error(String)`
+
+**`session` on 2026-07-28 is not `None` — it's a fresh, throwaway session, every request.** The stateless core has no `Mcp-Session-Id` handshake, so `streamable_http.rs` mints an ephemeral per-request session internally to keep the dispatch pipeline (which still carries a `SessionContext`) unchanged; that id is never read from the client and never echoed back. Practical effect: `SessionInjection` state written in `before_dispatch` is visible to the tool handler *within that same request* (still useful for e.g. attaching auth identity for the handler to read), but nothing persists to a second request — there is no cross-request session identity to key on. Rate limiting or any pattern that needs to correlate requests from the same caller must key on something else (API key, bearer subject, client IP), not `session.session_id()`. See [Pattern 2](#pattern-2-rate-limiting) below.
 
 ## Pattern 1: Auth Middleware
 
-Validate an API key from transport metadata, skip `initialize`/`ping`, inject authenticated user state.
+Validate an API key from transport metadata, inject authenticated user state.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_http_mcp_server::middleware::*;
 use turul_mcp_session_storage::SessionView;
 use async_trait::async_trait;
@@ -91,11 +95,6 @@ impl McpMiddleware for ApiKeyAuth {
         _session: Option<&dyn SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip auth for initialize and ping (session doesn't exist yet)
-        if ctx.method() == "initialize" || ctx.method() == "ping" {
-            return Ok(());
-        }
-
         let key = ctx.metadata()
             .get("x-api-key")
             .and_then(|v| v.as_str())
@@ -116,10 +115,10 @@ impl McpMiddleware for ApiKeyAuth {
 
 ## Pattern 2: Rate Limiting
 
-Per-session request counters with configurable limits and `retry_after`.
+Per-caller request counters with configurable limits and `retry_after`. **Key on a stable caller identity from `ctx.metadata()` (API key, bearer subject), not `session.session_id()`** — on 2026-07-28, `session` is a fresh throwaway per request, so a session-keyed counter never accumulates past 1.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_http_mcp_server::middleware::*;
 use turul_mcp_session_storage::SessionView;
 use async_trait::async_trait;
@@ -137,15 +136,12 @@ impl McpMiddleware for RateLimitMiddleware {
     async fn before_dispatch(
         &self,
         ctx: &mut RequestContext<'_>,
-        session: Option<&dyn SessionView>,
+        _session: Option<&dyn SessionView>,
         _injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        if ctx.method() == "initialize" {
-            return Ok(());
-        }
-
-        let session_id = session
-            .and_then(|s| s.session_id())
+        let caller_id = ctx.metadata()
+            .get("x-api-key")
+            .and_then(|v| v.as_str())
             .unwrap_or("anonymous")
             .to_string();
 
@@ -153,7 +149,7 @@ impl McpMiddleware for RateLimitMiddleware {
         let now = std::time::Instant::now();
 
         let (count, window_start) = counters
-            .entry(session_id)
+            .entry(caller_id)
             .or_insert((0, now));
 
         if now.duration_since(*window_start).as_secs() >= self.window_seconds {
@@ -181,7 +177,7 @@ impl McpMiddleware for RateLimitMiddleware {
 Record request timing using `before_dispatch` and `after_dispatch`.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_http_mcp_server::middleware::*;
 use turul_mcp_session_storage::SessionView;
 use async_trait::async_trait;
@@ -233,7 +229,7 @@ impl McpMiddleware for TimingMiddleware {
 Extract pre-validated identity from API Gateway authorizer headers.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_http_mcp_server::middleware::*;
 use turul_mcp_session_storage::SessionView;
 use async_trait::async_trait;
@@ -248,10 +244,6 @@ impl McpMiddleware for LambdaAuthMiddleware {
         _session: Option<&dyn SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        if ctx.method() == "initialize" {
-            return Ok(());
-        }
-
         // API Gateway authorizer's custom context fields land as x-authorizer-*
         // headers. Use the field name your authorizer Lambda returns under
         // `context: {...}` (e.g. user_id, sub, account_id). `principalId` is
@@ -288,7 +280,7 @@ Tool:        session.get_typed_state::<String>("user_id").await  →  Some("alic
 ## Registration and Execution Order
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use std::sync::Arc;
 
 let server = McpServer::builder()
@@ -334,7 +326,7 @@ MiddlewareError::custom("CUSTOM_ERR", "Something specific")
 
 ## Common Mistakes
 
-1. **Forgetting to skip `initialize`** — Session is `None` during `initialize`. If your middleware requires a session, return `Ok(())` early for `ctx.method() == "initialize"`.
+1. **Keying cross-request state (rate limits, caches) on `session.session_id()`** — on 2026-07-28 every request gets a fresh throwaway session, so a session-keyed counter never accumulates. Key on API key, bearer subject, or another caller-stable identifier from `ctx.metadata()` instead. (On a 2025-11-25 build, `session` is `None` during `initialize` — skip early for `ctx.method() == "initialize"` if your middleware requires a session.)
 
 2. **Creating `JsonRpcError` directly** — Always return `MiddlewareError` variants. The framework handles conversion. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
 

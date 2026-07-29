@@ -89,7 +89,7 @@ curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2026-07-28" \
   -H "Mcp-Method: tools/call" \
-  -H "Mcp-Name: test" \
+  -H "Mcp-Name: calculator" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}},"name":"calculator","arguments":{"a":5,"b":3}}}'
 ```
 

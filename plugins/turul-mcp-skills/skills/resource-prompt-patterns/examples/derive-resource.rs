@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Resource Pattern 2: Derive Macro #[derive(McpResource)]
 // Derive generates metadata traits only — McpResource::read() is manual.
 // Session access is available in the manual read() impl.

@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Minimal Lambda MCP server — smallest working example
 //
 // Cargo.toml dependencies:

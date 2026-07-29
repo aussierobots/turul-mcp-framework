@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Execution errors: tool_execution, .map_err(), and ? operator
 
 use turul_mcp_derive::mcp_tool;
