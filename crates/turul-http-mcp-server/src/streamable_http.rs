@@ -1139,9 +1139,14 @@ impl StreamableHttpHandler {
                 let error_json =
                     serde_json::to_string(&rpc_err).unwrap_or_else(|_| "{}".to_string());
 
-                // Return error with MCP headers (no session header for parse errors)
+                // Return error with MCP headers (no session header for parse errors).
+                // A body the transport cannot parse as a JSON-RPC message (malformed
+                // JSON, a batch array, or any other envelope violation) never reaches
+                // dispatch, so it takes the same pre-dispatch 400 as the null-id and
+                // header-validation checks below, not the 200 used for a well-formed
+                // request that fails inside a handler.
                 return Response::builder()
-                    .status(StatusCode::OK) // JSON-RPC parse errors still use 200 OK
+                    .status(StatusCode::BAD_REQUEST)
                     .header(CONTENT_TYPE, "application/json")
                     .header("MCP-Protocol-Version", context.protocol_version.as_str())
                     .body(

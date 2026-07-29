@@ -13,24 +13,26 @@ Test paths are relative to the repo root. `c/` abbreviates `crates/`.
 |---|---|---|---|---|---|---|---|---|
 | `jsonrpc: "2.0"` on every message | MUST | Implemented | `c/turul-mcp-protocol-2026-07-28/src/json_rpc.rs:29` | `discover.rs::discover_result_response_wire_shape` | pass | pass | pass | pass |
 | `RequestId` is string or number; bare `null` rejected | MUST | Implemented | schema `RequestId` | `wire_edges_2026.rs::null_request_id_is_rejected` | pass | — | — | — |
-| Batch (JSON array) bodies rejected — batching removed in 2026-07-28 | MUST | Implemented | `c/turul-http-mcp-server/src/streamable_http.rs:769` calls only the singular parser | `wire_edges_2026.rs::a_json_array_body_is_rejected_as_a_batch` | pass | — | — | — |
+| Batch (JSON array) bodies rejected — batching removed in 2026-07-28 | MUST | Implemented | `c/turul-http-mcp-server/src/streamable_http.rs:1135` (`handle_post_streamable_http`) calls only the singular parser | `wire_edges_2026.rs::a_json_array_body_is_rejected_as_a_batch` | pass | — | — | — |
 | `params._meta` is required, not optional | MUST | Implemented | `json_rpc.rs:36-46` | `json_rpc.rs::test_request_params_rejects_missing_meta` | pass | — | — | — |
 
 Batch rejection is now asserted rather than inferred: a two-element array body
 answers `-32600`, no element executes, and the response is one message rather
 than an array of them.
 
-**Status inconsistency the batch test pinned, and did not fix.** The batch body
-answers **HTTP 200** with the error in the body, because it fails in
-`parse_json_rpc_message` (`streamable_http.rs:1134-1153`), whose branch treats
-every JSON-RPC parse failure as a 200. The adjacent null-id check
-(`streamable_http.rs:1156-1179`) answers **400** for the same class of envelope
-violation, and §11's "the transport rejects before dispatch → 4xx" describes the
-400 behaviour. The test asserts what the server does today (200) rather than
-what the split implies; changing the parse-error branch to 400 is a one-line
-change in `turul-http-mcp-server` and would flip that assertion with it. Not
-decided here — recorded so the next reader knows the 200 is measured, not
-endorsed.
+**Status inconsistency the batch test pinned, now resolved.** A body the
+transport cannot parse as a JSON-RPC message (malformed JSON, or a batch
+array) now answers **HTTP 400**, the same status as the adjacent null-id check
+(`streamable_http.rs:1161-1184`) for the same class of envelope violation, and
+consistent with §11's "the transport rejects before dispatch → 4xx." The spec
+does not pin an HTTP status to a parse failure specifically — [Streamable
+HTTP's backward-compatibility
+guidance](https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http#backward-compatibility)
+uses 400 as the general status a modern server returns for a request it
+rejects before dispatch, and that same page's client-detection heuristic
+depends on 400 (not 200) marking a rejected request — so 400 was chosen for
+consistency with the rest of the transport's pre-dispatch rejections rather
+than pinned by explicit spec text.
 
 ## 2. Lifecycle — the stateless core
 
@@ -242,9 +244,10 @@ handler answers **200** with the error in the JSON-RPC body. Both halves are
 pinned by `scripts/interop-fastmcp.sh` J5 and, since this slice, in Rust:
 `error_mapping_2026.rs::handler_level_failure_is_http_200_with_the_error_in_the_body`
 asserts 200 + `-32602` + id echo back to back with the 404 branch on the same
-server, so the two are discriminated rather than each asserted alone. One body
-class does **not** follow the split — an unparseable body (a JSON array) also
-answers 200; see §1.
+server, so the two are discriminated rather than each asserted alone. A body
+the transport cannot parse as a JSON-RPC message (malformed JSON, or a batch
+array) also follows the "rejects before dispatch → 4xx" half of the split,
+answering 400 like the null-id and header-validation checks; see §1.
 
 ## 12. Security
 
@@ -300,12 +303,9 @@ Ordered by consequence, not by area.
    `build_http_challenge_response` with the three challenges
    `oauth_2026.rs::challenges_are_not_cacheable` drives, so the header is
    present by construction, but construction is not an assertion.
-5. **A JSON-RPC parse failure answers HTTP 200 while a null-id envelope
-   violation answers 400** — two branches, one class of fault, inconsistent
-   status. Both are pinned by tests; neither is endorsed. See §1.
-6. **ADR-027 does not document the six auth-hardening SEPs** the Branch Lock
+5. **ADR-027 does not document the six auth-hardening SEPs** the Branch Lock
    headlines.
-7. **`MiddlewareError::InvalidRequest`/`Internal`/`Custom` panic on any
+6. **`MiddlewareError::InvalidRequest`/`Internal`/`Custom` panic on any
    middleware rejection through `map_middleware_error_to_jsonrpc`.** They map to
    `-32600`/`-32603` and are passed to `JsonRpcErrorObject::server_error`, whose
    `assert!` requires `-32099..=-32000`. Latent, pre-existing, and the same
@@ -317,7 +317,10 @@ exclusion located and tested; cursor walks added for the three non-`tools`
 list methods; batch-array rejection tested; `.well-known/*` Origin exemption
 tested; `Cache-Control: no-store` on auth challenges located and tested; the
 handler-level HTTP 200 case tested; the crate's own `COMPLIANCE.md` corrected on
-the reserved-key guard, its test-gate counts and its `turul-rpc` version.
+the reserved-key guard, its test-gate counts and its `turul-rpc` version; the
+JSON-RPC-parse-failure branch changed from HTTP 200 to 400 so it agrees with
+the null-id and header-validation branches for the same class of pre-dispatch
+envelope violation.
 **Dropped as mislabelled**: the
 `NotificationMetaObject` row (documented faithful loosening, wire-identical,
 now asserted) and the `cfg!()` `notifications/initialized` residue (`cfg!`

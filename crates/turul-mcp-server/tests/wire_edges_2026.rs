@@ -427,10 +427,10 @@ async fn success_response_echoes_the_request_id() {
 /// body is therefore not a message this server can parse, and none of its
 /// elements may be executed.
 ///
-/// An unparseable body takes the transport's JSON-RPC-layer posture — HTTP 200
-/// carrying the error object — which is a different branch from the HTTP 400
-/// used for a body that parses but violates MCP's envelope rules (see
-/// `null_request_id_is_rejected`).
+/// An unparseable body — like a batch array — never reaches dispatch, so it
+/// takes the same pre-dispatch HTTP 400 as the null-id envelope violation (see
+/// `null_request_id_is_rejected`), not the HTTP 200 used for a well-formed
+/// request that fails inside a handler.
 #[tokio::test]
 async fn a_json_array_body_is_rejected_as_a_batch() {
     let url = start_server().await;
@@ -445,7 +445,7 @@ async fn a_json_array_body_is_rejected_as_a_batch() {
     )
     .await;
 
-    assert_eq!(status, 200, "{body}");
+    assert_eq!(status, 400, "{body}");
     assert_eq!(
         body["error"]["code"], -32600,
         "a batch body must be refused as an invalid request: {body}"
