@@ -109,6 +109,10 @@ gate_lambda() {
   # 2026 ones beyond the boot loop. It builds the same binary with a different
   # feature set.
   run "2025-11-25 Lambda E2E (cargo lambda watch, real Runtime API)" ./scripts/e2e-lambda-local-2025-11-25.sh
+  # The other direction: our own client driven against a Lambda-hosted server
+  # on both specs. The Lambda transport reassembles responses differently from
+  # the plain HTTP path, so a client-side parser assumption shows up here.
+  run "client-over-Lambda E2E (turul-mcp-client via cargo lambda watch, both specs)" ./scripts/e2e-lambda-client-local.sh
 }
 
 gate_mutex() {
