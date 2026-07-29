@@ -2083,7 +2083,7 @@ mod tests {
         assert!(builder.tools.is_empty());
         #[cfg(feature = "protocol-2025-11-25")]
         {
-            assert_eq!(builder.handlers.len(), 21); // spec + legacy compat
+            assert_eq!(builder.handlers.len(), 22); // spec + legacy compat
             assert!(builder.handlers.contains_key("ping"));
             assert!(builder.handlers.contains_key("notifications/message"));
             assert!(builder.handlers.contains_key("notifications/progress"));
@@ -2097,7 +2097,7 @@ mod tests {
             // the 2026-07-28 `ClientNotification` union has no
             // `ProgressNotification` member, and `notifications/message` was
             // never a member on any pin — 12, not 14.
-            assert_eq!(builder.handlers.len(), 12);
+            assert_eq!(builder.handlers.len(), 13);
             assert!(!builder.handlers.contains_key("ping"));
             assert!(!builder.handlers.contains_key("roots/list"));
             assert!(!builder.handlers.contains_key("notifications/message"));

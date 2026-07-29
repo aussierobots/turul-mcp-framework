@@ -187,6 +187,14 @@ impl LambdaMcpServerBuilder {
             "resources/read".to_string(),
             Arc::new(ResourcesReadHandler::new().without_security()),
         );
+        // Registered unconditionally, like the other two resource methods: a
+        // server that declares the resources capability but happens to have no
+        // templates must answer with an empty list, not -32601. build() swaps in
+        // a populated handler when templates were configured.
+        handlers.insert(
+            "resources/templates/list".to_string(),
+            Arc::new(ResourceTemplatesHandler::new()),
+        );
         handlers.insert(
             "prompts/list".to_string(),
             Arc::new(PromptsListHandler::new()),
@@ -206,8 +214,6 @@ impl LambdaMcpServerBuilder {
             "sampling/createMessage".to_string(),
             Arc::new(SamplingHandler),
         );
-        // Note: resources/templates/list is NOT registered here — only added in
-        // build() when template resources exist, matching HTTP server behavior.
         #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "elicitation/create".to_string(),
