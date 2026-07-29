@@ -73,8 +73,11 @@ gate_opt_in_2025() {
   run "lambda 2025-11-25"        cargo test   -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
   # Without `cors` too — the cors-enabled run masks a non-cfg-gated `cors_config` use.
   run "lambda 2025-11-25 no-cors" cargo clippy -p turul-mcp-aws-lambda  --no-default-features --features protocol-2025-11-25 --all-targets -- -D warnings
-  run "client 2025-11-25-only"   cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
-  run "client 2026-07-28-only"   cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
+  # Tests, not builds. These two feature sets select different #[cfg] dispatch
+  # arms from the bilingual default, so compiling them proved nothing about the
+  # code a single-spec consumer actually runs.
+  run "client 2025-11-25-only"   cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
+  run "client 2026-07-28-only"   cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
   run "client-initialise-server" cargo build  -p client-initialise-server --no-default-features
   run "tools E2E"       cargo test -p mcp-tools-tests
   run "resources E2E"   cargo test -p mcp-resources-tests

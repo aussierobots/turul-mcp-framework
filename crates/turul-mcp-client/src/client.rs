@@ -2464,6 +2464,10 @@ mod tests {
     /// Mock transport that records send_notification() calls and provides
     /// a controllable event channel for injecting ServerEvents.
     struct MockTransport {
+        #[cfg_attr(
+            not(any(feature = "client-bilingual", feature = "client-2025-11-25-only")),
+            allow(dead_code)
+        )]
         event_tx: mpsc::UnboundedSender<ServerEvent>,
         event_rx: parking_lot::Mutex<Option<mpsc::UnboundedReceiver<ServerEvent>>>,
         notifications: Arc<tokio::sync::Mutex<Vec<Value>>>,
@@ -2488,12 +2492,14 @@ mod tests {
         }
 
         /// Get the event sender for injecting server events from the test
+        #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
         fn event_sender(&self) -> mpsc::UnboundedSender<ServerEvent> {
             self.event_tx.clone()
         }
 
         /// Pre-clone the DELETE-count handle so a test can observe it after the
         /// transport has been boxed and moved into the client.
+        #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
         fn delete_count_handle(&self) -> Arc<std::sync::atomic::AtomicU32> {
             Arc::clone(&self.delete_count)
         }
@@ -2614,6 +2620,7 @@ mod tests {
 
     /// Verifies the full McpClient pipeline: server request → StreamHandler callback
     /// → response channel → consumer task → transport.send_notification().
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_client_response_consumer_pipeline() {
         let (mock, notifications) = MockTransport::new();
@@ -2686,6 +2693,7 @@ mod tests {
     }
 
     /// Same pipeline but with an error callback — verifies error responses reach transport.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_client_response_consumer_pipeline_error() {
         let (mock, notifications) = MockTransport::new();
@@ -2744,6 +2752,7 @@ mod tests {
     /// idempotency the client fires two DELETEs (one from disconnect, one from
     /// Drop) — the second lands on a server with the session already gone, and
     /// in OAuth deployments may arrive after the bearer token has expired.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_disconnect_clears_session_so_drop_is_noop() {
         let (mock, _notifications) = MockTransport::new();
@@ -2779,6 +2788,7 @@ mod tests {
     /// must still get the DELETE sent by Drop. Locking this in protects against
     /// future "always clear session_id eagerly" refactors that would silently
     /// break server-side session cleanup for the implicit-drop path.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_drop_without_disconnect_still_fires_delete() {
         let (mock, _notifications) = MockTransport::new();
@@ -3039,11 +3049,15 @@ mod tests {
 
     // ── Session lifecycle tests ─────────────────────────────────────────
 
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     use crate::config::RetryConfig;
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     use std::sync::atomic::Ordering;
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     use std::time::Duration;
 
     /// Helper: build a fast-retry config (1 ms delays) with the given max_attempts.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     fn fast_retry_config(max_attempts: u32) -> ClientConfig {
         ClientConfig {
             retry: RetryConfig {
@@ -3058,6 +3072,7 @@ mod tests {
 
     /// Test 2.1 — 404 recovery path resets session, clears stale transport session ID,
     /// re-initializes with a fresh session, and retries the original request.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_404_reinitialize_clears_stale_session_id() {
         let mut transport = StatefulMockTransport::new();
@@ -3121,6 +3136,7 @@ mod tests {
 
     /// Test 2.1a — 404 on last retry attempt still recovers (re-init doesn't count
     /// as a "retry" — the loop continues after successful re-init).
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_404_on_last_retry_attempt_still_recovers() {
         let mut transport = StatefulMockTransport::new();
@@ -3162,6 +3178,7 @@ mod tests {
 
     /// Test 2.1b — When re-initialization after 404 fails, the original 404 error
     /// is surfaced (not the re-init error).
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_404_reinit_failure_surfaces_original_error() {
         let mut transport = StatefulMockTransport::new();
@@ -3200,6 +3217,7 @@ mod tests {
 
     /// Test 2.2 — Server may omit Mcp-Session-Id header (stateless mode).
     /// connect() must succeed and client must be ready.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_optional_session_id_no_hard_failure() {
         let mut transport = StatefulMockTransport::new();
@@ -3232,6 +3250,7 @@ mod tests {
 
     /// Test 2.3 — Server returns an unsupported protocol version.
     /// connect() must fail with an error mentioning both versions.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_unsupported_protocol_version_rejected() {
         let mut transport = StatefulMockTransport::new();
@@ -3266,6 +3285,7 @@ mod tests {
     // ── Error propagation tests ────────────────────────────────────────
 
     /// Test 4.1 — JSON-RPC error response surfaces as `ServerError` with code, message, and data.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_jsonrpc_error_surfaces_as_server_error_with_code_message_data() {
         let mut transport = StatefulMockTransport::new();
@@ -3301,6 +3321,7 @@ mod tests {
     }
 
     /// Test 4.2 — JSON-RPC error without `data` field: `data` must be `None`.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_jsonrpc_error_without_data_field() {
         let mut transport = StatefulMockTransport::new();
@@ -3333,6 +3354,7 @@ mod tests {
     }
 
     /// Test 4.3 — `call_tool` with a malformed response returns an error rather than panicking.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_call_tool_malformed_response_returns_error() {
         let mut transport = StatefulMockTransport::new();
@@ -3357,6 +3379,7 @@ mod tests {
     }
 
     /// Test 4.4 — `get_prompt` with a malformed response returns an error rather than panicking.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_get_prompt_malformed_response_returns_error() {
         let mut transport = StatefulMockTransport::new();
@@ -3383,6 +3406,7 @@ mod tests {
     // ── Cache and notification tests ─────────────────────────────────────
 
     /// Test: list_tools() caches results and returns cached data on second call.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_list_tools_caches_result() {
         let mut transport = StatefulMockTransport::new();
@@ -3420,6 +3444,7 @@ mod tests {
     }
 
     /// Test: notifications/tools/list_changed invalidates the tool cache.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_tools_list_changed_notification_invalidates_cache() {
         let (mock, _notifications) = MockTransport::new();
@@ -3459,6 +3484,7 @@ mod tests {
     }
 
     /// Test: notifications/resources/list_changed invalidates the resource cache.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_resources_list_changed_notification_invalidates_cache() {
         let (mock, _notifications) = MockTransport::new();
@@ -3494,6 +3520,7 @@ mod tests {
     }
 
     /// Test: notifications/prompts/list_changed invalidates the prompt cache.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_prompts_list_changed_notification_invalidates_cache() {
         let (mock, _notifications) = MockTransport::new();
@@ -3529,6 +3556,7 @@ mod tests {
     }
 
     /// Test: User notification callback is invoked on server notifications.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_user_notification_callback_fires() {
         let (mock, _notifications) = MockTransport::new();
@@ -3579,6 +3607,7 @@ mod tests {
     }
 
     /// Test: refresh_tools() bypasses cache.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_refresh_tools_bypasses_cache() {
         let mut transport = StatefulMockTransport::new();
@@ -3630,8 +3659,10 @@ mod tests {
     //
     // A mock that supports multiple connect()/disconnect() cycles by
     // advertising server_events: false (skips event listener in connect()).
-    // Used for testing the -32031 session retry path.
+    // Used for testing the -32031 session retry path, which is a
+    // 2025-11-25-only handshake/session concept.
 
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     struct ReconnectableMockTransport {
         init_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<TransportResponse>>>>,
         request_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<Value>>>>,
@@ -3642,6 +3673,7 @@ mod tests {
         connected: AtomicBool,
     }
 
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     impl ReconnectableMockTransport {
         fn new() -> Self {
             Self {
@@ -3664,6 +3696,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[async_trait]
     impl crate::transport::Transport for ReconnectableMockTransport {
         fn transport_type(&self) -> TransportType {
@@ -3775,6 +3808,7 @@ mod tests {
     /// Test: -32031 error triggers disconnect + reconnect + single retry.
     /// Simulates the race condition where notifications/initialized hasn't
     /// been processed when the first tool call arrives.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_session_not_initialized_triggers_reconnect_and_retry() {
         let mut transport = ReconnectableMockTransport::new();
@@ -3853,6 +3887,7 @@ mod tests {
 
     /// Test: -32031 reconnect only retries once — if retry also fails,
     /// the retry error is returned (not the original -32031).
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_session_not_initialized_retry_fails_returns_retry_error() {
         let mut transport = ReconnectableMockTransport::new();
@@ -3904,6 +3939,7 @@ mod tests {
     }
 
     /// Test: -32031 when reconnect itself fails — original error is returned.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_session_not_initialized_reconnect_fails_returns_original_error() {
         let mut transport = ReconnectableMockTransport::new();
@@ -3942,6 +3978,7 @@ mod tests {
     }
 
     /// Test: "Session not initialized" message without code -32031 is still detected.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_session_not_initialized_detected_by_message() {
         let mut transport = ReconnectableMockTransport::new();
@@ -3987,6 +4024,7 @@ mod tests {
     }
 
     /// Test: Non-session errors (e.g. -32602) do NOT trigger reconnect.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_non_session_error_does_not_trigger_reconnect() {
         let mut transport = ReconnectableMockTransport::new();
@@ -4025,6 +4063,7 @@ mod tests {
 
     /// Test: call_tool_with_task also benefits from -32031 retry
     /// (it uses send_request_internal internally).
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_call_tool_with_task_also_retries_on_session_error() {
         let mut transport = ReconnectableMockTransport::new();
@@ -4075,6 +4114,7 @@ mod tests {
     }
 
     /// Test: invalidate_caches() clears all caches.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_invalidate_caches_clears_all() {
         let mut transport = StatefulMockTransport::new();

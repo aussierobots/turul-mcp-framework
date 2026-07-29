@@ -1,3 +1,4 @@
+#![cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 //! Client-side `x-mcp-header` placement rules and tool-schema exclusion.
 //!
 //! Drives a real `McpClient` (2026-07-28) over wiremock through

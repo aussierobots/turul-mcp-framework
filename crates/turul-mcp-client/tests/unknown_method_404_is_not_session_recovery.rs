@@ -1,3 +1,4 @@
+#![cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 //! A 404 on the 2026-07-28 lane must reach the caller, not trigger a handshake.
 //!
 //! 2026-07-28 maps an unknown method to HTTP 404 with `-32601` (the server side

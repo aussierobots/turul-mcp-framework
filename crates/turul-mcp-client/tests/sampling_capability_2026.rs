@@ -1,3 +1,4 @@
+#![cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 //! Wire-level acceptance: "Clients that support sampling MUST declare the
 //! sampling capability in `_meta.io.modelcontextprotocol/clientCapabilities`
 //! on each request" (client/sampling).

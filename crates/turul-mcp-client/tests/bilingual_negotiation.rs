@@ -1,3 +1,4 @@
+#![cfg(feature = "client-bilingual")]
 //! Acceptance tests for per-connection wire-version negotiation.
 //!
 //! One bilingual `McpClient` (the default build) connects to three different

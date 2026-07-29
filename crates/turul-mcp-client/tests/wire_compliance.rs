@@ -310,9 +310,12 @@ async fn test_clearing_override_falls_back_to_default_headers() {
 // not just the in-process `Value` the helper returns.
 // ============================================================================
 
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 use turul_mcp_client::McpClient;
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 use turul_mcp_client::config::ClientConfig;
 use turul_rpc::{JsonRpcNotification, JsonRpcRequest, RequestId, RequestParams};
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 use wiremock::matchers::body_partial_json;
 
 #[tokio::test]
@@ -416,6 +419,10 @@ async fn test_typed_request_with_empty_object_params_preserves_field_on_wire() {
 /// `McpClient::ping → build_request → send_request_internal → HttpTransport
 /// ::send_request → reqwest → wire`, so a regression that bypassed the
 /// typed constructor in any single MCP method would be caught here.
+/// `ping` is a 2025-11-25-only method (removed from 2026-07-28 core), and this
+/// exercises the `initialize` handshake, so it only runs on lanes that link
+/// the legacy wire path.
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 #[tokio::test]
 async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() {
     let mock_server = MockServer::start().await;
@@ -562,6 +569,9 @@ async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() 
 /// `RequestParams::Object(HashMap<String, Value>)` does NOT flatten, coerce,
 /// or otherwise mangle nested array values. Distinct from JSON-RPC envelope
 /// positional params (which MCP never uses at the `params` level).
+/// Drives the `initialize` handshake, so it only runs on lanes that link the
+/// legacy wire path.
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 #[tokio::test]
 async fn test_mcp_client_call_tool_preserves_array_argument_values_on_wire() {
     let mock_server = MockServer::start().await;

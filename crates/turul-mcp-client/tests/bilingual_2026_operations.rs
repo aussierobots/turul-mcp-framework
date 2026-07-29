@@ -1,3 +1,4 @@
+#![cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 //! Wire-level acceptance: a bilingual client, locked to 2026-07-28, routes every
 //! supported operation through the 2026 path (each request carries the required
 //! per-request `_meta`) and parses the 2026-shaped result. Removed-from-core
