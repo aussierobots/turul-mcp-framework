@@ -1,5 +1,6 @@
-//! Wire-shape tests against the vendored SEP-1865 spec types
-//! (`schema/spec.types.ts` / `schema/apps-draft.mdx`).
+//! Wire-shape tests against the vendored SEP-1865 spec
+//! (`schema/apps-2026-01-26.mdx`, with `schema/spec.types.ts` as the
+//! machine-readable companion).
 
 use serde_json::json;
 use turul_mcp_protocol_2026_07_28::initialize::ClientCapabilities;

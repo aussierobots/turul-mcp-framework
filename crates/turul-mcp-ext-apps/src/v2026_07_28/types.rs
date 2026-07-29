@@ -1,6 +1,7 @@
 //! MCP-side types for the Apps extension (SEP-1865).
 //!
-//! Maps to the vendored `schema/spec.types.ts`:
+//! Maps to the vendored `schema/apps-2026-01-26.mdx` (normative) and its
+//! machine-readable companion `schema/spec.types.ts`:
 //! - `McpUiClientCapabilities` → [`UiClientCapabilities`]
 //! - `McpUiToolVisibility`     → [`UiToolVisibility`]
 //! - `McpUiToolMeta`           → [`UiToolMeta`] (tool `_meta.ui`)
@@ -110,10 +111,9 @@ pub struct UiResourcePermissions {
 #[serde(deny_unknown_fields)]
 pub struct EmptyObject {}
 
-/// UI metadata for a UI resource, carried in `_meta.ui` on the
-/// `resources/list` entry and/or each `resources/read` content item —
-/// `McpUiResourceMeta`. When present on both, the content-item value wins;
-/// hosts MUST check both locations.
+/// UI metadata for a UI resource, carried in `_meta.ui` on the resource
+/// declaration and on each `resources/read` content item —
+/// `McpUiResourceMeta`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct UiResourceMeta {
     #[serde(skip_serializing_if = "Option::is_none")]
