@@ -21,7 +21,7 @@ Deleting an example means deleting its row here in the same change.
 
 ```bash
 cargo run -p minimal-server                       # http://127.0.0.1:8641/mcp
-cargo run -p client-initialise-server -- --port 52940
+cargo run -p client-initialise-server -- --port 52950
 ```
 
 > The `-p` name is the directory name for every example except the two Lambda
@@ -129,7 +129,7 @@ Every client pairs with a server **on its own lane** — start the server first.
 | Example | Lane | Pairs with | Demonstrates |
 |---|---|---|---|
 | **streamable-http-client** | 2026-07-28 | `minimal-server` (8641); `notification-server` (8005) for live deliveries | The canonical 2026 pair: `connect()` negotiation, discover retention, `call_tool`, request-scoped progress, `subscriptions/listen` |
-| **bilingual-fleet-client** | both | `minimal-server` (8641) + `client-initialise-server` (52940) | One binary sweeping a mixed fleet, negotiating the wire spec per connection |
+| **bilingual-fleet-client** | both | `minimal-server` (8641) + `client-initialise-server` (52950) | One binary sweeping a mixed fleet, negotiating the wire spec per connection |
 | **interop-client-probe** | 2026-07-28 | any foreign 2026-07-28 server | `turul-mcp-client` driven against a server this project did not write; reports `LEG <name> OK\|FAIL` per leg |
 | **interop-fixture-server** | 2026-07-28 | the cross-implementation probes in `scripts/interop-*.sh` | The frozen 2026 surface every foreign client is asserted against (port 8700) |
 | **client-initialise-server** | 2025-11-25 (pinned) | `client-initialise-report`, `session-management-compliance-test`, `streamable-http-client-2025-11-25` | The 2025 handshake fixture; `--storage-backend` selects the session store and the tools report which one is live |

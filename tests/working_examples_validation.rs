@@ -101,7 +101,7 @@ async fn test_mcp_streamable_http_compliance() {
             "client-initialise-server",
             "--",
             "--port",
-            "52940",
+            "52950",
         ])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -120,7 +120,7 @@ async fn test_mcp_streamable_http_compliance() {
                 "client-initialise-report",
                 "--",
                 "--url",
-                "http://127.0.0.1:52940/mcp",
+                "http://127.0.0.1:52950/mcp",
             ])
             .env("RUST_LOG", "info")
             .output()

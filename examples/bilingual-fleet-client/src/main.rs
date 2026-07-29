@@ -12,11 +12,11 @@
 //! ```bash
 //! # Start one server from each generation:
 //! cargo run -p minimal-server               # 2026-07-28, port 8641
-//! cargo run -p client-initialise-server -- --port 52940   # 2025-11-25
+//! cargo run -p client-initialise-server -- --port 52950   # 2025-11-25
 //!
 //! # Then sweep the fleet:
 //! cargo run -p bilingual-fleet-client -- \
-//!     http://127.0.0.1:8641/mcp http://127.0.0.1:52940/mcp
+//!     http://127.0.0.1:8641/mcp http://127.0.0.1:52950/mcp
 //! ```
 
 use turul_mcp_client::transport::HttpTransport;
@@ -34,10 +34,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let urls = if urls.is_empty() {
         println!("No URLs given — using the default demo fleet.");
         println!("(start them with: cargo run -p minimal-server  and");
-        println!("  cargo run -p client-initialise-server -- --port 52940)\n");
+        println!("  cargo run -p client-initialise-server -- --port 52950)\n");
         vec![
             "http://127.0.0.1:8641/mcp".to_string(),
-            "http://127.0.0.1:52940/mcp".to_string(),
+            "http://127.0.0.1:52950/mcp".to_string(),
         ]
     } else {
         urls

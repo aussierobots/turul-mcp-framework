@@ -16,7 +16,7 @@ example cannot be ported; it stays as the previous spec's regression fixture.
 ## Run
 
 ```bash
-cargo run -p client-initialise-server                              # InMemory, port 52940
+cargo run -p client-initialise-server                              # InMemory, port 52950
 cargo run -p client-initialise-server -- --port 52950 --storage-backend sqlite --create-tables
 cargo run -p client-initialise-server -- --storage-backend postgres
 cargo run -p client-initialise-server -- --storage-backend dynamodb --create-tables
@@ -26,7 +26,7 @@ Backends are cargo features (`sqlite`, `postgres`, `dynamodb`, all on by
 default); asking for one that was not compiled in is a startup error rather
 than a silent fallback.
 
-The default port is **52940**, not the framework's usual 8641 — `minimal-server`
+The default port is **52950**, not the framework's usual 8641 — `minimal-server`
 and `zero-config-getting-started` both bind 8641, and `bilingual-fleet-client`
 needs this server and `minimal-server` up at the same time.
 
@@ -47,7 +47,7 @@ same one no matter what is running.
 ## What to expect
 
 ```bash
-cargo run -p client-initialise-report -- --url http://127.0.0.1:52940/mcp
+cargo run -p client-initialise-report -- --url http://127.0.0.1:52950/mcp
 ```
 
 drives the whole lifecycle and prints a compliance report ending in

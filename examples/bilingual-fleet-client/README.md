@@ -20,11 +20,11 @@ blocked on the fleet being uniform.
 ```bash
 # One server from each generation:
 cargo run -p minimal-server                              # 2026-07-28, port 8641
-cargo run -p client-initialise-server                    # 2025-11-25, port 52940
+cargo run -p client-initialise-server                    # 2025-11-25, port 52950
 
 # Sweep the fleet (these two URLs are also the built-in default):
 cargo run -p bilingual-fleet-client -- \
-    http://127.0.0.1:8641/mcp http://127.0.0.1:52940/mcp
+    http://127.0.0.1:8641/mcp http://127.0.0.1:52950/mcp
 ```
 
 ## What to expect
@@ -36,7 +36,7 @@ cargo run -p bilingual-fleet-client -- \
    supported : ["2026-07-28"]
    tools (1): ["echo"]
 
-── http://127.0.0.1:52940/mcp
+── http://127.0.0.1:52950/mcp
    negotiated: V2025_11_25 (discover refused — fell back to the initialize handshake; Mcp-Session-Id session is live)
    tools (4): ["echo_sse", "get_session_data", "get_session_events", "get_table_info"]
 ```

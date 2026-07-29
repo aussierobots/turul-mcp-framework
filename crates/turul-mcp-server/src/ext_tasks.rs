@@ -17,7 +17,7 @@
 //! Task ids are state handles (Security Best Practices "State Handle
 //! Hijacking"): a task is bound at creation to the caller's authenticated
 //! principal (the verified `sub` claim the OAuth middleware leaves at
-//! `__turul_internal.auth_claims`, read via [`owner_from_session`]), and
+//! `__turul_internal.auth_claims`, read via `owner_from_session`), and
 //! `tasks/get`/`tasks/update`/`tasks/cancel` reject a task id presented by
 //! any other principal, indistinguishably from an unknown id. When a
 //! deployment has no authentication configured, no request carries a

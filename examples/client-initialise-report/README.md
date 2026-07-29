@@ -16,7 +16,7 @@ example has no 2026 counterpart to port to. The 2026 stateless pair is
 
 ```bash
 cargo run -p client-initialise-server                                    # terminal 1
-RUST_LOG=info cargo run -p client-initialise-report -- --url http://127.0.0.1:52940/mcp
+RUST_LOG=info cargo run -p client-initialise-report -- --url http://127.0.0.1:52950/mcp
 ```
 
 `--test-sse-notifications` additionally drives the notification-flow checks

@@ -167,15 +167,23 @@ CLIENT_STATUS=$?
 CLIENT_PLAIN=$(echo "$CLIENT_OUT" | sed -E 's/\x1b\[[0-9;]*m//g')
 echo "$CLIENT_PLAIN" | sed 's/^/    /'
 
-if [ "$CLIENT_STATUS" = "0" ] && echo "$CLIENT_PLAIN" | grep -q 'Initializing session\.\.\. .*Success'; then
-  ok "initialize handshake round-trips through the real Lambda Runtime API"
+# Assert on what the client received, not on the words it printed about it.
+# An earlier revision grepped for "Initializing session... Success" and broke the
+# moment the example's log format changed, while the round trip itself was fine.
+if [ "$CLIENT_STATUS" = "0" ]; then
+  ok "the scripted client session completed without error"
 else
-  bad "initialize via client" "exit=$CLIENT_STATUS (see client output above)"
+  bad "client session" "exit=$CLIENT_STATUS (see client output above)"
 fi
-if echo "$CLIENT_PLAIN" | grep -q 'Listing tools\.\.\. .*Success'; then
+# No separate initialize assertion: on the 2025-11-25 lane a sessionless
+# tools/list is rejected, so the tool-descriptor check below cannot pass unless
+# the handshake round-tripped. Asserting it again by grepping the client's log
+# text would add no information and would break whenever the example's output
+# format changes — which is exactly what happened to the previous revision.
+if echo "$CLIENT_PLAIN" | grep -q '"inputSchema"'; then
   ok "tools/list round-trips through the real Lambda Runtime API"
 else
-  bad "tools/list via client" "expected 'Listing tools... ... Success' in client output"
+  bad "tools/list via client" "no tool descriptor (inputSchema) in the client's output"
 fi
 if echo "$CLIENT_PLAIN" | grep -q '"echo"'; then
   ok "tools/list observed by the client includes echo"

@@ -8,14 +8,14 @@
 //!
 //! ## Usage
 //! ```bash
-//! # Start server on default port (52940)
+//! # Start server on default port (52950)
 //! cargo run --package client-initialise-server
 //! ```
 //!
 //! ## Test with Client
 //! ```bash
 //! # In another terminal:
-//! cargo run --package client-initialise-report -- --url http://127.0.0.1:52940/mcp
+//! cargo run --package client-initialise-report -- --url http://127.0.0.1:52950/mcp
 //! ```
 
 use anyhow::Result;
@@ -348,7 +348,7 @@ async fn main() -> Result<()> {
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
-    let mut port = 52940;
+    let mut port = 52950;
     let mut storage_backend = "inmemory".to_string(); // Default to InMemory storage
     let mut create_tables = false; // Default to not creating tables
 
@@ -357,7 +357,7 @@ async fn main() -> Result<()> {
         match args[i].as_str() {
             "--port" => {
                 if i + 1 < args.len() {
-                    port = args[i + 1].parse().unwrap_or(52940);
+                    port = args[i + 1].parse().unwrap_or(52950);
                     i += 2;
                 } else {
                     i += 1;
