@@ -8,7 +8,6 @@
 //! Fix: zero-config derive tools now return `None` for output_schema(), matching the
 //! function macro behavior. Use `#[tool(output = Type)]` for explicit output schemas.
 
-use std::collections::HashMap;
 use turul_mcp_builders::prelude::*;
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::McpResult;
@@ -51,18 +50,6 @@ fn test_zero_config_derive_has_no_output_schema() {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct MyOutput {
     result: f64,
-}
-
-impl turul_mcp_protocol::schema::JsonSchemaGenerator for MyOutput {
-    fn json_schema() -> turul_mcp_protocol::tools::ToolSchema {
-        use turul_mcp_protocol::schema::JsonSchema;
-        turul_mcp_protocol::tools::ToolSchema::object()
-            .with_properties(HashMap::from([(
-                "result".to_string(),
-                JsonSchema::number(),
-            )]))
-            .with_required(vec!["result".to_string()])
-    }
 }
 
 #[derive(McpTool, Clone, Default)]

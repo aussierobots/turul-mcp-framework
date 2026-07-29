@@ -1,7 +1,12 @@
 #!/bin/bash
 #
 # Calculator Learning Progression - Intent-Based Verification
-# Tests all 4 tool creation patterns with actual math verification
+# Tests all 4 tool creation patterns with actual math verification.
+#
+# All 5 example servers below build against the default (2026-07-28
+# stateless) feature set: there is no `initialize` handshake or
+# `Mcp-Session-Id` — every request carries `MCP-Protocol-Version`,
+# `Mcp-Method`/`Mcp-Name`, and a `_meta` block. See scripts/lib/mcp2026.sh.
 #
 
 set -e
@@ -9,6 +14,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
+
+source "$SCRIPT_DIR/lib/mcp2026.sh"
 
 echo "======================================================================"
 echo "Calculator Learning Progression - Intent-Based Verification"
@@ -48,6 +55,7 @@ test_server() {
     local port=$2
     local tool_name=$3
     local test_description=$4
+    local url="http://127.0.0.1:${port}/mcp"
 
     echo "----------------------------------------"
     echo "Testing: $server_name"
@@ -64,44 +72,22 @@ test_server() {
     fi
     RUST_LOG=error ./target/debug/"$server_name" --port "$port" > "/tmp/${server_name}_${port}.log" 2>&1 &
     SERVER_PID=$!
-    sleep 3
 
-    # Check if server is running
-    if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo -e "${RED}FAILED${NC}: Server failed to start"
-        FAILED=$((FAILED + 1))
-        return 1
-    fi
-
-    # Initialize and get session ID (from mcp-session-id header)
-    echo "Initializing MCP session..."
-    SESSION_ID=$(curl -i -s -X POST "http://127.0.0.1:$port/mcp" \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/json" \
-        -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
-        | grep -i '^mcp-session-id:' | sed 's/^mcp-session-id: *//i' | tr -d '\r\n ')
-
-    if [ -z "$SESSION_ID" ]; then
-        echo -e "${RED}FAILED${NC}: Could not get session ID from header"
+    if ! mcp2026_wait_for_server "$port"; then
+        echo -e "${RED}FAILED${NC}: Server did not answer server/discover within 15s"
         kill $SERVER_PID 2>/dev/null || true
         FAILED=$((FAILED + 1))
         return 1
     fi
 
-    echo "Session ID: $SESSION_ID"
-
     # Test 1: List tools
     echo "Test 1: Listing tools..."
-    TOOLS_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/json" \
-        -H "Mcp-Session-Id: $SESSION_ID" \
-        -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
-
+    TOOLS_RESPONSE=$(mcp2026_request "$url" "tools/list" "" '{}')
     TOOL_COUNT=$(echo "$TOOLS_RESPONSE" | jq -r '.result.tools | length // 0')
 
     if [ "$TOOL_COUNT" -eq 0 ]; then
         echo -e "${RED}FAILED${NC}: No tools found"
+        echo "Response: $TOOLS_RESPONSE"
         kill $SERVER_PID 2>/dev/null || true
         FAILED=$((FAILED + 1))
         return 1
@@ -115,11 +101,8 @@ test_server() {
     # Different servers have different parameter schemas
     if [ "$tool_name" = "echo" ]; then
         # minimal-server just echoes
-        CALL_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            -H "Mcp-Session-Id: $SESSION_ID" \
-            -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool_name\",\"arguments\":{\"text\":\"test\"}}}")
+        CALL_RESPONSE=$(mcp2026_request "$url" "tools/call" "$tool_name" \
+            "{\"name\":\"$tool_name\",\"arguments\":{\"text\":\"test\"}}")
 
         RESULT=$(echo "$CALL_RESPONSE" | jq -r '.result.content[0].text // empty')
 
@@ -136,11 +119,8 @@ test_server() {
 
     else
         # Calculator tools
-        CALL_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            -H "Mcp-Session-Id: $SESSION_ID" \
-            -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool_name\",\"arguments\":{\"a\":5.0,\"b\":3.0}}}")
+        CALL_RESPONSE=$(mcp2026_request "$url" "tools/call" "$tool_name" \
+            "{\"name\":\"$tool_name\",\"arguments\":{\"a\":5.0,\"b\":3.0}}")
 
         RESULT=$(echo "$CALL_RESPONSE" | jq -r '.result.content[0].text // empty')
 

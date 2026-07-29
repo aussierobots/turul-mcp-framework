@@ -5,11 +5,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// Trait for generating JSON schemas from Rust types
-pub trait JsonSchemaGenerator {
-    /// Generate a ToolSchema for this type
-    fn json_schema() -> crate::tools::ToolSchema;
-}
 
 /// A JSON Schema definition
 #[derive(Debug, Clone, Serialize, Deserialize)]

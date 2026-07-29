@@ -31,8 +31,6 @@ Set `output_field = "..."` on the `#[tool(...)]` attribute to choose your own.
 > `outputSchema` comes exclusively from the `output = Type` attribute plus that
 > type's `schemars::JsonSchema` impl. The derive macro cannot see `execute`'s
 > return type, so **omitting `output = Type` yields no `outputSchema` at all**.
-> Hand-writing `impl JsonSchemaGenerator` does *not* feed it either — that trait
-> has no consumer in the tool path.
 
 ## Spec lane
 

@@ -29,10 +29,6 @@ serde.workspace = true
 uuid = { workspace = true, features = ["v7", "serde"] }
 serde_yml.workspace = true
 
-[[bin]]
-name = "elicitation-server-e2e"
-path = "bin/main.rs"
-
 [lib]
 name = "mcp_elicitation_tests"
 path = "src/lib.rs"

@@ -74,13 +74,21 @@ trap cleanup EXIT INT TERM
 wait_ready() {
   # wait_ready <watch-pid-var> <probe-cmd...>
   local pid_var="$1"; shift
-  local ready=0
+  local streak=0
   for _ in $(seq 1 200); do
     kill -0 "${!pid_var}" 2>/dev/null || return 1
-    if "$@" >/dev/null 2>&1; then ready=1; break; fi
+    if "$@" >/dev/null 2>&1; then
+      streak=$((streak + 1))
+      # Three consecutive successes: one probe can land in the window between a
+      # lazy build finishing and the watcher swapping the function process, and
+      # the connection then dies mid-request as hyper IncompleteMessage.
+      [ "$streak" -ge 3 ] && return 0
+    else
+      streak=0
+    fi
     sleep 3
   done
-  [ "$ready" = "1" ]
+  return 1
 }
 
 probe_2026() {
@@ -104,12 +112,34 @@ probe_2025() {
   [ "$code" = "200" ]
 }
 
+# Both watches build the SAME binary name with mutually exclusive feature sets,
+# so they must not share a target directory: whichever rebuilt last would
+# overwrite target/debug/$FUNCTION and the other lane would serve, or be killed
+# mid-request while serving, the wrong build. That surfaces as
+# hyper::Error(IncompleteMessage) rather than anything naming the real cause.
+# A populated shared target dir hides it — the rebuilds are no-ops — so it
+# reproduces only after a cargo clean.
+TARGET_2026="${CARGO_TARGET_DIR:-$PWD/target}-lambda-e2e-2026-07-28"
+TARGET_2025="${CARGO_TARGET_DIR:-$PWD/target}-lambda-e2e-2025-11-25"
+
+# Build both lanes up front. `cargo lambda watch` otherwise builds on first
+# invoke, so the readiness probe races the build and the function is replaced
+# underneath whatever request is in flight.
+echo "=== pre-building $FUNCTION for both lanes (cold target dirs build ~200 crates) ==="
+CARGO_TARGET_DIR="$TARGET_2026" cargo build -p turul-mcp-aws-lambda --bin "$FUNCTION" \
+  || { echo "FAIL: 2026-07-28 pre-build failed"; exit 1; }
+CARGO_TARGET_DIR="$TARGET_2025" cargo build -p turul-mcp-aws-lambda --bin "$FUNCTION" \
+  --no-default-features -F cors,sse,protocol-2025-11-25 \
+  || { echo "FAIL: 2025-11-25 pre-build failed"; exit 1; }
+
 echo "=== booting cargo lambda watch: $FUNCTION (2026-07-28 default features) on :$PORT_2026 ==="
+CARGO_TARGET_DIR="$TARGET_2026" \
 cargo lambda watch -p turul-mcp-aws-lambda --bin "$FUNCTION" \
   --invoke-port "$PORT_2026" --ignore-changes >"$LOG_2026" 2>&1 &
 WATCH_PID_2026=$!
 
 echo "=== booting cargo lambda watch: $FUNCTION (2025-11-25 feature set) on :$PORT_2025 ==="
+CARGO_TARGET_DIR="$TARGET_2025" \
 cargo lambda watch -p turul-mcp-aws-lambda --bin "$FUNCTION" \
   --no-default-features -F cors,sse,protocol-2025-11-25 \
   --invoke-port "$PORT_2025" --ignore-changes >"$LOG_2025" 2>&1 &

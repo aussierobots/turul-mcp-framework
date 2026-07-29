@@ -358,9 +358,13 @@ impl SessionContext {
     }
 
     /// The request's `_meta.progressToken`, when the caller opted in to
-    /// `notifications/progress` (populated by the 2026 tools/call and
-    /// resources/read handlers).
-    #[cfg(feature = "protocol-2026-07-28")]
+    /// `notifications/progress` (populated by the tools/call and resources/read
+    /// handlers on both lanes).
+    ///
+    /// Returns `None` for a numeric token on 2025-11-25: that spec snapshot's
+    /// `ProgressToken` is a newtype over `String` and the crate is frozen, so a
+    /// number cannot be represented. `notify_request_progress` is unaffected —
+    /// it echoes the stored JSON value verbatim, preserving the client's type.
     pub fn progress_token(&self) -> Option<turul_mcp_protocol::meta::ProgressToken> {
         self.extensions
             .get("mcp:progressToken")
@@ -372,7 +376,6 @@ impl SessionContext {
     /// number). No-op (returns `false`) when the request declared no token —
     /// "Progress notifications MUST only reference tokens that were provided
     /// in an active request."
-    #[cfg(feature = "protocol-2026-07-28")]
     pub async fn notify_request_progress(&self, progress: f64, total: Option<f64>) -> bool {
         let Some(token) = self.extensions.get("mcp:progressToken").cloned() else {
             return false;
@@ -398,7 +401,6 @@ impl SessionContext {
     /// human-readable status message (Progress §Behavior: `message` is the
     /// optional progress text). No-op without a request token — see
     /// [`notify_request_progress`](Self::notify_request_progress).
-    #[cfg(feature = "protocol-2026-07-28")]
     pub async fn notify_request_progress_with_message(
         &self,
         progress: f64,

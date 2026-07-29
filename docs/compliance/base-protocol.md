@@ -128,6 +128,25 @@ test covers the three statuses the challenge builder actually reaches on the
 header by construction, but no wire test drives it; that is a narrower gap than
 the one it replaces and is recorded as such rather than claimed green.
 
+**Two auth-failure paths, not one, by design.** `turul-mcp-oauth`'s bearer-token
+rejections (missing/invalid/expired token, insufficient scope) construct
+`MiddlewareError::HttpChallenge` (`c/turul-mcp-oauth/src/middleware.rs`), which
+the transport short-circuits into a raw HTTP 401/403 + `WWW-Authenticate`
+response before JSON-RPC dispatch — an `unreachable!()` guard in
+`map_middleware_error_to_jsonrpc` (`c/turul-http-mcp-server/src/middleware/error.rs`)
+enforces that this variant never reaches the JSON-RPC error path. Separately,
+`MiddlewareError::Unauthenticated` is a general-purpose "auth required" signal
+any custom (non-OAuth) middleware can return; it maps to `-32001` inside a 200
+response (`session_handler.rs:1325`, `streamable_http.rs:2877`), the same "well-formed
+request that fails inside processing → 200 with the error in the JSON-RPC body"
+rule §11 documents for every other handler-level failure. The two are not the
+same failure wearing different HTTP clothes: an OAuth Bearer challenge is an
+HTTP-native mechanism RFC 6750/9728 mandates status codes and headers for;
+generic middleware authentication is a JSON-RPC domain error like any other
+`McpError` variant, with no such mandate. A custom middleware that wants
+OAuth-grade HTTP semantics returns `HttpChallenge`, not `Unauthenticated` — the
+frozen `-32001` allocation is not a gap to close.
+
 **Documentation gap:** ADR-021 mentions RFC 9207 but the governing 2026 ADR
 (ADR-027) does not discuss any of the six auth-hardening SEPs that AGENTS.md
 headlines in the Branch Lock (`AGENTS.md:227`). CLAUDE.md's Branch Lock section
@@ -179,6 +198,7 @@ version, all three of which had drifted.
 | Closing the stream is treated as cancellation | MUST | Implemented | `streamable_http.rs` | `cancellation_2026.rs::client_disconnect_cancels_the_in_flight_request` | pass | — | — | — |
 | Inbound client `notifications/progress` no longer dispatched | MUST | Implemented | `builder.rs:198` gated to the 2025 lane | `notifications_2026.rs::inbound_progress_notification_still_gets_202_with_no_dispatch_entry` | pass | — | — | — |
 | Server progress only for a request that declared a token, in order, stopping at completion | SHOULD | Implemented | `session.rs:370-420` | `progress_2026.rs::progress_echoes_the_request_string_token`, `::progress_stops_after_completion`, `streaming_e2e_2026.rs::progress_frames_carry_increasing_values_before_the_result` | pass | — | — | — |
+| Progress correlation is available on the 2025-11-25 lane too | SHOULD | Implemented | `SessionContext::progress_token`/`notify_request_progress`/`..._with_message` are lane-neutral; the token is populated from the typed `_meta` field on 2026-07-28 and by key from the untyped `meta` map on 2025-11-25 (`server.rs` tools/call, `handlers/mod.rs` resources/read) | `progress_token_match_2025_11_25.rs::a_progress_notification_carries_the_requests_own_token` | pass | — | — | — |
 | Cursor pagination on list results | MUST | Implemented | `tools.rs`/`resources.rs`/`prompts.rs` | `wire_edges_2026.rs::tools_list_is_deterministic_paginated_and_cacheable` (tools); `list_pagination_2026.rs::resources_list_paginates_and_rejects_an_invalid_cursor`, `::resource_templates_list_paginates_and_rejects_an_invalid_cursor`, `::prompts_list_paginates_and_rejects_an_invalid_cursor` | pass | — | — | — |
 
 All four paginated list methods now have a cursor walk. Each walk asserts three

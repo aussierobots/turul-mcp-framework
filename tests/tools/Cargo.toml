@@ -48,10 +48,6 @@ schemars.workspace = true
 [dev-dependencies]
 serial_test.workspace = true
 
-[[bin]]
-name = "tools-test-server-e2e"
-path = "bin/main.rs"
-
 [[test]]
 name = "all"
 path = "tests/all.rs"

@@ -43,10 +43,6 @@ path = "src/lib.rs"
 serial_test.workspace = true
 turul-mcp-client.workspace = true
 
-[[bin]]
-name = "resource-test-server-e2e"
-path = "bin/main.rs"
-
 [[test]]
 name = "all"
 path = "tests/all.rs"

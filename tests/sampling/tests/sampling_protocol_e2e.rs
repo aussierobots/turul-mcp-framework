@@ -97,20 +97,64 @@ async fn test_sampling_different_models() {
         .unwrap();
     client.send_initialized_notification().await.unwrap();
 
-    // Test different types of requests to different sampling models
+    // Each case hints at the specific provider that must answer (via
+    // `modelPreferences.hints`, per the MCP sampling spec) and asserts the
+    // response's `model` field matches — not just that some text came back.
     let test_cases = vec![
-        ("Write a technical document", "technical writing", 300),
-        ("Create a creative story", "creative writing", 400),
-        ("Help me with general questions", "conversational", 200),
+        (
+            "Write a technical document",
+            "technical writing",
+            300,
+            "technical-assistant-v1",
+        ),
+        (
+            "Create a creative story",
+            "creative writing",
+            400,
+            "creative-assistant-v1",
+        ),
+        (
+            "Help me with general questions",
+            "conversational",
+            200,
+            "conversational-assistant-v1",
+        ),
     ];
 
-    for (request_text, expected_type, max_tokens) in test_cases {
-        let create_request = create_message_request(request_text, max_tokens);
+    for (request_text, expected_type, max_tokens, expected_model) in test_cases {
+        let create_request = json!({
+            "messages": [
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": request_text
+                    }
+                }
+            ],
+            "maxTokens": max_tokens,
+            "temperature": 0.7,
+            "modelPreferences": {
+                "hints": [{ "name": expected_model }]
+            }
+        });
 
         let result = client
             .make_request("sampling/createMessage", create_request, 21)
             .await
             .expect("Failed to call sampling/createMessage");
+
+        let responding_model = result
+            .get("result")
+            .and_then(|r| r.get("model"))
+            .and_then(|m| m.as_str())
+            .expect("result.model should be a string");
+
+        assert_eq!(
+            responding_model, expected_model,
+            "expected the {} provider to answer \"{}\" (hinted via modelPreferences), but {} answered",
+            expected_type, request_text, responding_model
+        );
 
         let generated_text =
             extract_sampling_message(&result).expect("Should extract message text");
@@ -126,7 +170,10 @@ async fn test_sampling_different_models() {
             expected_type
         );
 
-        info!("✅ {} sampling model working correctly", expected_type);
+        info!(
+            "✅ {} sampling model working correctly ({})",
+            expected_type, responding_model
+        );
         debug!(
             "{} sample: {}",
             expected_type,

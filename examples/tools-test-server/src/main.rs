@@ -48,8 +48,6 @@ use tracing::info;
 use uuid::Uuid;
 
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::schema::{JsonSchema, JsonSchemaGenerator};
-use turul_mcp_protocol::tools::ToolSchema;
 // Server prelude re-exports builders prelude + protocol types
 use turul_mcp_server::prelude::*;
 
@@ -62,24 +60,6 @@ struct CalculatorResult {
     operation: String,
     a: f64,
     b: f64,
-}
-
-impl JsonSchemaGenerator for CalculatorResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
-                ("result".to_string(), JsonSchema::number()),
-                ("operation".to_string(), JsonSchema::string()),
-                ("a".to_string(), JsonSchema::number()),
-                ("b".to_string(), JsonSchema::number()),
-            ])))
-            .with_required(vec![
-                "result".to_string(),
-                "operation".to_string(),
-                "a".to_string(),
-                "b".to_string(),
-            ])
-    }
 }
 
 /// Basic calculator tool for testing arithmetic operations with parameter validation
@@ -141,23 +121,6 @@ struct StringResult {
     metadata: HashMap<String, serde_json::Value>,
 }
 
-impl JsonSchemaGenerator for StringResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
-                ("result".to_string(), JsonSchema::string()),
-                ("operation".to_string(), JsonSchema::string()),
-                ("original".to_string(), JsonSchema::string()),
-                ("metadata".to_string(), JsonSchema::object()),
-            ])))
-            .with_required(vec![
-                "result".to_string(),
-                "operation".to_string(),
-                "original".to_string(),
-            ])
-    }
-}
-
 /// String processing tool for text manipulation operations
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
@@ -215,23 +178,6 @@ struct DataResult {
     operation: String,
     input_type: String,
     metadata: HashMap<String, serde_json::Value>,
-}
-
-impl JsonSchemaGenerator for DataResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
-                ("result".to_string(), JsonSchema::object()),
-                ("operation".to_string(), JsonSchema::string()),
-                ("input_type".to_string(), JsonSchema::string()),
-                ("metadata".to_string(), JsonSchema::object()),
-            ])))
-            .with_required(vec![
-                "result".to_string(),
-                "operation".to_string(),
-                "input_type".to_string(),
-            ])
-    }
 }
 
 /// Data transformation tool for JSON operations
@@ -325,24 +271,6 @@ struct CounterResult {
     total_sessions: usize,
 }
 
-impl JsonSchemaGenerator for CounterResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
-                ("session_id".to_string(), JsonSchema::string()),
-                ("operation".to_string(), JsonSchema::string()),
-                ("current_value".to_string(), JsonSchema::integer()),
-                ("amount".to_string(), JsonSchema::integer()),
-                ("total_sessions".to_string(), JsonSchema::integer()),
-            ])))
-            .with_required(vec![
-                "session_id".to_string(),
-                "operation".to_string(),
-                "current_value".to_string(),
-            ])
-    }
-}
-
 /// Session-aware counter tool that maintains state per session using proper SessionStorage integration
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
@@ -424,26 +352,6 @@ struct ProgressResult {
     completed_at: String,
 }
 
-impl JsonSchemaGenerator for ProgressResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
-                ("operation".to_string(), JsonSchema::string()),
-                ("duration".to_string(), JsonSchema::number()),
-                ("steps".to_string(), JsonSchema::integer()),
-                ("progress_token".to_string(), JsonSchema::string()),
-                ("status".to_string(), JsonSchema::string()),
-                ("completed_at".to_string(), JsonSchema::string()),
-            ])))
-            .with_required(vec![
-                "operation".to_string(),
-                "duration".to_string(),
-                "steps".to_string(),
-                "status".to_string(),
-            ])
-    }
-}
-
 /// Progress tracking tool for long-running operations with progress notifications
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
@@ -516,17 +424,6 @@ struct ErrorResult {
     message: String,
 }
 
-impl JsonSchemaGenerator for ErrorResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([(
-                "message".to_string(),
-                JsonSchema::string(),
-            )])))
-            .with_required(vec!["message".to_string()])
-    }
-}
-
 /// Error generator tool for testing error handling
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
@@ -579,28 +476,6 @@ struct ValidationResult {
     config_keys: Vec<String>,
     tag_count: usize,
     validated_at: String,
-}
-
-impl JsonSchemaGenerator for ValidationResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
-                ("validation_result".to_string(), JsonSchema::string()),
-                ("email".to_string(), JsonSchema::string()),
-                ("age".to_string(), JsonSchema::integer()),
-                (
-                    "config_keys".to_string(),
-                    JsonSchema::array(JsonSchema::string()),
-                ),
-                ("tag_count".to_string(), JsonSchema::integer()),
-                ("validated_at".to_string(), JsonSchema::string()),
-            ])))
-            .with_required(vec![
-                "validation_result".to_string(),
-                "email".to_string(),
-                "age".to_string(),
-            ])
-    }
 }
 
 /// Parameter validator tool for complex schema validation

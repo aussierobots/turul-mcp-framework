@@ -47,7 +47,7 @@ pub struct McpServerBuilder {
 
     /// Sampling providers registered with the server
     #[cfg(feature = "protocol-2025-11-25")]
-    sampling: HashMap<String, Arc<dyn McpSampling>>,
+    sampling: Vec<Arc<dyn McpSampling>>,
 
     /// Completion providers registered with the server
     completions: Vec<Arc<dyn McpCompletion>>,
@@ -275,7 +275,7 @@ impl McpServerBuilder {
             #[cfg(feature = "protocol-2025-11-25")]
             elicitations: HashMap::new(),
             #[cfg(feature = "protocol-2025-11-25")]
-            sampling: HashMap::new(),
+            sampling: Vec::new(),
             completions: Vec::new(),
             #[cfg(feature = "ext-tasks")]
             ext_task_store: None,
@@ -987,8 +987,7 @@ impl McpServerBuilder {
     /// Register a sampling provider with the server
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_provider<S: McpSampling + 'static>(mut self, sampling: S) -> Self {
-        let key = format!("sampling_{}", self.sampling.len());
-        self.sampling.insert(key, Arc::new(sampling));
+        self.sampling.push(Arc::new(sampling));
         self
     }
 
@@ -1696,8 +1695,6 @@ impl McpServerBuilder {
         {
             let has_samplings = !self.sampling.is_empty();
             tracing::debug!("🔧 Has sampling configured: {}", has_samplings);
-            let has_logging = !self.loggers.is_empty();
-            tracing::debug!("🔧 Has logging configured: {}", has_logging);
         }
 
         // Tools capabilities — listChanged depends on ToolChangeMode
@@ -1756,8 +1753,14 @@ impl McpServerBuilder {
             self.capabilities.completions = Some(CompletionsCapabilities::default());
         }
 
-        // Logging capability: presence of the (opaque) object means the server
-        // can send notifications/message.
+        // Logging is advertised unconditionally because it is unconditionally
+        // served, and does not depend on the `loggers` map: `logging/setLevel`
+        // stores the threshold on the session (`LoggingHandler` never reads
+        // `loggers`), and `SessionContext::notify_log` is available to any tool.
+        // A server that registers no `McpLogger` still honours both, so
+        // advertising it is truthful — `logging_capability_is_truthful.rs` and
+        // `log_gating_2026.rs` drive the whole path against exactly such a
+        // server on each lane.
         #[allow(deprecated)] // SEP-2577 migration window
         {
             self.capabilities.logging = Some(LoggingCapabilities::default());

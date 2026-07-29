@@ -30,7 +30,7 @@ These scripts test the **actual intent and functionality** of each example, not 
   - Verifies session persistence across requests
   - Validates storage-specific behavior
 
-- **`verify_advanced_servers.sh`** - Advanced/Composite Servers (9 examples)
+- **`verify_advanced_servers.sh`** - Advanced/Composite Servers (5 examples)
   - Tests real business logic (alerts, audit, logging)
   - Verifies multi-capability servers
   - Validates complex workflows
@@ -40,27 +40,17 @@ These scripts test the **actual intent and functionality** of each example, not 
   - Verifies session management, SSE streaming
   - Validates client-server integration
 
-- **`verify_lambda_examples.sh`** - Lambda Examples (3 examples)
-  - Tests AWS Lambda deployment patterns (compilation only)
-  - Verifies serverless MCP builds correctly
-  - Note: Full testing requires AWS deployment
-
-- **`verify_meta_examples.sh`** - Meta Examples (3 examples)
-  - Tests builders showcase, performance testing
-  - Verifies demonstration and tutorial examples
-  - Validates educational content
+Lambda deployment patterns are covered separately by
+`test_lambda_middleware.sh` / `test_lambda_middleware_live.sh` and
+`../scripts/e2e-lambda-*.sh` (wired into `ci-gates.sh`'s `lambda` and
+`examples` lanes), not by a `verify_*_examples.sh` script here.
 
 ### Master Scripts
 
-- **`verify_all_examples.sh`** - Runs all 8 verification phases sequentially
-  - Generates comprehensive report
-  - Interactive prompts between phases
-  - Provides pass/fail summary
-
-- **`verify_all_examples_unattended.sh`** - Runs all 8 verification phases non-interactively
+- **`verify_all_examples_unattended.sh`** - Runs all 6 verification phases non-interactively
   - Generates comprehensive report without prompts
   - Collects results to temporary files
-  - Suitable for CI/CD pipelines
+  - Suitable for CI/CD pipelines (wired into `scripts/ci-gates.sh examples`)
 
 ## Usage
 
@@ -77,10 +67,6 @@ These scripts test the **actual intent and functionality** of each example, not 
 ### Run All Examples
 
 ```bash
-# Interactive mode (prompts between phases)
-./scripts/verify_all_examples.sh
-
-# Non-interactive (unattended)
 ./scripts/verify_all_examples_unattended.sh 2>&1 | tee full_verification.log
 ```
 
@@ -167,11 +153,9 @@ Scripts gracefully skip these with `SKIPPED` status when dependencies are unavai
 | Resource servers | 6 | ✅ Ready |
 | Prompts & special features | 7 | ✅ Ready |
 | Session storage backends | 4 | ✅ Ready |
-| Advanced/composite servers | 9 | ✅ Ready |
+| Advanced/composite servers | 5 | ✅ Ready |
 | Clients & test utilities | 5 | ✅ Ready |
-| Lambda examples | 3 | ✅ Ready |
-| Meta examples | 3 | ✅ Ready |
-| **Total** | **42** | ✅ Ready |
+| **Total** | **32** | ✅ Ready |
 
 ## Troubleshooting
 
@@ -207,7 +191,7 @@ RUST_LOG=error timeout 30s cargo run --bin ...
 
 ## Next Steps
 
-1. Run all examples: `./scripts/verify_all_examples.sh`
+1. Run all examples: `./scripts/verify_all_examples_unattended.sh`
 2. Review results
 3. Fix any failing examples
 4. Re-run verification until all pass

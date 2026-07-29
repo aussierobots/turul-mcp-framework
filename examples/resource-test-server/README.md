@@ -55,10 +55,3 @@ cargo run -p resource-test-server -- --port 8020
 The E2E harness starts it itself via `TestServerManager::start_resource_server()`
 (`tests/shared/src/e2e_utils.rs`), so running it by hand is only for poking at
 it with curl.
-
-## Duplicate copy
-
-`tests/resources/bin/main.rs` is a byte-identical copy of `src/main.rs`, built
-as the `resource-test-server-e2e` binary. Nothing spawns that binary — the
-harness runs `cargo run -p resource-test-server`, i.e. this package. Edit this
-file; the copy is dead weight awaiting removal.

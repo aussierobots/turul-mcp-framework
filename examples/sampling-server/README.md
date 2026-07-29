@@ -68,20 +68,22 @@ runs: `-32020 Validation error: max_tokens must be greater than 0`.
 Add `text/event-stream` to `Accept` and the same result arrives as an SSE
 `data:` frame instead of a JSON body.
 
-## Known limitation: only one of the three samplers is reachable
+## Selecting between the three samplers
 
-`main()` registers three providers (creative, technical, conversational), but
-`sampling/createMessage` has no way to select between them — the framework's
-`ProvidedSamplingHandler` dispatches to `providers.values().next()` on a
-`HashMap`. Which sampler answers is therefore **arbitrary and varies between
-process starts**; observed across five restarts of this server, requests were
-answered by the creative sampler (`creative-assistant-v1`) three times and the technical sampler twice,
-with identical input.
+`main()` registers three providers (creative, technical, conversational).
+`ProvidedSamplingHandler` dispatches deterministically: providers are tried in
+`priority()` descending order (registration order breaks ties), and the first
+whose `can_handle()` accepts the request wins — never `HashMap` iteration
+order, which varies between process starts.
 
-Treat the three registrations as showing that `.sampling_provider()` can be
-called repeatedly, not as showing per-request routing. Register one provider
-and branch inside its `sample()` if you need behaviour to depend on the
-request.
+Each sampler's `can_handle()` claims a request only when
+`modelPreferences.hints` names its own model id (e.g. `technical-assistant-v1`);
+with no hints, any of the three may answer and the registration-order tiebreak
+picks the first (`creative-assistant-v1`). To route to a specific sampler, send:
+
+```json
+"modelPreferences": { "hints": [{ "name": "technical-assistant-v1" }] }
+```
 
 ## Tests
 
@@ -90,6 +92,6 @@ cargo test -p mcp-sampling-tests
 ```
 
 Those suites launch this binary via `TestServerManager::start_sampling_server()`.
-`test_sampling_different_models` sends three differently-worded prompts but
-only asserts that the returned text is non-empty and longer than 20 chars —
-it cannot assert which sampler answered, for the reason above.
+`test_sampling_different_models` sends three prompts, each hinting at a
+specific model via `modelPreferences`, and asserts `result.model` matches the
+hinted provider.

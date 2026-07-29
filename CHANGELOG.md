@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### Fixed (2026-07-30, sampling provider selection was HashMap-order roulette)
+
+- **`ProvidedSamplingHandler` picked a sampling provider via `HashMap::values().next()`,**
+  so with more than one provider registered, which one answered `sampling/createMessage`
+  varied between process starts (`examples/sampling-server` registers three; across five
+  restarts with identical input the creative sampler answered three times and the technical
+  sampler twice). `SamplingProvider::can_handle` and `::priority` existed for exactly this
+  and were called from nowhere. Dispatch now tries providers in `priority()` descending
+  order, first `can_handle()` match wins; `.sampling_provider()`'s `sampling_{n}` key breaks
+  priority ties by registration order, never by `HashMap` iteration order. Verified across
+  10 separate process invocations of a dedicated regression test with three equal-priority
+  providers: same provider answered every time (was flaky ~60% of the time pre-fix across
+  10 runs of the same test against the reverted code).
+- **`examples/sampling-server`'s three samplers now claim requests via `modelPreferences.hints`**
+  (`can_handle` matches the hinted model name against its own id; no hints means any may
+  answer). This is what let `test_sampling_different_models` be corrected to assert which
+  provider actually answered instead of only that the response text was non-empty and over
+  20 characters long — an assertion that would have passed with a single hardcoded provider
+  or fully random selection.
+
 ### Fixed (2026-07-29, client could not list tools from our own server)
 
 - **`list_tools()` failed outright on a JSON Schema 2020-12 composition.** The client's

@@ -1449,7 +1449,8 @@ fn is_basic_type(ty: &syn::Type) -> bool {
 /// Falls back to struct introspection if schemars is not available for that type.
 ///
 /// This provides zero-configuration automatic detection: if the output type has
-/// `#[derive(JsonSchema)]`, the framework automatically uses it - no manual flags needed!
+/// `#[derive(schemars::JsonSchema)]`, the framework automatically uses it - no
+/// manual flags needed.
 pub fn generate_output_schema_auto(
     ty: &syn::Type,
     field_name: &str,

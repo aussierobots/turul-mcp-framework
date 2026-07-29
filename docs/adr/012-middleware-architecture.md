@@ -161,23 +161,33 @@ Middleware errors are mapped to semantic JSON-RPC error codes:
 ```rust
 fn map_middleware_error_to_jsonrpc(error: MiddlewareError) -> JsonRpcError {
     match error {
-        MiddlewareError::Unauthenticated(msg) => JsonRpcError::new(-32001, msg, None),
-        MiddlewareError::Unauthorized(msg) => JsonRpcError::new(-32002, msg, None),
+        MiddlewareError::Unauthenticated(msg) => JsonRpcError::new(error_codes::UNAUTHENTICATED, msg, None),
+        MiddlewareError::Unauthorized(msg) => JsonRpcError::new(error_codes::UNAUTHORIZED, msg, None),
         MiddlewareError::RateLimitExceeded { message, retry_after } => {
-            JsonRpcError::new(-32003, message, Some(json!({"retryAfter": retry_after})))
+            JsonRpcError::new(error_codes::RATE_LIMIT_EXCEEDED, message, Some(json!({"retryAfter": retry_after})))
         }
-        MiddlewareError::InvalidRequest(msg) => JsonRpcError::new(-32600, msg, None),
-        MiddlewareError::SessionError(msg) => JsonRpcError::new(-32603, msg, None),
+        MiddlewareError::InvalidRequest(msg) => JsonRpcError::new(error_codes::INVALID_REQUEST, msg, None),
+        MiddlewareError::Internal(msg) => JsonRpcError::new(error_codes::INTERNAL_ERROR, msg, None),
+        MiddlewareError::Custom { message, .. } => JsonRpcError::new(error_codes::INTERNAL_ERROR, message, None),
+        // Answered as a raw HTTP challenge before JSON-RPC dispatch is reached,
+        // so this arm is unreachable rather than mapped.
+        MiddlewareError::HttpChallenge { .. } => unreachable!(),
     }
 }
 ```
 
 **Semantic Error Codes:**
 - `-32001` - Unauthenticated (missing credentials)
-- `-32002` - Unauthorized (invalid permissions)
+- `-32005` - Unauthorized (invalid permissions)
 - `-32003` - RateLimitExceeded (with `retryAfter` in data)
 - `-32600` - InvalidRequest (malformed request)
-- `-32603` - InternalError (session storage failure)
+- `-32603` - InternalError (session storage failure, `Internal`, `Custom`)
+
+`HttpChallenge` has no JSON-RPC code: OAuth 2.1 requires a `401` with a
+`WWW-Authenticate` header, so it short-circuits to a raw HTTP response before
+dispatch. `Unauthorized` keeps the JSON-RPC form because a request that is
+well-formed but fails during processing is answered `200` with the error in the
+body — the two are different layers, not an inconsistency.
 
 ### Builder Integration
 
@@ -261,3 +271,9 @@ See framework examples:
 - [ADR 009: Protocol-Based Handler Routing](009-protocol-based-handler-routing.md)
 - `crates/turul-http-mcp-server/src/middleware/` - Implementation
 - `crates/turul-http-mcp-server/src/tests/middleware_tests.rs` - Tests
+
+## Revision Log
+
+| Date | Change |
+|---|---|
+| 2026-07-30 | `Unauthorized` remapped `-32002` → `-32005`. 2026-07-28 states implementations of that version MUST NOT emit `-32002`, which it reassigns to resource-not-found. Recorded the `HttpChallenge` variant, which predated this ADR's error table, and corrected `SessionError` to the actual `Internal`/`Custom` variants. |

@@ -1867,6 +1867,25 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             ctx
         };
 
+        // Progress opt-in on 2025-11-25: same `_meta.progressToken` concept, but
+        // that spec snapshot types `CallToolParams::meta` as an untyped map, so
+        // the token is read by key rather than off a typed field.
+        #[cfg(feature = "protocol-2025-11-25")]
+        let mcp_session_context = {
+            let mut ctx = mcp_session_context;
+            if let Some(ref mut session) = ctx
+                && let Some(token) = call_params
+                    .meta
+                    .as_ref()
+                    .and_then(|meta| meta.get("progressToken"))
+            {
+                session
+                    .extensions
+                    .insert("mcp:progressToken".to_string(), token.clone());
+            }
+            ctx
+        };
+
         // Build arguments Value
         let args = call_params
             .arguments

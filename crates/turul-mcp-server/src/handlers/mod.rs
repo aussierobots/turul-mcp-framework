@@ -959,6 +959,23 @@ impl McpHandler for ResourcesReadHandler {
             session
         };
 
+        // Progress opt-in on 2025-11-25: `ReadResourceParams::meta` is an
+        // untyped map on this spec snapshot, so the token is read by key.
+        #[cfg(feature = "protocol-2025-11-25")]
+        let session = {
+            let mut session = session;
+            if let Some(ref mut ctx) = session
+                && let Some(token) = read_params
+                    .meta
+                    .as_ref()
+                    .and_then(|meta| meta.get("progressToken"))
+            {
+                ctx.extensions
+                    .insert("mcp:progressToken".to_string(), token.clone());
+            }
+            session
+        };
+
         // Additional security validation for the specific URI
         if let Some(security_middleware) = &self.security_middleware {
             // Re-validate the URI after parsing (defense in depth)
@@ -1393,14 +1410,24 @@ impl McpHandler for SamplingHandler {
 /// This handler validates requests and dispatches to actual McpSampling
 /// implementations registered via .sampling_provider(). It replaces the
 /// default SamplingHandler when providers are configured.
+///
+/// Routes like [`CompletionHandler`]: the first provider whose `can_handle()`
+/// accepts the request wins, trying providers in `priority()` descending
+/// order and, for equal priority, in registration order. Registration order is
+/// carried by the `Vec` rather than recovered from a key, so no iteration order
+/// (which varies per process) can reach the dispatch decision.
 #[cfg(feature = "protocol-2025-11-25")]
 pub struct ProvidedSamplingHandler {
-    providers: HashMap<String, Arc<dyn crate::McpSampling>>,
+    providers: Vec<Arc<dyn crate::McpSampling>>,
 }
 
 #[cfg(feature = "protocol-2025-11-25")]
 impl ProvidedSamplingHandler {
-    pub fn new(providers: HashMap<String, Arc<dyn crate::McpSampling>>) -> Self {
+    /// `providers` arrives in registration order. `sort_by_key` is stable, so
+    /// sorting on priority alone leaves equal-priority providers in that order.
+    pub fn new(providers: Vec<Arc<dyn crate::McpSampling>>) -> Self {
+        let mut providers = providers;
+        providers.sort_by_key(|provider| std::cmp::Reverse(provider.priority()));
         Self { providers }
     }
 }
@@ -1429,11 +1456,12 @@ impl McpHandler for ProvidedSamplingHandler {
             params: message_params,
         };
 
-        // Select provider - use first for now (can enhance with can_handle/priority later)
+        // First provider (priority desc, registration order tiebreak) whose
+        // can_handle() accepts the request wins — see struct docs.
         let provider = self
             .providers
-            .values()
-            .next()
+            .iter()
+            .find(|provider| provider.can_handle(&request))
             .ok_or_else(|| McpError::configuration("No sampling provider available"))?;
 
         // Validate request - THIS is where maxTokens=0 gets caught!
@@ -1956,5 +1984,92 @@ mod cancelled_notification_tests {
         let (id, reason) = CancelledNotificationHandler::extract(None);
         assert_eq!(id, None);
         assert_eq!(reason, None);
+    }
+}
+
+#[cfg(feature = "protocol-2025-11-25")]
+#[cfg(test)]
+mod provided_sampling_handler_tests {
+    use super::{McpHandler, ProvidedSamplingHandler};
+    use async_trait::async_trait;
+    use serde_json::json;
+    use std::sync::Arc;
+    use turul_mcp_builders::prelude::*;
+    use turul_mcp_protocol::prompts::ContentBlock;
+    use turul_mcp_protocol::sampling::{CreateMessageRequest, CreateMessageResult, Role, SamplingMessage};
+
+    /// A sampling provider whose only distinguishing trait is its model id —
+    /// equal priority (default 0) and unconditional `can_handle` (default
+    /// `true`), same as every other provider in this test, so nothing but
+    /// registration order can break the tie.
+    struct NamedSampler {
+        model_id: &'static str,
+    }
+
+    impl HasSamplingConfig for NamedSampler {
+        fn max_tokens(&self) -> u32 {
+            100
+        }
+    }
+
+    impl HasSamplingContext for NamedSampler {
+        fn messages(&self) -> &[SamplingMessage] {
+            &[]
+        }
+    }
+
+    impl HasModelPreferences for NamedSampler {}
+    impl HasIcons for NamedSampler {}
+    impl HasSamplingTools for NamedSampler {}
+
+    #[async_trait]
+    impl crate::McpSampling for NamedSampler {
+        async fn sample(
+            &self,
+            _request: CreateMessageRequest,
+        ) -> crate::McpResult<CreateMessageResult> {
+            Ok(CreateMessageResult::new(
+                Role::Assistant,
+                ContentBlock::Text {
+                    text: "response".to_string(),
+                    annotations: None,
+                    meta: None,
+                },
+                self.model_id,
+            ))
+        }
+    }
+
+    /// Regression test for the HashMap-iteration-order bug: `.sampling_provider()`
+    /// keys entries `sampling_{n}` in registration order. With three providers of
+    /// equal priority and unconditional `can_handle`, dispatch must deterministically
+    /// pick the first registered one on every call — never whichever entry
+    /// Equal priority, all accepting: the first registered must answer.
+    #[tokio::test]
+    async fn equal_priority_providers_answer_in_registration_order() {
+        let providers: Vec<Arc<dyn crate::McpSampling>> = vec![
+            Arc::new(NamedSampler {
+                model_id: "provider-zero",
+            }),
+            Arc::new(NamedSampler {
+                model_id: "provider-one",
+            }),
+            Arc::new(NamedSampler {
+                model_id: "provider-two",
+            }),
+        ];
+
+        let handler = ProvidedSamplingHandler::new(providers);
+        let request = json!({
+            "messages": [{"role": "user", "content": {"type": "text", "text": "hi"}}],
+            "maxTokens": 50
+        });
+
+        let result = handler
+            .handle(Some(request))
+            .await
+            .expect("handle should succeed");
+        let model = result.get("model").and_then(|m| m.as_str());
+        assert_eq!(model, Some("provider-zero"));
     }
 }

@@ -5,7 +5,7 @@
 #   opt-in lane   = 2025-11-25 (legacy)
 #
 # Gates mirror docs/plans/2026-07-28-final-readiness-audit.md §7.
-# Usage:  scripts/ci-gates.sh [default|opt-in-2025|lambda|mutex|docs|all]  (default: all)
+# Usage:  scripts/ci-gates.sh [default|opt-in-2025|lambda|mutex|docs|examples|all]  (default: all)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -42,6 +42,8 @@ gate_default() {
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test schema_fidelity_2026
   run "2026 list pagination (cursor walks, invalid-cursor rejection)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test list_pagination_2026
+  run "2026 macro-authored tool icons reach tools/list" \
+    cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test tool_icons_2026
   run "2026 resource mimeType agreement (list vs read)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test resource_mime_type_2026
   # Spec-neutral test infrastructure: closes the reserve->bind window that let
@@ -149,14 +151,49 @@ gate_docs() {
   fi
 }
 
+# Runnable example servers, verified end to end over the real HTTP wire
+# (not just compiled) — the shell-level counterpart to gate_default's
+# in-process Rust suites. Split from gate_default because it shells out to
+# `cargo build -p <example>` + a live server per script rather than running
+# under `cargo test`.
+gate_examples() {
+  # Strict-superset orchestrator: calculator progression, resource servers,
+  # prompts/special-features, session storage backends, advanced/composite
+  # servers, and client/test utilities (6 phases, each mixing the 2026-07-28
+  # default lane with protocol-2025-11-25-pinned examples where those still
+  # exist). Lambda examples are gated separately below and in gate_lambda;
+  # they were dropped from this orchestrator's phase list as superseded.
+  run "example servers (calculator/resource/prompts/storage/advanced/client)" \
+    ./scripts/verify_all_examples_unattended.sh
+  # middleware-rate-limit-server: pre-session stateless rate limiting,
+  # asserts the 6th request gets -32003 (RateLimitExceeded).
+  run "example: rate-limit middleware (-32003 on the 6th request)" \
+    ./scripts/test_rate_limit.sh
+  # middleware-logging-server / middleware-rate-limit-server /
+  # middleware-auth-server, each on its own port: init, rate limit,
+  # X-API-Key auth gate (-32001 unauthenticated, whoami with a valid key).
+  run "example: logging/rate-limit/auth middleware (live)" \
+    ./scripts/test_middleware_live.sh
+  # middleware-auth-lambda: cargo-lambda cross-target build (debug + release).
+  run "example: Lambda auth middleware (cargo-lambda build)" \
+    ./scripts/test_lambda_middleware.sh
+  # middleware-auth-lambda: cargo-lambda watch, real Lambda Runtime API
+  # emulator. Auth-gate assertions (-32001 without a key, whoami with one)
+  # run when DynamoDB is reachable; otherwise this reports its own SKIPPED
+  # and still exits 0 — there is no AWS/DynamoDB in this sandbox to fake.
+  run "example: Lambda auth middleware (cargo-lambda watch, live)" \
+    ./scripts/test_lambda_middleware_live.sh
+}
+
 case "${1:-all}" in
   default)      gate_default ;;
   opt-in-2025)  gate_opt_in_2025 ;;
   lambda)       gate_lambda ;;
   mutex)        gate_mutex ;;
   docs)         gate_docs ;;
-  all)          gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs ;;
-  *) echo "usage: $0 [default|opt-in-2025|lambda|mutex|docs|all]"; exit 2 ;;
+  examples)     gate_examples ;;
+  all)          gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs; gate_examples ;;
+  *) echo "usage: $0 [default|opt-in-2025|lambda|mutex|docs|examples|all]"; exit 2 ;;
 esac
 
 echo; [ "$fail" = "0" ] && echo "ALL GATES PASSED" || echo "ONE OR MORE GATES FAILED"

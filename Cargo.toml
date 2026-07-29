@@ -320,6 +320,20 @@ colored = "3.1"
 mcp-e2e-shared = { path = "tests/shared" }
 
 
+[profile.dev]
+# Line tables, not full debuginfo: keeps file:line in backtraces, drops the type
+# information only a debugger would read.
+debug = "line-tables-only"
+
+# Dependencies carry no debuginfo: we never step into serde/tokio/hyper, and
+# their debuginfo was the bulk of target/debug/deps. Panic messages and their
+# file:line survive regardless — those come from #[track_caller], not debuginfo.
+[profile.dev.package."*"]
+debug = 0
+
+[profile.test.package."*"]
+debug = 0
+
 [profile.release]
 lto = true
 codegen-units = 1

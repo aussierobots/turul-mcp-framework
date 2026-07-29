@@ -158,7 +158,7 @@ _Rules below apply to `main` / the 2025-11-25 spec target. On the 2026-07-28 bra
 _On the 2026-07-28 branch the `notifications/initialized` rule does not apply — the handshake is gone. Per-request capability negotiation rides in `_meta`._
 
 - `notifications/initialized`: in strict lifecycle mode, reject operations until client sends `notifications/initialized`; add E2E to verify gating and acceptance after. (2025-11-25 baseline only.)
-- `notifications/progress`: progress updates must include `progressToken`. Add at least one strict E2E that asserts ≥1 progress event and token match with tool response.
+- `notifications/progress`: progress updates must include `progressToken`. Add at least one strict E2E that asserts ≥1 progress event and token match with tool response. Satisfied on both lanes: `progress_token_match_2025_11_25.rs` (2025-11-25) and `progress_2026.rs` / `streaming_e2e_2026.rs` (2026-07-28). The `SessionContext` progress API is deliberately lane-neutral — `notify_progress(arbitrary_string, ..)` does not satisfy this rule, because a token the tool invented is not correlation.
 - `list_changed` notifications (e.g., `notifications/tools/list_changed`) for tools/prompts/resources must only be advertised/emitted when dynamic change sources exist; keep capability key `listChanged=false` for static servers.
 
 ## Capabilities Truthfulness
