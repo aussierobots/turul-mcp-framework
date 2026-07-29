@@ -64,11 +64,18 @@ used through the framework.
 
 ## Gap register
 
-1. **`turul-mcp-ext-apps` is not wired into the server or the client.** Either
+1. **`turul-mcp-ext-apps` is pinned to a floating draft while a released dated
+   spec exists.** Its README declares "Apps protocol version: `2026-01-26`", but
+   `apps-draft.mdx` was vendored from upstream `specification/draft/`, not from
+   `specification/2026-01-26/`. Measured against upstream: the released file is
+   59,181 bytes, current draft is 90,146, ours is 89,256 — **902 lines different
+   from the spec the crate claims to implement**. `scripts/check-schema-pin.sh`
+   guards only the core schema, so nothing caught it.
+2. **`turul-mcp-ext-apps` is not wired into the server or the client.** Either
    wire it or state plainly in its README that it is a types-only crate, so
    nobody adds the dependency expecting the extension to work.
-2. **No peer has exercised the Tasks extension.** Its coverage is thorough and
+3. **No peer has exercised the Tasks extension.** Its coverage is thorough and
    entirely self-referential. The Go SDK v1.7.0 is the most promising peer for
    closing this, being the only stable 2026-07-28 implementation.
-3. **"Extensions off unless opted in" is structural, not asserted.** Nothing
+4. **"Extensions off unless opted in" is structural, not asserted.** Nothing
    fails if a future change starts advertising an extension by default.
