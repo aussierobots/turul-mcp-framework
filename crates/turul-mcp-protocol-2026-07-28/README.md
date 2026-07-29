@@ -35,7 +35,7 @@ A faithful 1:1 mapping of `schema/schema.ts`. Every TS interface, type, and meth
 
 ## Status
 
-**423 tests passing** across the crate's five suites. The schema-drift detector in `tests/compliance.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
+The suite is green across the crate's five test targets. The schema-drift detector in `tests/compliance.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
 
 The vendored schema is `schema/schema.ts`, taken from the immutable released path `schema/2026-07-28/schema.ts`. Upstream `schema/draft/` is the *next* spec cycle's floating pointer and is not what this crate tracks — verify the pin before starting a slice. Regeneration trigger and process: [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
 

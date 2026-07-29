@@ -24,7 +24,21 @@ FIXTURE_PORT="$PORT"
 PEER_PORT=$((PORT + 1))
 PROXY_PORT=$((PORT + 2))
 WORK="${TMPDIR:-/tmp}/turul-interop-client"
-FASTMCP_VERSION="4.0.0b1"   # first FastMCP release supporting 2026-07-28
+FASTMCP_VERSION="4.0.0b1"   # 4.0.0a1 also spoke 2026-07-28; this is the beta we measured
+
+# Pin-currency check. A pinned peer is a claim about the outside world that goes
+# stale silently — the TypeScript probe measured a superseded pre-release for
+# weeks because nothing compared its pin to the registry. Warns rather than
+# fails: this probe's job is to test the version it pinned, not to refuse to run
+# because the peer shipped.
+PYPI_LATEST=$(curl -sS --max-time 15 https://pypi.org/pypi/fastmcp/json 2>/dev/null \
+  | jq -r '[.releases | to_entries[] | select(.value | length > 0)
+            | {v: .key, t: .value[0].upload_time}] | sort_by(.t) | last | .v' 2>/dev/null)
+if [ -n "$PYPI_LATEST" ] && [ "$PYPI_LATEST" != "null" ] && [ "$PYPI_LATEST" != "$FASTMCP_VERSION" ]; then
+  echo "WARN: PyPI's newest fastmcp is $PYPI_LATEST, this probe pins $FASTMCP_VERSION —" >&2
+  echo "      re-pin and re-run before treating the result as current" >&2
+fi
+
 PYTHON_VERSIONS="${PYTHON_VERSIONS:-3.14 3.12}"
 
 command -v uv >/dev/null || { echo "SKIP: uv not found — https://docs.astral.sh/uv/" >&2; exit 0; }

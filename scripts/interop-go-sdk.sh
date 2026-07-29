@@ -35,6 +35,15 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
+# Pin-currency check — see the note in scripts/interop-fastmcp.sh. Warns only.
+GO_LATEST=$(curl -sS --max-time 15 \
+  https://proxy.golang.org/github.com/modelcontextprotocol/go-sdk/@latest 2>/dev/null \
+  | jq -r .Version 2>/dev/null)
+if [ -n "$GO_LATEST" ] && [ "$GO_LATEST" != "null" ] && [ "$GO_LATEST" != "$GO_SDK_VERSION" ]; then
+  echo "WARN: the module proxy's newest go-sdk is $GO_LATEST, this probe pins $GO_SDK_VERSION —" >&2
+  echo "      re-pin and re-run before treating the result as current" >&2
+fi
+
 PORT="${1:-8710}"
 PROXY_PORT=$((PORT + 1))
 WORK="${TMPDIR:-/tmp}/turul-interop-go-sdk"

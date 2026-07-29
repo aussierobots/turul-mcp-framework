@@ -165,7 +165,7 @@ mirrors use `#_meta` so the rendered docs.rs links work. A re-pin must not
 
 ## Compliance harness
 
-Bidirectional wire-format gate against the upstream's canonical example JSON fixtures (`schema/2026-07-28/examples/`, 88 directories, 129 fixture files):
+Bidirectional wire-format gate against the upstream's canonical example JSON fixtures (`schema/2026-07-28/examples/`, 88 directories — the count `coverage.rs::CASES` pins):
 
 - **Build-time** — `cargo test -p turul-mcp-protocol-2026-07-28 --features compliance --test upstream_fixtures` drives every modeled `Case` against every `.json` file in its directory; asserts semantic-diff equality after parse → re-serialize.
 - **Runtime** — `cargo run -p turul-mcp-protocol-2026-07-28 --features compliance --bin mcp-compliance-2026-07-28` calls the same `compliance::roundtrip::run_all` path. Green tests ⇒ green binary on the same pin.

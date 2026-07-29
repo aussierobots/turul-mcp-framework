@@ -187,9 +187,11 @@ tiers 1 and 2 *structurally cannot* — assumptions baked into both ends of our 
 
 Standing checks worth automating cheaply, because both peers are moving:
 
-- **Each probe now asserts its own pin.** Every interop script checks that its
-  pinned peer version still equals the registry's `dist-tags.latest` and says so
-  when it does not. This replaces a watch on `npm view @modelcontextprotocol/sdk`
+- **Each probe checks its own pin.** All four interop scripts compare their
+  pinned peer version against the registry — npm `dist-tags.latest`, the newest
+  PyPI upload including pre-releases, and the Go module proxy's `@latest` — and
+  **warn** when the pin has fallen behind. Warn, not fail: a probe's job is to
+  test the version it pinned, not to refuse to run because the peer shipped. This replaces a watch on `npm view @modelcontextprotocol/sdk`
   that was structurally blind: the v2 line ships as `@modelcontextprotocol/core`,
   `/client` and `/server`, and `@modelcontextprotocol/sdk` carries only 1.x. That
   one wrong package name produced two false published claims — "not on npm" and

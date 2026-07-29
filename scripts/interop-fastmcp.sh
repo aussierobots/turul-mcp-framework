@@ -24,12 +24,25 @@ cd "$(dirname "$0")/.."
 PORT="${1:-8690}"
 PROXY_PORT=$((PORT + 1))
 WORK="${TMPDIR:-/tmp}/turul-interop-fastmcp"
-FASTMCP_VERSION="4.0.0b1"   # first FastMCP release supporting 2026-07-28
+FASTMCP_VERSION="4.0.0b1"   # 4.0.0a1 also spoke 2026-07-28; this is the beta we measured
 # Preferred first. FastMCP 4.0.0b1 segfaults inside CPython 3.14's asyncio C
 # module after completing the exchange — reproduced with FastMCP's OWN server as
 # the peer, so it is a client/interpreter fault, not a wire-format issue. We try
 # 3.14 first and fall back so the probe still asserts a completed round trip.
 PYTHON_VERSIONS="${PYTHON_VERSIONS:-3.14 3.12}"
+
+# Pin-currency check. A pinned peer is a claim about the outside world that goes
+# stale silently — this probe once measured a superseded pre-release for weeks
+# because nothing compared the pin to the registry. Warns rather than fails: the
+# probe's job is to test the version it pinned, not to refuse to run when the
+# peer ships.
+LATEST=$(curl -sS --max-time 15 https://pypi.org/pypi/fastmcp/json 2>/dev/null \
+  | jq -r '[.releases | to_entries[] | select(.value | length > 0)
+            | {v: .key, t: .value[0].upload_time}] | sort_by(.t) | last | .v' 2>/dev/null)
+if [ -n "$LATEST" ] && [ "$LATEST" != "null" ] && [ "$LATEST" != "$FASTMCP_VERSION" ]; then
+  echo "WARN: PyPI's newest fastmcp is $LATEST, this probe pins $FASTMCP_VERSION —" >&2
+  echo "      re-pin and re-run before treating the result as current" >&2
+fi
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 command -v uv >/dev/null || fail "uv not found — https://docs.astral.sh/uv/"

@@ -44,7 +44,7 @@ fn compliance_md_see_count_matches_the_vendored_schema() {
 #[test]
 fn compliance_md_fixture_count_matches_the_case_table() {
     use turul_mcp_protocol_2026_07_28::compliance::coverage::CASES;
-    let stated = stated_count(COMPLIANCE_MD, " directories, ");
+    let stated = stated_count(COMPLIANCE_MD, " directories —");
     assert_eq!(
         stated,
         CASES.len(),

@@ -22,6 +22,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   code paths for one contract. Default handler counts move to 22 (2025-11-25) and 13
   (2026-07-28).
 
+### Fixed (2026-07-29, false claims in shipped crate artifacts)
+
+- **`turul-mcp-protocol-2026-07-28`'s own docs asserted things untrue of the crate**, and
+  `cargo package --list` confirms they ship in the tarball. The README carried a "Re-pin
+  outstanding" banner claiming the vendored schema came from `schema/draft/` — it does not;
+  the bytes hash to the released `schema/2026-07-28/schema.ts` at the pinned commit, and the
+  banner outlived the re-pin. `COMPLIANCE.md` stated 8 `@see` block-tags where the schema
+  carries 13, marked five JSON-RPC anchors as mirrored when none are, and described the
+  fixture tree as 86 directories / 124 files while `coverage.rs` asserts 88 in the same crate.
+  `Cargo.toml` named the pre-release fixture path.
+- **Three rustdoc links pointed at a fragment that does not resolve.** `basic/index#meta` is
+  `#_meta` on the live page. Upstream's own `@see` writes `#meta`, so the mirroring rule was
+  faithfully reproducing an upstream typo into broken docs.rs links; the mirrors now use the
+  working anchor, with a note so a re-pin does not revert them.
+- **Stale pre-renumbering error codes in 2026 contexts.** `examples/header-bound-tools-server`
+  is on the 2026 default lane and documented its header-mismatch contract as `-32001` across
+  `main.rs`, its README and `EXAMPLES.md`; that value is now the framework's own
+  `UNAUTHENTICATED` constant, so the example described one contract using a code meaning
+  something else. `ci-gates.sh` printed `-32001/-32004` and `-32003` as gate labels while the
+  tests those gates run assert `-32020` and `-32021`.
+- **New `tests/docs_consistency.rs`**, wired into the default gate, recomputes each figure
+  stated in prose from the artifact it describes, so owner and documentation cannot drift
+  apart silently again.
+
 ### Added (2026-07-29, test and interop surfaces)
 
 - **A dedicated streaming end-to-end suite** (`streaming_e2e_2026.rs`). The existing 2026
@@ -53,8 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   superseded `v2.0.0-beta.1` git tag while `2.0.0` was already published, and the watch was
   structurally incapable of noticing. Re-run against the published build, the cell passes and
   identity in `_meta` is accepted. `mcp==2.0.0` (PyPI) is a further stable peer, still
-  untested. Every probe now asserts its pinned peer version against the registry's
-  `dist-tags.latest`.
+  untested. All four probes now compare their pinned peer version against the registry — npm,
+  PyPI and the Go module proxy — and warn when it has fallen behind.
 - **`docs/compliance/`** — per-spec-area records naming, for each requirement, the test that
   asserts it and which independent implementation has exercised it. Self-verified and
   externally verified totals are kept apart on purpose, and "not exercised" is a distinct
