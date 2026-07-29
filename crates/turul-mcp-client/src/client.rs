@@ -699,8 +699,14 @@ impl McpClient {
                 Err(e) => {
                     warn!(attempt = attempt, error = %e, "Request failed");
 
-                    // MCP spec: 404 means session unknown — must re-initialize
-                    if e.is_session_expired() {
+                    // 404 means "session unknown, re-initialize" only where
+                    // sessions exist. On 2026-07-28 it is the mapping for an
+                    // unknown method, so recovering here would answer a method
+                    // the peer does not implement by sending `initialize` — a
+                    // method that revision removed. Surface the 404 instead.
+                    if e.is_session_expired()
+                        && self.negotiated_version().await != Some(crate::version::McpVersion::V2026_07_28)
+                    {
                         warn!("Session expired (HTTP 404) — attempting re-initialization");
                         self.session.reset().await;
                         // Clear stale session ID from transport so initialize

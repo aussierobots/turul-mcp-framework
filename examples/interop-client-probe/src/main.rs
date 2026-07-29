@@ -15,6 +15,7 @@
 //!
 //!   cargo run -p interop-client-probe -- <url>
 
+use turul_mcp_client::completion::{CompleteArgument, CompletionReference, PromptReference};
 use turul_mcp_client::schema::JsonSchema;
 use turul_mcp_client::transport::HttpTransport;
 use turul_mcp_client::{McpClient, McpVersion};
@@ -158,6 +159,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|p| format!("{} prompt(s)", p.len()))
             .map_err(|e| e.to_string()),
     );
+    let completion_target = first_prompt.clone();
     if let Some(name) = first_prompt {
         leg(
             "prompts/get",
@@ -171,8 +173,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("LEG prompts/get FAIL peer exposed no prompt to render");
     }
 
-    // No completion/complete leg: turul-mcp-client exposes no method for it.
-    println!("LEG completion/complete UNSUPPORTED turul-mcp-client has no complete() method");
+    // Completion is prompt-scoped, so it can only be driven when the peer
+    // advertised a prompt above.
+    if let Some(name) = completion_target {
+        leg(
+            "completion/complete",
+            client
+                .complete(
+                    CompletionReference::Prompt(PromptReference::new(&name)),
+                    CompleteArgument::new("name", "a"),
+                    None,
+                )
+                .await
+                .map(|r| format!("{} value(s)", r.completion.values.len()))
+                .map_err(|e| e.to_string()),
+        );
+    } else {
+        println!("LEG completion/complete SKIP peer exposed no prompt to complete against");
+    }
 
     println!("CORE {}", if core_ok { "ok" } else { "failed" });
     if !core_ok {
