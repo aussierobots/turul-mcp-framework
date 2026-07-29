@@ -6,14 +6,14 @@
 //! in the repo has turul code on both ends of the wire, so a contract both
 //! halves get wrong the same way looks identical to one they get right.
 //!
-//! Each leg prints `LEG <name> OK|FAIL <detail>` and no leg aborts the run — a
+//! Each leg prints a `LEG` line with its name and outcome, and no leg aborts the run — a
 //! peer that lacks prompts should show up as one failed leg, not as a probe
 //! that stopped before reaching the rest. Exit status covers the modern-core
 //! legs only (`server/discover`, `tools/list`, `tools/call`); the read surface
 //! is reported for the caller to judge, since peers legitimately differ in
 //! what they expose.
 //!
-//!   cargo run -p interop-client-probe -- <url>
+//!   cargo run -p interop-client-probe -- `<url>`
 
 use turul_mcp_client::completion::{CompleteArgument, CompletionReference, PromptReference};
 use turul_mcp_client::schema::JsonSchema;

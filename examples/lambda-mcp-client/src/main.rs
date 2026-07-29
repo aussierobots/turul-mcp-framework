@@ -20,7 +20,7 @@
 //! cargo run -p lambda-turul-mcp-client -- probe
 //!
 //! # Against a deployed Function URL:
-//! cargo run -p lambda-turul-mcp-client -- probe --url https://<id>.lambda-url.<region>.on.aws
+//! cargo run -p lambda-turul-mcp-client -- probe --url `https://<id>.lambda-url.<region>.on.aws`
 //! ```
 
 use anyhow::Result;
