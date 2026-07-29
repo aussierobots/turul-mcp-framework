@@ -1,14 +1,15 @@
-//! INDEPENDENT VERIFICATION (agent != implementer) of the sampling
-//! message-shape MUSTs enforced on `sampling/createMessage` input requests.
+//! Sampling message-shape MUSTs on `sampling/createMessage` input requests,
+//! observed on the wire.
 //!
-//! Drives a REAL HTTP server (reqwest -> streamable handler -> tools/call
-//! dispatch -> `input_required_to_result` in handlers/mod.rs). Uses a DIFFERENT
-//! bad shape than the implementer's `sampling_shape_2026.rs` (which used an
-//! assistant ToolUse with no following message): here a USER message MIXES a
-//! text block with a ToolResult block — the other message-shape MUST. Additionally
-//! asserts the response `id` ECHOES the request id (the implementer's test did
-//! not check id echo) and captures the verbatim wire bytes.
+//! Drives a real HTTP server (reqwest -> streamable handler -> tools/call
+//! dispatch -> `input_required_to_result`). `sampling_shape_2026.rs` covers an
+//! assistant ToolUse with no following message; the bad shape here is the other
+//! message-shape MUST — a user message that mixes a text block with a
+//! ToolResult block. Also asserts the JSON-RPC response `id` echoes the request
+//! id for both numeric and string ids.
 #![cfg(feature = "protocol-2026-07-28")]
+
+mod common;
 
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::input_required::{InputRequest, InputRequests};
@@ -54,13 +55,10 @@ impl MixedUserMsgTool {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
-        .name("verify-gap-cf9")
+        .name("sampling-shape-wire-2026")
         .version("0.4.0")
         .tool(MixedUserMsgTool::default())
         .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
@@ -109,10 +107,9 @@ async fn post_call(url: &str, id: serde_json::Value) -> (reqwest::StatusCode, se
 }
 
 #[tokio::test]
-async fn verify_r5_mixed_user_message_rejected_200_neg32602_id_echoed_numeric() {
+async fn mixed_user_message_rejected_200_neg32602_id_echoed_numeric() {
     let url = start_server().await;
     let (status, body) = post_call(&url, serde_json::json!(4242)).await;
-    eprintln!("VERIFY R5 wire body (numeric id): {body}");
     assert_eq!(
         status, 200,
         "generic JSON-RPC error must ride HTTP 200, not 400: {body}"
@@ -135,10 +132,9 @@ async fn verify_r5_mixed_user_message_rejected_200_neg32602_id_echoed_numeric() 
 }
 
 #[tokio::test]
-async fn verify_r5_string_id_is_echoed() {
+async fn string_id_is_echoed() {
     let url = start_server().await;
     let (status, body) = post_call(&url, serde_json::json!("req-abc")).await;
-    eprintln!("VERIFY R5 wire body (string id): {body}");
     assert_eq!(status, 200, "{body}");
     assert_eq!(body["error"]["code"], -32602, "{body}");
     assert_eq!(

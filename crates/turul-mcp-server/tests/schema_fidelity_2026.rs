@@ -9,6 +9,8 @@
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
 
+mod common;
+
 use serde::{Deserialize, Serialize};
 use turul_mcp_builders::schemars;
 use turul_mcp_derive::McpTool;
@@ -60,11 +62,8 @@ impl RenderTool {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let server = McpServer::builder()
         .name("schema-fidelity-2026")

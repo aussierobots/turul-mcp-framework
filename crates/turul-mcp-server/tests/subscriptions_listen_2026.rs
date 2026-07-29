@@ -12,6 +12,8 @@
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
 
+mod common;
+
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -106,11 +108,8 @@ impl EmitChangesTool {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let server = McpServer::builder()
         .name("subscriptions-2026-test")
@@ -361,11 +360,8 @@ async fn listen_requires_sse_accept() {
 async fn listen_ack_omits_unsupported_types() {
     // Server WITHOUT prompts: promptsListChanged requested but unsupported →
     // omitted from the acknowledged filter.
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("subscriptions-2026-noprompts")
         .version("0.4.0")
@@ -384,6 +380,8 @@ async fn listen_ack_omits_unsupported_types() {
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
+    // The server owns the port now; let another test reserve one.
+    drop(reserved);
 
     let resp = client
         .post(&url)

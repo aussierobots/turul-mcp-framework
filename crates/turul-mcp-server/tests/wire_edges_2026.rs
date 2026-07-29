@@ -7,6 +7,8 @@
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
 
+mod common;
+
 use std::collections::HashMap;
 
 use turul_mcp_derive::McpTool;
@@ -39,7 +41,8 @@ impl GammaTool {
     }
 }
 
-/// Prompt carrying title + icons + _meta — prompts/list must not drop them.
+/// Prompt carrying title + icons + _meta — prompts/list must not drop them —
+/// and one declared argument, so `prompts/get` has something to substitute.
 struct TitledPrompt;
 
 impl turul_mcp_server::prelude::HasPromptMetadata for TitledPrompt {
@@ -51,7 +54,18 @@ impl turul_mcp_server::prelude::HasPromptMetadata for TitledPrompt {
     }
 }
 impl turul_mcp_server::prelude::HasPromptDescription for TitledPrompt {}
-impl turul_mcp_server::prelude::HasPromptArguments for TitledPrompt {}
+impl turul_mcp_server::prelude::HasPromptArguments for TitledPrompt {
+    fn arguments(&self) -> Option<&Vec<turul_mcp_protocol::prompts::PromptArgument>> {
+        use std::sync::OnceLock;
+        static ARGS: OnceLock<Vec<turul_mcp_protocol::prompts::PromptArgument>> = OnceLock::new();
+        Some(ARGS.get_or_init(|| {
+            vec![
+                turul_mcp_protocol::prompts::PromptArgument::new("subject")
+                    .with_description("Who the prompt greets"),
+            ]
+        }))
+    }
+}
 impl turul_mcp_server::prelude::HasPromptAnnotations for TitledPrompt {}
 impl turul_mcp_server::prelude::HasPromptMeta for TitledPrompt {
     fn prompt_meta(&self) -> Option<&HashMap<String, serde_json::Value>> {
@@ -76,10 +90,16 @@ impl turul_mcp_server::prelude::HasIcons for TitledPrompt {
 impl turul_mcp_server::McpPrompt for TitledPrompt {
     async fn render(
         &self,
-        _args: Option<HashMap<String, serde_json::Value>>,
+        args: Option<HashMap<String, serde_json::Value>>,
     ) -> McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>> {
+        let subject = args
+            .as_ref()
+            .and_then(|a| a.get("subject"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("world")
+            .to_string();
         Ok(vec![turul_mcp_protocol::prompts::PromptMessage::user_text(
-            "hello",
+            format!("Hello, {subject}!"),
         )])
     }
 }
@@ -120,11 +140,8 @@ impl turul_mcp_server::McpResource for BadBlobResource {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let server = McpServer::builder()
         .name("wire-edges-2026")
@@ -405,6 +422,44 @@ async fn success_response_echoes_the_request_id() {
     );
 }
 
+/// JSON-RPC batching was removed in 2026-07-28: the schema's `JSONRPCMessage`
+/// is a single request, response or notification, with no array form. A batch
+/// body is therefore not a message this server can parse, and none of its
+/// elements may be executed.
+///
+/// An unparseable body takes the transport's JSON-RPC-layer posture — HTTP 200
+/// carrying the error object — which is a different branch from the HTTP 400
+/// used for a body that parses but violates MCP's envelope rules (see
+/// `null_request_id_is_rejected`).
+#[tokio::test]
+async fn a_json_array_body_is_rejected_as_a_batch() {
+    let url = start_server().await;
+    let (status, body) = post_raw(
+        &url,
+        "tools/list",
+        None,
+        serde_json::json!([
+            { "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": { "_meta": meta() } },
+            { "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": { "_meta": meta() } }
+        ]),
+    )
+    .await;
+
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["error"]["code"], -32600,
+        "a batch body must be refused as an invalid request: {body}"
+    );
+    assert!(
+        !body.is_array(),
+        "the response must be one message, never a batch of responses: {body}"
+    );
+    assert!(
+        body.get("result").is_none(),
+        "no element of the batch may be executed: {body}"
+    );
+}
+
 /// "JSON-RPC messages MUST be UTF-8 encoded" (basic/transports). The server
 /// must reject a POST body containing invalid UTF-8 bytes with HTTP 400
 /// rather than attempting to parse it as JSON-RPC.
@@ -601,6 +656,60 @@ async fn prompt_descriptors_and_error_codes() {
     .await;
     assert_eq!(status, 400, "{body}");
     assert_eq!(body["error"]["code"], -32020, "{body}");
+}
+
+/// Server §Prompts: `prompts/get` is where "arguments ... may be
+/// auto-completed" get applied — the declared argument must reach the rendered
+/// message, and an omitted one must not leave the placeholder unresolved.
+/// Evidenced until now only by the FastMCP and Go interop probes.
+#[tokio::test]
+async fn prompts_get_substitutes_the_supplied_argument() {
+    let url = start_server().await;
+
+    // The argument is declared on the descriptor a client reads first.
+    let (_, listed) = post_method(
+        &url,
+        "prompts/list",
+        None,
+        serde_json::json!({"_meta": meta()}),
+    )
+    .await;
+    assert_eq!(
+        listed["result"]["prompts"][0]["arguments"][0]["name"], "subject",
+        "the declared argument must be advertised: {listed}"
+    );
+
+    let (status, body) = post_method(
+        &url,
+        "prompts/get",
+        Some("titled"),
+        serde_json::json!({
+            "name": "titled",
+            "arguments": { "subject": "Ada" },
+            "_meta": meta()
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["result"]["messages"][0]["content"]["text"], "Hello, Ada!",
+        "the supplied argument must be substituted into the message: {body}"
+    );
+    assert_eq!(body["result"]["messages"][0]["role"], "user", "{body}");
+
+    // Omitting the argument falls back to the provider's default rather than
+    // emitting the unsubstituted placeholder.
+    let (_, body) = post_method(
+        &url,
+        "prompts/get",
+        Some("titled"),
+        serde_json::json!({ "name": "titled", "_meta": meta() }),
+    )
+    .await;
+    assert_eq!(
+        body["result"]["messages"][0]["content"]["text"], "Hello, world!",
+        "{body}"
+    );
 }
 
 /// An unconfigured server answers completion/complete with 404 + -32601

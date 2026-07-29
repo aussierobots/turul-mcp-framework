@@ -1,9 +1,11 @@
-//! INDEPENDENT VERIFICATION (agent != implementer) of R1 + R3.
+//! Tool `inputSchema` rejection on the real server build path.
 //!
-//! Drives the REAL server build path — `McpServer::builder()...build()` at
-//! crates/turul-mcp-server/src/builder.rs:1672-1682 — with adversarial
-//! inputs DIFFERENT from the implementer's `schema_validation_2026.rs`
-//! (which only exercised a single `{"type":123}` malformed property).
+//! Registers tools through `McpServer::builder()...build()` and asserts the
+//! JSON Schema 2020-12 dialect gate and the `$ref` resolution policy both fire
+//! there, with diagnostics that name the offending tool and reference.
+//! `schema_validation_2026.rs` covers a single malformed property; the schemas
+//! here are adversarial — recursive refs, remote refs hidden under applicator
+//! keywords the cheap bounds walk does not traverse.
 #![cfg(feature = "protocol-2026-07-28")]
 
 use async_trait::async_trait;
@@ -68,16 +70,15 @@ impl McpTool for ProbeTool {
 
 fn build_with(schema: Value) -> Result<McpServer, turul_mcp_protocol::McpError> {
     McpServer::builder()
-        .name("verify-bp3")
+        .name("input-schema-build-2026")
         .version("0.4.0")
         .tool(ProbeTool::new(schema))
         .build()
 }
 
-// ---- R1: unsupported dialect is rejected at build() ----
+// ---- unsupported dialect is rejected at build() ----
 #[test]
-fn verify_r1_unsupported_dialect_draft07_rejected_at_build() {
-    // Different from implementer input: declare a draft-07 `$schema` dialect.
+fn unsupported_dialect_draft07_rejected_at_build() {
     let err = build_with(json!({
         "type": "object",
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -92,9 +93,9 @@ fn verify_r1_unsupported_dialect_draft07_rejected_at_build() {
     );
 }
 
-// ---- R1: a DIFFERENT malformed shape (type array with a non-string member) ----
+// ---- a `type` array with a non-string member is rejected at build() ----
 #[test]
-fn verify_r1_malformed_type_array_rejected_at_build() {
+fn malformed_type_array_rejected_at_build() {
     let err = build_with(json!({
         "type": "object",
         "properties": { "bad": { "type": ["string", 42] } }
@@ -103,9 +104,9 @@ fn verify_r1_malformed_type_array_rejected_at_build() {
     assert!(err.to_string().contains("probe_tool"), "{err}");
 }
 
-// ---- R1: absent $schema is accepted ----
+// ---- absent $schema (default dialect) is accepted ----
 #[test]
-fn verify_r1_absent_schema_dialect_accepted_at_build() {
+fn absent_schema_dialect_accepted_at_build() {
     build_with(json!({
         "type": "object",
         "properties": { "a": { "type": "string" } }
@@ -113,9 +114,9 @@ fn verify_r1_absent_schema_dialect_accepted_at_build() {
     .expect("absent $schema (default dialect) must be accepted");
 }
 
-// ---- R3: a genuinely recursive LOCAL $ref is accepted (not falsely TooDeep) ----
+// ---- a genuinely recursive LOCAL $ref is accepted, not falsely TooDeep ----
 #[test]
-fn verify_r3_recursive_local_ref_accepted_and_terminates() {
+fn recursive_local_ref_accepted_and_terminates() {
     // node -> children/items -> $ref back to node. If the bounds walk followed
     // $ref, this would hang or overflow; it must terminate and accept.
     build_with(json!({
@@ -134,9 +135,9 @@ fn verify_r3_recursive_local_ref_accepted_and_terminates() {
     .expect("a recursive local $ref schema must be accepted");
 }
 
-// ---- R3: a REMOTE $ref is rejected, diagnostic names the ref + policy ----
+// ---- a REMOTE $ref is rejected; the diagnostic names the ref + policy ----
 #[test]
-fn verify_r3_remote_ref_rejected_naming_ref_and_policy() {
+fn remote_ref_rejected_naming_ref_and_policy() {
     let err = build_with(json!({
         "type": "object",
         "properties": { "a": { "$ref": "https://attacker.example/evil.json" } }
@@ -154,11 +155,10 @@ fn verify_r3_remote_ref_rejected_naming_ref_and_policy() {
     );
 }
 
-// ---- R3 BYPASS ATTEMPT: remote $ref hidden under `prefixItems`, a 2020-12
-// keyword the cheap `check_bounds` walk does NOT traverse. If the compile step
-// still resolves+blocks it, defense-in-depth holds. Capture actual behavior. ----
+// ---- remote $ref hidden under `prefixItems`, a 2020-12 keyword the cheap
+// `check_bounds` walk does not traverse: the compile step must still block it ----
 #[test]
-fn verify_r3_bypass_remote_ref_under_prefix_items() {
+fn remote_ref_under_prefix_items_rejected() {
     let result = build_with(json!({
         "type": "object",
         "properties": {
@@ -176,9 +176,9 @@ fn verify_r3_bypass_remote_ref_under_prefix_items() {
     );
 }
 
-// ---- R3 BYPASS ATTEMPT #2: remote $ref under `additionalProperties`. ----
+// ---- same, hidden under `additionalProperties` ----
 #[test]
-fn verify_r3_bypass_remote_ref_under_additional_properties() {
+fn remote_ref_under_additional_properties_rejected() {
     let result = build_with(json!({
         "type": "object",
         "properties": {

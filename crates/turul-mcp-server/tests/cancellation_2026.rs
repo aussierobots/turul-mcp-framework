@@ -8,6 +8,8 @@
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
 
+mod common;
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -17,11 +19,8 @@ use turul_mcp_server::prelude::*;
 
 /// Server with one slow tool that flips `completed` only if it runs to the end.
 async fn start_server(completed: Arc<AtomicBool>) -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let slow_tool = ToolBuilder::new("slow")
         .description("Sleeps, then records completion")

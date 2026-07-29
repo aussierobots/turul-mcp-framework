@@ -440,6 +440,20 @@ impl ResourceContent {
             blob: blob.into(),
         })
     }
+
+    /// Set the `mimeType` reported for this content, replacing the default the
+    /// [`Self::text`] / [`Self::json`] / [`Self::blob`] constructors pick. Without
+    /// it a provider cannot describe text that is not `text/plain`, and
+    /// `resources/read` contradicts the `mimeType` its `resources/list` entry
+    /// advertises for the same URI.
+    pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
+        let mime_type = Some(mime_type.into());
+        match &mut self {
+            Self::Text(text) => text.mime_type = mime_type,
+            Self::Blob(blob) => blob.mime_type = mime_type,
+        }
+        self
+    }
 }
 
 /// Complete resources/templates/list request —

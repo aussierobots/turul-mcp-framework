@@ -4,6 +4,8 @@
 //! Run with: `cargo test -p turul-mcp-server --features ext-tasks --test ext_tasks_2026`
 #![cfg(all(feature = "ext-tasks", feature = "protocol-2026-07-28"))]
 
+mod common;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -149,11 +151,8 @@ impl McpTool for ApprovalTool {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let server = McpServer::builder()
         .name("ext-tasks-2026-test")

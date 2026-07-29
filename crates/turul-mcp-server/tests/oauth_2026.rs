@@ -9,6 +9,8 @@
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
 
+mod common;
+
 use turul_mcp_derive::McpTool;
 use turul_mcp_oauth::ProtectedResourceMetadata;
 use turul_mcp_server::prelude::*;
@@ -26,11 +28,8 @@ impl EchoTool {
 /// OAuth-protected 2026 server. The JWKS URI is unreachable on purpose —
 /// missing/garbage bearers must be rejected before any JWKS fetch.
 async fn start_oauth_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let metadata = ProtectedResourceMetadata::new(
         format!("http://127.0.0.1:{port}/mcp"),
@@ -179,6 +178,112 @@ async fn protected_resource_metadata_is_served_on_well_known_routes() {
         );
         assert!(body["resource"].as_str().unwrap_or("").ends_with("/mcp"));
     }
+}
+
+/// RFC 6750 §3: a challenge carries credentials-related material, so it "MUST
+/// NOT be cached". Asserted on every status the challenge builder emits, since
+/// they share one response path — a cached 401 would keep a client locked out
+/// after it obtains a token.
+#[tokio::test]
+async fn challenges_are_not_cacheable() {
+    let url = start_oauth_server().await;
+
+    let no_store = |resp: &reqwest::Response| -> bool {
+        resp.headers()
+            .get("cache-control")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .contains("no-store")
+    };
+
+    let resp = discover(&url, None).await;
+    assert_eq!(resp.status(), 401);
+    assert!(
+        no_store(&resp),
+        "401 challenge must be Cache-Control: no-store"
+    );
+
+    let resp = discover(&url, Some("not-a-jwt")).await;
+    assert_eq!(resp.status(), 401);
+    assert!(
+        no_store(&resp),
+        "invalid_token challenge must be Cache-Control: no-store"
+    );
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .header("Authorization", "Basic Zm9vOmJhcg==")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 4, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("POST");
+    assert_eq!(resp.status(), 400);
+    assert!(
+        no_store(&resp),
+        "invalid_request challenge must be Cache-Control: no-store"
+    );
+}
+
+/// RFC 9728 §3.1 has clients fetch protected-resource metadata from a resource
+/// server they are not same-origin with, so the metadata routes are outside the
+/// DNS-rebinding gate that answers 403 on the MCP endpoint. A hostile `Origin`
+/// must not turn discovery into a 403 — the document is public and carries no
+/// credentials.
+#[tokio::test]
+async fn hostile_origin_does_not_block_the_well_known_metadata() {
+    let url = start_oauth_server().await;
+    let base = url.strip_suffix("/mcp").unwrap();
+    let client = reqwest::Client::new();
+
+    for path in [
+        "/.well-known/oauth-protected-resource",
+        "/.well-known/oauth-protected-resource/mcp",
+    ] {
+        let resp = client
+            .get(format!("{base}{path}"))
+            .header("Origin", "http://attacker.example")
+            .send()
+            .await
+            .expect("GET well-known with hostile Origin");
+        assert_eq!(
+            resp.status(),
+            200,
+            "{path} must stay reachable cross-origin, not 403"
+        );
+        let body: serde_json::Value = resp.json().await.expect("json");
+        assert_eq!(
+            body["authorization_servers"][0], "https://auth.example.test",
+            "{path}: {body}"
+        );
+    }
+
+    // The MCP endpoint itself is still gated by the same hostile Origin.
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .header("Origin", "http://attacker.example")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 5, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("POST");
+    assert_eq!(
+        resp.status(),
+        403,
+        "the MCP endpoint must still reject the hostile origin"
+    );
 }
 
 /// Authorization §Error Handling: "400 Bad Request: Malformed authorization

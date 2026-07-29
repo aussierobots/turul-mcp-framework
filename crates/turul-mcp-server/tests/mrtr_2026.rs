@@ -11,6 +11,8 @@
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
 
+mod common;
+
 use std::collections::HashMap;
 
 use turul_mcp_derive::McpTool;
@@ -68,11 +70,8 @@ impl GatedEchoTool {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let server = McpServer::builder()
         .name("mrtr-2026-test")
@@ -272,11 +271,8 @@ impl SamplingGatedTool {
 }
 
 async fn start_subcap_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("mrtr-2026-subcap")
         .version("0.4.0")
@@ -512,11 +508,8 @@ impl turul_mcp_server::McpPrompt for GatedPrompt {
 }
 
 async fn start_full_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("mrtr-2026-full")
         .version("0.4.0")
@@ -660,7 +653,7 @@ async fn resources_read_capability_gate_applies() {
     assert_eq!(body["error"]["code"], -32021, "{body}");
 }
 
-// ---- MRTR negative paths (PAT/G7) ----
+// ---- MRTR negative paths ----
 
 /// Errs InputRequired with NEITHER inputRequests nor requestState — the
 /// schema invariant ("at least one of") makes this a server error, not an
@@ -683,11 +676,8 @@ impl BrokenMrtrTool {
 /// error, never as a resultType:"input_required" result.
 #[tokio::test]
 async fn input_required_with_neither_field_is_a_server_error() {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("mrtr-neg-2026")
         .version("0.4.0")
@@ -706,6 +696,8 @@ async fn input_required_with_neither_field_is_a_server_error() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
+    // The server owns the port now; let another test reserve one.
+    drop(reserved);
 
     let client = reqwest::Client::new();
     let resp = client
@@ -782,11 +774,8 @@ impl turul_mcp_server::McpCompletion for EscapingCompleter {
 
 #[tokio::test]
 async fn input_required_escaping_a_non_mrtr_method_is_an_error() {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("mrtr-escape-2026")
         .version("0.4.0")
@@ -806,6 +795,8 @@ async fn input_required_escaping_a_non_mrtr_method_is_an_error() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
+    // The server owns the port now; let another test reserve one.
+    drop(reserved);
 
     let client = reqwest::Client::new();
     let resp = client
@@ -885,11 +876,8 @@ impl PlainSamplerTool {
 }
 
 async fn start_caparm_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("mrtr-2026-caparms")
         .version("0.4.0")

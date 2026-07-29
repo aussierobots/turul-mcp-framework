@@ -8,6 +8,8 @@
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
 
+mod common;
+
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::input_required::{InputRequest, InputRequests};
 use turul_mcp_server::prelude::*;
@@ -71,11 +73,8 @@ impl GoodShapeSamplerTool {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("sampling-shape-2026")
         .version("0.4.0")

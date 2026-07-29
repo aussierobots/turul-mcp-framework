@@ -13,12 +13,6 @@
 //! against. Changing one means changing `scripts/interop-*.sh` in the same
 //! slice.
 //!
-//! Known discrepancy, left in place deliberately: the fixture resource declares
-//! `text/markdown` but `resources/read` reports `text/plain`, because
-//! `ResourceContent::text()` hardcodes that and offers no way to set another.
-//! A probe author seeing the mismatch is looking at a framework gap, not a bug
-//! in their client.
-//!
 //!   cargo run -p interop-fixture-server -- --port 8700
 
 use std::collections::HashMap;
@@ -36,6 +30,7 @@ use turul_mcp_server::{McpCompletion, McpPrompt, McpResource};
 
 const FIXTURE_URI: &str = "file:///fixture/readme.md";
 const FIXTURE_TEXT: &str = "# Interop fixture\n\nStable text for cross-implementation probes.\n";
+const FIXTURE_MIME: &str = "text/markdown";
 
 #[mcp_tool(name = "echo", description = "Echo back the input text")]
 async fn echo(#[param(description = "Text to echo back")] text: String) -> McpResult<String> {
@@ -70,7 +65,7 @@ impl HasResourceDescription for FixtureResource {
 }
 impl HasResourceMimeType for FixtureResource {
     fn mime_type(&self) -> Option<&str> {
-        Some("text/markdown")
+        Some(FIXTURE_MIME)
     }
 }
 impl HasResourceSize for FixtureResource {}
@@ -85,7 +80,9 @@ impl McpResource for FixtureResource {
         _params: Option<serde_json::Value>,
         _session: Option<&SessionContext>,
     ) -> McpResult<Vec<ResourceContent>> {
-        Ok(vec![ResourceContent::text(FIXTURE_URI, FIXTURE_TEXT)])
+        Ok(vec![
+            ResourceContent::text(FIXTURE_URI, FIXTURE_TEXT).with_mime_type(FIXTURE_MIME),
+        ])
     }
 }
 

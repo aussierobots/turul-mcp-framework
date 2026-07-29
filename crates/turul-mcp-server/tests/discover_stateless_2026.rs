@@ -12,6 +12,8 @@
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
 #![cfg(feature = "protocol-2026-07-28")]
 
+mod common;
+
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::prelude::*;
 
@@ -31,13 +33,8 @@ impl EchoTool {
 /// Start a 2026 server on an ephemeral port and return its `/mcp` URL once it
 /// accepts connections.
 async fn start_server() -> String {
-    // Reserve a free port, then hand it to the server. The brief gap between
-    // dropping this listener and the server binding is the standard test pattern.
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let server = McpServer::builder()
         .name("discover-2026-test")
@@ -54,7 +51,7 @@ async fn start_server() -> String {
     });
 
     let url = format!("http://127.0.0.1:{port}/mcp");
-    // Wait until the accept loop is live (build() binds; run() starts accepting).
+    // Wait until the accept loop is live — `run()` binds and starts accepting.
     let client = reqwest::Client::new();
     for _ in 0..50 {
         if client.get(&url).send().await.is_ok() {
@@ -511,11 +508,8 @@ async fn completion_complete_dispatches_statelessly() {
     // completion/complete is part of the 2026 core; with completion enabled
     // the request must dispatch sessionless and return the CompleteResult
     // wire shape ({ completion: { values, ... } }).
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("completion-2026-test")
         .version("0.4.0")
@@ -535,6 +529,8 @@ async fn completion_complete_dispatches_statelessly() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
+    // The server owns the port now; let another test reserve one.
+    drop(reserved);
 
     // Capability must be advertised…
     let resp = client
@@ -660,11 +656,8 @@ impl turul_mcp_server::McpCompletion for FloodCompleter {
 }
 
 async fn start_completion_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
     let server = McpServer::builder()
         .name("completion-provider-2026-test")
         .version("0.4.0")
@@ -884,5 +877,63 @@ async fn unparseable_protocol_version_header_is_rejected_with_32022() {
             out["result"].is_null(),
             "unparseable version {bogus:?} must not be served a result: {out}"
         );
+    }
+}
+
+/// SEP-2133: extensions are opt-in — a server "MUST NOT" behave as though an
+/// extension is active unless it declares it. This build enables no extension
+/// feature, so `capabilities.extensions` must be absent rather than an empty
+/// map or a stray entry, and the extension's own methods must not dispatch.
+/// Without this the "off unless opted in" posture rests on the Cargo feature
+/// graph alone, where a default-feature edit would flip it unnoticed.
+#[tokio::test]
+async fn a_default_build_advertises_no_extensions() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 52, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("discover POST");
+    let body: serde_json::Value = resp.json().await.expect("json");
+    let caps = &body["result"]["capabilities"];
+    assert!(
+        caps.is_object(),
+        "server/discover must carry capabilities: {body}"
+    );
+    assert!(
+        caps.get("extensions").is_none(),
+        "a build with no extension feature must not advertise any extension: {body}"
+    );
+
+    // The advertisement and the routing table must agree: the Tasks extension's
+    // methods are not implemented on this build.
+    for method in ["tasks/get", "tasks/update", "tasks/cancel"] {
+        let resp = client
+            .post(&url)
+            .header("Accept", "application/json")
+            .header("MCP-Protocol-Version", "2026-07-28")
+            .header("Mcp-Method", method)
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "id": 53, "method": method,
+                "params": { "taskId": "t1", "_meta": meta() }
+            }))
+            .send()
+            .await
+            .expect("extension method POST");
+        let status = resp.status();
+        let out: serde_json::Value = resp.json().await.unwrap_or_default();
+        assert_eq!(
+            status, 404,
+            "{method} belongs to an undeclared extension and must not dispatch: {out}"
+        );
+        assert_eq!(out["error"]["code"], -32601, "{method}: {out}");
     }
 }

@@ -9,6 +9,8 @@
 #![cfg(feature = "protocol-2026-07-28")]
 #![allow(deprecated)] // exercises the SEP-2577-deprecated logging surface
 
+mod common;
+
 use std::time::Duration;
 
 use futures::StreamExt;
@@ -37,11 +39,8 @@ impl ChattyTool {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
 
     let server = McpServer::builder()
         .name("loggate-2026-test")
