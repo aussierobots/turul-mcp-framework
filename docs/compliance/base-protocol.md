@@ -38,9 +38,9 @@ present.
 
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
-| POST answers `application/json` when the request opted into nothing | MUST | Implemented | `streamable_http.rs:780,898` | `streaming_e2e_2026.rs::json_replies_are_a_single_object_with_no_event_framing` | pass | pass | pass | pass |
-| POST answers `text/event-stream` when the request declared `progressToken` | MUST | Implemented | `streamable_http.rs:965,1033` | `progress_2026.rs::combined_accept_uses_json_without_a_token_and_sse_with_one` | pass | pass | pass | pass |
-| SSE bodies are well-formed event-stream grammar | MUST | Implemented | `streamable_http.rs:2407` | `streaming_e2e_2026.rs::sse_body_matches_the_event_stream_grammar` | pass | pass | pass | pass |
+| POST answers `application/json` when the request opted into nothing | MUST | Implemented | `streamable_http.rs:780,898` | `streaming_e2e_2026.rs::json_replies_are_a_single_object_with_no_event_framing` | pass | — | — | — |
+| POST answers `text/event-stream` when the request declared `progressToken` | MUST | Implemented | `streamable_http.rs:965,1033` | `progress_2026.rs::combined_accept_uses_json_without_a_token_and_sse_with_one` | pass | — | — | — |
+| SSE bodies are well-formed event-stream grammar | MUST | Implemented | `streamable_http.rs:2407` | `streaming_e2e_2026.rs::sse_body_matches_the_event_stream_grammar` | pass | — | — | — |
 | SSE responses declare an unbuffered stream (no Content-Length, `no-cache`) | SHOULD | Implemented | `streamable_http.rs:2502-2511` | `streaming_e2e_2026.rs::sse_response_headers_declare_an_unbuffered_stream` | pass | — | — | — |
 | The result frame ends the stream | MUST | Implemented | `streamable_http.rs` dispatch | `streaming_e2e_2026.rs::the_result_frame_is_last_and_closes_the_stream` | pass | — | — | — |
 | Origin absent → allowed; loopback → allowed; same-host → allowed | MUST | Implemented | `c/turul-http-mcp-server/src/origin.rs:82-146` | `origin_validation_2026.rs::origin_absent_is_allowed`, `::loopback_origin_is_allowed_by_default`, `::same_host_origin_is_allowed_by_default` | pass | — | — | — |

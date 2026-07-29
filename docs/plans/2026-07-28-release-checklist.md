@@ -1,6 +1,6 @@
 # MCP 2026-07-28 — Release Checklist (engineering work items)
 
-> **Status: APPLIED, uncommitted — 2026-07-29.** Every §1 release blocker, all of §2, and
+> **Status: APPLIED and committed — 2026-07-29.** Every §1 release blocker, all of §2, and
 > §3–§4 are implemented in the working tree; see the CHANGELOG's 2026-07-29 entries for what
 > landed. Do not re-do checked items — verify against the diff instead.
 >
@@ -75,29 +75,29 @@ next-spec content while the crate still claims to implement 2026-07-28. Today it
 structurally it is a trap, and CLAUDE.md/AGENTS.md currently *mandate* running that
 drift-check every slice.
 
-- [ ] `crates/turul-mcp-protocol-2026-07-28/src/compliance/fetch.rs:27` — `subpath:
+- [x] `crates/turul-mcp-protocol-2026-07-28/src/compliance/fetch.rs:27` — `subpath:
       "schema/draft/examples"` → `"schema/2026-07-28/examples"`
-- [ ] `crates/turul-mcp-protocol-2026-07-28/src/compliance/fetch.rs:26` — `sha` → `271ecc9a…`
-- [ ] `crates/turul-mcp-protocol-2026-07-28/src/bin/compliance.rs:91` — `resolve_subpath_head(&PIN,
+- [x] `crates/turul-mcp-protocol-2026-07-28/src/compliance/fetch.rs:26` — `sha` → `271ecc9a…`
+- [x] `crates/turul-mcp-protocol-2026-07-28/src/bin/compliance.rs:91` — `resolve_subpath_head(&PIN,
       "main", …)` resolves against the floating `main`; repoint to the tag/commit
-- [ ] Re-vendor the schema file **first**, then re-derive every provenance value from the file
+- [x] Re-vendor the schema file **first**, then re-derive every provenance value from the file
       actually on disk (never copy a hash forward):
       ```bash
       curl -fsSL "https://raw.githubusercontent.com/modelcontextprotocol/modelcontextprotocol/271ecc9accafdd9b83a3c869fa67c22953b2af80/schema/2026-07-28/schema.ts" -o crates/turul-mcp-protocol-2026-07-28/schema/schema.ts
       ```
-- [ ] `schema/README.md` — update `Upstream source`, `Raw URL used`, commit pin, `Content
+- [x] `schema/README.md` — update `Upstream source`, `Raw URL used`, commit pin, `Content
       sha256`, blob sha, ETag. **Rewrite only lines 18–25** (the `⚠ DRAFT-PATH WARNING`
       heading and its one draft-path paragraph). **Preserve lines 27–67 verbatim** — those are
       the re-vendor revision log, not draft-path prose.
-- [ ] `schema/EXAMPLES_PIN.md:7` — still says `schema/draft/examples`
-- [ ] Apply the two code deltas: rename `SubscriptionsListenResultMeta` →
+- [x] `schema/EXAMPLES_PIN.md:7` — still says `schema/draft/examples`
+- [x] Apply the two code deltas: rename `SubscriptionsListenResultMeta` →
       `…MetaObject` (`src/subscriptions.rs:193`, re-export `src/lib.rs:180`, doc refs
       `src/meta.rs:217,395`), and add the `SubscriptionsListenResultResponse` binding
-- [ ] `src/compliance/coverage.rs` — add a case for the new
+- [x] `src/compliance/coverage.rs` — add a case for the new
       `SubscriptionsListenResultResponse` fixture dir, or `assert_table_matches_upstream`
       fails with "missing". Modeling it is optional; 8 of its 9 `*ResultResponse` siblings are
       `NotModeled`.
-- [ ] Update the ADR-027 revision log **and** CHANGELOG.md in the same slice
+- [x] Update the ADR-027 revision log **and** CHANGELOG.md in the same slice
 
 **Also worth doing while here** (found during verification, independent of the re-pin):
 `src/compliance/coverage.rs:461` marks the **existing** `SubscriptionsListenResult` fixture
@@ -110,16 +110,16 @@ is already vendored locally. Modeling it costs nothing and raises `modeled=N`.
 `"DRAFT-2026-v1".parse::<McpVersion>().is_err()` — there is no `FromStr` arm and no serde
 alias. CHANGELOG.md's own entry confirms the alias "was removed entirely". Yet:
 
-- [ ] `crates/turul-mcp-protocol-2026-07-28/README.md:8` — "still accepted on deserialize for
+- [x] `crates/turul-mcp-protocol-2026-07-28/README.md:8` — "still accepted on deserialize for
       back-compat, but is never emitted" → **false**, drop the claim
-- [ ] `crates/turul-mcp-protocol-2026-07-28/schema/README.md:23` — same claim, same fix
-- [ ] `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md:14` — same claim, same fix
+- [x] `crates/turul-mcp-protocol-2026-07-28/schema/README.md:23` — same claim, same fix
+- [x] `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md:14` — same claim, same fix
 
 This is *not* the "keep deserialize back-compat" carve-out: the alias was deliberately
 retired, so documenting it as accepted is a false compliance claim in published crate docs.
 `version.rs:215-216` is the ground truth — leave it alone.
 
-- [ ] CHANGELOG.md carries **two contradictory `[0.4.0]-Unreleased` entries** on this same
+- [x] CHANGELOG.md carries **two contradictory `[0.4.0]-Unreleased` entries** on this same
       alias (one says README was fixed to describe the alias, the other says the alias was
       removed entirely), both dated 2026-07-28 with no ordering. Reconcile before tagging.
 
@@ -133,23 +133,23 @@ AGENTS.md:44 names this file as the branch's current compliance state. Verified:
 | Fixture pin (`:10`) | `60dc69e9…` | `71e30695…` (per `schema/README.md`) |
 | `notifications/progress` | listed as an open gap | **already fixed** — cfg-gated at `builder.rs:192`, asserted at `builder.rs:2099` |
 
-- [ ] Re-derive both hashes from disk after the §1.1 re-pin
-- [ ] Remove the `notifications/progress` gap entry
-- [ ] Re-check the remaining "Known gaps" entries the same way — a document wrong in both
+- [x] Re-derive both hashes from disk after the §1.1 re-pin
+- [x] Remove the `notifications/progress` gap entry
+- [x] Re-check the remaining "Known gaps" entries the same way — a document wrong in both
       directions cannot be trusted in either without a pass
 
 ### 1.4 The operator playbooks still describe a moving draft
 
 Every future agent session reads these first and will act on the false premise.
 
-- [ ] `CLAUDE.md:27` — "The draft is still moving and is about to finalize as the current
+- [x] `CLAUDE.md:27` — "The draft is still moving and is about to finalize as the current
       spec. Upstream keeps revising `schema/draft/schema.ts` in place…"
-- [ ] `CLAUDE.md:18` and `AGENTS.md:204` — "release candidate"
-- [ ] `AGENTS.md:227` — "is about to finalize as the current spec"
-- [ ] `CLAUDE.md:35` — the runnable check still targets `schema/draft/schema.ts`
-- [ ] `CLAUDE.md:8` — project description still claims "complete MCP **2025-11-25**
+- [x] `CLAUDE.md:18` and `AGENTS.md:204` — "release candidate"
+- [x] `AGENTS.md:227` — "is about to finalize as the current spec"
+- [x] `CLAUDE.md:35` — the runnable check still targets `schema/draft/schema.ts`
+- [x] `CLAUDE.md:8` — project description still claims "complete MCP **2025-11-25**
       specification support" (README.md:7 and the crate `lib.rs` docs are already correct)
-- [ ] `CLAUDE.md:459` — the §Comments worked example itself cites "the DRAFT-2026-v1 schema";
+- [x] `CLAUDE.md:459` — the §Comments worked example itself cites "the DRAFT-2026-v1 schema";
       it is the pattern contributors copy
 
 > Sequencing: §1.4 is prose-only and safe, **but** see manual-checklist item A1 — the
@@ -161,8 +161,8 @@ Live-verified by running the documented curl verbatim against a running server: 
 `-32020 Header mismatch`. `Mcp-Name` must equal the *item name being invoked*, not a client
 identifier.
 
-- [ ] `examples/minimal-server/README.md:75` — `Mcp-Name: test-client` → `Mcp-Name: echo`
-- [ ] `examples/zero-config-getting-started/README.md:92` — `Mcp-Name: test` →
+- [x] `examples/minimal-server/README.md:75` — `Mcp-Name: test-client` → `Mcp-Name: echo`
+- [x] `examples/zero-config-getting-started/README.md:92` — `Mcp-Name: test` →
       `Mcp-Name: calculator`
 
 Seven other example READMEs already use the correct pattern; this is an old copy-paste
@@ -186,8 +186,8 @@ error[E0063]: missing field `origin_policy` in initializer of `ServerConfig`
 `origin_policy` was added to `ServerConfig` for the 2026 origin-validation work; this call
 site was never updated because nothing runs it.
 
-- [ ] Fix `tests/http_server_examples.rs:31` — add `origin_policy: …::default()`
-- [ ] Wire all 11 orphaned binaries into `.github/workflows/ci.yml` **and**
+- [x] Fix `tests/http_server_examples.rs:31` — add `origin_policy: …::default()`
+- [x] Wire all 11 orphaned binaries into `.github/workflows/ci.yml` **and**
       `scripts/ci-gates.sh`
 
 ### 1.7 Nothing enforces the schema pin
@@ -198,7 +198,7 @@ upstream moves — which is exactly how the current drift accumulated undetected
 requires pin-drift checks at the start of every slice; that is human discipline with zero
 automated enforcement, and §1.1's fix has no gate preventing recurrence.
 
-- [ ] Add a `schema-pin` CI job + matching `gate_schema_pin` in `scripts/ci-gates.sh` that
+- [x] Add a `schema-pin` CI job + matching `gate_schema_pin` in `scripts/ci-gates.sh` that
       (a) recomputes the vendored file's sha256 and fails unless it matches the `Content
       sha256` in `schema/README.md`, and (b) asserts that README's commit equals `PIN` in
       `fetch.rs`. Both checks are offline and deterministic — no network, no flake.
@@ -210,10 +210,10 @@ automated enforcement, and §1.1's fix has no gate preventing recurrence.
 teaches the `initialize` / `notifications/initialized` / `Mcp-Session-Id` lifecycle,
 `tasks/list` (removed by SEP-2663), and the pre-MRTR elicitation model as live contracts.
 
-- [ ] **Minimum:** add a lane banner to the plugin README and all 13 `SKILL.md` files stating
+- [x] **Minimum:** add a lane banner to the plugin README and all 13 `SKILL.md` files stating
       they target the 2025-11-25 opt-in lane and are not yet updated for the 2026-07-28
       default. Gate: `grep -rL '2026-07-28' plugins/turul-mcp-skills/skills/*/SKILL.md` empty.
-- [ ] **Full:** rewrite `mcp-client-patterns`, `testing-patterns`, `task-patterns`,
+- [x] **Full:** rewrite `mcp-client-patterns`, `testing-patterns`, `task-patterns`,
       `elicitation-workflows` for the stateless core.
 
 > Severity depends on manual-checklist item **A3** — blocker if the plugin is publicly
@@ -227,7 +227,7 @@ target. All six definitions target 2025-11-25; `spec-compliance.md:8` and `archi
 direct review and edits into `crates/turul-mcp-protocol-2025-11-25/`, which AGENTS.md:20
 declares **frozen** ("no code changes, no version bumps, no doc updates").
 
-- [ ] Repoint all six to 2026-07-28 default / 2025-11-25 opt-in, and delete every instruction
+- [x] Repoint all six to 2026-07-28 default / 2025-11-25 opt-in, and delete every instruction
       to modify or test the frozen crate. Gate: `grep -rn 'turul-mcp-protocol-2025-11-25'
       .claude/agents/` returns only lines explicitly labelled FROZEN / do-not-edit.
 
@@ -238,7 +238,7 @@ declares **frozen** ("no code changes, no version bumps, no doc updates").
 Following it would fail exactly as the observed `cargo publish --dry-run -p turul-mcp-derive`
 failure did. The list also omits all four crates added since it was written.
 
-- [ ] Replace with the dependency-first order derived from actual `[dependencies]` graphs:
+- [x] Replace with the dependency-first order derived from actual `[dependencies]` graphs:
       `turul-mcp-protocol-2026-07-28 → turul-mcp-schema-validation →
       turul-mcp-server-state-storage → turul-mcp-ext-tasks → turul-mcp-ext-apps →
       turul-mcp-client → turul-mcp-protocol → turul-mcp-builders → turul-mcp-session-storage →
