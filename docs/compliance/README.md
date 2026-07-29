@@ -50,10 +50,10 @@ share our assumptions. Only python/typescript/go columns are external evidence.
 
 Two numbers matter and they are deliberately kept apart.
 
-**Self-verified.** The suite is green: 3199 tests across the default 2026-07-28
-lane, the 2025-11-25 opt-in lane, the mutex gate and the docs gate, via
-`scripts/ci-gates.sh all`. Every one of those has turul code on both ends of
-the wire.
+**Self-verified.** The suite is green: **64 gates, 3213 tests**, across the
+default 2026-07-28 lane, the 2025-11-25 opt-in lane, the Lambda Runtime API
+gate, the spec-mutex gate and the docs gate, via `scripts/ci-gates.sh all`.
+Every one of those has turul code on both ends of the wire.
 
 **Externally verified.** Independent implementations that have completed a real
 journey against this framework:
@@ -62,8 +62,17 @@ journey against this framework:
 |---|---|---|---|---|---|
 | FastMCP (Python) | 4.0.0b1 | beta | peer → turul | 9 + 5 negatives | `scripts/interop-fastmcp.sh` |
 | FastMCP (Python) | 4.0.0b1 | beta | turul → peer | 8 | `scripts/interop-turul-client.sh` |
-| MCP Go SDK | v1.7.0 | **stable** | peer → turul | not yet recorded | `scripts/interop-go-sdk.sh` |
+| MCP Go SDK | v1.7.0 | **stable** | peer → turul | **9 + 5 negatives** | `scripts/interop-go-sdk.sh` |
 | MCP TypeScript SDK | v2.0.0-beta.1 | beta | peer → turul | **0 — fails at `connect()`** | `scripts/interop-typescript-sdk.sh` |
+
+The **Go SDK result is the strongest external evidence in the repo**, because
+that peer is the only one that is not a pre-release. Its client completed
+`server/discover`, `tools/list`, `tools/call` (twice), `resources/list`,
+`resources/read`, `resources/templates/list`, `prompts/list`, `prompts/get` and
+`completion/complete` — every request carrying `MCP-Protocol-Version:
+2026-07-28` and correct `Mcp-Method`/`Mcp-Name` headers, with no `initialize`
+and no session id anywhere — plus all five negative paths. No wire disagreement
+was found.
 
 The TypeScript cell is a **finding, not a defect on our side**. That SDK's
 `DiscoverResultSchema` still requires a top-level `serverInfo`, which the

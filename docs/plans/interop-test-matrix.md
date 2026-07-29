@@ -77,7 +77,7 @@ logic.
 | **R** (turul) | control — **pass** | **R→P — pass, 8 methods** | R→T — not built | R→G — not built |
 | **P** (FastMCP) | **P→R — pass, 9 methods + 5 negatives** | peer control | n/a | n/a |
 | **T** (TS SDK) | **T→R — fails at `connect()`** (see below) | n/a | peer control | n/a |
-| **G** (Go SDK) | G→R — probe authored, result not yet recorded | n/a | n/a | peer control |
+| **G** (Go SDK) | **G→R — pass, 9 methods + 5 negatives** | n/a | n/a | peer control |
 
 Scripts: `interop-fastmcp.sh` (P→R), `interop-turul-client.sh` (R→R control and
 R→P), `interop-typescript-sdk.sh` (T→R), `interop-go-sdk.sh` (G→R).
@@ -154,14 +154,14 @@ Coverage today: **J1 only, in one cell.** 3 of 22 methods, one happy path, zero 
 | **1a** | A shared fixture server so every peer hits one surface | **done** — `examples/interop-fixture-server` |
 | **2** | `scripts/interop-typescript-sdk.sh`, J1+J2+J5+J6 | **done, cell fails** — the SDK beta's stale `DiscoverResult` schema blocks `connect()` |
 | **3** | R→P: drive a FastMCP server with `turul-mcp-client` | **done** — 8 methods, with an R→R control |
-| **3a** | G→R: the Go SDK v1.7.0, the only stable peer | probe authored; result not yet recorded |
+| **3a** | G→R: the Go SDK v1.7.0, the only stable peer | **done** — J1+J2+J5 green, no wire disagreement |
 | **4** | J3 (MRTR) and J4 (subscriptions/progress) across live cells | not started — the two headline 2026 features remain self-verified only |
 | **5** | One runner, one matrix report, per-cell skip when a peer is unavailable | not started — currently four ad-hoc scripts |
 
 Coverage today, measured rather than estimated: **9 of 22 methods** exercised by
-an independent client (P→R), **8** driven by our client against an independent
-server (R→P), 5 negative paths, and zero coverage of MRTR, subscriptions or
-progress by any peer.
+each of two independent clients (FastMCP and the Go SDK), **8** driven by our
+client against an independent server (R→P), 5 negative paths confirmed twice
+over, and **zero** coverage of MRTR, subscriptions or progress by any peer.
 
 ---
 
