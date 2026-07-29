@@ -138,17 +138,46 @@ async fn call_chatty(url: &str, log_level: Option<&str>) -> Vec<serde_json::Valu
 async fn message_notifications_require_a_declared_log_level() {
     let url = start_server().await;
 
-    // Without logLevel in _meta: the server MUST NOT emit notifications/message.
-    let events = call_chatty(&url, None).await;
+    // Without logLevel in _meta the server MUST NOT emit notifications/message,
+    // and it cannot: declaring neither a logLevel nor a progressToken opts the
+    // request out of request-scoped notifications entirely, so the reply is a
+    // single JSON object with no stream to carry one.
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json, text/event-stream")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "chatty")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "name": "chatty", "arguments": {}, "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {}
+            }}
+        }))
+        .send()
+        .await
+        .expect("POST");
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    let body: serde_json::Value = resp.json().await.expect("json body");
     assert!(
-        !events.is_empty(),
-        "the final response must arrive on the stream"
+        content_type.starts_with("application/json"),
+        "no logLevel and no progressToken must be answered with a single JSON \
+         object, got content-type {content_type:?}: {body}"
     );
     assert!(
-        !events
-            .iter()
-            .any(|e| e["method"] == "notifications/message"),
-        "no logLevel declared → no notifications/message, got: {events:?}"
+        body["result"].is_object(),
+        "the final response must still arrive: {body}"
+    );
+    assert!(
+        body.get("method").is_none(),
+        "a JSON reply carries the result only, never a notification: {body}"
     );
 
     // With logLevel "info": the info-level message must be delivered.

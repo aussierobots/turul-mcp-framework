@@ -252,8 +252,14 @@ impl McpTestClient {
         .await
     }
 
-    /// Call a tool with SSE streaming (for progress notifications)
-    /// Returns the raw response for SSE event parsing
+    /// Call a tool with SSE streaming (for progress notifications).
+    /// Returns the raw response for SSE event parsing.
+    ///
+    /// Declares a `progressToken`: that is what opts a request into
+    /// request-scoped notifications and therefore into stream framing. A
+    /// progress notification must carry the token given in the originating
+    /// request, so without one there is nothing the server could correlate and
+    /// the reply is a single JSON object.
     pub async fn call_tool_with_sse(
         &self,
         name: &str,
@@ -263,7 +269,11 @@ impl McpTestClient {
             "jsonrpc": "2.0",
             "id": 8,
             "method": "tools/call",
-            "params": {"name": name, "arguments": arguments}
+            "params": {
+                "name": name,
+                "arguments": arguments,
+                "_meta": { "progressToken": format!("sse-{name}") }
+            }
         });
 
         let mut req_builder = self

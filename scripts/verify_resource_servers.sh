@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Phase 2: Resource Servers - Intent-Based Verification
+# Resource Servers - Intent-Based Verification
 # Tests resources/list and resources/read with actual content verification
 #
 
@@ -14,7 +14,7 @@ cd "$PROJECT_ROOT"
 source "$SCRIPT_DIR/../tests/shared/bin/wait_for_server.sh"
 
 echo "======================================================================"
-echo "Phase 2: Resource Servers - Intent-Based Verification"
+echo "Resource Servers - Intent-Based Verification"
 echo "======================================================================"
 echo ""
 echo "Testing Objective: Verify resources/list and resources/read work"
@@ -201,7 +201,7 @@ test_resource_server "session-aware-resource-server" 8008 "Session-aware resourc
 
 # Final summary
 echo "======================================================================"
-echo "Phase 2 Summary"
+echo "Resource Servers Summary"
 echo "======================================================================"
 echo "Total: $TOTAL servers"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
@@ -210,9 +210,9 @@ echo -e "Skipped: ${YELLOW}$SKIPPED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ PHASE 2 COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
+    echo -e "${GREEN}✅ RESOURCE SERVERS COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
     exit 0
 else
-    echo -e "${RED}❌ PHASE 2 FAILED${NC} - $FAILED failures"
+    echo -e "${RED}❌ RESOURCE SERVERS FAILED${NC} - $FAILED failures"
     exit 1
 fi

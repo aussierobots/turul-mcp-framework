@@ -710,7 +710,7 @@ async fn progress_feed_and_discovered_server_accessors() {
     let client = McpClient::new(transport, ClientConfig::default());
     client.connect().await.expect("connect");
 
-    // GAP-ARCH-1/DISC-1: the discover body is retained and exposed.
+    // The discover body is retained and exposed to callers.
     let discovered = client
         .discovered_server()
         .await

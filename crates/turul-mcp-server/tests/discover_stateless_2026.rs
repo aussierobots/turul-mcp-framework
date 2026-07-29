@@ -820,3 +820,44 @@ async fn discover_advertises_the_prompts_capability_with_truthful_list_changed()
         "static prompt registry must truthfully advertise listChanged=false: {body}"
     );
 }
+
+/// A version string that is not a recognised MCP revision at all must be
+/// rejected exactly like a recognised-but-unsupported one. The dispatch layer
+/// previously parsed the header with a silent fallback to a superseded spec
+/// version, so an unparseable value was served rather than refused.
+#[tokio::test]
+async fn unparseable_protocol_version_header_is_rejected_with_32022() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+    for bogus in ["banana", "2026-7-28", "", "9999-99-99"] {
+        let resp = client
+            .post(&url)
+            .header("Accept", "application/json")
+            .header("MCP-Protocol-Version", bogus)
+            .header("Mcp-Method", "tools/list")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "id": 1, "method": "tools/list",
+                "params": { "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientCapabilities": {}
+                }}
+            }))
+            .send()
+            .await
+            .expect("POST");
+        let status = resp.status();
+        let out: serde_json::Value = resp.json().await.unwrap_or_default();
+        assert_eq!(
+            status, 400,
+            "unparseable version {bogus:?} must be refused, not served: {out}"
+        );
+        assert!(
+            out["error"]["code"] == -32022 || out["error"]["code"] == -32020,
+            "unparseable version {bogus:?} must map to a spec version/header error, got: {out}"
+        );
+        assert!(
+            out["result"].is_null(),
+            "unparseable version {bogus:?} must not be served a result: {out}"
+        );
+    }
+}

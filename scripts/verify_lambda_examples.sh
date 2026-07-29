@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Phase 7: Lambda Examples - Intent-Based Verification
+# Lambda Examples - Intent-Based Verification
 # Tests AWS Lambda deployment patterns (may require mocking)
 #
 
@@ -11,7 +11,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 echo "======================================================================"
-echo "Phase 7: Lambda Examples - Intent-Based Verification"
+echo "Lambda Examples - Intent-Based Verification"
 echo "======================================================================"
 echo ""
 echo "Testing Objective: Verify AWS Lambda MCP server patterns compile"
@@ -73,7 +73,7 @@ test_lambda_example "lambda-mcp-client" "Lambda client integration patterns"
 
 # Final summary
 echo "======================================================================"
-echo "Phase 7 Summary"
+echo "Lambda Examples Summary"
 echo "======================================================================"
 echo "Total: $TOTAL Lambda examples"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
@@ -84,9 +84,9 @@ echo "      Full integration testing requires AWS Lambda deployment."
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ PHASE 7 COMPLETE${NC}: All Lambda examples verified"
+    echo -e "${GREEN}✅ LAMBDA EXAMPLES COMPLETE${NC}: All Lambda examples verified"
     exit 0
 else
-    echo -e "${RED}❌ PHASE 7 FAILED${NC}: $FAILED example(s) failed verification"
+    echo -e "${RED}❌ LAMBDA EXAMPLES FAILED${NC}: $FAILED example(s) failed verification"
     exit 1
 fi

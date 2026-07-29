@@ -498,13 +498,19 @@ async fn test_post_streaming_delivers_progress_before_result() {
         .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header("Accept", "text/event-stream, application/json") // Request SSE streaming with JSON fallback
+        // `progressToken` is what opts a request into request-scoped
+        // notifications, and therefore into stream framing: progress
+        // notifications must carry the token given in the originating request,
+        // so a request without one can never be sent the progress this test
+        // is named for.
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "tools/call",
             "id": 42,
             "params": {
                 "name": "test_add",
-                "arguments": {"a": 5, "b": 3}
+                "arguments": {"a": 5, "b": 3},
+                "_meta": { "progressToken": "progress-before-result" }
             }
         }))
         .send()

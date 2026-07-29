@@ -273,10 +273,12 @@ async fn test_tools_call_combined_accept_prefers_sse() {
         .unwrap_or("")
         .to_string();
 
-    // tools/call is streaming-capable — server should use SSE even with combined Accept
+    // 2025-11-25 lane: tools/call is streaming-capable, so a combined Accept
+    // gets SSE regardless of whether the request declared a progressToken.
+    // (2026-07-28 decides this per request — see progress_2026.rs.)
     assert!(
         content_type.contains("text/event-stream"),
-        "tools/call with combined Accept should prefer SSE, got '{}'",
+        "tools/call with combined Accept should prefer SSE on the 2025 lane, got '{}'",
         content_type
     );
 

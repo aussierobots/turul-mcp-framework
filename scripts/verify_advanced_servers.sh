@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Phase 5: Advanced/Composite Servers - Intent-Based Verification
+# Advanced/Composite Servers - Intent-Based Verification
 # Tests complex servers with real business logic and multiple capabilities
 #
 
@@ -14,7 +14,7 @@ cd "$PROJECT_ROOT"
 source "$SCRIPT_DIR/../tests/shared/bin/wait_for_server.sh"
 
 echo "======================================================================"
-echo "Phase 5: Advanced/Composite Servers - Intent-Based Verification"
+echo "Advanced/Composite Servers - Intent-Based Verification"
 echo "======================================================================"
 echo ""
 echo "Testing Objective: Verify complex servers with real business logic,"
@@ -229,7 +229,7 @@ test_advanced_server "zero-config-getting-started" 8641 "Absolute beginner tutor
 
 # Final summary
 echo "======================================================================"
-echo "Phase 5 Summary"
+echo "Advanced/Composite Servers Summary"
 echo "======================================================================"
 echo "Total: $TOTAL servers"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
@@ -238,9 +238,9 @@ echo -e "Skipped: ${YELLOW}$SKIPPED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ PHASE 5 COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
+    echo -e "${GREEN}✅ ADVANCED SERVERS COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
     exit 0
 else
-    echo -e "${RED}❌ PHASE 5 FAILED${NC} - $FAILED failures"
+    echo -e "${RED}❌ ADVANCED SERVERS FAILED${NC} - $FAILED failures"
     exit 1
 fi

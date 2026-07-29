@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Phase 3: Prompts & Special Features - Intent-Based Verification
+# Prompts & Special Features - Intent-Based Verification
 # Tests prompts/get with template substitution and special MCP features
 #
 
@@ -14,7 +14,7 @@ cd "$PROJECT_ROOT"
 source "$SCRIPT_DIR/../tests/shared/bin/wait_for_server.sh"
 
 echo "======================================================================"
-echo "Phase 3: Prompts & Special Features - Intent-Based Verification"
+echo "Prompts & Special Features - Intent-Based Verification"
 echo "======================================================================"
 echo ""
 echo "Testing Objective: Verify prompts/get, completion, sampling, and"
@@ -274,7 +274,7 @@ test_feature_server "notification-server" 8005 "Real-time SSE notifications" "no
 
 # Final summary
 echo "======================================================================"
-echo "Phase 3 Summary"
+echo "Prompts & Special Features Summary"
 echo "======================================================================"
 echo "Total: $TOTAL servers"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
@@ -283,9 +283,9 @@ echo -e "Skipped: ${YELLOW}$SKIPPED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ PHASE 3 COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
+    echo -e "${GREEN}✅ PROMPTS EXAMPLES COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
     exit 0
 else
-    echo -e "${RED}❌ PHASE 3 FAILED${NC} - $FAILED failures"
+    echo -e "${RED}❌ PROMPTS EXAMPLES FAILED${NC} - $FAILED failures"
     exit 1
 fi

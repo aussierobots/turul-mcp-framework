@@ -60,13 +60,18 @@ async fn start_server(completed: Arc<AtomicBool>) -> String {
     url
 }
 
+/// Carries a `progressToken`: the contract under test is that closing an SSE
+/// response stream cancels the request, and the token is what opts this request
+/// into stream framing. Without one the reply is a single JSON object and there
+/// is no stream to close.
 fn call_body() -> serde_json::Value {
     serde_json::json!({
         "jsonrpc": "2.0", "id": 1, "method": "tools/call",
         "params": { "name": "slow", "arguments": {}, "_meta": {
             "io.modelcontextprotocol/protocolVersion": "2026-07-28",
             "io.modelcontextprotocol/clientInfo": { "name": "test-client", "version": "1.0.0" },
-            "io.modelcontextprotocol/clientCapabilities": {}
+            "io.modelcontextprotocol/clientCapabilities": {},
+            "progressToken": "cancel-probe"
         }}
     })
 }

@@ -37,6 +37,7 @@ fn test_basic_http_server_configuration() {
         enable_post_sse: true,
         session_expiry_minutes: 30,
         allow_unauthenticated_ping: true,
+        origin_policy: turul_http_mcp_server::OriginPolicy::default(),
     };
 
     // Note: We don't actually create the HttpMcpServer here since it would try to bind to the port

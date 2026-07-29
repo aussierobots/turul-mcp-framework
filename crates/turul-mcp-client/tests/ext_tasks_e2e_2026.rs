@@ -205,7 +205,7 @@ async fn task_outcome_polls_to_completion() {
 }
 
 /// Undeclared client: the SAME tool completes synchronously — and the strict
-/// BP-1 parser stays intact (the sync result is an ordinary CallToolResult).
+/// The parser stays intact (the sync result is an ordinary CallToolResult).
 #[tokio::test]
 async fn undeclared_client_gets_synchronous_outcome() {
     let url = start_server().await;

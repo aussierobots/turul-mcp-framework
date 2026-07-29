@@ -64,6 +64,11 @@ jobs:
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test log_gating_2026
       - name: 2026 schema fidelity (derive/builders pipeline to the wire)
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test schema_fidelity_2026
+      # Offline. The compliance suite validates Rust types against whatever bytes
+      # are on disk, so it stays green under a tampered schema or a half-applied
+      # re-pin; this is the only check that notices.
+      - name: Schema pin integrity (checksum + pin parity + dated subpath)
+        run: ./scripts/check-schema-pin.sh
       - name: protocol-2026 compliance + upstream wire fixtures
         run: cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
       - name: Bilingual client (not in default-members)
@@ -99,6 +104,10 @@ jobs:
           # unifies both protocol features and trips the alias mutex under cargo test.
           cargo build  -p turul-mcp-derive      --no-default-features --features protocol-2025-11-25
           cargo test   -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
+          # Without `cors` too: the cors-enabled run above masked a `cors_config`
+          # reference in a non-cfg-gated build() branch, so the crate did not
+          # compile at all for anyone opting out of cors.
+          cargo clippy -p turul-mcp-aws-lambda  --no-default-features --features protocol-2025-11-25 --all-targets -- -D warnings
           cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
           cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
           cargo build  -p client-initialise-server --no-default-features
@@ -113,6 +122,24 @@ jobs:
           cargo test -p mcp-elicitation-tests
           cargo test -p turul-mcp-framework-integration-tests --test tasks_e2e_inmemory
           cargo test -p turul-mcp-framework-integration-tests --test ping_auth_2025
+
+      # Every [[test]] target declared in tests/Cargo.toml must be invoked here.
+      # Adding a target without a line below silently drops it from CI — the
+      # defect that let `example_validation` stop compiling unnoticed.
+      - name: Integration-test crate (all remaining targets)
+        run: |
+          set -euxo pipefail
+          cargo test -p turul-mcp-framework-integration-tests --test compliance
+          cargo test -p turul-mcp-framework-integration-tests --test schema_tests
+          cargo test -p turul-mcp-framework-integration-tests --test example_validation
+          cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
+          cargo test -p turul-mcp-framework-integration-tests --test feature_tests
+          cargo test -p turul-mcp-framework-integration-tests --test session_context_macro_tests
+          cargo test -p turul-mcp-framework-integration-tests --test derive_comprehensive_tool_tests
+          cargo test -p turul-mcp-framework-integration-tests --test derive_schemars_integration_test
+          cargo test -p turul-mcp-framework-integration-tests --test derive_zero_config_output_schema_test
+          cargo test -p turul-mcp-framework-integration-tests --test dynamic_tools_e2e
+          cargo test -p turul-mcp-framework-integration-tests --test event_dispatcher_persistence
 
   spec-mutex:
     name: Spec mutex (both features must not compile)
@@ -136,6 +163,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # turul-mcp-derive carries doctests that are `rust,ignore` under the
+      # 2026-07-28 default and only compile on the opt-in lane, so the default
+      # `cargo doc` below never type-checks them. `--doc` cannot be used here:
+      # doctests build the dev-dependency graph, which pulls in the 2026-default
+      # turul-mcp-server and trips the protocol-alias mutex.
+      - name: Rustdoc for the 2025-11-25 lane's derive examples
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc -p turul-mcp-derive --no-deps --no-default-features --features protocol-2025-11-25
       - name: cargo doc (deny rustdoc warnings)
         env:
           RUSTDOCFLAGS: "-D warnings"

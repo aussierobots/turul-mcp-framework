@@ -130,22 +130,15 @@ kill $SERVER_PID
 
 ## Key Implementation Details
 
-### Session ID Handling
+### Stateless requests (2026-07-28)
 
-The framework uses **lenient mode** where:
-- Session IDs are created automatically on `initialize`
-- Session ID is returned in the `Mcp-Session-Id` response **header** (not JSON body)
-- All subsequent requests must include `MCP-Session-ID: <session-id>` header
+There is no `initialize` handshake and no `Mcp-Session-Id`. Every request carries
+`MCP-Protocol-Version` and `Mcp-Method` headers plus a `params._meta` block; named
+calls (`tools/call`, `prompts/get`, `resources/read`) also carry `Mcp-Name`, which
+must equal the name in the body. See the worked commands above.
 
-**Incorrect** (old approach):
-```bash
-SESSION_ID=$(curl -s ... | jq -r '.result.sessionId')
-```
+On the opt-in 2025-11-25 lane the old session handshake still applies.
 
-**Correct** (current approach):
-```bash
-SESSION_ID=$(curl -i -s ... | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
-```
 
 ### Intent-Based Testing Philosophy
 
@@ -168,16 +161,16 @@ Scripts gracefully skip these with `SKIPPED` status when dependencies are unavai
 
 ## Test Coverage
 
-| Phase | Examples | Status |
+| Suite | Examples | Status |
 |-------|----------|--------|
-| Phase 1 | 5 | ✅ Ready |
-| Phase 2 | 6 | ✅ Ready |
-| Phase 3 | 7 | ✅ Ready |
-| Phase 4 | 4 | ✅ Ready |
-| Phase 5 | 9 | ✅ Ready |
-| Phase 6 | 5 | ✅ Ready |
-| Phase 7 | 3 | ✅ Ready |
-| Phase 8 | 3 | ✅ Ready |
+| Calculator progression | 5 | ✅ Ready |
+| Resource servers | 6 | ✅ Ready |
+| Prompts & special features | 7 | ✅ Ready |
+| Session storage backends | 4 | ✅ Ready |
+| Advanced/composite servers | 9 | ✅ Ready |
+| Clients & test utilities | 5 | ✅ Ready |
+| Lambda examples | 3 | ✅ Ready |
+| Meta examples | 3 | ✅ Ready |
 | **Total** | **42** | ✅ Ready |
 
 ## Troubleshooting

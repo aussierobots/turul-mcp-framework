@@ -13,6 +13,7 @@ fail=0
 run() { echo "=== $1 ==="; shift; if "$@"; then echo "  PASS"; else echo "  FAIL ($*)"; fail=1; fi; }
 
 gate_default() {
+  run "schema pin integrity" ./scripts/check-schema-pin.sh
   run "build (default = protocol-2026-07-28)" cargo build
   run "clippy (deny warnings)" cargo clippy --all-targets -- -D warnings
   run "test" cargo test
@@ -56,6 +57,8 @@ gate_opt_in_2025() {
   # whose 2026 default unifies both protocol features and trips the alias mutex.
   run "derive 2025-11-25"        cargo build  -p turul-mcp-derive      --no-default-features --features protocol-2025-11-25
   run "lambda 2025-11-25"        cargo test   -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
+  # Without `cors` too — the cors-enabled run masks a non-cfg-gated `cors_config` use.
+  run "lambda 2025-11-25 no-cors" cargo clippy -p turul-mcp-aws-lambda  --no-default-features --features protocol-2025-11-25 --all-targets -- -D warnings
   run "client 2025-11-25-only"   cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
   run "client 2026-07-28-only"   cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
   run "client-initialise-server" cargo build  -p client-initialise-server --no-default-features
@@ -67,6 +70,14 @@ gate_opt_in_2025() {
   run "elicitation E2E" cargo test -p mcp-elicitation-tests
   run "tasks E2E"       cargo test -p turul-mcp-framework-integration-tests --test tasks_e2e_inmemory
   run "ping auth E2E"   cargo test -p turul-mcp-framework-integration-tests --test ping_auth_2025
+  # Every [[test]] target in tests/Cargo.toml must appear here; a target with no
+  # line below is invisible to CI.
+  for t in compliance schema_tests example_validation e2e_tests feature_tests \
+           session_context_macro_tests derive_comprehensive_tool_tests \
+           derive_schemars_integration_test derive_zero_config_output_schema_test \
+           dynamic_tools_e2e event_dispatcher_persistence; do
+    run "integration:$t" cargo test -p turul-mcp-framework-integration-tests --test "$t"
+  done
 }
 
 gate_mutex() {
@@ -81,6 +92,15 @@ gate_mutex() {
 gate_docs() {
   echo "=== rustdoc (deny warnings) ==="
   if RUSTDOCFLAGS="-D warnings" cargo doc --no-deps; then echo "  PASS"; else echo "  FAIL"; fail=1; fi
+  # The derive doctests gated to the opt-in lane are `rust,ignore` under the
+  # default build, so the run above never type-checks them.
+  echo "=== rustdoc: 2025-11-25 lane derive examples ==="
+  if RUSTDOCFLAGS="-D warnings" cargo doc -p turul-mcp-derive --no-deps \
+       --no-default-features --features protocol-2025-11-25; then
+    echo "  PASS"
+  else
+    echo "  FAIL"; fail=1
+  fi
 }
 
 case "${1:-all}" in

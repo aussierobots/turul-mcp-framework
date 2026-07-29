@@ -192,18 +192,55 @@ async fn progress_preserves_a_numeric_token() {
     );
 }
 
+/// A request that declared no `progressToken` cannot be sent progress: the
+/// notification's own token field is required and must be the one given in the
+/// originating request. The server enforces this structurally — with no token
+/// and an Accept that allows either framing, the reply is a single JSON object,
+/// so there is no stream on which a notification could be delivered at all.
 #[tokio::test]
 async fn no_token_means_no_progress_notifications() {
     let url = start_server().await;
-    let events = call_worker(&url, None).await;
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(&url)
+        .header("Accept", "application/json, text/event-stream")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "tools/call")
+        .header("Mcp-Name", "worker")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "name": "worker", "arguments": {},
+                "_meta": {
+                    "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                    "io.modelcontextprotocol/clientCapabilities": {}
+                }
+            }
+        }))
+        .send()
+        .await
+        .expect("POST");
+
+    let content_type = resp
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    let body: serde_json::Value = resp.json().await.expect("json body");
+
     assert!(
-        !events.is_empty(),
-        "the final response must arrive on the stream"
+        content_type.starts_with("application/json"),
+        "no progressToken means nothing can stream: expected a single JSON \
+         object, got content-type {content_type:?}: {body}"
     );
     assert!(
-        progress_notifications(&events).is_empty(),
-        "MUST only reference tokens provided in an active request — no token, \
-         no notifications/progress: {events:?}"
+        body["result"].is_object(),
+        "the final response must still arrive: {body}"
+    );
+    assert!(
+        body.get("method").is_none(),
+        "a JSON reply carries the result only, never a notification frame: {body}"
     );
 }
 
@@ -249,4 +286,54 @@ async fn progress_stops_after_completion() {
             .any(|e| e["method"] == "notifications/progress"),
         "the progress notification precedes the final response: {events:?}"
     );
+}
+
+/// Response framing under a combined `Accept`. The spec lets the server answer
+/// a request with either a single JSON object or an SSE stream and requires the
+/// client to support both, so this pins *which* we choose: SSE only when the
+/// request opted into request-scoped notifications with a `progressToken`.
+/// Plain JSON is the broader-support path and the only one that can carry
+/// header/capability errors on a 4xx.
+#[tokio::test]
+async fn combined_accept_uses_json_without_a_token_and_sse_with_one() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+
+    for (token, expected) in [
+        (None, "application/json"),
+        (Some(serde_json::json!("tok-1")), "text/event-stream"),
+    ] {
+        let mut meta = serde_json::json!({
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {}
+        });
+        if let (Some(m), Some(t)) = (meta.as_object_mut(), token.clone()) {
+            m.insert("progressToken".to_string(), t);
+        }
+
+        let resp = client
+            .post(&url)
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", "2026-07-28")
+            .header("Mcp-Method", "tools/call")
+            .header("Mcp-Name", "worker")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": { "name": "worker", "arguments": {}, "_meta": meta }
+            }))
+            .send()
+            .await
+            .expect("POST");
+
+        let got = resp
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default()
+            .to_string();
+        assert!(
+            got.starts_with(expected),
+            "progressToken={token:?} must be answered with {expected}, got {got:?}"
+        );
+    }
 }

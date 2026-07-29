@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Phase 1: Calculator Learning Progression - Intent-Based Verification
+# Calculator Learning Progression - Intent-Based Verification
 # Tests all 4 tool creation patterns with actual math verification
 #
 
@@ -11,7 +11,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 echo "======================================================================"
-echo "Phase 1: Calculator Learning Progression - Intent-Based Verification"
+echo "Calculator Learning Progression - Intent-Based Verification"
 echo "======================================================================"
 echo ""
 echo "Testing Objective: Verify all 4 tool creation patterns produce"
@@ -183,7 +183,7 @@ test_server "calculator-add-manual-server" 8646 "calculator_add_manual" "Level 4
 
 # Final summary
 echo "======================================================================"
-echo "Phase 1 Summary"
+echo "Calculator Learning Progression Summary"
 echo "======================================================================"
 echo "Total: $TOTAL servers"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
@@ -191,9 +191,9 @@ echo -e "Failed: ${RED}$FAILED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ PHASE 1 COMPLETE${NC}: All calculator patterns verified"
+    echo -e "${GREEN}✅ CALCULATOR EXAMPLES COMPLETE${NC}: All calculator patterns verified"
     exit 0
 else
-    echo -e "${RED}❌ PHASE 1 FAILED${NC}: $FAILED server(s) failed verification"
+    echo -e "${RED}❌ CALCULATOR EXAMPLES FAILED${NC}: $FAILED server(s) failed verification"
     exit 1
 fi

@@ -86,6 +86,23 @@ async fn post_method(url: &str, rpc_method: &str) -> (reqwest::StatusCode, serde
     (status, body)
 }
 
+/// POST a removed method as a real JSON-RPC *notification* — no `id`. This is
+/// the envelope a client actually sends for a `notifications/*` method; the
+/// id-carrying form in [`post_method`] exercises the request path instead.
+async fn post_notification(url: &str, rpc_method: &str) -> reqwest::StatusCode {
+    let client = reqwest::Client::new();
+    client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", rpc_method)
+        .json(&serde_json::json!({ "jsonrpc": "2.0", "method": rpc_method }))
+        .send()
+        .await
+        .unwrap_or_else(|e| panic!("{rpc_method} notification POST failed: {e}"))
+        .status()
+}
+
 #[tokio::test]
 async fn unknown_method_gets_http_404_with_method_not_found() {
     let url = start_server().await;
@@ -115,6 +132,9 @@ async fn methods_absent_from_the_2026_schema_get_404() {
         "logging/setLevel",
         "resources/subscribe",
         "roots/list",
+        // Sent here as id-carrying *requests*, which is the wrong envelope for a
+        // notification method — the notification path is covered separately by
+        // `removed_notification_methods_are_acked_not_dispatched`.
         "notifications/roots/list_changed",
         "notifications/roots/listChanged",
     ] {
@@ -140,4 +160,41 @@ async fn known_methods_are_unaffected() {
     let (status, body) = post_method(&url, "server/discover").await;
     assert_eq!(status, 200);
     assert!(body["result"].is_object(), "server/discover result: {body}");
+}
+
+/// Removed *notification* methods, sent in the envelope a real client uses (no
+/// `id`), are acknowledged rather than routed anywhere. JSON-RPC notifications
+/// never carry a response, so 202 is the deliberate posture for an unrecognised
+/// one — the contract being pinned here is that none of them revives the
+/// 2025-11-25 lifecycle: `notifications/initialized` no longer takes the
+/// synchronous is-initialized path on a 2026-07-28 build, and a subsequent
+/// request is unaffected by having sent it.
+#[tokio::test]
+async fn removed_notification_methods_are_acked_not_dispatched() {
+    let url = start_server().await;
+
+    for method in [
+        "notifications/initialized",
+        "notifications/roots/list_changed",
+        "notifications/roots/listChanged",
+    ] {
+        let status = post_notification(&url, method).await;
+        assert_eq!(
+            status, 202,
+            "{method} is a notification: it must be acked with 202, not answered"
+        );
+    }
+
+    // The removed lifecycle notifications left no state behind — a normal
+    // request still succeeds and is not gated on any initialization flag.
+    let (status, body) = post_method(&url, "tools/list").await;
+    assert_eq!(status, 200, "tools/list after removed notifications: {body}");
+    assert_eq!(
+        body["result"]["resultType"], "complete",
+        "tools/list must still complete normally: {body}"
+    );
+    assert!(
+        body["error"].is_null(),
+        "no error expected after removed notifications: {body}"
+    );
 }

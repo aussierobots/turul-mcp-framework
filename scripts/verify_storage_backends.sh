@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Phase 4: Session Storage Backends - Intent-Based Verification
+# Session Storage Backends - Intent-Based Verification
 # Tests SQLite, PostgreSQL, DynamoDB, and stateful operations
 #
 
@@ -14,7 +14,7 @@ cd "$PROJECT_ROOT"
 source "$SCRIPT_DIR/../tests/shared/bin/wait_for_server.sh"
 
 echo "======================================================================"
-echo "Phase 4: Session Storage Backends - Intent-Based Verification"
+echo "Session Storage Backends - Intent-Based Verification"
 echo "======================================================================"
 echo ""
 echo "Testing Objective: Verify session persistence works across different"
@@ -178,7 +178,7 @@ test_storage_server "stateful-server" 8006 "Advanced stateful operations" "false
 
 # Final summary
 echo "======================================================================"
-echo "Phase 4 Summary"
+echo "Session Storage Backends Summary"
 echo "======================================================================"
 echo "Total: $TOTAL servers"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
@@ -187,9 +187,9 @@ echo -e "Skipped: ${YELLOW}$SKIPPED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ PHASE 4 COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
+    echo -e "${GREEN}✅ STORAGE BACKENDS COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
     exit 0
 else
-    echo -e "${RED}❌ PHASE 4 FAILED${NC} - $FAILED failures"
+    echo -e "${RED}❌ STORAGE BACKENDS FAILED${NC} - $FAILED failures"
     exit 1
 fi
