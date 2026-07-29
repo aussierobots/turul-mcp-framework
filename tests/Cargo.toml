@@ -100,3 +100,25 @@ path = "tasks_e2e_inmemory.rs"
 [[test]]
 name = "event_dispatcher_persistence"
 path = "event_dispatcher_persistence.rs"
+
+# Client round-trip integration (real McpClient against spawned example servers)
+[[test]]
+name = "client_integration_test"
+path = "client_integration_test.rs"
+
+# Runtime capability truthfulness E2E (full server + resource-test-server startup)
+[[test]]
+name = "mcp_runtime_capabilities_validation"
+path = "mcp_runtime_capabilities_validation.rs"
+
+# Streamable HTTP behavior regression suite (progress/SSE/pagination/meta/lifecycle)
+[[test]]
+name = "streamable_http_behavior_regression"
+path = "streamable_http_behavior_regression.rs"
+
+# Guards against tests/*.rs files that are neither an explicit [[test]] target
+# nor reachable via #[path] from a consolidated binary (autotests = false means
+# such files silently never compile or run).
+[[test]]
+name = "reachability_guard"
+path = "reachability_guard.rs"

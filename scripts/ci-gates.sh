@@ -92,7 +92,9 @@ gate_opt_in_2025() {
   for t in compliance schema_tests example_validation e2e_tests feature_tests \
            session_context_macro_tests derive_comprehensive_tool_tests \
            derive_schemars_integration_test derive_zero_config_output_schema_test \
-           dynamic_tools_e2e event_dispatcher_persistence; do
+           dynamic_tools_e2e event_dispatcher_persistence client_integration_test \
+           mcp_runtime_capabilities_validation streamable_http_behavior_regression \
+           reachability_guard; do
     run "integration:$t" cargo test -p turul-mcp-framework-integration-tests --test "$t"
   done
 }
