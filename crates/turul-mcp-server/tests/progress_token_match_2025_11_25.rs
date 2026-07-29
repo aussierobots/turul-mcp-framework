@@ -133,7 +133,7 @@ async fn a_progress_notification_carries_the_requests_own_token() {
 
     // Accept: text/event-stream so progress and the result arrive on one
     // stream — no GET/POST ordering race to lose the notification to.
-    let body = client
+    let response = client
         .post(&url)
         .header("Accept", "text/event-stream")
         .header("Mcp-Session-Id", &session)
@@ -147,10 +147,23 @@ async fn a_progress_notification_carries_the_requests_own_token() {
         }))
         .send()
         .await
-        .expect("tools/call")
-        .text()
-        .await
-        .expect("sse body");
+        .expect("tools/call");
+
+    // Assert the wire format before parsing it: `data:`-prefix parsing alone
+    // would silently accept a JSON body by finding zero frames in it.
+    assert_eq!(response.status(), 200);
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default()
+        .to_string();
+    assert!(
+        content_type.starts_with("text/event-stream"),
+        "a progressToken request must be answered as SSE, got {content_type:?}"
+    );
+
+    let body = response.text().await.expect("sse body");
 
     let frames = data_payloads(&body);
     let progress: Vec<&serde_json::Value> = frames

@@ -9,6 +9,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### Fixed (2026-07-30, verification scripts and the forbidden `-32002`)
+
+- **The legacy `≤2024-11-05` handler emitted `-32002`.**
+  `session_handler.rs` returned the literal `-32002` for a missing
+  `Mcp-Session-Id` on its GET SSE path. That file carries no `cfg` gate and is
+  reachable through protocol-version routing, so the code applied on the
+  2026-07-28 lane, which forbids implementations of this version from emitting
+  it. Now `UNAUTHENTICATED` (`-32001`) — what `streamable_http.rs` already
+  returned for the same condition. The existing per-constant guard could not
+  catch it because the site bypassed `error_codes`, so
+  `no_source_file_emits_the_forbidden_resource_not_found_code` now scans the
+  crate's sources for the literal. Revert-and-fail: restoring `-32002` fails
+  that guard, naming `session_handler.rs:896`. This also corrects a claim in
+  `docs/compliance/base-protocol.md`, which had asserted no framework path
+  emitted `-32002` on the 2026 lane.
+
+- **`e2e-lambda-client-local.sh`: the 2025-11-25 client leg is now an explicit
+  SKIP, and the 2026-07-28 legs were made deterministic.** `cargo lambda watch`
+  builds the function lazily on first invoke while the readiness probe returned
+  on its first success, so the probe could pass against a process the watcher
+  then replaced — surfacing as `hyper::Error(IncompleteMessage)`, which names
+  nothing about the cause. Both lanes are now pre-built into per-lane target
+  dirs (they build the same binary name with mutually exclusive features and
+  must not share one) and readiness needs three consecutive probes. A populated
+  target dir hid all of this; `cargo clean` exposed it.
+  The 2025-11-25 client-over-Lambda leg is not exercisable against this fixture
+  at all: the emulator serves invocations serially with one instance, and on
+  that lane the client holds a long-lived GET SSE stream open, so the stream and
+  the following POST race for the instance — passing when idle, failing under
+  load. Real Lambda scales out, so this does not describe production. The leg
+  now prints SKIP with that reason instead of being a coin flip. Ruled out by
+  experiment: connection reuse is fine (two requests on one connection report
+  `Reusing existing http: connection` / `left intact`).
+
+- **19 `verify_*.sh` / `test_*.sh` scripts audited, each one actually run.**
+  8 deleted as superseded, orphaned, or assertion-free (`verify_example.sh`
+  extracted a session id by grepping a body fetched without `-i`, which never
+  worked; `test_rate_limit_debug.sh` asserted nothing; `verify_meta_examples.sh`
+  targeted two examples that no longer exist). 11 ported to the 2026-07-28
+  stateless wire via a new `scripts/lib/mcp2026.sh` helper and placed behind
+  `gate_examples`, so none can rot unnoticed again. Several had been counting
+  failure as success. (The squashed commit message for this batch says "10
+  scripts deleted"; the true figure is 8 — `git diff --diff-filter=D` over
+  `scripts/` is the authority.)
+
+
 ### Fixed (2026-07-30, sampling provider selection was HashMap-order roulette)
 
 - **`ProvidedSamplingHandler` picked a sampling provider via `HashMap::values().next()`,**
@@ -17,8 +63,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   restarts with identical input the creative sampler answered three times and the technical
   sampler twice). `SamplingProvider::can_handle` and `::priority` existed for exactly this
   and were called from nowhere. Dispatch now tries providers in `priority()` descending
-  order, first `can_handle()` match wins; `.sampling_provider()`'s `sampling_{n}` key breaks
-  priority ties by registration order, never by `HashMap` iteration order. Verified across
+  order, first `can_handle()` match wins, and equal priority breaks by registration
+  order — carried by the provider `Vec` itself, never by `HashMap` iteration order. Verified across
   10 separate process invocations of a dedicated regression test with three equal-priority
   providers: same provider answered every time (was flaky ~60% of the time pre-fix across
   10 runs of the same test against the reverted code).

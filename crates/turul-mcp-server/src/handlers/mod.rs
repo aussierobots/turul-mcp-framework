@@ -2041,10 +2041,8 @@ mod provided_sampling_handler_tests {
     }
 
     /// Regression test for the HashMap-iteration-order bug: `.sampling_provider()`
-    /// keys entries `sampling_{n}` in registration order. With three providers of
-    /// equal priority and unconditional `can_handle`, dispatch must deterministically
-    /// pick the first registered one on every call — never whichever entry
-    /// Equal priority, all accepting: the first registered must answer.
+    /// Three providers of equal priority, all accepting: the first registered
+    /// must answer, on every call and in every process.
     #[tokio::test]
     async fn equal_priority_providers_answer_in_registration_order() {
         let providers: Vec<Arc<dyn crate::McpSampling>> = vec![

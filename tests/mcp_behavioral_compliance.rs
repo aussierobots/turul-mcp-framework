@@ -1345,9 +1345,16 @@ async fn test_legacy_handler_get_sse_without_session_returns_400() {
         body["error"].is_object(),
         "envelope MUST have an `error` object"
     );
+    // -32001 (UNAUTHENTICATED), not -32002. Three reasons, none of them
+    // "the code changed": -32002 means resource-not-found, which a missing
+    // header is not; `streamable_http.rs` already answered -32001 for this
+    // same condition, so the legacy path was inconsistent with its sibling;
+    // and `session_handler.rs` carries no cfg gate, so on a 2026-07-28 build
+    // -32002 here would be a code that revision forbids emitting at all.
     assert_eq!(
-        body["error"]["code"], -32002,
-        "error.code locked at -32002 for missing-session on the legacy path"
+        body["error"]["code"], -32001,
+        "missing-session on the legacy path is an authentication condition, \
+         not resource-not-found"
     );
     let msg = body["error"]["message"].as_str().unwrap_or("");
     assert!(

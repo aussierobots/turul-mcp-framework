@@ -1754,9 +1754,11 @@ impl McpServerBuilder {
         }
 
         // Logging is advertised unconditionally because it is unconditionally
-        // served, and does not depend on the `loggers` map: `logging/setLevel`
-        // stores the threshold on the session (`LoggingHandler` never reads
-        // `loggers`), and `SessionContext::notify_log` is available to any tool.
+        // served on both lanes, and neither route depends on the `loggers` map:
+        // on 2025-11-25 `logging/setLevel` stores the threshold on the session
+        // (`LoggingHandler` never reads `loggers`), and on 2026-07-28, which
+        // removed that method, the threshold arrives per request in `_meta`.
+        // `SessionContext::notify_log` is available to any tool on either lane.
         // A server that registers no `McpLogger` still honours both, so
         // advertising it is truthful — `logging_capability_is_truthful.rs` and
         // `log_gating_2026.rs` drive the whole path against exactly such a

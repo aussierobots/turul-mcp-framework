@@ -306,6 +306,55 @@ mod tests {
         }
     }
 
+    /// The per-constant guard above did not catch `session_handler.rs`, which
+    /// emitted the literal `-32002` directly rather than through `error_codes`.
+    /// This scans the crate's own source for the literal, so a new emit site
+    /// fails regardless of how it is constructed. Source-level rather than
+    /// wire-level on purpose: the invariant is "this code appears in no emit
+    /// path", which no single request can demonstrate.
+    #[test]
+    fn no_source_file_emits_the_forbidden_resource_not_found_code() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders = Vec::new();
+        let mut stack = vec![src];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read src dir") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                // This file names the code in its own assertions and in this
+                // scan; the constants it defines are pinned by
+                // `middleware_codes_are_frozen_legacy_allocations` instead.
+                if path.file_name().is_some_and(|f| f == "error.rs")
+                    && path.parent().is_some_and(|d| d.ends_with("middleware"))
+                {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).expect("read source");
+                for (n, line) in text.lines().enumerate() {
+                    let code = line.trim_start();
+                    if code.starts_with("//") {
+                        continue;
+                    }
+                    if code.contains("-32002") {
+                        offenders.push(format!("{}:{}: {}", path.display(), n + 1, code.trim()));
+                    }
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "2026-07-28 forbids implementations of this version from emitting \
+             -32002, which means resource-not-found to every conformant peer:\n{}",
+            offenders.join("\n")
+        );
+    }
+
     #[test]
     fn test_error_equality() {
         let err1 = MiddlewareError::unauthenticated("test");

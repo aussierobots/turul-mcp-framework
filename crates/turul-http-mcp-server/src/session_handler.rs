@@ -892,7 +892,11 @@ impl SessionMcpHandler {
                 warn!("Missing Mcp-Session-Id header for SSE request");
                 let error = JsonRpcError::new(
                     None,
-                    JsonRpcErrorObject::server_error(-32002, "Missing Mcp-Session-Id header", None),
+                    JsonRpcErrorObject::server_error(
+                        crate::middleware::error::error_codes::UNAUTHENTICATED,
+                        "Missing Mcp-Session-Id header",
+                        None,
+                    ),
                 );
                 let error_json = serde_json::to_string(&error).unwrap_or_else(|_| "{}".to_string());
                 return Ok(Response::builder()

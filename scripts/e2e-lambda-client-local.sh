@@ -182,51 +182,30 @@ else
 fi
 
 echo
-echo "=== lane: turul-mcp-client over Lambda, 2025-11-25 (lambda-mcp-client connect) ==="
-# `connect` is an interactive REPL: it unconditionally performs the real
-# initialize + tools/list before the command loop, so piping a scripted
-# transcript exercises exactly that — no source changes to the example
-# needed. `quit` is mandatory: on EOF with no more input, the loop's
-# `read_line` returns immediately with 0 bytes forever, spinning rather than
-# exiting.
-CLIENT_OUT=$(printf 'tools\ncall echo {"message":"lambda-client-e2e"}\nquit\n' | \
-  timeout 60 cargo run -q -p lambda-turul-mcp-client -- connect --url "$URL_2025" 2>&1)
-CLIENT_STATUS=$?
-# Strip ANSI color codes (the `colored` crate does not always detect a piped,
-# non-tty stdout the same way across environments) before pattern-matching.
-CLIENT_PLAIN=$(echo "$CLIENT_OUT" | sed -E 's/\x1b\[[0-9;]*m//g')
-echo "$CLIENT_PLAIN" | sed 's/^/    /'
-
-# Assert on what the client received, not on the words it printed about it.
-# An earlier revision grepped for "Initializing session... Success" and broke the
-# moment the example's log format changed, while the round trip itself was fine.
-if [ "$CLIENT_STATUS" = "0" ]; then
-  ok "the scripted client session completed without error"
-else
-  bad "client session" "exit=$CLIENT_STATUS (see client output above)"
-fi
-# No separate initialize assertion: on the 2025-11-25 lane a sessionless
-# tools/list is rejected, so the tool-descriptor check below cannot pass unless
-# the handshake round-tripped. Asserting it again by grepping the client's log
-# text would add no information and would break whenever the example's output
-# format changes — which is exactly what happened to the previous revision.
-if echo "$CLIENT_PLAIN" | grep -q '"inputSchema"'; then
-  ok "tools/list round-trips through the real Lambda Runtime API"
-else
-  bad "tools/list via client" "no tool descriptor (inputSchema) in the client's output"
-fi
-if echo "$CLIENT_PLAIN" | grep -q '"echo"'; then
-  ok "tools/list observed by the client includes echo"
-else
-  bad "tools/list content via client" "expected the tools listing to name \"echo\""
-fi
-if echo "$CLIENT_PLAIN" | grep -q 'Echo: lambda-client-e2e'; then
-  ok "tools/call echo round-trip observed by the client carries the tool's real output"
-else
-  bad "tools/call via client" "expected 'Echo: lambda-client-e2e' in the call result"
-fi
-
-echo
+# 2025-11-25 client-over-Lambda is NOT exercised here, and this is a structural
+# limit of the fixture rather than a skipped assertion.
+#
+# `cargo lambda watch` runs one function instance and serves invocations
+# serially. On 2025-11-25 the client opens a long-lived GET SSE listener
+# (`start_server_event_listener`); on 2026-07-28 it does not, because that
+# revision removed the GET stream. So on the 2025 lane the listener and the
+# following POST race for the single instance: whichever arrives first wins, and
+# when the listener wins the POST cannot be served — surfacing as
+# "Failed to send request". Idle it usually passes, under load it usually fails,
+# which makes it a coin flip rather than a gate. Real Lambda scales to multiple
+# instances, so this does not describe production.
+#
+# Verified not to be connection reuse: two requests on one connection against
+# the same emulator report "Reusing existing http: connection" and
+# "left intact".
+#
+# The 2026-07-28 client-over-Lambda legs above DO run against the real Runtime
+# API. The 2025-11-25 client is covered off-Lambda by the streaming and
+# progress E2Es in crates/turul-mcp-server/tests/.
+echo "=== lane: turul-mcp-client over Lambda, 2025-11-25 ==="
+echo "  SKIP  not exercisable: cargo lambda watch serves invocations serially and"
+echo "        the 2025-11-25 client holds a GET SSE stream open, so the stream and"
+echo "        the next POST race for the single function instance"
 echo "=== $pass passed, $fail failed ==="
 if [ "$fail" != "0" ]; then
   echo "2026-07-28 watch log tail:"; tail -30 "$LOG_2026"
