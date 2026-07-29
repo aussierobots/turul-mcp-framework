@@ -484,6 +484,20 @@ grep -rEc 'CLAUDE\.md|AGENTS\.md'                                          <crat
 grep -rEc 'removed:|was removed|no longer:|formerly known|deleted with'    <crate>/
 grep -rEn '\b2025-11-25\b'                                                 <crate>/  # then disposition each hit
 grep -rEc 'initialization handshake|notifications/initialized'             <crate>/src/
+
+# Identifiers, not just prose: the SCREAMING-CASE patterns above never match a
+# gap ID that has been snake_cased into a fn name, a server name, or a string.
+grep -rEc '\bbp[0-9]|\bgap_[a-z]|\bcf[0-9]|\bpat_g[0-9]|\br[0-9]_[a-z]'    <crate>/src/ <crate>/tests/
+
+# FILENAMES, not just contents. Every grep above reads file bodies, so a
+# tracking ID in a path — `tests/verify_bp3_build_2026.rs`, a `[[test]]` target
+# name, `scripts/verify_phase4.sh` — is structurally invisible to them.
+# Fix by renaming to what the file verifies, keeping the prefix
+# (`verify_phase4.sh` → `verify_storage_backends.sh`), then update every place
+# that names the old target: scripts/ci-gates.sh, Cargo.toml `[[test]]`
+# entries, and any docs/plans row citing the test by filename.
+find <crate>/ -type f -printf '%f\n' \
+  | grep -Eic 'bp[0-9]|gap|cf[0-9]|ver[0-9]|(^|_)r[0-9](_|\.)|phase[0-9]|slice[0-9]|batch[0-9]'
 ```
 
 For ambiguous hits — historical migration notes that explain a current shape vs. stale current-spec claims — list each one in the slice summary with a per-instance disposition. Never silently let them pass.

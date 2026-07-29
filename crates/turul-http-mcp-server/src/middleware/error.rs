@@ -5,7 +5,27 @@ use std::fmt;
 /// JSON-RPC 2.0 error codes for middleware errors
 ///
 /// These codes are used when converting `MiddlewareError` to `JsonRpcError`.
-/// Codes `-32000` to `-32099` are reserved for application-defined server errors.
+///
+/// MCP 2026-07-28 partitions JSON-RPC's `-32000..-32099` implementation-defined
+/// range: `-32000..-32019` is the legacy sub-range — new codes MUST NOT be
+/// allocated in it and new implementations SHOULD NOT use it at all — and
+/// `-32020..-32099` is reserved for the specification. New codes for purposes
+/// the specification does not define SHOULD be allocated outside the JSON-RPC
+/// reserved range `-32768..-32000`. See
+/// [Error Codes](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes).
+///
+/// The three codes below predate that partition and are frozen as legacy
+/// allocations; nothing new may join them.
+///
+/// `UNAUTHORIZED` is a **known deviation**: 2026-07-28 names `-32002` among the
+/// codes implementations of this version MUST NOT emit (it meant "resource not
+/// found" in 2025-11-25 and earlier, and `turul-mcp-client` still classifies it
+/// as resource-not-found in `error.rs::is_resource_not_found`). Relocating it
+/// is blocked at both call sites that build these responses —
+/// `map_middleware_error_to_jsonrpc` in `session_handler.rs` and
+/// `streamable_http.rs` construct the object with
+/// `JsonRpcErrorObject::server_error`, which asserts the code lies in
+/// `-32099..=-32000` and panics otherwise.
 pub mod error_codes {
     /// Authentication required (-32001)
     pub const UNAUTHENTICATED: i64 = -32001;
@@ -244,6 +264,32 @@ mod tests {
 
         let err = MiddlewareError::custom("CUSTOM_ERROR", "Something went wrong");
         assert_eq!(err.to_string(), "CUSTOM_ERROR: Something went wrong");
+    }
+
+    /// The middleware codes are frozen legacy allocations, and none may enter
+    /// the spec-reserved sub-range. 2026-07-28 forbids allocating new codes in
+    /// `-32000..-32019` and forbids emitting any `-32020..-32099` code the
+    /// specification does not define; a new middleware code must therefore be
+    /// allocated outside the JSON-RPC reserved range `-32768..-32000`.
+    #[test]
+    fn middleware_codes_are_frozen_legacy_allocations() {
+        const FROZEN: [(&str, i64); 3] = [
+            ("UNAUTHENTICATED", -32001),
+            ("UNAUTHORIZED", -32002),
+            ("RATE_LIMIT_EXCEEDED", -32003),
+        ];
+        assert_eq!(error_codes::UNAUTHENTICATED, FROZEN[0].1);
+        assert_eq!(error_codes::UNAUTHORIZED, FROZEN[1].1);
+        assert_eq!(error_codes::RATE_LIMIT_EXCEEDED, FROZEN[2].1);
+
+        for (name, code) in FROZEN {
+            assert!(
+                !(-32099..=-32020).contains(&code),
+                "{name} emits {code}, inside the spec-reserved -32020..-32099 \
+                 sub-range; implementations must not emit codes there that the \
+                 specification does not define"
+            );
+        }
     }
 
     #[test]

@@ -526,10 +526,10 @@ impl McpError {
                 None,
             ),
 
-            // Validation errors. Codes live in the -32000..-32019
-            // implementation-defined range — the schema now reserves
-            // -32020..-32099 for its own sequential allocations, so
-            // framework-internal codes MUST stay below -32020.
+            // Validation errors. These codes are frozen legacy allocations in
+            // the -32000..-32019 sub-range: 2026-07-28 forbids allocating new
+            // codes there, so a new framework-internal code belongs outside the
+            // JSON-RPC reserved range -32768..-32000 instead.
             McpError::ValidationError(msg) => JsonRpcErrorObject::server_error(
                 -32014,
                 &format!("Validation error: {}", msg),
@@ -611,14 +611,22 @@ impl turul_rpc::r#async::ToJsonRpcError for McpError {
 
 #[cfg(test)]
 mod mcp_error_code_partition {
-    //! Schema partitions JSON-RPC's server-error range: `-32000..-32019` is
-    //! implementation-defined (never assigned by the spec), `-32020..-32099`
-    //! is spec-reserved and allocated sequentially. Every spec-registered
-    //! structured error MUST use its assigned number; every
-    //! framework-internal `McpError` variant MUST stay out of the
-    //! spec-reserved range so a future spec allocation can never collide
-    //! with it.
+    //! 2026-07-28 partitions JSON-RPC's server-error range: `-32000..-32019`
+    //! is the legacy sub-range — new codes MUST NOT be allocated in it and new
+    //! implementations SHOULD NOT use it at all — and `-32020..-32099` is
+    //! reserved for the specification, allocated sequentially. New codes for
+    //! purposes the specification does not define SHOULD be allocated outside
+    //! the JSON-RPC reserved range `-32768..-32000`. Every spec-registered
+    //! structured error MUST use its assigned number. See
+    //! [Error Codes](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes).
     use super::McpError;
+
+    /// Framework-internal codes already in use when 2026-07-28 introduced the
+    /// sub-range partition. Frozen: nothing new may join them, because the
+    /// specification forbids allocating new codes in `-32000..-32019`.
+    const LEGACY_ALLOCATIONS: [i64; 11] = [
+        -32000, -32010, -32011, -32012, -32013, -32014, -32015, -32016, -32017, -32018, -32019,
+    ];
 
     #[test]
     fn missing_required_client_capability_uses_spec_code() {
@@ -642,8 +650,12 @@ mod mcp_error_code_partition {
         assert_eq!(crate::headers::ERROR_CODE_HEADER_MISMATCH, -32020);
     }
 
+    /// A framework-internal code is acceptable only if it is one of the frozen
+    /// legacy allocations or sits outside the JSON-RPC reserved range
+    /// entirely. The `-32000..-32019` sub-range is closed to new allocations,
+    /// not the recommended home for them.
     #[test]
-    fn framework_internal_errors_stay_out_of_spec_reserved_range() {
+    fn framework_internal_errors_are_legacy_allocations_or_outside_the_reserved_range() {
         let cases: Vec<(McpError, &str)> = vec![
             (
                 McpError::ToolExecutionError("x".into()),
@@ -684,9 +696,12 @@ mod mcp_error_code_partition {
         for (err, name) in cases {
             let code = err.to_error_object().code;
             assert!(
-                (-32019..=-32000).contains(&code),
-                "{name} emits {code}, which is outside the -32000..-32019 \
-                 implementation-defined range (spec now reserves -32020..-32099)"
+                LEGACY_ALLOCATIONS.contains(&code) || !(-32768..=-32000).contains(&code),
+                "{name} emits {code}, which is neither a frozen legacy \
+                 allocation nor outside the JSON-RPC reserved range \
+                 -32768..-32000. New codes MUST NOT be allocated in \
+                 -32000..-32019 and MUST NOT be emitted from the spec-reserved \
+                 -32020..-32099; allocate outside the reserved range instead"
             );
         }
     }

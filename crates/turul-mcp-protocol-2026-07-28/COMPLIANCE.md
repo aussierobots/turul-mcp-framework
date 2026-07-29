@@ -27,33 +27,46 @@
   shutdown-signal infrastructure (no `CancellationToken`, no `tokio::signal`
   wiring) exists anywhere in `turul-http-mcp-server` or `turul-mcp-server` to
   hook into — this is unbuilt transport infrastructure, not a missed call site.
-- **`RequestMetaObject.extra` has the same reserved-key-collision risk fixed
-  on `SubscriptionsListenResultMetaObject` below** (public `#[serde(flatten)]` map
-  alongside named typed fields — a caller can insert
-  `io.modelcontextprotocol/protocolVersion` etc. into `extra` and collide with
-  the typed field, producing a duplicate wire key). Pre-existing, not
-  introduced by the 2026-07-02 slice; out of scope here — flagged for a
-  dedicated pass across all `extra`/flatten-map fields in the crate.
+- **`error_codes::UNAUTHORIZED` is `-32002`, which this spec version MUST NOT
+  emit.** The code is defined in `turul-http-mcp-server`, not here, but it
+  reaches the 2026 wire and `turul-mcp-client::is_resource_not_found` matches
+  `-32602 | -32002` — so turul-on-turul reports a permission denial as a missing
+  resource. Blocked rather than deferred: both `map_middleware_error_to_jsonrpc`
+  sites construct through `JsonRpcErrorObject::server_error`, whose `assert!`
+  requires `-32099..=-32000`, so the spec's recommended destination for a
+  replacement code is unreachable through that constructor. Full disposition in
+  `docs/compliance/base-protocol.md` §11 and `docs/adr/027` revision log.
+
+An earlier revision listed `RequestMetaObject.extra` here as an unguarded
+reserved-key collision risk. **That is fixed and tested** — the hand-written
+`Serialize` at `src/meta.rs:499-545` filters five reserved keys out of the
+flattened map before emitting it, and `meta.rs::request_meta_object_extra_cannot_shadow_protocol_version`
+asserts against the raw serialized *text* rather than a `Value` (a `Map`
+silently overwrites on the second insert and cannot observe a duplicate key).
+Removed from this list rather than carried forward.
 
 ## Test gate
 
+Measured 2026-07-29 on this working tree.
+
 | Surface | Count | Status |
 |---|---|---|
-| Lib unit tests (`--features compliance`) | 185 | ✅ pass |
-| Lib unit tests (default features) | 178 | ✅ pass |
-| `tests/compliance.rs` integration | 187 | ✅ pass |
-| `tests/upstream_fixtures.rs` harness | 3 | ✅ pass |
+| Lib unit tests (`--features compliance`) | 230 | ✅ pass |
+| Lib unit tests (default features) | 222 | ✅ pass |
+| `tests/compliance.rs` integration | 189 | ✅ pass |
+| `tests/docs_consistency.rs` | 3 (`--features compliance`) / 2 (default) | ✅ pass |
+| `tests/upstream_fixtures.rs` harness | 3 (`--features compliance` only) | ✅ pass |
 | Doctests | 1 (+ 2 ignored) | ✅ pass |
-| **Total (`--features compliance`)** | **420** | ✅ all green, `clippy -D warnings` clean |
-| Total (default features) | 409 | ✅ — `compliance` feature adds the 7 lib + 3 fixture wire-gate tests |
+| **Total (`--features compliance`)** | **426** | ✅ all green, `clippy -D warnings` clean |
+| Total (default features) | 414 | ✅ — `compliance` adds 8 lib + 1 docs-consistency + 3 fixture wire-gate tests |
 | `mcp-compliance-2026-07-28` binary | 24/24 fixtures | ✅ all pass |
 | Modeled fixtures | 12 of 88 (13.6%) | ⚠ partial — see §Coverage below |
 
-Verified on `turul-rpc 0.2.2` (with `turul-rpc-jsonrpc 0.2.2` for the `frame` module fix).
+Verified against `turul-rpc` 0.2.3 (`Cargo.lock`; the manifest pins the `0.2` range).
 
 ## Wire envelope conformance (JSON-RPC §5)
 
-Wire types re-exported from `turul-rpc` 0.2.2:
+Wire types re-exported from `turul-rpc` (0.2.3 in `Cargo.lock`):
 
 | Schema interface | Rust re-export | Status |
 |---|---|---|
