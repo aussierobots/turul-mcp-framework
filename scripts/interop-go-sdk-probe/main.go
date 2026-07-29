@@ -131,7 +131,7 @@ func proxyHandler(upstream string) http.HandlerFunc {
 }
 
 // cacheableMethods is the exact set of J1+J2 methods whose result type
-// extends CacheableResult in schema/draft-schema.ts (grepped, not assumed):
+// extends CacheableResult in schema/schema.ts (grepped, not assumed):
 // DiscoverResult, ListToolsResult, ListResourcesResult,
 // ListResourceTemplatesResult, ListPromptsResult, ReadResourceResult.
 // GetPromptResult and CompleteResult do not extend it.
