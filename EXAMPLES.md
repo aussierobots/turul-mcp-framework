@@ -88,7 +88,7 @@ cargo run -p minimal-server
 | **roots-server** | 8050 | ✅ VALIDATED | Root directories | MCP roots/list endpoint demonstration |
 | **mrtr-elicitation-server** | 8642 | ✅ VALIDATED | MRTR elicitation round trip (2026) | `InputRequired` → retry with `inputResponses`; paired client bin |
 | **origin-policy-server** | 8643 | ✅ VALIDATED | Origin validation / DNS-rebinding (2026) | `OriginPolicy` default/AllowList/Disabled; 403 matrix verified live |
-| **header-bound-tools-server** | 8644 | ✅ VALIDATED | SEP-2243 header-bound tool params (2026) | `x-mcp-header` → `Mcp-Param-*` mirroring; -32001 contract verified live |
+| **header-bound-tools-server** | 8644 | ✅ VALIDATED | SEP-2243 header-bound tool params (2026) | `x-mcp-header` → `Mcp-Param-*` mirroring; -32020 contract verified live |
 | **ext-tasks-server** | 8645 | ✅ VALIDATED | Tasks extension (SEP-2663, 2026) | Task election + polling + `tasks/update` mid-task input; paired client bin; live-verified |
 | **oauth-resource-server** | 8080 | ✅ VALIDATED | OAuth 2.1 Resource Server (RFC 9728) | JWKS Bearer validation, PRM well-known routes, `--required-scope` → 403 insufficient_scope |
 | **dynamic-tools-server** | 8484 | ✅ VALIDATED | Dynamic tool registration (2025-pinned) | `ToolRegistry` + `notifications/tools/list_changed` on the stateful lane |

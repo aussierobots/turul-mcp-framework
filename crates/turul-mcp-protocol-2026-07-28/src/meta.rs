@@ -252,7 +252,7 @@ pub const META_KEY_SERVER_INFO: &str = "io.modelcontextprotocol/serverInfo";
 /// the reverse-DNS prefix rules; `io.modelcontextprotocol/` and `dev.mcp/`
 /// are reserved for MCP use.
 ///
-/// See [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta).
+/// See [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#_meta).
 pub type MetaObject = HashMap<String, Value>;
 
 /// `_meta` for results — [`MetaObject`] plus the responding server's identity.
@@ -263,7 +263,7 @@ pub type MetaObject = HashMap<String, Value>;
 /// value is self-reported and unverified: clients MUST NOT key behavior on it
 /// and MUST NOT treat it as a security identity.
 ///
-/// See [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta).
+/// See [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#_meta).
 ///
 /// `Serialize` is hand-written for the same reason as [`RequestMetaObject`]:
 /// `extra` is public and caller-writable, so a caller could otherwise insert
@@ -359,7 +359,7 @@ impl Serialize for ResultMetaObject {
 
 /// Strictly-typed request `_meta` carrying the per-request capability
 /// negotiation. See also [`MetaObject`] for key naming rules and reserved
-/// prefixes, and [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta)
+/// prefixes, and [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#_meta)
 /// for the full spec section.
 ///
 /// Replaces the 2025-11-25 `initialize` handshake: every 2026-07-28 request's

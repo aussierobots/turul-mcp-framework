@@ -35,9 +35,9 @@ A faithful 1:1 mapping of `schema/schema.ts`. Every TS interface, type, and meth
 
 ## Status
 
-**420 tests passing** (227 lib + 189 compliance integration + 3 upstream-fixture + 1 doctest). The schema-drift detector in `tests/compliance.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
+**423 tests passing** across the crate's five suites. The schema-drift detector in `tests/compliance.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
 
-⚠ **Re-pin outstanding.** The spec has finalized and the wire-version string is `"2026-07-28"`, but this copy is still vendored from the upstream `schema/draft/` path — now the *next* spec cycle's floating pointer rather than a snapshot of 2026-07-28. The released schema lives at the immutable `schema/2026-07-28/schema.ts`. Check the pins before starting any slice. Regeneration trigger and process: [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
+The vendored schema is `schema/schema.ts`, taken from the immutable released path `schema/2026-07-28/schema.ts`. Upstream `schema/draft/` is the *next* spec cycle's floating pointer and is not what this crate tracks — verify the pin before starting a slice. Regeneration trigger and process: [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
 
 ## Crate layout
 

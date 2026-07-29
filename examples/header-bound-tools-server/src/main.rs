@@ -7,9 +7,9 @@
 //! — region pinning, tenant sharding — **without parsing JSON bodies**.
 //!
 //! The server validates that mirrored headers match the body arguments:
-//! - value in body but header missing → HTTP 400 + JSON-RPC `-32001`
-//! - spurious header (no matching body argument) → 400 + `-32001`
-//! - decoded mismatch → 400 + `-32001`
+//! - value in body but header missing → HTTP 400 + JSON-RPC `-32020`
+//! - spurious header (no matching body argument) → 400 + `-32020`
+//! - decoded mismatch → 400 + `-32020`
 //! - non-tchar values ride a Base64 sentinel (`:b64:` prefix)
 //!
 //! The `route_query` tool below pins a `region` parameter to the
@@ -116,8 +116,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing::info!(
         "curl -s -X POST http://127.0.0.1:8644/mcp -H 'Content-Type: application/json' -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: tools/call' -H 'Mcp-Name: route_query' -H 'Mcp-Param-Region: ap-southeast-2' -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{{meta},\"name\":\"route_query\",\"arguments\":{{\"region\":\"ap-southeast-2\",\"query\":\"SELECT 1\"}}}}}}'"
     );
-    tracing::info!("# Omit Mcp-Param-Region (value still in body) → 400 + -32001");
-    tracing::info!("# Mismatched header value → 400 + -32001");
+    tracing::info!("# Omit Mcp-Param-Region (value still in body) → 400 + -32020");
+    tracing::info!("# Mismatched header value → 400 + -32020");
 
     server.run().await?;
     Ok(())

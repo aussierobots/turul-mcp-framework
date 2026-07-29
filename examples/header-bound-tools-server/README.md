@@ -27,8 +27,8 @@ properties.insert(
 | Request | Result |
 |---|---|
 | `Mcp-Param-Region: ap-southeast-2` matching the body argument | 200, tool runs |
-| Header omitted while the body carries `region` | **400 + `-32001`** "header omitted but the parameter is present in the request body" |
-| `Mcp-Param-Region: us-east-1` vs body `ap-southeast-2` | **400 + `-32001`** "does not match the request body value" |
+| Header omitted while the body carries `region` | **400 + `-32020`** "header omitted but the parameter is present in the request body" |
+| `Mcp-Param-Region: us-east-1` vs body `ap-southeast-2` | **400 + `-32020`** "does not match the request body value" |
 
 Values that aren't valid header tokens (non-tchar) ride a Base64 sentinel —
 the server decodes before comparing.
@@ -48,7 +48,7 @@ curl -s -X POST http://127.0.0.1:8644/mcp \
 ```
 
 Drop the `Mcp-Param-Region` header (or change its value) to see the
-`-32001` rejection.
+`-32020` rejection.
 
 ## See also
 

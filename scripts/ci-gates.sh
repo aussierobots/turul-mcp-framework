@@ -26,11 +26,11 @@ gate_default() {
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test stateless_2026_http_surface
   run "2026 subscriptions/listen (ack-first, filtered delivery)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test subscriptions_listen_2026
-  run "2026 request-metadata headers (Mcp-Method/Mcp-Name, -32001/-32004)" \
+  run "2026 request-metadata headers (Mcp-Method/Mcp-Name, -32020/-32022)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_headers_2026
   run "2026 unknown-method mapping (404 + -32601)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test error_mapping_2026
-  run "2026 MRTR (input_required round trip, -32003 capability gate)" \
+  run "2026 MRTR (input_required round trip, -32021 capability gate)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mrtr_2026
   run "2026 Mcp-Param-* mirroring (x-mcp-header validation)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_param_2026
@@ -42,6 +42,8 @@ gate_default() {
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test schema_fidelity_2026
   run "protocol-2026 compliance + upstream wire fixtures" \
     cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
+  run "shipped crate docs agree with the artifacts they describe" \
+    cargo test -p turul-mcp-protocol-2026-07-28 --features compliance --test docs_consistency
   run "bilingual client (not in default-members)" cargo test -p turul-mcp-client
   run "2026 client example (pairs with minimal-server)" cargo build -p streamable-http-client
   run "client-using examples (not in default-members)" cargo build -p mrtr-elicitation-server -p bilingual-fleet-client -p ext-tasks-server --bins

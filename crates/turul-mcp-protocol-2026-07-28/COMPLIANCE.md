@@ -148,21 +148,24 @@ Spot-checked high-risk fields — all serde renames match schema exactly:
 
 ## Spec `@see` anchor coverage
 
-8 `@see` block-tags in `schema/schema.ts`:
+13 `@see` block-tags in `schema/schema.ts`, in three groups:
 
-| # | Schema anchor | Rust binding | Status |
-|---|---|---|---|
-| 1 | `[General fields: _meta](/specification/2026-07-28/basic/index#meta)` | `meta::MetaObject` | ✅ mirrored |
-| 2 | `[General fields: _meta]` (same) | `meta::RequestMetaObject` | ✅ mirrored |
-| 3 | TypeDoc `{@link MetaObject}` cross-ref | `meta::RequestMetaObject` | ✅ uses `[`MetaObject`]` intra-doc link |
-| 4 | `[JSON-RPC 2.0 Error Object](https://www.jsonrpc.org/specification#error_object)` (ParseError) | `json_rpc::JsonRpcError` parent doc | ✅ mirrored |
-| 5–8 | Same JSON-RPC anchor on `InvalidRequestError`, `MethodNotFoundError`, `InvalidParamsError`, `InternalError` | All factory methods → `JsonRpcError` | ✅ collapsed onto parent struct doc |
+| Group | Tags | Schema anchor | Rust binding | Status |
+|---|---|---|---|---|
+| `_meta` section link | 4 | `[General fields: _meta](/specification/2026-07-28/basic/index#meta)` on `MetaObject`, `RequestMetaObject`, `NotificationMetaObject`, `ResultMetaObject` | 3 doc sites in `meta.rs` | mirrored |
+| `{@link MetaObject}` cross-ref | 4 | TypeDoc intra-schema link | `` [`MetaObject`] `` intra-doc links in `meta.rs` | mirrored |
+| JSON-RPC error object | 5 | `https://www.jsonrpc.org/specification#error_object` on `ParseError`, `InvalidRequestError`, `MethodNotFoundError`, `InvalidParamsError`, `InternalError` | — | **not mirrored** |
 
 Anchors are URL fragments (section IDs) — they survive re-pins. Schema line numbers do not, and are not used as comment anchors anywhere in this crate's `src/` or `tests/` directories.
 
+**Anchor correction.** Upstream's `@see` writes the fragment `#meta`, but the live
+page's section id is `#_meta` — upstream's own anchor does not resolve. The Rust
+mirrors use `#_meta` so the rendered docs.rs links work. A re-pin must not
+"correct" them back to match the schema verbatim.
+
 ## Compliance harness
 
-Bidirectional wire-format gate against the upstream's canonical example JSON fixtures (`schema/draft/examples/`, 86 directories, 124 fixture files):
+Bidirectional wire-format gate against the upstream's canonical example JSON fixtures (`schema/2026-07-28/examples/`, 88 directories, 129 fixture files):
 
 - **Build-time** — `cargo test -p turul-mcp-protocol-2026-07-28 --features compliance --test upstream_fixtures` drives every modeled `Case` against every `.json` file in its directory; asserts semantic-diff equality after parse → re-serialize.
 - **Runtime** — `cargo run -p turul-mcp-protocol-2026-07-28 --features compliance --bin mcp-compliance-2026-07-28` calls the same `compliance::roundtrip::run_all` path. Green tests ⇒ green binary on the same pin.
@@ -270,7 +273,7 @@ cargo run -p turul-mcp-protocol-2026-07-28 --features compliance \
 
 ## Refresh contract
 
-When upstream `schema/draft/examples` changes:
+When upstream `schema/2026-07-28/examples` changes:
 
 1. `refresh` resolves `main` HEAD via `git ls-remote`.
 2. Re-fetches into a side cache (does not pollute primary).
