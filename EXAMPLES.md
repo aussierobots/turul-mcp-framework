@@ -1,6 +1,8 @@
 # MCP Framework Examples
 
-This document provides a comprehensive overview of all **54 active examples** in the MCP Framework (plus `examples/archived/` — grown by 5 in the 2026-06-12 archive slice; the disposition review lives in git history), organized by learning progression from basic concepts to advanced implementations.
+This document provides a comprehensive overview of the active examples in the MCP Framework, organized by learning progression from basic concepts to advanced implementations.
+
+The former `examples/archived/` directory was removed on 2026-07-29: those 29 examples predated the 2026-07-28 spec, were never workspace members, and so were never built by any gate. They remain in git history if one is ever needed back.
 
 **✅ All active examples compile under their lane's CI gates** (2026-07-28 default lane
 + per-manifest 2025-11-25 pins). Per-example functional re-verification against the
@@ -212,7 +214,7 @@ re-verified its six examples live on the wire.
 - **Live-verified**: migrated and new examples were verified by running them and executing their own printed commands
 
 ### 📊 **Statistics**
-- **Total Examples**: 54 active (29 archived in `examples/archived/`)
+- **Total Examples**: 54 active
 - **Session state (2025-pinned lane)**: stateful-server, session-aware-resource-server, and the logging/session test fixtures demonstrate cross-request session state on the opt-in lane; 2026-default examples use request-scoped context or app-owned storage instead
 - **Client-Server Pairs**: 9 pairing-table rows validating communication patterns
 - **Task Support**: 3 examples demonstrating MCP 2025-11-25 task lifecycle (InMemory storage)
