@@ -735,7 +735,7 @@ async fn progress_feed_and_discovered_server_accessors() {
         "a server with tools must declare the tools capability: {caps}"
     );
 
-    // PAT/G4: progress events reach the application before the result.
+    // Progress events reach the application before the result.
     let progress_events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
     let sink = progress_events.clone();
     let result = client

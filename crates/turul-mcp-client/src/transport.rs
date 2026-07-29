@@ -10,19 +10,10 @@ use crate::error::{McpClientResult, TransportError};
 pub mod http;
 pub mod sse;
 
-// Stdio transport is planned for future implementation
-
-// #[cfg(feature = "stdio")]
-// pub mod stdio;
-
 // Re-export transport implementations
 pub use http::HttpTransport;
 #[allow(deprecated)] // re-exported for unmigrated ≤2024-11-05 servers (SEP-2596)
 pub use sse::SseTransport;
-
-// Re-exports for future transport implementations
-// #[cfg(feature = "stdio")]
-// pub use stdio::StdioTransport;
 
 /// Transport type enumeration
 #[derive(Debug, Clone, PartialEq)]
@@ -31,8 +22,6 @@ pub enum TransportType {
     Http,
     /// Server-Sent Events transport (HTTP+SSE)
     Sse,
-    // Future transport types:
-    // Stdio,
 }
 
 impl std::fmt::Display for TransportType {

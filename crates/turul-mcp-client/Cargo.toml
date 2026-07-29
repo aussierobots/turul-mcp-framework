@@ -59,9 +59,6 @@ default = ["http", "sse", "client-bilingual"]
 # Transport features
 http = []
 sse = ["tokio-util"]
-stdio = ["tokio-util"]
-# All transports
-all-transports = ["http", "sse", "stdio"]
 
 # Spec-coexistence (mutually exclusive — enforced by compile_error! in lib.rs).
 # Bilingual (default) links both protocol crates; one McpClient negotiates the

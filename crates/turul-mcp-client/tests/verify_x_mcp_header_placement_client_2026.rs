@@ -1,7 +1,6 @@
-//! INDEPENDENT VERIFICATION (agent != implementer) of R2 + R4, RE-VERIFY pass
-//! after the `find_misplaced_x_mcp_header` allowlist fix.
+//! Client-side `x-mcp-header` placement rules and tool-schema exclusion.
 //!
-//! Drives a REAL McpClient (2026-07-28) over wiremock through
+//! Drives a real `McpClient` (2026-07-28) over wiremock through
 //! `parse_list_tools` (crates/turul-mcp-client/src/protocol/v2026_07_28.rs).
 //! The x-mcp-header positional rule is an ALLOWLIST: an annotation is valid
 //! ONLY when every step from the schema root to it is a `properties/<name>`
@@ -117,10 +116,10 @@ fn good_schema() -> Value {
     json!({ "type": "object", "properties": { "q": { "type": "string" } } })
 }
 
-// ======================= R2 (unchanged, still valid) =======================
+// ================= schema-level exclusion from tools/list ==================
 
 #[tokio::test]
-async fn verify_r2_unsupported_dialect_tool_excluded() {
+async fn unsupported_dialect_tool_excluded() {
     let bad = json!({
         "type": "object",
         "$schema": "http://json-schema.org/draft-07/schema#",
@@ -135,7 +134,7 @@ async fn verify_r2_unsupported_dialect_tool_excluded() {
 }
 
 #[tokio::test]
-async fn verify_r2_remote_ref_tool_excluded() {
+async fn remote_ref_tool_excluded() {
     let bad = json!({
         "type": "object",
         "properties": { "a": { "$ref": "https://attacker.example/evil.json" } }
@@ -148,7 +147,7 @@ async fn verify_r2_remote_ref_tool_excluded() {
     );
 }
 
-// ============ R4 COMPLETENESS — annotation off the properties chain =========
+// ========== COMPLETENESS — annotation off the properties chain =============
 // Each: (unit) detector flags it AND (wire) tool excluded, good tool survives.
 
 async fn assert_excluded(case: &str, bad_schema: Value) {
@@ -167,10 +166,8 @@ async fn assert_excluded(case: &str, bad_schema: Value) {
     );
 }
 
-// --- the three previously-bypassed cases, now FLIPPED to assert EXCLUSION ---
-
 #[tokio::test]
-async fn verify_r4_prefix_items_excluded() {
+async fn prefix_items_excluded() {
     assert_excluded(
         "prefixItems",
         json!({
@@ -183,7 +180,7 @@ async fn verify_r4_prefix_items_excluded() {
 }
 
 #[tokio::test]
-async fn verify_r4_pattern_properties_excluded() {
+async fn pattern_properties_excluded() {
     assert_excluded(
         "patternProperties",
         json!({
@@ -196,7 +193,7 @@ async fn verify_r4_pattern_properties_excluded() {
 }
 
 #[tokio::test]
-async fn verify_r4_additional_properties_excluded() {
+async fn additional_properties_excluded() {
     assert_excluded(
         "additionalProperties",
         json!({
@@ -208,10 +205,8 @@ async fn verify_r4_additional_properties_excluded() {
     .await;
 }
 
-// --- new applicator cases required by the mandate ---
-
 #[tokio::test]
-async fn verify_r4_contains_excluded() {
+async fn contains_excluded() {
     assert_excluded(
         "contains",
         json!({
@@ -224,7 +219,7 @@ async fn verify_r4_contains_excluded() {
 }
 
 #[tokio::test]
-async fn verify_r4_property_names_excluded() {
+async fn property_names_excluded() {
     assert_excluded(
         "propertyNames",
         json!({
@@ -237,7 +232,7 @@ async fn verify_r4_property_names_excluded() {
 }
 
 #[tokio::test]
-async fn verify_r4_unevaluated_properties_excluded() {
+async fn unevaluated_properties_excluded() {
     assert_excluded(
         "unevaluatedProperties",
         json!({
@@ -250,7 +245,7 @@ async fn verify_r4_unevaluated_properties_excluded() {
 }
 
 #[tokio::test]
-async fn verify_r4_dependent_schemas_excluded() {
+async fn dependent_schemas_excluded() {
     assert_excluded(
         "dependentSchemas",
         json!({
@@ -264,7 +259,7 @@ async fn verify_r4_dependent_schemas_excluded() {
 }
 
 #[tokio::test]
-async fn verify_r4_defs_referenced_excluded() {
+async fn defs_referenced_excluded() {
     assert_excluded(
         "$defs (referenced via $ref)",
         json!({
@@ -277,7 +272,7 @@ async fn verify_r4_defs_referenced_excluded() {
 }
 
 #[tokio::test]
-async fn verify_r4_defs_unreferenced_excluded() {
+async fn defs_unreferenced_excluded() {
     // Nothing $ref's #/$defs/Region — still off the pure-properties chain, so
     // the tool is invalid and MUST be excluded.
     assert_excluded(
@@ -291,7 +286,7 @@ async fn verify_r4_defs_unreferenced_excluded() {
     .await;
 }
 
-// ================= R4 PRECISION — no false positives (KEPT) =================
+// ================= PRECISION — no false positives (KEPT) ===================
 // Each: (unit) detector does NOT flag AND (wire) tool survives.
 
 async fn assert_kept(case: &str, schema: Value) {
@@ -307,7 +302,7 @@ async fn assert_kept(case: &str, schema: Value) {
 }
 
 #[tokio::test]
-async fn verify_r4_precision_pure_properties_nesting_kept() {
+async fn precision_pure_properties_nesting_kept() {
     assert_kept(
         "pure properties/outer/properties/inner",
         json!({
@@ -320,7 +315,7 @@ async fn verify_r4_precision_pure_properties_nesting_kept() {
 }
 
 #[tokio::test]
-async fn verify_r4_precision_const_kept() {
+async fn precision_const_kept() {
     assert_kept(
         "const carries literal x-mcp-header key",
         json!({
@@ -333,7 +328,7 @@ async fn verify_r4_precision_const_kept() {
 }
 
 #[tokio::test]
-async fn verify_r4_precision_default_kept() {
+async fn precision_default_kept() {
     assert_kept(
         "default carries literal x-mcp-header key",
         json!({
@@ -346,7 +341,7 @@ async fn verify_r4_precision_default_kept() {
 }
 
 #[tokio::test]
-async fn verify_r4_precision_enum_kept() {
+async fn precision_enum_kept() {
     assert_kept(
         "enum member carries literal x-mcp-header key",
         json!({
@@ -359,7 +354,7 @@ async fn verify_r4_precision_enum_kept() {
 }
 
 #[tokio::test]
-async fn verify_r4_precision_examples_kept() {
+async fn precision_examples_kept() {
     assert_kept(
         "examples member carries literal x-mcp-header key",
         json!({

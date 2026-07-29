@@ -14,6 +14,9 @@ use crate::streaming::StreamHandler;
 use crate::transport::BoxedTransport;
 
 // Re-export protocol types for convenience
+use turul_mcp_protocol_2025_11_25::completion::{
+    CompleteArgument, CompleteResult, CompletionContext, CompletionReference,
+};
 use turul_mcp_protocol_2025_11_25::meta::Cursor;
 use turul_mcp_protocol_2025_11_25::resources::{ListResourceTemplatesResult, ResourceTemplate};
 use turul_mcp_protocol_2025_11_25::tasks::{
@@ -57,6 +60,10 @@ pub struct McpClient {
     /// `x-mcp-header` annotation, so the bindings are captured before the
     /// type remap.
     cached_param_bindings: Arc<RwLock<ParamBindingMap>>,
+    /// Raw 2026 `inputSchema` per tool, from the raw `tools/list` result. The
+    /// public `Tool` vocabulary cannot hold every JSON Schema 2020-12 construct
+    /// a 2026 server may advertise, so the untruncated schema is kept here.
+    cached_tool_schemas: Arc<RwLock<std::collections::HashMap<String, Value>>>,
     /// Cached resource list (invalidated by `notifications/resources/list_changed`)
     cached_resources: Arc<RwLock<Option<Vec<Resource>>>>,
     /// Cached prompt list (invalidated by `notifications/prompts/list_changed`)
@@ -200,6 +207,7 @@ impl McpClient {
             response_consumer_handle: Arc::new(parking_lot::Mutex::new(None)),
             cached_tools: Arc::new(RwLock::new(None)),
             cached_param_bindings: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            cached_tool_schemas: Arc::new(RwLock::new(std::collections::HashMap::new())),
             cached_resources: Arc::new(RwLock::new(None)),
             cached_prompts: Arc::new(RwLock::new(None)),
             discovered: Arc::new(RwLock::new(None)),
@@ -217,10 +225,32 @@ impl McpClient {
             handle.abort();
         }
 
-        // Connect transport
-        {
-            self.transport.connect().await?;
+        self.transport.connect().await?;
 
+        // Negotiate the wire spec and run the version-appropriate handshake.
+        // The listener is started AFTER this: on 2026-07-28 there is no GET SSE
+        // stream to open at all, and on 2025-11-25 the GET must carry the
+        // session id the handshake produces.
+        self.negotiate_protocol().await?;
+
+        self.start_server_event_listener().await?;
+
+        info!("Successfully connected to MCP server");
+        Ok(())
+    }
+
+    /// Open the transport's server-initiated event stream and wire it to the
+    /// stream handler. No-op when the transport has no such stream, and skipped
+    /// on 2026-07-28 — that revision removed the GET SSE stream from Streamable
+    /// HTTP, so opening one only earns an HTTP 405.
+    async fn start_server_event_listener(&self) -> McpClientResult<()> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            debug!("Skipping the GET SSE listener: 2026-07-28 has no GET stream");
+            return Ok(());
+        }
+
+        {
             // Start event listener if supported
             if self.transport.capabilities().server_events {
                 let receiver = self.transport.start_event_listener().await?;
@@ -302,10 +332,6 @@ impl McpClient {
             }
         }
 
-        // Negotiate the wire spec and run the version-appropriate handshake.
-        self.negotiate_protocol().await?;
-
-        info!("Successfully connected to MCP server");
         Ok(())
     }
 
@@ -826,6 +852,17 @@ impl McpClient {
     /// The cache is automatically invalidated when the server sends a
     /// `notifications/tools/list_changed` notification. Use [`refresh_tools`](Self::refresh_tools)
     /// to force a fresh fetch.
+    ///
+    /// # Schema fidelity on a 2026-07-28 connection
+    ///
+    /// The returned [`Tool`] models each `inputSchema` property as a closed enum
+    /// keyed on `"type"`, so a property expressed with a JSON Schema 2020-12
+    /// composition keyword (`oneOf`/`anyOf`/`allOf`/`$ref` — legal per SEP-2106)
+    /// cannot be carried. Such a property is dropped from the returned schema and
+    /// a `tracing::warn!` naming the tool and the dropped paths is emitted; the
+    /// tool itself is still listed and still callable. Read
+    /// [`tool_input_schema`](Self::tool_input_schema) for the untruncated schema
+    /// the server actually advertised.
     pub async fn list_tools(&self) -> McpClientResult<Vec<Tool>> {
         // Return cached tools if available
         {
@@ -847,7 +884,25 @@ impl McpClient {
         Ok(tools)
     }
 
+    /// The untruncated `inputSchema` the server advertised for `tool_name`, as
+    /// raw JSON — populated by [`list_tools`](Self::list_tools) /
+    /// [`refresh_tools`](Self::refresh_tools) on a 2026-07-28 connection.
+    ///
+    /// This is the full-fidelity route for the JSON Schema 2020-12 constructs
+    /// the public [`Tool`] type cannot hold (see
+    /// [`list_tools`](Self::list_tools)). `None` on a 2025-11-25 connection, or
+    /// before any tool listing has been fetched.
+    pub async fn tool_input_schema(&self, tool_name: &str) -> Option<Value> {
+        self.cached_tool_schemas
+            .read()
+            .await
+            .get(tool_name)
+            .cloned()
+    }
+
     /// Force a fresh fetch of tools from the server, bypassing and updating the cache.
+    ///
+    /// Same 2026-07-28 schema-fidelity caveat as [`list_tools`](Self::list_tools).
     pub async fn refresh_tools(&self) -> McpClientResult<Vec<Tool>> {
         let tools = self.fetch_tools().await?;
 
@@ -904,11 +959,14 @@ impl McpClient {
         let raw_result = response.get("result").cloned().unwrap_or(Value::Null);
         let tools = crate::protocol::v2026_07_28::parse_list_tools(&raw_result)?;
 
-        // Capture the SEP-2243 Mcp-Param bindings before the vocabulary remap
-        // drops the x-mcp-header annotations.
+        // Capture the SEP-2243 Mcp-Param bindings and the untruncated
+        // inputSchemas before the vocabulary remap drops the x-mcp-header
+        // annotations and any 2020-12 construct the public type cannot hold.
         {
             let bindings = crate::protocol::v2026_07_28::collect_param_bindings(&raw_result);
             *self.cached_param_bindings.write().await = bindings;
+            let schemas = crate::protocol::v2026_07_28::collect_input_schemas(&raw_result);
+            *self.cached_tool_schemas.write().await = schemas;
         }
 
         debug!(count = tools.len(), "Retrieved tools");
@@ -916,6 +974,8 @@ impl McpClient {
     }
 
     /// List available tools with pagination support
+    ///
+    /// Same 2026-07-28 schema-fidelity caveat as [`list_tools`](Self::list_tools).
     pub async fn list_tools_paginated(
         &self,
         cursor: Option<Cursor>,
@@ -1138,6 +1198,10 @@ impl McpClient {
                     json!({ "notifications": filter }),
                 ),
             );
+            let request_id = request
+                .get("id")
+                .and_then(|id| id.as_str())
+                .map(String::from);
             let mut receiver = self.transport.send_request_streaming(request).await?;
 
             // The server MUST send the acknowledgement first.
@@ -1173,6 +1237,7 @@ impl McpClient {
             return Ok(SubscriptionStream {
                 honored,
                 subscription_id,
+                request_id,
                 receiver,
             });
         }
@@ -1846,6 +1911,80 @@ impl McpClient {
         Ok(prompt_response)
     }
 
+    /// Ask the server to complete an argument value (`completion/complete`).
+    ///
+    /// `reference` names the prompt (`ref/prompt`) or resource template
+    /// (`ref/resource`) the argument belongs to; `context` carries the values
+    /// already resolved for the other arguments, which the server MAY use to
+    /// narrow its suggestions.
+    pub async fn complete(
+        &self,
+        reference: CompletionReference,
+        argument: CompleteArgument,
+        context: Option<CompletionContext>,
+    ) -> McpClientResult<CompleteResult> {
+        debug!(argument = %argument.name, "Requesting completions");
+
+        let mut params = json!({
+            "ref": serde_json::to_value(&reference)?,
+            "argument": serde_json::to_value(&argument)?,
+        });
+        if let Some(ref context) = context {
+            params["context"] = serde_json::to_value(context)?;
+        }
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "completion/complete",
+                    params,
+                    crate::protocol::v2026_07_28::parse_complete,
+                )
+                .await;
+        }
+
+        let request = self.build_request("completion/complete", params);
+        let response = self.send_request_internal(request).await?;
+        let result: CompleteResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(
+            count = result.completion.values.len(),
+            "Completions received"
+        );
+        Ok(result)
+    }
+
+    /// Tell the server to stop working on an in-flight request
+    /// (`notifications/cancelled`).
+    ///
+    /// `request_id` MUST be the JSON-RPC id of a request this client previously
+    /// issued and that SHOULD still be in flight — e.g.
+    /// [`SubscriptionStream::request_id`](SubscriptionStream::request_id) for a
+    /// live `subscriptions/listen` stream. The notification is fire-and-forget:
+    /// the server MAY still answer the original request if the cancellation
+    /// arrives too late.
+    ///
+    /// Dropping a request future also closes its stream, which the server
+    /// treats as cancellation; this is the explicit form, and the only one that
+    /// can carry a `reason`.
+    pub async fn cancel_request(
+        &self,
+        request_id: &str,
+        reason: Option<&str>,
+    ) -> McpClientResult<()> {
+        debug!(request_id, "Cancelling request");
+
+        let mut params = json!({ "requestId": request_id });
+        if let Some(reason) = reason {
+            params["reason"] = json!(reason);
+        }
+
+        self.send_notification_internal(Self::build_notification("notifications/cancelled", params))
+            .await
+    }
+
     /// Send a ping to test connectivity
     pub async fn ping(&self) -> McpClientResult<()> {
         debug!("Sending ping");
@@ -2256,6 +2395,10 @@ pub struct SubscriptionStream {
     pub honored: Value,
     /// `io.modelcontextprotocol/subscriptionId` from the acknowledgement.
     pub subscription_id: Option<String>,
+    /// JSON-RPC id of the `subscriptions/listen` request that opened this
+    /// stream — the id [`McpClient::cancel_request`] takes to close it
+    /// explicitly.
+    request_id: Option<String>,
     receiver: tokio::sync::mpsc::UnboundedReceiver<Value>,
 }
 
@@ -2263,6 +2406,13 @@ impl SubscriptionStream {
     /// Next notification on the stream (`None` when the server closes it).
     pub async fn next(&mut self) -> Option<Value> {
         self.receiver.recv().await
+    }
+
+    /// JSON-RPC id of the `subscriptions/listen` request that opened this
+    /// stream. Pass it to [`McpClient::cancel_request`] to close the stream
+    /// with a reason instead of dropping it.
+    pub fn request_id(&self) -> Option<&str> {
+        self.request_id.as_deref()
     }
 }
 

@@ -200,6 +200,13 @@ impl HttpTransport {
         }
     }
 
+    /// Whether this connection carries `Mcp-Session-Id`. The 2026-07-28
+    /// stateless core removed the header, so its absence is not worth a warning
+    /// there.
+    fn uses_session_header(&self) -> bool {
+        *self.protocol_version.read() != "2026-07-28"
+    }
+
     /// Clear the session ID (used during 404 re-initialization)
     pub fn clear_session_id(&self) {
         debug!("Clearing session ID for re-initialization");
@@ -719,10 +726,8 @@ impl Transport for HttpTransport {
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP request using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
-        } else {
-            warn!(
-                "HTTP request attempted without session ID - server may reject for non-initialize methods"
-            );
+        } else if self.uses_session_header() {
+            warn!("HTTP request attempted without session ID - server may reject");
         }
 
         let response = req_builder
@@ -941,7 +946,7 @@ impl Transport for HttpTransport {
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP notification using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
-        } else {
+        } else if self.uses_session_header() {
             warn!("HTTP notification attempted without session ID - server may reject");
         }
 
@@ -1069,6 +1074,14 @@ impl Transport for HttpTransport {
             return Ok(rx);
         }
 
+        // 2026-07-28 deleted the GET SSE stream from Streamable HTTP: a
+        // conformant server answers the GET with 405. Server-initiated messages
+        // arrive on the POST response stream and on `subscriptions/listen`.
+        if !self.uses_session_header() {
+            debug!("GET SSE listener not started: 2026-07-28 has no GET stream");
+            return Ok(rx);
+        }
+
         // Start SSE connection task for GET requests
         let client = self.client.clone();
         let url = self.endpoint.clone();
@@ -1096,10 +1109,9 @@ impl Transport for HttpTransport {
                 // Snapshot the session ID at request-build time. We need the
                 // snapshot (not just the cached value at response time) so the
                 // 4xx terminal handler below can compare-and-swap: only clear
-                // the cache if it still matches what we sent. If `connect()` ran
-                // `initialize_session()` after we built this GET (a real race —
-                // `client.rs:135-229` spawns the listener before initialize),
-                // a fresher session ID must not be clobbered.
+                // the cache if it still matches what we sent. A re-initialize
+                // running concurrently with an in-flight GET must not have its
+                // fresher session ID clobbered.
                 let sent_session_id: Option<String> = session_id.lock().clone();
                 if let Some(ref current_session_id) = sent_session_id {
                     debug!("SSE request using session ID: {}", current_session_id);
@@ -1136,11 +1148,10 @@ impl Transport for HttpTransport {
                         // session header — but only if it still matches what we sent —
                         // so the caller's next initialize POST is sent without a stale
                         // Mcp-Session-Id (mirrors the POST 404 recovery path in
-                        // McpClient::send_request_raw). If `initialize_session()`
-                        // wrote a fresher session ID into the cache while our GET was
-                        // in flight (which happens because `client.rs:connect()`
-                        // spawns the listener before initialize), leave the new value
-                        // alone. Then emit the error and exit; the caller drives
+                        // McpClient::send_request_raw). If a re-initialize wrote a
+                        // fresher session ID into the cache while our GET was in
+                        // flight, leave the new value alone. Then emit the error and
+                        // exit; the caller drives
                         // recovery by re-running initialize and restarting the listener.
                         if status.is_client_error() {
                             let mut guard = session_id.lock();

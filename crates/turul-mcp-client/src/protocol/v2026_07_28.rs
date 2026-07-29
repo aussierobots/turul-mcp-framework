@@ -100,6 +100,150 @@ where
     Ok(serde_json::from_value(serde_json::to_value(v)?)?)
 }
 
+/// Remap a 2026 tool into the public `Tool` vocabulary. Infallible by
+/// construction: a tool is never dropped from — and never fails — a listing
+/// because of what its schema contains.
+///
+/// The public `ToolSchema` types each property as a closed enum keyed on
+/// `"type"`, so a property written with a JSON Schema 2020-12 composition
+/// keyword (`oneOf`/`anyOf`/`allOf`/`$ref`) — legal on `inputSchema` per
+/// SEP-2106, and emitted by this framework's own server for tagged unions —
+/// has no representation there. When the direct remap fails, the tool is
+/// rebuilt field by field: every part that crosses the vocabulary gap is kept,
+/// every part that cannot is dropped and named in a warning. The untruncated
+/// 2026 schema stays reachable via `McpClient::tool_input_schema`.
+fn remap_tool(tool: &p::tools::Tool) -> turul_mcp_protocol_2025_11_25::Tool {
+    let value = serde_json::to_value(tool).unwrap_or_default();
+    if let Ok(remapped) =
+        serde_json::from_value::<turul_mcp_protocol_2025_11_25::Tool>(value.clone())
+    {
+        return remapped;
+    }
+
+    let mut dropped: Vec<String> = Vec::new();
+    let input_schema = downgrade_schema(value.get("inputSchema"), "inputSchema", &mut dropped)
+        .unwrap_or_else(turul_mcp_protocol_2025_11_25::tools::ToolSchema::object);
+
+    let mut remapped = turul_mcp_protocol_2025_11_25::Tool::new(tool.name.clone(), input_schema);
+    remapped.title = tool.title.clone();
+    remapped.description = tool.description.clone();
+    remapped.output_schema =
+        downgrade_schema(value.get("outputSchema"), "outputSchema", &mut dropped);
+    remapped.annotations = downgrade_field(&value, "annotations", &mut dropped);
+    remapped.icons = downgrade_field(&value, "icons", &mut dropped);
+    remapped.meta = downgrade_field(&value, "_meta", &mut dropped);
+
+    tracing::warn!(
+        tool = %tool.name,
+        dropped = %dropped.join(", "),
+        "tools/list: schema detail dropped — this tool's 2026 definition uses \
+         constructs the client's public Tool vocabulary cannot hold; the tool is \
+         still listed and still callable, and the full schema is available from \
+         McpClient::tool_input_schema"
+    );
+    remapped
+}
+
+/// Best-effort conversion of a 2026 schema object into the public `ToolSchema`,
+/// dropping the individual properties with no public representation. `None`
+/// when the object as a whole has none (e.g. an `outputSchema` with a non-object
+/// root, which 2026 permits and the public type does not). Every dropped path is
+/// appended to `dropped`.
+fn downgrade_schema(
+    schema: Option<&Value>,
+    path: &str,
+    dropped: &mut Vec<String>,
+) -> Option<turul_mcp_protocol_2025_11_25::tools::ToolSchema> {
+    let mut schema = schema?.clone();
+    if let Some(properties) = schema.get_mut("properties").and_then(|p| p.as_object_mut()) {
+        let unrepresentable: Vec<String> = properties
+            .iter()
+            .filter(|(_, v)| {
+                serde_json::from_value::<turul_mcp_protocol_2025_11_25::JsonSchema>((*v).clone())
+                    .is_err()
+            })
+            .map(|(k, _)| k.clone())
+            .collect();
+        for name in unrepresentable {
+            properties.remove(&name);
+            dropped.push(format!("{path}.properties.{name}"));
+        }
+    }
+    match serde_json::from_value(schema) {
+        Ok(schema) => Some(schema),
+        Err(_) => {
+            dropped.push(path.to_string());
+            None
+        }
+    }
+}
+
+/// An optional tool field, dropped (and named in `dropped`) when it has no
+/// public representation.
+fn downgrade_field<T: serde::de::DeserializeOwned>(
+    tool: &Value,
+    key: &str,
+    dropped: &mut Vec<String>,
+) -> Option<T> {
+    match serde_json::from_value(tool.get(key)?.clone()) {
+        Ok(value) => Some(value),
+        Err(_) => {
+            dropped.push(key.to_string());
+            None
+        }
+    }
+}
+
+/// Client-side admissibility of an advertised tool. A tool that fails here is
+/// excluded from the listing entirely — unlike a vocabulary-gap downgrade, these
+/// are definitions the client MUST NOT act on.
+fn tool_is_admissible(tool: &p::tools::Tool) -> bool {
+    let schema = serde_json::to_value(&tool.input_schema).unwrap_or_default();
+
+    // SEP-2243: clients on Streamable HTTP MUST reject tool definitions whose
+    // x-mcp-header annotations violate the constraints, INCLUDING an annotation
+    // reachable only through `items`/composition/`$ref` rather than a plain
+    // `properties` chain — exclude the tool and log a warning so one malformed
+    // definition doesn't block the rest.
+    if let Err(reason) = p::headers::scan_x_mcp_headers(&schema) {
+        tracing::warn!(
+            tool = %tool.name,
+            %reason,
+            "excluding tool from tools/list: invalid x-mcp-header annotation"
+        );
+        return false;
+    }
+    if let Some(pointer) = p::headers::find_misplaced_x_mcp_header(&schema) {
+        tracing::warn!(
+            tool = %tool.name,
+            %pointer,
+            "excluding tool from tools/list: x-mcp-header annotation not reachable via a properties chain"
+        );
+        return false;
+    }
+
+    // Reject an invalid advertised inputSchema (JSON Schema 2020-12
+    // dialect/bounds).
+    if let Err(reason) = schema_is_valid(&schema) {
+        tracing::warn!(
+            tool = %tool.name,
+            %reason,
+            "excluding tool from tools/list: invalid inputSchema"
+        );
+        return false;
+    }
+
+    true
+}
+
+fn remap_tools(tools: &[p::tools::Tool]) -> Vec<turul_mcp_protocol_2025_11_25::Tool> {
+    tools
+        .iter()
+        .filter(|tool| tool_is_admissible(tool))
+        .map(remap_tool)
+        .collect()
+}
+
 /// A tool whose `inputSchema` fails JSON Schema 2020-12 dialect validation is
 /// excluded from `tools/list`.
 fn schema_is_valid(schema: &Value) -> Result<(), String> {
@@ -111,49 +255,26 @@ pub(crate) fn parse_list_tools(
 ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Tool>> {
     check_result_type(result)?;
     let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
-    r.tools
-        .iter()
-        .filter(|tool| {
-            let schema = serde_json::to_value(&tool.input_schema).unwrap_or_default();
+    Ok(remap_tools(&r.tools))
+}
 
-            // SEP-2243: clients on Streamable HTTP MUST reject tool
-            // definitions whose x-mcp-header annotations violate the
-            // constraints, INCLUDING an annotation reachable only through
-            // `items`/composition/`$ref` rather than a plain `properties`
-            // chain — exclude the tool and log a warning so one malformed
-            // definition doesn't block the rest.
-            if let Err(reason) = p::headers::scan_x_mcp_headers(&schema) {
-                tracing::warn!(
-                    tool = %tool.name,
-                    %reason,
-                    "excluding tool from tools/list: invalid x-mcp-header annotation"
-                );
-                return false;
-            }
-            if let Some(pointer) = p::headers::find_misplaced_x_mcp_header(&schema) {
-                tracing::warn!(
-                    tool = %tool.name,
-                    %pointer,
-                    "excluding tool from tools/list: x-mcp-header annotation not reachable via a properties chain"
-                );
-                return false;
-            }
-
-            // Reject an invalid advertised inputSchema (JSON Schema 2020-12
-            // dialect/bounds).
-            if let Err(reason) = schema_is_valid(&schema) {
-                tracing::warn!(
-                    tool = %tool.name,
-                    %reason,
-                    "excluding tool from tools/list: invalid inputSchema"
-                );
-                return false;
-            }
-
-            true
-        })
-        .map(remap)
-        .collect()
+/// Per-tool raw 2026 `inputSchema` from a raw `tools/list` result — the
+/// full-fidelity route for callers whose tool needs a construct the public
+/// `Tool` vocabulary drops.
+pub(crate) fn collect_input_schemas(result: &Value) -> std::collections::HashMap<String, Value> {
+    let mut map = std::collections::HashMap::new();
+    let Some(tools) = result.get("tools").and_then(|t| t.as_array()) else {
+        return map;
+    };
+    for tool in tools {
+        if let (Some(name), Some(schema)) = (
+            tool.get("name").and_then(|n| n.as_str()),
+            tool.get("inputSchema"),
+        ) {
+            map.insert(name.to_string(), schema.clone());
+        }
+    }
+    map
 }
 
 /// SEP-2243: per-tool `Mcp-Param-*` bindings from a raw `tools/list` result —
@@ -246,6 +367,24 @@ pub(crate) fn parse_read_resource(
     remap(&r)
 }
 
+/// `completion/complete`. Built field by field rather than by JSON remap:
+/// `CompletionResult.total` is `f64` on the 2026 wire and `u32` in the public
+/// vocabulary, so an integral `100.0` would not survive a serde round trip.
+pub(crate) fn parse_complete(
+    result: &Value,
+) -> McpClientResult<turul_mcp_protocol_2025_11_25::completion::CompleteResult> {
+    check_result_type(result)?;
+    let r: p::completion::CompleteResult = serde_json::from_value(result.clone())?;
+    Ok(turul_mcp_protocol_2025_11_25::completion::CompleteResult {
+        completion: turul_mcp_protocol_2025_11_25::completion::CompletionResult {
+            values: r.completion.values,
+            total: r.completion.total.map(|total| total as u32),
+            has_more: r.completion.has_more,
+        },
+        meta: r.meta.as_ref().map(remap).transpose()?,
+    })
+}
+
 pub(crate) fn parse_list_prompts(
     result: &Value,
 ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::Prompt>> {
@@ -272,7 +411,11 @@ pub(crate) fn parse_list_tools_result(
 ) -> McpClientResult<turul_mcp_protocol_2025_11_25::ListToolsResult> {
     check_result_type(result)?;
     let r: p::tools::ListToolsResult = serde_json::from_value(result.clone())?;
-    remap(&r)
+    Ok(turul_mcp_protocol_2025_11_25::ListToolsResult {
+        tools: remap_tools(&r.tools),
+        next_cursor: r.next_cursor.as_ref().map(remap).transpose()?,
+        meta: r.meta.as_ref().map(remap).transpose()?,
+    })
 }
 
 pub(crate) fn parse_list_resources_result(
@@ -400,6 +543,66 @@ mod tests {
                 .is_none(),
             "no declaration without the opt-in: {v}"
         );
+    }
+
+    /// SEP-2106 permits an `outputSchema` with any 2020-12 root, including one
+    /// with no `"type"` at all. The public `ToolSchema` requires a root type, so
+    /// the field is dropped — the tool itself must survive.
+    #[test]
+    fn a_typeless_output_schema_root_drops_the_field_not_the_tool() {
+        let result = json!({
+            "tools": [{
+                "name": "widen",
+                "inputSchema": {"type": "object", "properties": {"a": {"type": "string"}}},
+                "outputSchema": {"oneOf": [{"type": "string"}, {"type": "number"}]}
+            }],
+            "ttlMs": 0,
+            "cacheScope": "public"
+        });
+        let tools = parse_list_tools(&result).expect("listing must not fail");
+        assert_eq!(tools.len(), 1);
+        assert_eq!(tools[0].name, "widen");
+        assert!(tools[0].output_schema.is_none());
+        assert!(
+            tools[0]
+                .input_schema
+                .properties
+                .as_ref()
+                .unwrap()
+                .contains_key("a")
+        );
+    }
+
+    /// One tool with a property the public vocabulary cannot hold must not
+    /// remove any tool from the listing, nor the tool's other properties.
+    #[test]
+    fn a_composition_property_is_dropped_but_the_tool_and_its_siblings_survive() {
+        let result = json!({
+            "tools": [
+                {
+                    "name": "render",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "shape": {"oneOf": [{"type": "string"}, {"type": "number"}]},
+                            "title": {"type": "string"}
+                        },
+                        "required": ["shape", "title"]
+                    }
+                },
+                {"name": "echo", "inputSchema": {"type": "object"}}
+            ],
+            "ttlMs": 0,
+            "cacheScope": "public"
+        });
+        let tools = parse_list_tools(&result).expect("listing must not fail");
+        assert_eq!(
+            tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(),
+            vec!["render", "echo"]
+        );
+        let properties = tools[0].input_schema.properties.as_ref().unwrap();
+        assert!(properties.contains_key("title"), "sibling property kept");
+        assert!(!properties.contains_key("shape"), "composition dropped");
     }
 
     #[test]
