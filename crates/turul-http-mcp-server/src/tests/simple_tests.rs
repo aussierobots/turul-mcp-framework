@@ -6,9 +6,9 @@ use serde_json::json;
 use std::sync::Arc;
 
 use crate::StreamManager;
+use crate::protocol::McpProtocolVersion;
 use crate::server::{HttpMcpServerBuilder, ServerConfig};
 use crate::sse::{SseEvent, SseManager};
-use crate::protocol::McpProtocolVersion;
 use crate::streamable_http::StreamableHttpHandler;
 use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;

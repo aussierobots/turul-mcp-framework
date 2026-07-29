@@ -350,7 +350,10 @@ async fn removed_notification_methods_are_acked_not_dispatched() {
     // The removed lifecycle notifications left no state behind — a normal
     // request still succeeds and is not gated on any initialization flag.
     let (status, body) = post_method(&url, "tools/list").await;
-    assert_eq!(status, 200, "tools/list after removed notifications: {body}");
+    assert_eq!(
+        status, 200,
+        "tools/list after removed notifications: {body}"
+    );
     assert_eq!(
         body["result"]["resultType"], "complete",
         "tools/list must still complete normally: {body}"

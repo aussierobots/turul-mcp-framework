@@ -23,7 +23,11 @@ members = [
 
   # Test crates
 
-  # Active examples (33 total)
+  # Examples. Every directory under examples/ must be a member here, must be
+  # listed in EXAMPLES.md, and must be either in `default-members` below or
+  # named on a `-p` gate line in scripts/ci-gates.sh. The
+  # `every_example_is_documented_and_gated` test in tests/examples_guard.rs
+  # enforces all three.
   "examples/audit-trail-server",
   "examples/bilingual-fleet-client",
   "examples/calculator-add-builder-server",
@@ -63,7 +67,7 @@ members = [
   "examples/tools-test-server",
   "examples/zero-config-getting-started",
 
-  # MCP 2025-11-25 feature showcases
+  # MCP 2026-07-28 feature showcases
   "examples/header-bound-tools-server",
   "examples/icon-showcase",
 
@@ -124,28 +128,39 @@ default-members = [
   "crates/turul-mcp-aws-lambda",
   "crates/turul-mcp-oauth",
 
-  # Examples that build under the 2026-07-28 default (migrated). The remaining
-  # examples use 2025-only features (tasks/sampling/elicitation/logging builders,
-  # the runtime ToolBuilder, pagination envelopes) or the bilingual client and are
-  # held out until ported or pinned to the 2025 opt-in.
+  # Examples that build under the 2026-07-28 default. The only examples held out
+  # are the ones whose manifests pin `protocol-2025-11-25`: unifying those into
+  # this build set makes the turul-mcp-protocol alias see both spec features at
+  # once and the spec mutex fires. They are gated in scripts/ci-gates.sh
+  # `gate_opt_in_2025` instead.
+  #
+  # Examples that depend on turul-mcp-client belong here despite the client
+  # being bilingual — it links the versioned protocol crates directly and never
+  # the alias, so unification stays single-spec (verified by building this set).
   "examples/audit-trail-server",
+  "examples/bilingual-fleet-client",
   "examples/calculator-add-builder-server",
   "examples/calculator-add-function-server",
   "examples/calculator-add-manual-server",
   "examples/calculator-add-simple-server-derive",
+  "examples/client-initialise-report",
   "examples/completion-server",
   "examples/derive-macro-server",
+  "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
   "examples/header-bound-tools-server",
   "examples/icon-showcase",
+  "examples/interop-client-probe",
   "examples/lambda-authorizer",
+  "examples/lambda-mcp-client",
   "examples/middleware-auth-lambda",
   "examples/middleware-auth-server",
   "examples/middleware-logging-server",
   "examples/middleware-rate-limit-server",
   "examples/interop-fixture-server",
   "examples/minimal-server",
+  "examples/mrtr-elicitation-server",
   "examples/notification-server",
   "examples/origin-policy-server",
   "examples/oauth-resource-server",
@@ -153,9 +168,12 @@ default-members = [
   "examples/prompts-server",
   "examples/resource-server",
   "examples/resources-server",
+  "examples/session-management-compliance-test",
   "examples/simple-dynamodb-session",
   "examples/simple-postgres-session",
   "examples/simple-sqlite-session",
+  "examples/streamable-http-client",
+  "examples/streamable-http-client-2025-11-25",
   "examples/tool-output-introspection",
   "examples/tool-output-schemas",
   "examples/zero-config-getting-started",

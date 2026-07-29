@@ -3,7 +3,7 @@
 //! This test performs actual initialize() calls to verify that servers
 //! advertise truthful capabilities at runtime, not just in code.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::time::timeout;
 use turul_mcp_server::{McpPrompt, PromptMessage};
@@ -37,17 +37,24 @@ async fn test_runtime_initialize_capabilities_truthfulness() {
         }
     });
 
-    let response = timeout(Duration::from_secs(5), client
-        .post(&server_url)
-        .json(&initialize_request)
-        .send())
+    let response = timeout(
+        Duration::from_secs(5),
+        client.post(&server_url).json(&initialize_request).send(),
+    )
+    .await
+    .expect("Request timed out")
+    .expect("Failed to send request");
+
+    assert!(
+        response.status().is_success(),
+        "Initialize request failed: {}",
+        response.status()
+    );
+
+    let body: Value = response
+        .json()
         .await
-        .expect("Request timed out")
-        .expect("Failed to send request");
-
-    assert!(response.status().is_success(), "Initialize request failed: {}", response.status());
-
-    let body: Value = response.json().await.expect("Failed to parse JSON response");
+        .expect("Failed to parse JSON response");
 
     // Verify JSON-RPC structure
     assert_eq!(body["jsonrpc"], "2.0");
@@ -59,29 +66,25 @@ async fn test_runtime_initialize_capabilities_truthfulness() {
 
     // CRITICAL: Verify actual runtime behavior for static framework
     assert_eq!(
-        capabilities["prompts"]["listChanged"],
-        false,
+        capabilities["prompts"]["listChanged"], false,
         "❌ COMPLIANCE VIOLATION: prompts.listChanged should be false for static framework, got: {}",
         capabilities["prompts"]["listChanged"]
     );
 
     assert_eq!(
-        capabilities["resources"]["listChanged"],
-        false,
+        capabilities["resources"]["listChanged"], false,
         "❌ COMPLIANCE VIOLATION: resources.listChanged should be false for static framework, got: {}",
         capabilities["resources"]["listChanged"]
     );
 
     assert_eq!(
-        capabilities["resources"]["subscribe"],
-        false,
+        capabilities["resources"]["subscribe"], false,
         "❌ COMPLIANCE VIOLATION: resources.subscribe should be false until implemented, got: {}",
         capabilities["resources"]["subscribe"]
     );
 
     assert_eq!(
-        capabilities["tools"]["listChanged"],
-        false,
+        capabilities["tools"]["listChanged"], false,
         "❌ COMPLIANCE VIOLATION: tools.listChanged should be false for static framework, got: {}",
         capabilities["tools"]["listChanged"]
     );
@@ -91,7 +94,10 @@ async fn test_runtime_initialize_capabilities_truthfulness() {
     assert!(body["result"]["serverInfo"].is_object());
 
     println!("✅ RUNTIME VALIDATION PASSED: All capabilities are truthfully advertised");
-    println!("Actual capabilities: {}", serde_json::to_string_pretty(capabilities).unwrap());
+    println!(
+        "Actual capabilities: {}",
+        serde_json::to_string_pretty(capabilities).unwrap()
+    );
 
     // Cleanup
     server_handle.shutdown().await;
@@ -131,9 +137,15 @@ async fn test_resource_server_runtime_capabilities() {
             std::io::Read::read_to_string(&mut stderr, &mut stderr_content).ok();
 
             if stderr_content.contains("Invalid resource URI") {
-                panic!("❌ URI VALIDATION FAILED: Resource server couldn't start due to invalid URI: {}", stderr_content);
+                panic!(
+                    "❌ URI VALIDATION FAILED: Resource server couldn't start due to invalid URI: {}",
+                    stderr_content
+                );
             } else {
-                panic!("❌ Resource server exited unexpectedly: {} - stderr: {}", status, stderr_content);
+                panic!(
+                    "❌ Resource server exited unexpectedly: {} - stderr: {}",
+                    status, stderr_content
+                );
             }
         }
         Ok(None) => {

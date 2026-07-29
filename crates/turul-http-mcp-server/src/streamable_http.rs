@@ -146,21 +146,21 @@ impl StreamableHttpContext {
 
         #[cfg(feature = "protocol-2026-07-28")]
         {
-        let Some(meta) = request.get_param("_meta") else {
-            return false;
-        };
-        if meta.get("progressToken").is_some() {
-            return true;
-        }
-        // Per-request log level is a 2026-07-28 key; the 2025-11-25 lane sets
-        // levels with `logging/setLevel` instead, so there is nothing to opt in
-        // to here and the alias crate does not export the constant.
-        // The key is deprecated with the rest of the Logging surface, but a
-        // request that declares it must still be able to receive what it asked
-        // for while the feature remains in the spec.
-        #[allow(deprecated)]
-        let opted_in = meta.get(turul_mcp_protocol::META_KEY_LOG_LEVEL).is_some();
-        opted_in
+            let Some(meta) = request.get_param("_meta") else {
+                return false;
+            };
+            if meta.get("progressToken").is_some() {
+                return true;
+            }
+            // Per-request log level is a 2026-07-28 key; the 2025-11-25 lane sets
+            // levels with `logging/setLevel` instead, so there is nothing to opt in
+            // to here and the alias crate does not export the constant.
+            // The key is deprecated with the rest of the Logging surface, but a
+            // request that declares it must still be able to receive what it asked
+            // for while the feature remains in the spec.
+            #[allow(deprecated)]
+            let opted_in = meta.get(turul_mcp_protocol::META_KEY_LOG_LEVEL).is_some();
+            opted_in
         }
     }
 

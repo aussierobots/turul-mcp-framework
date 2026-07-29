@@ -720,8 +720,8 @@ mod tests {
     #[test]
     fn test_cancelled_notification_always_emits_request_id() {
         use turul_rpc::RequestId;
-        let notification = CancelledNotification::new(RequestId::Number(7))
-            .with_reason("User cancelled");
+        let notification =
+            CancelledNotification::new(RequestId::Number(7)).with_reason("User cancelled");
 
         let json = serde_json::to_value(&notification).unwrap();
         assert_eq!(json["method"], "notifications/cancelled");

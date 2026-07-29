@@ -518,7 +518,9 @@ impl McpServer {
     /// method (e.g. `server/discover`).
     #[cfg(feature = "http")]
     pub fn registered_methods(&self) -> Vec<String> {
-        self.build_configured_http_builder().build().registered_methods()
+        self.build_configured_http_builder()
+            .build()
+            .registered_methods()
     }
 
     /// Run the server with HTTP transport (requires "http" feature)

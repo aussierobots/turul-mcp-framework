@@ -55,7 +55,11 @@ async fn start_server() -> String {
     url
 }
 
-async fn post_notification(url: &str, method: &str, params: serde_json::Value) -> reqwest::Response {
+async fn post_notification(
+    url: &str,
+    method: &str,
+    params: serde_json::Value,
+) -> reqwest::Response {
     let client = reqwest::Client::new();
     client
         .post(url)

@@ -1404,7 +1404,10 @@ mod enum_union_fidelity_tests {
         // collapse into StringSchema.
         let wire = json!({"type": "banana"});
         let result: Result<PrimitiveSchemaDefinition, _> = serde_json::from_value(wire);
-        assert!(result.is_err(), "unknown type discriminator must be rejected");
+        assert!(
+            result.is_err(),
+            "unknown type discriminator must be rejected"
+        );
     }
 }
 

@@ -22,8 +22,8 @@ fn root_export_parses_every_supported_version() {
 
 #[test]
 fn prelude_export_is_the_same_type_as_the_root_export() {
-    use turul_http_mcp_server::prelude::McpProtocolVersion as FromPrelude;
     use turul_http_mcp_server::McpProtocolVersion as FromRoot;
+    use turul_http_mcp_server::prelude::McpProtocolVersion as FromPrelude;
     // Compiles only if both paths name one type; a second definition breaks it.
     let v: FromRoot = FromPrelude::parse_version("2026-07-28").expect("prelude parses 2026-07-28");
     assert_eq!(v.as_str(), "2026-07-28");

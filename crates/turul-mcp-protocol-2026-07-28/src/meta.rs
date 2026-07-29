@@ -734,7 +734,10 @@ mod tests {
         map.insert("vendor.example/trace".to_string(), serde_json::json!("abc"));
 
         let carried: ResultMetaObject = map.into();
-        assert_eq!(carried.server_info.as_ref().map(|i| i.name.as_str()), Some("srv"));
+        assert_eq!(
+            carried.server_info.as_ref().map(|i| i.name.as_str()),
+            Some("srv")
+        );
         assert!(!carried.extra.contains_key(META_KEY_SERVER_INFO));
 
         // Raw text: a `Value` map would collapse a duplicate and hide it.
@@ -773,7 +776,10 @@ mod tests {
             !raw.contains(META_KEY_SERVER_INFO),
             "the reserved key must not be emitted with no valid value: {raw}"
         );
-        assert!(raw.contains("vendor.example/keep"), "other keys survive: {raw}");
+        assert!(
+            raw.contains("vendor.example/keep"),
+            "other keys survive: {raw}"
+        );
     }
 
     /// A well-formed `serverInfo` survives the full loose-map -> typed ->
@@ -790,7 +796,9 @@ mod tests {
         let raw = serde_json::to_string(&carried).unwrap();
         let back: ResultMetaObject = serde_json::from_str(&raw).unwrap();
 
-        let info = back.server_info.expect("serverInfo survives the round trip");
+        let info = back
+            .server_info
+            .expect("serverInfo survives the round trip");
         assert_eq!(info.name, "srv");
         assert_eq!(info.version, "0.4.0");
         assert!(!back.extra.contains_key(META_KEY_SERVER_INFO));

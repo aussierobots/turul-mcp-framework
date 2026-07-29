@@ -448,10 +448,7 @@ impl LambdaMcpServer {
                 self.session_manager.clone(),
                 self.strict_lifecycle,
             );
-            dispatcher.register_method(
-                "notifications/initialized".to_string(),
-                initialized_bridge,
-            );
+            dispatcher.register_method("notifications/initialized".to_string(), initialized_bridge);
         }
 
         // Create the Lambda handler with all components and middleware

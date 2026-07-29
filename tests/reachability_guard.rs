@@ -28,9 +28,7 @@ fn declared_test_paths() -> Vec<String> {
             in_test_block = false;
             continue;
         }
-        if in_test_block
-            && let Some(rest) = trimmed.strip_prefix("path")
-        {
+        if in_test_block && let Some(rest) = trimmed.strip_prefix("path") {
             let rest = rest.trim_start();
             if let Some(rest) = rest.strip_prefix('=') {
                 let value = rest.trim().trim_matches('"');
@@ -72,9 +70,8 @@ fn reachable_basenames() -> BTreeSet<String> {
     for declared in declared_test_paths() {
         if let Some(consolidated_name) = declared.strip_prefix("consolidated/") {
             let consolidated_path = manifest_dir.join("consolidated").join(consolidated_name);
-            let source = std::fs::read_to_string(&consolidated_path).unwrap_or_else(|e| {
-                panic!("failed to read {}: {e}", consolidated_path.display())
-            });
+            let source = std::fs::read_to_string(&consolidated_path)
+                .unwrap_or_else(|e| panic!("failed to read {}: {e}", consolidated_path.display()));
             for target in path_mod_targets(&source) {
                 // Targets are relative to tests/consolidated/, e.g. "../foo.rs".
                 let basename = target
@@ -102,12 +99,7 @@ fn top_level_test_files() -> Vec<String> {
         let entry = entry.expect("failed to read tests/ directory entry");
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) == Some("rs") {
-            files.push(
-                path.file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned(),
-            );
+            files.push(path.file_name().unwrap().to_string_lossy().into_owned());
         }
     }
 

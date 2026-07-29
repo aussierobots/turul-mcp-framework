@@ -324,11 +324,15 @@ async fn call_tool_or_task_emits_exactly_one_encoded_mcp_name_header() {
         .await;
     Mock::given(method("POST"))
         .and(body_partial_json(json!({"method": "tools/call"})))
-        .respond_with(ResponseTemplate::new(200).insert_header("Content-Type", "application/json").set_body_json(json!({
-            "jsonrpc": "2.0", "id": "req_1",
-            "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
-                "content": [{ "type": "text", "text": "ok" }], "isError": false }
-        })))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(json!({
+                    "jsonrpc": "2.0", "id": "req_1",
+                    "result": { "resultType": "complete", "ttlMs": 0, "cacheScope": "public",
+                        "content": [{ "type": "text", "text": "ok" }], "isError": false }
+                })),
+        )
         .mount(&server)
         .await;
 
@@ -337,7 +341,10 @@ async fn call_tool_or_task_emits_exactly_one_encoded_mcp_name_header() {
     config.declared_capabilities.ext_tasks = true;
     let transport = Box::new(HttpTransport::new(&url).unwrap());
     let client = McpClient::new(transport, config);
-    client.connect().await.expect("connect against a 2026 server");
+    client
+        .connect()
+        .await
+        .expect("connect against a 2026 server");
 
     // A padded name: raw " padded " vs encoded "=?base64?IHBhZGRlZCA=?=" differ,
     // so a duplicate is detectable on the wire.
@@ -355,11 +362,19 @@ async fn call_tool_or_task_emits_exactly_one_encoded_mcp_name_header() {
         .filter(|r| {
             serde_json::from_slice::<Value>(&r.body)
                 .ok()
-                .and_then(|b| b.get("method").and_then(|m| m.as_str()).map(|s| s == "tools/call"))
+                .and_then(|b| {
+                    b.get("method")
+                        .and_then(|m| m.as_str())
+                        .map(|s| s == "tools/call")
+                })
                 .unwrap_or(false)
         })
         .collect();
-    assert_eq!(tools_call.len(), 1, "expected exactly one tools/call request");
+    assert_eq!(
+        tools_call.len(),
+        1,
+        "expected exactly one tools/call request"
+    );
     let names: Vec<_> = tools_call[0]
         .headers
         .get_all("mcp-name")

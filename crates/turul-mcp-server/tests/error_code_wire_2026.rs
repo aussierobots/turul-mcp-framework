@@ -46,7 +46,11 @@ impl McpMiddleware for DenySecretTool {
         _injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
         if ctx.method() == "tools/call"
-            && ctx.params().and_then(|p| p.get("name")).and_then(|v| v.as_str()) == Some("secret")
+            && ctx
+                .params()
+                .and_then(|p| p.get("name"))
+                .and_then(|v| v.as_str())
+                == Some("secret")
         {
             return Err(MiddlewareError::Unauthorized(
                 "caller lacks permission for tool 'secret'".into(),
@@ -157,13 +161,15 @@ async fn permission_denial_and_missing_resource_are_distinguishable_and_neither_
     let missing_code = missing_body["error"]["code"].as_i64();
 
     assert_ne!(
-        denied_code, Some(-32002),
+        denied_code,
+        Some(-32002),
         "permission denial must not be -32002 — that code means resource-not-found \
          to every conformant 2026-07-28 peer and this spec version forbids emitting \
          it: {denied_body}"
     );
     assert_ne!(
-        missing_code, Some(-32002),
+        missing_code,
+        Some(-32002),
         "missing resource must be -32602 on 2026-07-28, not the retired -32002: {missing_body}"
     );
     assert_eq!(missing_code, Some(-32602), "{missing_body}");

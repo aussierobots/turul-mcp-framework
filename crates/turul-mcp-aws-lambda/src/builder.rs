@@ -1023,7 +1023,8 @@ impl LambdaMcpServerBuilder {
             // the SameOriginOrLoopback default stands.
             #[cfg(feature = "cors")]
             if let Some(cors) = &self.cors_config {
-                self.server_config.origin_policy = if cors.allowed_origins.iter().any(|o| o == "*") {
+                self.server_config.origin_policy = if cors.allowed_origins.iter().any(|o| o == "*")
+                {
                     turul_http_mcp_server::OriginPolicy::Disabled
                 } else {
                     turul_http_mcp_server::OriginPolicy::AllowList(cors.allowed_origins.clone())

@@ -308,7 +308,7 @@ mod tests {
     #[test]
     fn discover_result_serializes_instructions_when_present() {
         let r = DiscoverResult::new(vec!["2026-07-28".to_string()], fixture_caps())
-        .with_instructions("Use this server for testing only.");
+            .with_instructions("Use this server for testing only.");
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["instructions"], "Use this server for testing only.");
     }
@@ -316,7 +316,7 @@ mod tests {
     #[test]
     fn discover_result_round_trips() {
         let r = DiscoverResult::new(vec!["2026-07-28".to_string()], fixture_caps())
-        .with_instructions("hi");
+            .with_instructions("hi");
         let v = serde_json::to_value(&r).unwrap();
         // CacheableResult mixin (DiscoverResult extends CacheableResult) — both
         // fields are required on the wire, camelCase.

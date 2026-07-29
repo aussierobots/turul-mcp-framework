@@ -833,7 +833,8 @@ async fn task_bound_to_owner_rejects_other_principal() {
     for _ in 0..100 {
         let (status, body) = tasks_get_as(&url, &task_id, "alice").await;
         assert_eq!(status, 200, "{body}");
-        if ["completed", "failed", "cancelled"].contains(&body["result"]["status"].as_str().unwrap_or(""))
+        if ["completed", "failed", "cancelled"]
+            .contains(&body["result"]["status"].as_str().unwrap_or(""))
         {
             done = body;
             break;

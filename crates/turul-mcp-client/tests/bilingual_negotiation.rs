@@ -482,7 +482,9 @@ async fn call_tool_recovers_from_header_mismatch_with_one_refresh_and_retry() {
 
     // The retry after refresh_tools(): succeeds.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "tools/call"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -598,7 +600,9 @@ async fn call_tool_recovers_from_plain_json_400_header_mismatch() {
         .await;
 
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "tools/call"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -660,7 +664,9 @@ async fn http_404_with_json_body_stays_a_transport_error() {
         .await;
 
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "tools/call"}),
+        ))
         .respond_with(
             ResponseTemplate::new(404)
                 .insert_header("Content-Type", "application/json")
@@ -725,7 +731,9 @@ async fn mcp_name_header_is_base64_sentinel_encoded_when_not_plain_ascii() {
         .await;
 
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "tools/call"}),
+        ))
         .and(header("Mcp-Name", "=?base64?IHBhZGRlZCA=?="))
         .respond_with(
             ResponseTemplate::new(200)
@@ -806,9 +814,9 @@ async fn subscriptions_listen_400_surfaces_jsonrpc_error_not_transport_error() {
         .await;
     match outcome {
         Err(turul_mcp_client::McpClientError::ServerError { code: -32021, .. }) => {}
-        Err(other) => panic!(
-            "subscriptions/listen 400 must surface as ServerError(-32021), got: {other:?}"
-        ),
+        Err(other) => {
+            panic!("subscriptions/listen 400 must surface as ServerError(-32021), got: {other:?}")
+        }
         Ok(_) => panic!("subscriptions/listen 400 must be an error, got a live stream"),
     }
 }
@@ -867,7 +875,11 @@ async fn subscriptions_listen_post_advertises_both_accept_types() {
         .find(|r| {
             serde_json::from_slice::<serde_json::Value>(&r.body)
                 .ok()
-                .and_then(|b| b.get("method").and_then(|m| m.as_str()).map(|s| s == "subscriptions/listen"))
+                .and_then(|b| {
+                    b.get("method")
+                        .and_then(|m| m.as_str())
+                        .map(|s| s == "subscriptions/listen")
+                })
                 .unwrap_or(false)
         })
         .expect("a subscriptions/listen POST was sent");

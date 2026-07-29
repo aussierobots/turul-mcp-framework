@@ -102,9 +102,7 @@ impl DiscoveredServer {
         Self {
             server_info: result
                 .get("_meta")
-                .and_then(|m| {
-                    m.get(turul_mcp_protocol_2026_07_28::meta::META_KEY_SERVER_INFO)
-                })
+                .and_then(|m| m.get(turul_mcp_protocol_2026_07_28::meta::META_KEY_SERVER_INFO))
                 .cloned(),
             capabilities: result.get("capabilities").cloned(),
             instructions: result
@@ -705,7 +703,8 @@ impl McpClient {
                     // the peer does not implement by sending `initialize` — a
                     // method that revision removed. Surface the 404 instead.
                     if e.is_session_expired()
-                        && self.negotiated_version().await != Some(crate::version::McpVersion::V2026_07_28)
+                        && self.negotiated_version().await
+                            != Some(crate::version::McpVersion::V2026_07_28)
                     {
                         warn!("Session expired (HTTP 404) — attempting re-initialization");
                         self.session.reset().await;
@@ -1487,22 +1486,16 @@ impl McpClient {
         // derives it from params.name for tools/call and Base64-sentinel-encodes
         // it. Passing a raw one here would emit a second, unencoded Mcp-Name
         // header (reqwest appends rather than replaces).
-        self.send_2026_07_28_with_extra_headers(
-            "tools/call",
-            extra,
-            &[],
-            |result| {
-                if result.get("resultType").and_then(|v| v.as_str())
-                    == Some(turul_mcp_ext_tasks::RESULT_TYPE_TASK)
-                {
-                    let task: turul_mcp_ext_tasks::CreateTaskResult =
-                        serde_json::from_value(result.clone())?;
-                    return Ok(ToolCallOutcome::Task(task));
-                }
-                crate::protocol::v2026_07_28::parse_call_tool(result)
-                    .map(ToolCallOutcome::Completed)
-            },
-        )
+        self.send_2026_07_28_with_extra_headers("tools/call", extra, &[], |result| {
+            if result.get("resultType").and_then(|v| v.as_str())
+                == Some(turul_mcp_ext_tasks::RESULT_TYPE_TASK)
+            {
+                let task: turul_mcp_ext_tasks::CreateTaskResult =
+                    serde_json::from_value(result.clone())?;
+                return Ok(ToolCallOutcome::Task(task));
+            }
+            crate::protocol::v2026_07_28::parse_call_tool(result).map(ToolCallOutcome::Completed)
+        })
         .await
     }
 
@@ -4382,8 +4375,15 @@ mod tests {
         let mut ids = std::collections::HashSet::new();
         for handle in handles {
             let id = handle.await.unwrap();
-            assert!(ids.insert(id.clone()), "duplicate request id observed: {id}");
+            assert!(
+                ids.insert(id.clone()),
+                "duplicate request id observed: {id}"
+            );
         }
-        assert_eq!(ids.len(), 64, "every concurrent request must get a distinct id");
+        assert_eq!(
+            ids.len(),
+            64,
+            "every concurrent request must get a distinct id"
+        );
     }
 }

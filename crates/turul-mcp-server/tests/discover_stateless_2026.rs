@@ -224,8 +224,7 @@ async fn tools_call_result_carries_server_info_meta() {
 
     let body: serde_json::Value = resp.json().await.expect("json body");
     assert_eq!(
-        body["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
-        "discover-2026-test",
+        body["result"]["_meta"]["io.modelcontextprotocol/serverInfo"]["name"], "discover-2026-test",
         "every 2026 result carries the server identity: {body}"
     );
 }

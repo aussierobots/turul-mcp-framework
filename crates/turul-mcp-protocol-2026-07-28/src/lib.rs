@@ -187,9 +187,9 @@ pub use ping::{EmptyParams, EmptyResult};
 pub use schema::JsonSchema;
 pub use traits::{
     HasData, HasDataParam, HasErrorObject, HasMeta, HasMetaParam, HasNotificationMeta,
-    HasOptionalRequestId,
-    HasProgressTokenParam, HasRequestId, HasResultType, JsonRpcErrorResponseTrait,
-    JsonRpcNotificationTrait, JsonRpcRequestTrait, JsonRpcResultResponseTrait, Params, RpcResult,
+    HasOptionalRequestId, HasProgressTokenParam, HasRequestId, HasResultType,
+    JsonRpcErrorResponseTrait, JsonRpcNotificationTrait, JsonRpcRequestTrait,
+    JsonRpcResultResponseTrait, Params, RpcResult,
 };
 
 // JSON-RPC wire envelopes come from `turul-rpc` (0.2 schema-compliant types).
@@ -709,7 +709,9 @@ mod mcp_error_code_partition {
     #[test]
     fn no_two_framework_internal_errors_share_a_code() {
         let codes = [
-            McpError::ToolExecutionError("x".into()).to_error_object().code,
+            McpError::ToolExecutionError("x".into())
+                .to_error_object()
+                .code,
             McpError::ResourceAccessDenied("x".into())
                 .to_error_object()
                 .code,
@@ -741,7 +743,11 @@ mod mcp_error_code_partition {
         let mut sorted = codes.to_vec();
         sorted.sort_unstable();
         sorted.dedup();
-        assert_eq!(sorted.len(), codes.len(), "duplicate internal error code in {codes:?}");
+        assert_eq!(
+            sorted.len(),
+            codes.len(),
+            "duplicate internal error code in {codes:?}"
+        );
     }
 }
 

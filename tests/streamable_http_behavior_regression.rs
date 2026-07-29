@@ -150,10 +150,7 @@ async fn test_sse_framing_for_streaming_clients() {
         response.headers().get("content-type").unwrap(),
         "text/event-stream"
     );
-    assert_eq!(
-        response.headers().get("cache-control").unwrap(),
-        "no-cache"
-    );
+    assert_eq!(response.headers().get("cache-control").unwrap(), "no-cache");
 }
 
 /// Test JSON response for non-streaming clients

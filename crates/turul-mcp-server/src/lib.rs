@@ -191,6 +191,9 @@ pub use sampling::McpSampling;
 pub use security::{
     AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,
 };
+/// Handler for the 2026-07-28 `server/discover` method
+#[cfg(feature = "protocol-2026-07-28")]
+pub use server::DiscoverHandler;
 /// Core MCP server and session-aware handlers
 #[cfg(feature = "protocol-2025-11-25")]
 pub use server::SessionAwareInitializeHandler;
@@ -198,9 +201,6 @@ pub use server::SessionAwareInitializeHandler;
 pub use server::{
     ListToolsHandler, McpServer, SessionAwareMcpHandlerBridge, SessionAwareToolHandler,
 };
-/// Handler for the 2026-07-28 `server/discover` method
-#[cfg(feature = "protocol-2026-07-28")]
-pub use server::DiscoverHandler;
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionEventDispatcher, SessionManager};
 /// Task executor abstraction for pluggable execution backends

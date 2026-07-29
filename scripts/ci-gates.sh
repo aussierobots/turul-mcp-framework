@@ -79,6 +79,17 @@ gate_opt_in_2025() {
   run "client 2025-11-25-only"   cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
   run "client 2026-07-28-only"   cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
   run "client-initialise-server" cargo build  -p client-initialise-server --no-default-features
+  # Every example whose manifest pins protocol-2025-11-25. They cannot join
+  # [default-members] — unifying their features with the 2026 default trips the
+  # spec mutex — so this is the only thing that compiles them. tests/examples_guard.rs
+  # fails if an example is in neither place.
+  run "2025-11-25 lane examples" cargo build --bins \
+    -p dynamic-tools-server -p elicitation-server -p lambda-turul-mcp-server \
+    -p logging-test-client -p logging-test-server -p prompts-test-server \
+    -p resource-test-server -p roots-server -p sampling-server \
+    -p session-aware-resource-server -p session-logging-proof-test \
+    -p stateful-server -p tasks-e2e-inmemory-client -p tasks-e2e-inmemory-server \
+    -p tools-test-server
   run "tools E2E"       cargo test -p mcp-tools-tests
   run "resources E2E"   cargo test -p mcp-resources-tests
   run "prompts E2E"     cargo test -p mcp-prompts-tests
@@ -92,7 +103,7 @@ gate_opt_in_2025() {
   for t in compliance schema_tests example_validation e2e_tests feature_tests \
            session_context_macro_tests derive_comprehensive_tool_tests \
            derive_schemars_integration_test derive_zero_config_output_schema_test \
-           dynamic_tools_e2e event_dispatcher_persistence client_integration_test \
+           dynamic_tools_e2e event_dispatcher_persistence client_integration_test examples_guard \
            mcp_runtime_capabilities_validation streamable_http_behavior_regression \
            reachability_guard; do
     run "integration:$t" cargo test -p turul-mcp-framework-integration-tests --test "$t"

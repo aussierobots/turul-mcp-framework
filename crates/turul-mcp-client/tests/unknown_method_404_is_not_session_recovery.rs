@@ -55,9 +55,15 @@ async fn a_404_unknown_method_is_returned_not_recovered_with_initialize() {
         .await;
 
     let url = format!("{}/mcp", server.uri());
-    let client = McpClient::new(Box::new(HttpTransport::new(&url).unwrap()), Default::default());
+    let client = McpClient::new(
+        Box::new(HttpTransport::new(&url).unwrap()),
+        Default::default(),
+    );
     client.connect().await.expect("discover");
-    assert_eq!(client.negotiated_version().await, Some(McpVersion::V2026_07_28));
+    assert_eq!(
+        client.negotiated_version().await,
+        Some(McpVersion::V2026_07_28)
+    );
 
     let err = client
         .list_tools()
@@ -75,7 +81,9 @@ async fn a_404_unknown_method_is_returned_not_recovered_with_initialize() {
         .collect();
 
     assert!(
-        !sent.iter().any(|m| m == "initialize" || m == "notifications/initialized"),
+        !sent
+            .iter()
+            .any(|m| m == "initialize" || m == "notifications/initialized"),
         "a 404 must not be recovered with a handshake this revision removed; sent {sent:?} \
          (error surfaced was: {err})"
     );

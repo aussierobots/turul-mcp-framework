@@ -150,7 +150,10 @@ async fn sse_result_frame_carries_server_info_meta() {
     );
 
     // Progress notifications are not results and must not be stamped.
-    for n in events.iter().filter(|e| e["method"] == "notifications/progress") {
+    for n in events
+        .iter()
+        .filter(|e| e["method"] == "notifications/progress")
+    {
         assert!(
             n["params"]["_meta"]
                 .get("io.modelcontextprotocol/serverInfo")

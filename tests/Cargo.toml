@@ -122,3 +122,10 @@ path = "streamable_http_behavior_regression.rs"
 [[test]]
 name = "reachability_guard"
 path = "reachability_guard.rs"
+
+# Guards against examples/ directories that no registry knows about: absent
+# from [workspace.members], absent from both [default-members] and every
+# `-p` gate line in scripts/ci-gates.sh, or absent from EXAMPLES.md.
+[[test]]
+name = "examples_guard"
+path = "examples_guard.rs"

@@ -469,7 +469,8 @@ async fn non_utf8_post_body_is_rejected_with_400() {
     let client = reqwest::Client::new();
 
     // 0xFF is not a valid UTF-8 continuation/lead byte in this position.
-    let invalid_utf8: &[u8] = b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{\"x\":\"\xff\xfe\"}}";
+    let invalid_utf8: &[u8] =
+        b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{\"x\":\"\xff\xfe\"}}";
 
     let resp = client
         .post(&url)
