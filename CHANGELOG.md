@@ -9,6 +9,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### Fixed (2026-07-29, found by cross-implementation interop)
+
+- **`resources/templates/list` answered `-32601` when no templates were registered.** The
+  handler was registered only if template resources existed, so a server that declares the
+  resources capability told clients the method does not exist rather than that there are
+  none — a different claim, and the one a capability-driven client acts on by abandoning
+  templates entirely. Registration is now unconditional on both the local and Lambda
+  builders, matching `resources/list` and `resources/read`; `build()` still swaps in the
+  populated handler when templates were configured. This changes the 2025-11-25 lane too,
+  deliberately: the method is standard on that spec as well and gating it would mean two
+  code paths for one contract. Default handler counts move to 22 (2025-11-25) and 13
+  (2026-07-28).
+
+### Added (2026-07-29, test and interop surfaces)
+
+- **A dedicated streaming end-to-end suite** (`streaming_e2e_2026.rs`). The existing 2026
+  streaming tests read `data:` lines leniently and assert on the JSON inside, leaving the
+  framing itself unasserted — a server could emit malformed field lines, drop the blank-line
+  terminator, or cut mid-frame and every one of them would still pass. The new suite asserts
+  the bytes: event-stream grammar, unbuffered response headers, frame ordering, the result
+  frame terminating the stream, and the JSON counterpart staying distinguishable on the wire.
+- **A Lambda end-to-end gate driven by `cargo lambda watch`** (`scripts/e2e-lambda-local.sh`).
+  The in-process Lambda tests construct a handler and call it directly, skipping the AWS
+  Runtime API entirely. This drives the real control-plane emulator, so all 10 assertions are
+  on bytes that crossed a Function URL request/response cycle.
+- **A shared interop fixture server** (`examples/interop-fixture-server`) exposing tools,
+  resources, prompts and completion, so every peer probe hits one surface. Probes previously
+  ran against `minimal-server`, whose single tool capped interop at 3 of 22 methods.
+- **An interop client probe** (`examples/interop-client-probe`) that drives a *foreign* server
+  with `turul-mcp-client` and reports per-leg results without aborting.
+- **Four interop probes, with measured results.** FastMCP 4.0.0b1: 9 methods and 5 negative
+  paths (`interop-fastmcp.sh`), and 8 methods driven by our client against a FastMCP server
+  with an R→R control (`interop-turul-client.sh`). **MCP Go SDK v1.7.0** (`interop-go-sdk.sh`):
+  9 methods and 5 negatives, no wire disagreement — the strongest external evidence available,
+  because it is the only peer that is not a pre-release. MCP TypeScript SDK v2.0.0-beta.1
+  (`interop-typescript-sdk.sh`): **fails at `connect()`**, and the failure is the peer's — its
+  `DiscoverResultSchema` still requires a top-level `serverInfo` that the released schema
+  removed. Recorded, not accommodated.
+- **`docs/compliance/`** — per-spec-area records naming, for each requirement, the test that
+  asserts it and which independent implementation has exercised it. Self-verified and
+  externally verified totals are kept apart on purpose, and "not exercised" is a distinct
+  value from "pass". AGENTS.md now requires these to be reconciled in the same slice as a
+  schema re-pin.
+
 ### Changed (2026-07-29, adopt the released MCP 2026-07-28 spec)
 
 - **Schema re-pinned from the pre-release draft path to the released one.** Upstream published

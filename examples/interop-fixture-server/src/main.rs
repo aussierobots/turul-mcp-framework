@@ -13,6 +13,12 @@
 //! against. Changing one means changing `scripts/interop-*.sh` in the same
 //! slice.
 //!
+//! Known discrepancy, left in place deliberately: the fixture resource declares
+//! `text/markdown` but `resources/read` reports `text/plain`, because
+//! `ResourceContent::text()` hardcodes that and offers no way to set another.
+//! A probe author seeing the mismatch is looking at a framework gap, not a bug
+//! in their client.
+//!
 //!   cargo run -p interop-fixture-server -- --port 8700
 
 use std::collections::HashMap;
