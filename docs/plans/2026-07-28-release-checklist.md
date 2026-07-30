@@ -341,8 +341,14 @@ earliest-removal of 2027-07-28. The protocol-crate types do carry
       `docs/adr/README.md:49` repeats the stale status independently. **Do not rename the ADR
       file** — ~15 cross-references cite it by exact path, and per manual item A1 a rename
       reads as a "branch is done" signal.
-- [ ] **3.3** 46 `v0.3` references across 10 `SKILL.md` files → `v0.4` (CLAUDE.md
-      §Pre-Release item 3: bump on minor changes, which this is).
+- [x] **3.3** `v0.3` references in `plugins/` → `v0.4` where they are current-state
+      claims. **Done 2026-07-31.** The "46 across 10 SKILL.md files" figure was wrong:
+      the real count was 9 across 5 files, and 8 of those must NOT move — changelog
+      headings, since-markers ("Since v0.3.27…", "(v0.3+)") and the v0.3.33–v0.3.46
+      hardening citations. Exactly one was a live instruction telling users what to
+      depend on: `commands/new-mcp-server.md` "all targeting v0.3.x" → `v0.4.x`.
+      A blanket sweep as originally scoped would have falsified shipped release notes.
+      Rule recorded in CLAUDE.md §Version References.
 - [ ] **3.4** `description = "… (BP-3)"` in `crates/turul-mcp-schema-validation/Cargo.toml:9`
       — an internal gap-register ID rendered verbatim on the crates.io page. Also in two
       manifest comments (root `Cargo.toml:183`, `turul-mcp-client/Cargo.toml:26`).

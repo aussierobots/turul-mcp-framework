@@ -153,7 +153,7 @@ let storage = Arc::new(InMemoryTaskStorage::new());
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["sqlite"] }
+turul-mcp-task-storage = { version = "0.4", features = ["sqlite"] }
 ```
 
 ```rust
@@ -173,7 +173,7 @@ let storage = Arc::new(
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["postgres"] }
+turul-mcp-task-storage = { version = "0.4", features = ["postgres"] }
 ```
 
 ```rust
@@ -193,7 +193,7 @@ let storage = Arc::new(
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-task-storage = { version = "0.4", features = ["dynamodb"] }
 ```
 
 ```rust

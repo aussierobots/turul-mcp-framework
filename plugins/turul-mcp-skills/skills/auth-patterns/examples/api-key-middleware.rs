@@ -2,8 +2,8 @@
 // Simple API key authentication middleware
 //
 // Cargo.toml dependencies:
-//   turul-mcp-server = { version = "0.3" }
-//   turul-mcp-derive = { version = "0.3" }
+//   turul-mcp-server = { version = "0.4" }
+//   turul-mcp-derive = { version = "0.4" }
 //   tokio = { version = "1", features = ["full"] }
 //   async-trait = "0.1"
 //
@@ -81,7 +81,7 @@ async fn main() -> McpResult<()> {
 
     let server = McpServer::builder()
         .name("api-key-server")
-        .version("0.3")
+        .version("0.4")
         .middleware(Arc::new(ApiKeyMiddleware { valid_keys: keys }))
         .tool(HelloTool::default())
         .build()?;

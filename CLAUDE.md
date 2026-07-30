@@ -15,7 +15,17 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 
 ## Branch Lock: `feat/turul-mcp-protocol-2026-07-28`
 
-**This branch tracks adoption of MCP 2026-07-28, now the released current specification** (stateless core, `initialize`/`Mcp-Session-Id` removed, Tasks moved to extension, error code `-32002` → `-32602`, JSON Schema 2020-12, MCP Apps, caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging). See https://modelcontextprotocol.io/specification/2026-07-28.
+**This branch is the 0.4 release in preparation**, adopting MCP 2026-07-28 — now the
+released current specification (stateless core, `initialize`/`Mcp-Session-Id` removed,
+Tasks moved to extension, error code `-32002` → `-32602`, JSON Schema 2020-12, MCP Apps,
+caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging).
+See https://modelcontextprotocol.io/specification/2026-07-28.
+
+**0.4 becomes the current release only when the maintainer opens the PR and merges it.**
+Until then this branch is pre-release: it holds the 0.4 line, `main` holds 0.3 /
+2025-11-25, and neither fact licenses merging. Write about this branch's contents as
+**0.4** — every non-frozen crate is already `0.4.0`, so "0.3" in a *current-state*
+claim is stale (see §Version References below for what legitimately stays 0.3).
 
 Confirm the name before relying on the rules below — they bind whatever branch holds
 the 2026-07-28 work, and a stale name here would make them unenforceable as written:
@@ -185,6 +195,34 @@ struct Calculator;  // Framework → tools/call
 - All other crates start the 0.4.x line at `0.4.0`.
 - `[workspace.package].version` exists but is **not authoritative** — it's a default for tooling. Per-crate `version = "..."` is the source of truth.
 - `[workspace.dependencies]` pins the version for each internal crate path. When bumping a crate, bump it in the crate's `Cargo.toml` AND in the workspace dependency pin.
+
+### Version References: what is stale, and what is not
+
+This branch is 0.4. A **current-state claim** naming 0.3 is stale and must move —
+"depend on `turul-mcp-server = "0.3"`", "target v0.3.x", "the 0.3 API does X".
+
+These legitimately stay 0.3 and a blanket `0.3` → `0.4` sweep would corrupt them:
+
+- **Frozen crates** — `turul-mcp-protocol-2025-06-18`, `turul-mcp-protocol-2025-11-25`
+  and `turul-mcp-json-rpc-server` stay published at `0.3.47` and never move.
+- **Since-markers** — "Since v0.3.27, backend features forward to both storage
+  crates", "two streaming entry points (v0.3+)". Still true; the version records when
+  it became true.
+- **Changelog history** — CHANGELOG.md and the plugin README's release sections.
+  Rewriting a shipped release's notes falsifies the record.
+- **Incident citations** — the v0.3.40 → v0.3.41 and v0.3.42 references in §Test
+  Coverage Discipline name when a specific bug shipped. Renumbering them destroys
+  the evidence the rule rests on.
+- **External crate versions** — `futures = "0.3"`, `tracing-subscriber = "0.3"`,
+  `async-stream = "0.3"` have nothing to do with this workspace.
+
+Disposition each hit; never sweep — and **grep both forms**. `v0.3` and `= "0.3"` are
+different populations: searching only `v0.3` in `plugins/` found nine hits, eight of
+them history. Searching `= "0.3"` found 50 more — dependency pins in skill examples,
+`.version()` strings, and `scripts/scaffold-mcp-server.sh`, which *generates* a
+`Cargo.toml` for users and was emitting `turul-mcp-server = "0.3"`. All 50 were live
+instructions. The prose-only search made the problem look 5× smaller than it was and
+pointed at the wrong files.
 
 ### Workspace Dependencies
 External crate dependencies (`serde`, `tokio`, `hyper`, etc.) MUST use `workspace = true` references. Declare versions in root `Cargo.toml` `[workspace.dependencies]`, reference with `.workspace = true` in crate `Cargo.toml`. Add crate-specific features inline: `hyper = { workspace = true, features = ["http1"] }`.
@@ -629,7 +667,10 @@ Before publishing a new version:
 
 1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml` AND its pin in `[workspace.dependencies]`. Per §Crate Versioning Policy, `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
 2. **Example server versions**: Update `.version("x.y.z")` strings in `examples/*/src/main.rs`
-3. **Plugin skill versions**: Skills use generic minor version (`v0.3`, not `v0.3.13`) — do NOT bump on patch releases. Only update when the minor version changes (e.g., `v0.3` → `v0.4`).
+3. **Plugin skill versions**: Skills use the generic minor version (`v0.4`, not
+   `v0.4.1`) — do NOT bump on patch releases, only when the minor changes. Bump
+   *current-state* references only; see §Version References — since-markers and
+   changelog entries stay put.
 4. **CHANGELOG.md**: Add release entry with date and comparison links
 5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
 6. **Publish order** (dependency-first, derived from the actual non-dev dependency graph):

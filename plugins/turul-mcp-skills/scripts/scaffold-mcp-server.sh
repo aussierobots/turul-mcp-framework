@@ -95,27 +95,27 @@ CARGO_EOF
 case "$STORAGE" in
     inmemory)
         cat >> "$PROJECT_DIR/Cargo.toml" << 'CARGO_EOF'
-turul-mcp-server = "0.3"
+turul-mcp-server = "0.4"
 CARGO_EOF
         ;;
     sqlite)
         cat >> "$PROJECT_DIR/Cargo.toml" << 'CARGO_EOF'
-turul-mcp-server = { version = "0.3", features = ["http", "sse", "sqlite"] }
-turul-mcp-session-storage = { version = "0.3", features = ["sqlite"] }
+turul-mcp-server = { version = "0.4", features = ["http", "sse", "sqlite"] }
+turul-mcp-session-storage = { version = "0.4", features = ["sqlite"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls"] }
 CARGO_EOF
         ;;
     postgres)
         cat >> "$PROJECT_DIR/Cargo.toml" << 'CARGO_EOF'
-turul-mcp-server = { version = "0.3", features = ["http", "sse", "postgres"] }
-turul-mcp-session-storage = { version = "0.3", features = ["postgres"] }
+turul-mcp-server = { version = "0.4", features = ["http", "sse", "postgres"] }
+turul-mcp-session-storage = { version = "0.4", features = ["postgres"] }
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls"] }
 CARGO_EOF
         ;;
     dynamodb)
         cat >> "$PROJECT_DIR/Cargo.toml" << 'CARGO_EOF'
-turul-mcp-server = { version = "0.3", features = ["http", "sse", "dynamodb"] }
-turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-server = { version = "0.4", features = ["http", "sse", "dynamodb"] }
+turul-mcp-session-storage = { version = "0.4", features = ["dynamodb"] }
 aws-sdk-dynamodb = "1"
 aws-config = "1"
 CARGO_EOF
@@ -124,8 +124,8 @@ esac
 
 # Common dependencies (all backends)
 cat >> "$PROJECT_DIR/Cargo.toml" << 'CARGO_EOF'
-turul-mcp-derive = "0.3"
-turul-mcp-protocol = "0.3"
+turul-mcp-derive = "0.4"
+turul-mcp-protocol = "0.4"
 tokio = { version = "1", features = ["full"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

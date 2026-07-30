@@ -110,7 +110,7 @@ Print a summary table with pass/fail/warn status per check:
 Validation Results for: my-mcp-server
 Mode: External Project
 
-  ✓ Turul dependency          turul-mcp-server = "0.3" found
+  ✓ Turul dependency          turul-mcp-server = "0.4" found
   ✓ MCP components            3 tools, 1 resource registered
   ✓ Protocol imports           No direct versioned protocol imports
   ⚠ Output attribute          DoubleTool uses derive(McpTool) without output = Type

@@ -120,17 +120,17 @@ Use snapshot mode (combination 1 or 2) when:
 ```toml
 # Snapshot mode (default features are sufficient)
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3" }
+turul-mcp-aws-lambda = { version = "0.4" }
 # default = ["cors", "sse"] — SSE enabled but only snapshots without streaming feature
 
 # Real-time streaming mode
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3", features = ["streaming"] }
+turul-mcp-aws-lambda = { version = "0.4", features = ["streaming"] }
 # streaming implies sse
 
 # Snapshot mode, explicitly no SSE
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3", default-features = false, features = ["cors"] }
+turul-mcp-aws-lambda = { version = "0.4", default-features = false, features = ["cors"] }
 ```
 
 ## CORS and Streaming

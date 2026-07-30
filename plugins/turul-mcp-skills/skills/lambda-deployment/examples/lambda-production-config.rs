@@ -2,11 +2,11 @@
 // Production-ready Lambda MCP server with auth middleware, env CORS, and logging
 //
 // Cargo.toml dependencies:
-//   turul-mcp-aws-lambda = { version = "0.3", features = ["dynamodb"] }
-//   turul-mcp-server = { version = "0.3" }
-//   turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
-//   turul-http-mcp-server = { version = "0.3" }
-//   turul-mcp-derive = { version = "0.3" }
+//   turul-mcp-aws-lambda = { version = "0.4", features = ["dynamodb"] }
+//   turul-mcp-server = { version = "0.4" }
+//   turul-mcp-session-storage = { version = "0.4", features = ["dynamodb"] }
+//   turul-http-mcp-server = { version = "0.4" }
+//   turul-mcp-derive = { version = "0.4" }
 //   lambda_http = "0.13"
 //   tokio = { version = "1", features = ["full"] }
 //   async-trait = "0.1"
