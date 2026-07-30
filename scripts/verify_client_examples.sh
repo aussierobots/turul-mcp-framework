@@ -43,6 +43,19 @@ NC='\033[0m' # No Color
 # Track PIDs for cleanup
 PIDS=()
 
+# Run a command, recording its status in CAPTURED_EXIT instead of ending the run.
+#
+# `set -e` aborts on a failing command in plain position, so the `cmd` /
+# `STATUS=$?` shape reads naturally but exits before the assignment — making
+# every FAILED branch below unreachable and discarding the reason along with the
+# log tail it was about to print. The status is only observable if the command
+# runs somewhere the shell already tolerates failure, such as an `if`.
+#
+# Redirections belong on the `capture` call; they apply to the command through it.
+capture() {
+    if "$@"; then CAPTURED_EXIT=0; else CAPTURED_EXIT=$?; fi
+}
+
 # Cleanup function (PID-based, not pkill)
 cleanup() {
     echo ""
@@ -82,8 +95,7 @@ test_client_initialization() {
     CLIENT_PID=$!
 
     # Wait for client to complete
-    wait $CLIENT_PID 2>/dev/null
-    CLIENT_EXIT=$?
+    if wait $CLIENT_PID 2>/dev/null; then CLIENT_EXIT=0; else CLIENT_EXIT=$?; fi
 
     # Cleanup server
     kill $SERVER_PID 2>/dev/null || true
@@ -124,8 +136,9 @@ test_streamable_client() {
     # Run streamable client. It takes the server URL as a bare positional
     # argument, not a --url flag.
     echo "Running streamable-http-client..."
-    RUST_LOG=error timeout 10s "$BIN_DIR/streamable-http-client" http://127.0.0.1:8641/mcp > /tmp/streamable_client.log 2>&1
-    CLIENT_EXIT=$?
+    capture env RUST_LOG=error timeout 10s "$BIN_DIR/streamable-http-client" \
+        http://127.0.0.1:8641/mcp > /tmp/streamable_client.log 2>&1
+    CLIENT_EXIT=$CAPTURED_EXIT
 
     # Cleanup server
     kill $SERVER_PID 2>/dev/null || true
@@ -167,8 +180,9 @@ test_logging_client() {
     # Run logging test client. It takes --port (matching the server),
     # --quick-test keeps this bounded for a CI gate.
     echo "Running logging-test-client..."
-    RUST_LOG=error timeout 20s "$BIN_DIR/logging-test-client" --port 8052 --quick-test > /tmp/logging_client.log 2>&1
-    CLIENT_EXIT=$?
+    capture env RUST_LOG=error timeout 20s "$BIN_DIR/logging-test-client" \
+        --port 8052 --quick-test > /tmp/logging_client.log 2>&1
+    CLIENT_EXIT=$CAPTURED_EXIT
 
     # Cleanup server
     kill $SERVER_PID 2>/dev/null || true
@@ -208,9 +222,9 @@ test_session_compliance() {
     fi
 
     echo "Running session management compliance test..."
-    RUST_LOG=error timeout 20s "$BIN_DIR/session-management-compliance-test" \
+    capture env RUST_LOG=error timeout 20s "$BIN_DIR/session-management-compliance-test" \
         http://127.0.0.1:52951/mcp > /tmp/session_compliance.log 2>&1
-    TEST_EXIT=$?
+    TEST_EXIT=$CAPTURED_EXIT
 
     kill $SERVER_PID 2>/dev/null || true
     sleep 1
@@ -250,15 +264,9 @@ test_progress_token_echo() {
         return 1
     fi
 
-    # `set -e` aborts on a failing command in plain position, which would skip
-    # the reporting below and lose the reason. Capture the status in a condition.
-    if RUST_LOG=error timeout 20s "$BIN_DIR/streamable-http-client-2025-11-25" \
+    capture env RUST_LOG=error timeout 20s "$BIN_DIR/streamable-http-client-2025-11-25" \
         --url http://127.0.0.1:52952/mcp > /tmp/progress_token_echo.log 2>&1
-    then
-        TEST_EXIT=0
-    else
-        TEST_EXIT=$?
-    fi
+    TEST_EXIT=$CAPTURED_EXIT
 
     kill $SERVER_PID 2>/dev/null || true
     sleep 1

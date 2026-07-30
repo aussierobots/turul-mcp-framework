@@ -48,6 +48,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a known SKIP is not mistaken for a regression. Cross-linked from the README
   and from the existing manual-verification checklist.
 
+### Fixed (2026-07-31, every failing leg in verify_client_examples.sh was silent)
+
+- **Five legs discarded their own failure reason.** Each ran
+  `cmd > log 2>&1` then `STATUS=$?`, but the file sets `set -e`, so a failing
+  command ended the script *before* the assignment. The `FAILED:` branch and the
+  log tail it was about to print were unreachable — the run exited non-zero with
+  no indication of which leg broke or why. That is what made the earlier
+  progress-token revert-and-fail take two attempts to read.
+
+  All five now run through one `capture()` helper, which invokes the command
+  inside an `if` — a position where the shell already tolerates failure — and
+  records the status in `CAPTURED_EXIT`. The `wait $CLIENT_PID` leg uses the
+  inline `if` form instead, since `wait` is a shell builtin operating on the
+  current shell's jobs and does not survive dispatch through a function. The leg
+  added on 2026-07-30 already had its own inline `if`; it now shares the helper,
+  so there is one definition rather than six variations.
+
+  Verified in both directions: 6/6 green unchanged, and pointing one leg at a
+  closed port produces `FAILED: streamable-http-client did not complete a
+  2026-07-28 round trip` **followed by the captured output**, where previously
+  the script vanished at the command and printed neither.
+
+  Note this is a shell-semantics fix, not an environment one: `set -e` is bash's
+  `errexit`, evaluated by the interpreting shell, and is unaffected by which sudo
+  implementation is installed. The `capture` form is correct regardless of
+  `errexit`, shell version, or launcher.
+
 ### Fixed (2026-07-30, the 2025-lane test harness lost port races)
 
 - **`TestServerManager` handed out ephemeral ports it no longer held.**
