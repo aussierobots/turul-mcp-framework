@@ -115,7 +115,7 @@ pub struct ServerInfo {
 }
 ```
 
-See: [CLAUDE.md — JSON Naming: camelCase ONLY](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#json-naming-camelcase-only)
+See: [CLAUDE.md — JSON Naming: camelCase ONLY](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/wire-format-compliance.md#json-naming-camelcase-only)
 
 ## Vec\<T\> Output — Use Wrapper Structs
 

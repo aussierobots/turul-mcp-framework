@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-1. Don’t assume. Don’t hide confusion. Surface tradeoffs.
+1. Don't assume. Don't hide confusion. Surface tradeoffs.
 2. Minimum code that solves the problem. Nothing speculative.
 3. Touch only what you must. Clean up only your own mess.
 4. Define success criteria. Loop until verified.
@@ -32,7 +32,8 @@ See https://modelcontextprotocol.io/specification/2026-07-28.
 Until then this branch is pre-release: it holds the 0.4 line, `main` holds 0.3 /
 2025-11-25, and neither fact licenses merging. Write about this branch's contents as
 **0.4** — every non-frozen crate is already `0.4.0`, so "0.3" in a *current-state*
-claim is stale (see §Version References below for what legitimately stays 0.3).
+claim is stale (see [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md)
+for what legitimately stays 0.3).
 
 Confirm the name before relying on the rules below — they bind whatever branch holds
 the 2026-07-28 work, and a stale name here would make them unenforceable as written:
@@ -70,335 +71,30 @@ Governing rules — including the one-immutable-commit requirement and the
 which wins on conflict. Do not restate them here; this section is the runnable
 check only.
 
-## Critical Rules
-
-### Protocol Crate Purity
-
-**Precedence — settled 2026-07-31: the MCP spec, the ADRs and the code outrank this
-rule's wording.** This section describes an intent in prose; prose generalises badly.
-When the phrasing here appears to forbid something the schema requires, an ADR
-decided, or the code already does correctly, **the rule is what is wrong** — fix the
-wording, do not "fix" the code to satisfy it. In that order: the spec settles what the
-protocol crate must contain, an ADR settles a decision already taken, the code settles
-what is actually true today.
-
-This is not a licence to ignore the rule. It resolves *conflicts*, and a conflict
-means the spec/ADR/code demonstrably says otherwise — cite the schema type, the ADR
-number, or the file. "It seemed convenient" is not a conflict.
-
-**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2026-07-28` unless it directly relates to MCP spec compliance.** No framework features, middleware hooks, or convenience additions.
-
-**Forbidden**: *Invented* trait hierarchies, builder patterns, framework helpers, tutorial docs
-**Allowed**: MCP spec types, serde derives, basic builder methods on concrete types, spec error types
-**Framework traits belong in `turul-mcp-builders`** (`turul-mcp-builders/src/traits/`)
-
-**Schema-mirroring traits are not the forbidden kind.** Each protocol crate carries
-75–80 traits in `traits.rs` (`HasMethod`, `HasParams`, `HasMeta`, …) that exist only
-because the MCP schema is TypeScript and uses interface inheritance —
-`ProgressNotificationParams extends NotificationParams` has no direct Rust
-equivalent. Their names follow the schema's own interface names, so they are part of
-the 1:1 mapping, not machinery layered on top. This is the shape in all three
-protocol crates and predates 0.4.
-
-The distinction is **transcribed vs. invented**. If the trait exists because the
-schema declares that relationship, it belongs in the protocol crate. If it exists to
-make the framework nicer to use — `HasInputSchema`, `HasExecution`, `HasIcons` — it
-belongs in `turul-mcp-builders`. No trait name is defined in both places; keep it
-that way.
-
-This is the worked example of the precedence above. Read literally, "Forbidden: trait
-hierarchies" condemned 75–80 traits that the schema itself declares — and on
-2026-07-31 that reading cost a round trip, escalated as an architectural question when
-the actual defect was one mislabelled doc comment. The spec won; the wording moved.
-
-`scripts/check-protocol-purity.sh` enforces the crude parts of this and runs in
-`gate_default`. It greps for the word "Framework" in `//` comments, so describing
-protocol traits as "framework traits" trips it — correctly, since that phrasing
-misfiles them. A grep is a proxy, not the rule: if it flags something the schema
-requires, the fix is the label or the grep, never deleting spec-mandated code.
-
-### Frozen Protocol Crates (DO NOT MODIFY)
-
-**`turul-mcp-protocol-2025-06-18` and `turul-mcp-protocol-2025-11-25` are FROZEN at 0.3.x.** They are historical spec snapshots and must never be edited again — no patches, no version bumps, no doc updates, no dependency changes. New MCP spec work lives in `turul-mcp-protocol-2026-07-28` (0.4.x line). The only permitted touch is workspace `Cargo.toml` metadata if a workspace-wide rename forces it.
-
-### Simple Solutions First
-**ALWAYS** prefer simple, minimal fixes over complex or over-engineered solutions:
-
-```rust
-// SIMPLE - Add parameter to existing signature
-async fn read(&self, params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>>
-
-// COMPLEX - Create new traits, elaborate architectures
-trait McpResourceLegacy { ... }  // Avoid backwards compatibility layers
-trait McpResourceV2 { ... }      // Avoid versioned APIs
-```
-
-**Key Principles:**
-- **Work within existing architecture** - don't rebuild what works
-- **Major changes are too costly** - fix problems with minimal impact
-- **One obvious way to do it** - avoid multiple patterns for the same thing
-- **Green is not proof** - a passing suite says the checks ran, not that they
-  could have failed. Establish that a check *can* fail on the bug before
-  believing it passed for the right reason. See §Test Coverage Discipline item 4.
-
-### Test Compliance
-
-**Tests validate the MCP spec and intended contract — never change tests to preserve buggy behavior.**
-
-- When code and tests disagree, verify against the MCP specification before changing either
-- Never silently accept multiple wire formats in tests (e.g., `.strip_prefix("data: ")` to handle both SSE and JSON) — assert the expected Content-Type and body format explicitly
-- Tests must assert wire-format compliance: Content-Type headers, HTTP status codes, JSON-RPC error codes, and response body shape
-
-### Test Coverage Discipline (pre-publish gate)
-
-**Every behavior-changing slice must satisfy all four before release:**
-
-1. **ADR exists or is updated.** Tests validate the ADR contract, not what the code happens to do. If no ADR governs the changed behavior, write or update one in the same slice and reference it in the CHANGELOG entry.
-2. **Production-path coverage.** Tests must exercise the entry point real consumers use (e.g., `Builder → server.handler() → handle_streaming()`), not just direct construction of the patched type. A fix verified only at the unit it touched does not cover the bug — v0.3.40 → v0.3.41 happened because tests bypassed the builder path.
-3. **Wire-layer coverage for transport-protocol boundaries.** When the fix touches code that produces bytes consumed by another protocol layer (Lambda Runtime API, hyper, SSE wire format, JSON-RPC envelope, MCP streamable HTTP), the test MUST exercise the bytes that hit that next layer — not just the framework-internal types that produce them. v0.3.42 happened because tests asserted "BodyDataStream yields ≥1 item" while production failed at "Lambda Runtime API wire bytes after delimiter are non-empty." For transport-protocol tests, drain through a verbatim transliteration of the upstream serializer (e.g. `lambda_runtime-<version>/src/requests.rs`) and assert on the resulting byte sequence. No "faithful mock" loophole — use the upstream code unmodified (call it if pub, replicate verbatim with a source-line citation if not).
-4. **Revert-and-fail check.** Temporarily revert the fix and run the new tests. They MUST fail. If they still pass, the test asserts code behavior rather than contract — rewrite it. Record the revert-and-fail result in the commit message.
-
-A green test suite written alongside the fix is suspect by default. The revert-and-fail check is the only proof the regression net catches the bug. The wire-layer rule exists because a test calibrated to the framework's internal types will pass for any fix that satisfies those types, even when the fix doesn't satisfy the actual protocol contract consumed downstream.
-
-### Protocol Re-export Rule (MANDATORY)
-
-**NEVER reference versioned protocol crates directly.** Always use the `turul-mcp-protocol` re-export crate.
-
-```rust
-// CORRECT
-use turul_mcp_protocol::*;
-use turul_mcp_protocol::elicitation::ElicitResult;
-
-// WRONG - NEVER reference versioned crates directly
-use turul_mcp_protocol_2026_07_28::*;   // FORBIDDEN
-use turul_mcp_protocol_2025_11_25::*;   // FORBIDDEN
-use turul_mcp_protocol_2025_06_18::*;   // FORBIDDEN
-```
-
-**Only exceptions**:
-1. `crates/turul-mcp-protocol/` (the re-export crate itself).
-2. Each versioned protocol crate within its own source (`turul-mcp-protocol-2026-07-28`, `-2025-11-25`, `-2025-06-18`).
-3. **`crates/turul-mcp-client/`** — the bilingual client links **both** versioned protocol crates directly (`turul-mcp-protocol-2025-11-25` and `turul-mcp-protocol-2026-07-28`, gated by the `client-bilingual` / `client-2025-11-25-only` / `client-2026-07-28-only` features) so a single client can negotiate and speak either wire spec per connection. It does **not** route through the `turul-mcp-protocol` alias. This is the one consumer-side exception; it is documented in ADR-030 and ADR-001's revision log.
-
-### Spec-Version Naming: ALWAYS the full date, NEVER a bare year
-
-**Identify an MCP spec version by its full `YYYY-MM-DD` (or `YYYY_MM_DD`) date — never by year alone.** A bare year is ambiguous: 2025 shipped **two** specs (`2025-06-18` and `2025-11-25`). `v2026` / `client-2026-only` / `protocol-2025` are FORBIDDEN.
-
-```rust
-// CORRECT — full date, unambiguous
-mod v2026_07_28;                         McpVersion::V2026_07_28
-feature = "client-2026-07-28-only"       feature = "protocol-2025-11-25"
-fn send_2026_07_28(...)                  // crates/turul-mcp-ext-tasks (no date = spec-neutral)
-
-// WRONG — bare year, ambiguous
-mod v2026;                               feature = "client-2026-only"
-fn send_2026(...)                        "protocol-2025"
-```
-
-Applies to module names, function/identifier names, cargo features, type/enum variants, and prose. The only spec-version tokens that omit a date are deliberately spec-NEUTRAL names (e.g. a single `turul-mcp-ext-tasks` crate that spans specs — see ADR-028).
-
-**Import Hierarchy** (prefer top):
-- `turul_mcp_server::prelude::*` — re-exports everything (protocol + builders + server types)
-- `turul_mcp_builders::prelude::*` — framework traits + runtime builders
-- `turul_mcp_protocol::*` — MCP spec types only (Tool, Resource, Prompt, McpError)
-
-### Zero-Configuration Design
-Users NEVER specify method strings - framework auto-determines from types:
-```rust
-// CORRECT
-#[derive(McpTool)]
-struct Calculator;  // Framework → tools/call
-
-// WRONG
-#[mcp_tool(method = "tools/call")]  // NO METHOD STRINGS!
-```
-
-### Crate Versioning Policy
-
-**Each crate carries its own literal `version = "X.Y.Z"` in `Cargo.toml`.** No crate uses `version.workspace = true`. The 0.4.0 release is the first under this policy — all non-frozen crates ship at 0.4.0 together, but going forward they can be patched and published independently (only bumping the crate that changed, not the whole workspace).
-
-- Frozen crates (`turul-mcp-protocol-2025-06-18`, `turul-mcp-protocol-2025-11-25`) stay at `0.3.47`. They are historical spec snapshots and don't move.
-- All other crates start the 0.4.x line at `0.4.0`.
-- `[workspace.package].version` exists but is **not authoritative** — it's a default for tooling. Per-crate `version = "..."` is the source of truth.
-- `[workspace.dependencies]` pins the version for each internal crate path. When bumping a crate, bump it in the crate's `Cargo.toml` AND in the workspace dependency pin.
-
-### Version References: what is stale, and what is not
-
-This branch is 0.4. A **current-state claim** naming 0.3 is stale and must move —
-"depend on `turul-mcp-server = "0.3"`", "target v0.3.x", "the 0.3 API does X".
-
-These legitimately stay 0.3 and a blanket `0.3` → `0.4` sweep would corrupt them:
-
-- **Frozen crates** — `turul-mcp-protocol-2025-06-18`, `turul-mcp-protocol-2025-11-25`
-  and `turul-mcp-json-rpc-server` stay published at `0.3.47` and never move.
-- **Since-markers** — "Since v0.3.27, backend features forward to both storage
-  crates", "two streaming entry points (v0.3+)". Still true; the version records when
-  it became true.
-- **Changelog history** — CHANGELOG.md and the plugin README's release sections.
-  Rewriting a shipped release's notes falsifies the record.
-- **Incident citations** — the v0.3.40 → v0.3.41 and v0.3.42 references in §Test
-  Coverage Discipline name when a specific bug shipped. Renumbering them destroys
-  the evidence the rule rests on.
-- **External crate versions** — `futures = "0.3"`, `tracing-subscriber = "0.3"`,
-  `async-stream = "0.3"` have nothing to do with this workspace.
-
-Disposition each hit; never sweep — and **grep both forms**. `v0.3` and `= "0.3"` are
-different populations: searching only `v0.3` in `plugins/` found nine hits, eight of
-them history. Searching `= "0.3"` found 50 more — dependency pins in skill examples,
-`.version()` strings, and `scripts/scaffold-mcp-server.sh`, which *generates* a
-`Cargo.toml` for users and was emitting `turul-mcp-server = "0.3"`. All 50 were live
-instructions. The prose-only search made the problem look 5× smaller than it was and
-pointed at the wrong files.
-
-### Workspace Dependencies
-External crate dependencies (`serde`, `tokio`, `hyper`, etc.) MUST use `workspace = true` references. Declare versions in root `Cargo.toml` `[workspace.dependencies]`, reference with `.workspace = true` in crate `Cargo.toml`. Add crate-specific features inline: `hyper = { workspace = true, features = ["http1"] }`.
-
-### Feature Flags — Storage Backends
-Default features: `["http", "sse"]` — in-memory only, no backend deps compiled. Storage backends are opt-in:
-
-```toml
-# In-memory only (default)
-turul-mcp-server = "0.4"
-
-# With DynamoDB backends
-turul-mcp-server = { version = "0.4", features = ["dynamodb"] }
-
-# With DynamoDB + dynamic tools
-turul-mcp-server = { version = "0.4", features = ["dynamodb", "dynamic-tools"] }
-```
-
-Backend features (`sqlite`, `postgres`, `dynamodb`) forward to both `turul-mcp-session-storage` AND `turul-mcp-task-storage`. When `dynamic-tools` is enabled, they also forward to `turul-mcp-server-state-storage` via weak dep syntax (`?/`).
-
-### API Conventions
-- **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
-- **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
-- **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
-- **Session IDs**: Always `Uuid::now_v7().as_simple()` for temporal ordering (no-hyphen hex)
-
-### JSON Naming: camelCase ONLY
-
-**CRITICAL**: All JSON fields MUST use camelCase — true of both 2025-11-25 and 2026-07-28.
-
-```rust
-// CORRECT - Always rename snake_case fields
-#[serde(rename = "additionalProperties")]
-additional_properties: Option<bool>,
-
-// WRONG - Never serialize as snake_case
-additional_properties: Option<bool>,  // becomes "additional_properties"
-```
-
-### Notification Wire Format: Always Use JsonRpcNotification
-
-**CRITICAL**: Protocol notification types (e.g., `ToolListChangedNotification`, `ResourceListChangedNotification`) are **NOT wire-complete**. They contain MCP-specific fields (`method`, `params`) but lack the required `jsonrpc: "2.0"` envelope.
-
-```rust
-// CORRECT — wire-complete JSON-RPC notification for transport:
-let notification = JsonRpcNotification::new("notifications/tools/list_changed".to_string());
-// Serializes to: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
-
-// WRONG — missing jsonrpc field, will fail client-side validation:
-let notification = ToolListChangedNotification::new();
-// Serializes to: {"method":"notifications/tools/list_changed"}  ← BROKEN
-```
-
-This applies to ALL notification types sent via SSE/HTTP transport. The protocol `*Notification` types are for parsing/type safety, not for direct wire emission.
-
-### Notification Persistence Architecture
-
-**SessionManager is the single event bus.** All notification emitters (ToolRegistry, SessionContext) go through `SessionManager::broadcast_event()`. Guaranteed persistence is provided by the `SessionEventDispatcher` — an awaited trait installed at the SessionManager layer, not at individual emitters.
-
-- `broadcast_event()` for Custom events enumerates targets from `storage.list_sessions()` (NOT the in-memory cache), filters terminated sessions, dispatches per-session via the awaited dispatcher
-- `dispatch_custom_event(session_id)` is for per-session delivery (e.g., fingerprint mismatch) — storage-backed, not cache-gated
-- `send_event_to_session()` is cache-backed (unchanged) — used only when the session is known to be attached in this process
-- The dispatcher calls `StreamManager::broadcast_to_session()` which persists to session event storage AND delivers to active connections
-- The SSE bridge task is observer-only for Custom events — NOT the persistence path
-- Without a dispatcher (e.g., no HTTP server), events are best-effort only (in-memory channels)
-
-**Do NOT add notification sinks or persistence hooks to individual emitters** — that splits the event architecture into competing delivery paths.
-
-**Distributed session targeting** (see ADR-023): In Lambda/multi-instance, the in-memory `SessionManager.sessions` cache may not contain sessions created by other instances. Notification targeting for Custom events uses `storage.list_sessions()`, not the cache.
-
-### Critical Error Handling Rules
-
-**MANDATORY**: Handlers return domain errors only. Dispatcher owns protocol conversion.
-
-**Key Rules:**
-1. Handlers return `Result<Value, McpError>` ONLY
-2. Dispatcher converts McpError → JsonRpcError automatically
-3. Never create JsonRpcError, JsonRpcResponse in business logic
-4. Use `McpError::InvalidParameters`, `McpError::ToolNotFound`, etc.
-
-### MCP Tool Output Compliance
-
-**Tools with `outputSchema` MUST provide `structuredContent`** - Framework handles automatically.
-
-```rust
-// Framework auto-generates structuredContent
-#[mcp_tool(
-    name = "word_count",
-    description = "Count words in text",
-    output_field = "countResult"  // Custom field name (optional, default "result")
-)]
-async fn count_words(text: String) -> McpResult<WordCount> {
-    Ok(WordCount { count: text.split_whitespace().count() })
-}
-```
-
-**Rules:**
-1. Framework automatically adds `structuredContent` when `outputSchema` exists
-2. Use `output_field` to customize output field name (default: "result")
-3. **NEVER change tests to match code** - Tests validate MCP spec compliance
-
-### Streamable HTTP Requirements
-
-**Accept Headers:**
-- `Accept: application/json` - JSON responses
-- `Accept: text/event-stream` - SSE streaming (required for progress notifications)
-- `Accept: */*` - Accept all
-
-**Session Initialization (Strict Mode):**
-1. POST /mcp with `initialize` → capture session ID from response
-2. POST /mcp with `notifications/initialized` → enable session (returns 202)
-3. Include `MCP-Session-ID` header in all subsequent requests
-
-**SSE Resumability (MCP 2025-11-25 spec, "Resumability and Redelivery"):**
-- **With `Last-Event-ID`**: Server MUST replay events after that ID on the originating stream. "Resumption is always via HTTP GET with `Last-Event-ID`."
-- **Without `Last-Event-ID`**: Fresh GET SSE stream. Server MAY send notifications. Replay policy for stored events is a deployment decision, not explicitly prohibited or required by the spec.
-- Event IDs are per-stream cursors. "The server MUST NOT replay messages that would have been delivered on a different stream."
-
-**Session Status Codes (Streamable HTTP):** (per MCP 2025-11-25 § Session Management)
-- Missing `Mcp-Session-Id` header → **400** ("Servers that require a session ID SHOULD respond to requests without an MCP-Session-Id header (other than initialization) with HTTP 400 Bad Request"). Pre-init `ping` bypass: with `allow_unauthenticated_ping = true` (default) sessionless pings succeed; with `false`, the rejection also returns 400 (same missing-header contract).
-- Nonexistent session ID → **404** (MCP spec: client must start fresh `initialize`)
-- Terminated session ID → **404** (MCP spec: treated same as nonexistent)
-- Auth token invalid/expired → **401** (OAuth middleware, separate from session)
-- Insufficient OAuth scope → **403**
-- Storage backend error → **500**
-
-**Legacy `session_handler.rs` (protocol ≤ 2024-11-05) GET SSE** also returns 400 for missing `Mcp-Session-Id` for cross-transport consistency (previously returned HTTP 200 with a JSON-RPC error body — non-spec).
-
-**Testing:** All requests need valid Accept header (application/json, text/event-stream, or */*)
-
-### MCP 2025-11-25 Compliance (opt-in lane)
-
-The 2026-07-28 lane is the default; this section is the 2025-11-25 build.
-
-
-**Notification method strings**: `notifications/*/list_changed` (underscore) — spec-compliant form. Server accepts legacy `listChanged` (camelCase) for backward compat only.
-
-**JSON capability keys**: `listChanged` (camelCase) — correct per spec.
-
-**ToolChoiceMode**: `"auto" | "none" | "required"`. Legacy `"any"` accepted on deserialize only.
-
-**Role enum**: `User` and `Assistant` only — no `System` variant in MCP protocol.
-
-**Progress fields**: `f64` (not `u64`). Use `as_f64()`, never `as_u64()`.
-
-**structuredContent**: Auto-generated by framework when `outputSchema` exists.
-
-**Session handshake**: `initialize` → `notifications/initialized` → `Mcp-Session-Id` header on all subsequent requests.
-
-**Verify**: `cargo test -p turul-mcp-framework-integration-tests --test compliance`
+## Rules
+
+Each rule lives in its own file under [docs/rules/](docs/rules/README.md) — one topic
+per file, so a rule can be linked, cited by a reviewer, and updated without touching
+the others. The precedence in §Source of Truth above applies to every one of them:
+spec > ADR > code > rule text.
+
+| Rule | Governs |
+|---|---|
+| [protocol-crate-purity.md](docs/rules/protocol-crate-purity.md) | What may live in `turul-mcp-protocol*` crates; frozen 2025-* crates |
+| [protocol-reexport.md](docs/rules/protocol-reexport.md) | Always import via `turul-mcp-protocol`, never a versioned crate directly |
+| [spec-version-naming.md](docs/rules/spec-version-naming.md) | Full `YYYY-MM-DD` spec dates, never a bare year |
+| [zero-configuration-design.md](docs/rules/zero-configuration-design.md) | No method strings — framework derives them from types |
+| [crate-versioning.md](docs/rules/crate-versioning.md) | Per-crate `version =`, what's stale vs. legitimately still 0.3, workspace deps |
+| [comments.md](docs/rules/comments.md) | What a source comment may say; forbidden tags/citations; slice completion gate |
+| [test-coverage-discipline.md](docs/rules/test-coverage-discipline.md) | Pre-publish test gate; what makes a check meaningless; reviewer-agent briefing |
+| [notification-architecture.md](docs/rules/notification-architecture.md) | SessionManager as sole event bus; wire-complete notification envelopes; handler error rules |
+| [wire-format-compliance.md](docs/rules/wire-format-compliance.md) | Streamable HTTP headers/status codes, camelCase JSON, structuredContent, 2025-11-25 opt-in lane |
+| [scope-discipline.md](docs/rules/scope-discipline.md) | Minimal fixes only; stay inside the approved plan; core-crate change checklist |
+
+Before spawning a reviewer agent (Explore, Plan, code-reviewer, devils-advocate,
+etc.), point it at `AGENTS.md`, this file, and the relevant ADRs — see
+[test-coverage-discipline.md § Briefing reviewer agents](docs/rules/test-coverage-discipline.md#briefing-reviewer-agents)
+for why and exactly what to say.
 
 ## Quick Reference
 
@@ -501,6 +197,12 @@ async fn add(a: f64) -> McpResult<MyOutput> { Ok(MyOutput { value: a }) }  // au
 
 For manual `HasOutputSchema` implementation, see `examples/calculator-add-manual-server`.
 
+### API Conventions
+- **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
+- **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
+- **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
+- **Session IDs**: Always `Uuid::now_v7().as_simple()` for temporal ordering (no-hyphen hex)
+
 ### Basic Server
 ```rust
 use turul_mcp_server::prelude::*;
@@ -557,190 +259,9 @@ cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
 
 **Why**: Incremental compilation caches string literals/errors across crates.
 
-### Comments
-
-**Comments describe what the code IS and what's non-obvious to a human reading it.** Not session history, not internal phase tags, not decision-record citations, not line numbers that will rot. Keep them clean and minimal — a comment earns its place only by explaining something the code itself cannot.
-
-**Forbidden:**
-- **Internal development phases** — `Phase 3.4`, `Slice 1`, `Batch N`, `Group A`, `Migration step 2`. These mean nothing once the session ends.
-- **Internal requirement / gap-register / audit identifiers** — `BP-3`, `GAP-CF-9`, `VER-1`, `TX/GAP-7`, `CF/GAP-x`, or any tracking ID from `docs/plans/2026-07-28-spec-compliance.md` (the compliance matrix / gap register). Same class as phase tags: they are how *we* track a fix, not what the code IS. In source, state the spec requirement itself (the MUST) or cite the external `SEP-####` / schema `@see` anchor — never the internal gap ID. (Docs — the matrix, ADRs, CHANGELOG — may cite these IDs freely.)
-- **Internal decision-record (ADR) references** — `per ADR-025`, `see ADR-029`, `cuts the shim per ADR-025`, `ADR-030 §Decision`. ADRs record *why we decided*, which is process history that belongs in the ADR, the CHANGELOG, or the commit — not in source. State the code's actual constraint instead (e.g. `the frozen 2025-* crates keep turul-rpc 0.1`, not `per ADR-025`). This applies to `.rs` **and** `Cargo.toml`/manifest comments. (Project docs — CHANGELOG.md, ADRs, COMPLIANCE.md, plan docs — may cite ADRs freely; source comments must not.) **External MCP spec anchors are different and remain allowed** — a `SEP-####` or `@see` reference names the *wire contract the code implements* (what it IS), see the Allowed list below.
-- **Upstream schema line numbers** — `Schema line 2627`, `lines 943–949`. Line numbers shift every time we re-pin the schema (`refresh --write`); the comment quietly becomes wrong without anyone noticing.
-- **Tombstones / dev log narratives** — `was removed in v0.3.42`, `formerly known as X`, `pending Phase 5`. Git history is the log; code comments are not.
-- **Comparative claims you haven't verified** — `unlike every other Result type`, `the only place we do X`. Either grep and enumerate (`X, Y, Z all share this shape`) or don't claim it.
-- **Self-references to `CLAUDE.md` / `AGENTS.md` in code comments** — `see CLAUDE.md §Comments`, `per CLAUDE.md §Notification Wire Format`. The repo playbook governs *how* code is written, not what individual files cite. Code comments should describe the code; they don't need a citation to the rule that says *"comments should describe the code."* Project docs (CHANGELOG.md, ADRs, COMPLIANCE.md, plan docs) may cite CLAUDE.md / AGENTS.md by name when explaining process decisions — `.rs` source files must not.
-- **Speculation about author intent** — `intentional or oversight`, `presumably because the spec authors meant`. We don't know intent.
-
-**Allowed — and preferred when the WHY is non-obvious:**
-- Hidden invariants that can't be expressed in the type — `caller must hold the mutex when invoking this`
-- Constraints not visible from one site — `keep in sync with the kebab-case in foo.rs::REGISTRY`
-- Workarounds for specific bugs with context — `reqwest #1234: trailing newline corrupts the cookie jar`
-- Verifiable schema anchors by NAME, not line — `Wire shape of \`elicitation/create\`'s URL-mode params — see \`ElicitRequestURLParams\` in the 2026-07-28 schema.` Names survive re-pins; line numbers don't.
-- **Mirror the schema's `@see` anchors** when the upstream type carries one. The MCP schema uses TypeDoc `@see` block tags pointing to the spec docs (e.g. `@see [General fields: _meta](/specification/2026-07-28/basic/index#meta)`). When our Rust binding documents that type, carry the same anchor through as a doc link — anchors are URL fragments tied to section IDs, not line numbers, so they survive re-pins. Example: `/// See [General fields: _meta](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#meta).` Anchors that are missing from the upstream schema (an `@see` we couldn't find) ARE useful information — flag them, don't make them up.
-
-**Default: write no comment.** If removing the comment wouldn't confuse a future reader, don't write it. Well-named identifiers describe WHAT; comments earn their place by explaining WHY.
-
-### Slice Completion Gate
-
-**Before declaring a slice "complete" or writing a summary claim ("X is now clean", "no violations remain", "all instances fixed"), run a pre-declared verification grep across the FULL scope of the rule — not just the instances the prior reviewer named.**
-
-The recurring failure mode this gate exists to stop: reviewer surfaces N instances → operator fixes N → operator claims "rule satisfied across crate" → next reviewer finds M more instances the first didn't search for → repeat. Each "fix" was correct; each "claim" was premature.
-
-**Mandatory before claiming a comment-rule slice done** (applied to the whole crate, not just `src/`):
-
-```bash
-# All counts MUST be 0. If non-zero, surface each hit with explicit
-# disposition (keep as historical/migration note, or rewrite) BEFORE
-# claiming the slice is done.
-grep -rEc 'Schema line|schema line|Schema lines|schema lines|lines [0-9]'  <crate>/
-grep -rEc 'Phase [0-9]\.\?|Slice [0-9]|Group [A-G] —|Group [A-G]:'         <crate>/
-grep -rEnc 'BP-[0-9]|GAP-[A-Z]|VER-[0-9]|TX/GAP|CF/GAP'                    <crate>/src/ <crate>/tests/  # gap-register IDs — none in source
-grep -rEc 'CLAUDE\.md|AGENTS\.md'                                          <crate>/src/ <crate>/tests/
-grep -rEc 'removed:|was removed|no longer:|formerly known|deleted with'    <crate>/
-grep -rEn '\b2025-11-25\b'                                                 <crate>/  # then disposition each hit
-grep -rEc 'initialization handshake|notifications/initialized'             <crate>/src/
-
-# Identifiers, not just prose: the SCREAMING-CASE patterns above never match a
-# gap ID that has been snake_cased into a fn name, a server name, or a string.
-grep -rEc '\bbp[0-9]|\bgap_[a-z]|\bcf[0-9]|\bpat_g[0-9]|\br[0-9]_[a-z]'    <crate>/src/ <crate>/tests/
-
-# FILENAMES, not just contents. Every grep above reads file bodies, so a
-# tracking ID in a path — `tests/verify_bp3_build_2026.rs`, a `[[test]]` target
-# name, `scripts/verify_phase4.sh` — is structurally invisible to them.
-# Fix by renaming to what the file verifies, keeping the prefix
-# (`verify_phase4.sh` → `verify_storage_backends.sh`), then update every place
-# that names the old target: scripts/ci-gates.sh, Cargo.toml `[[test]]`
-# entries, and any docs/plans row citing the test by filename.
-find <crate>/ -type f -printf '%f\n' \
-  | grep -Eic 'bp[0-9]|gap|cf[0-9]|ver[0-9]|(^|_)r[0-9](_|\.)|phase[0-9]|slice[0-9]|batch[0-9]'
-```
-
-For ambiguous hits — historical migration notes that explain a current shape vs. stale current-spec claims — list each one in the slice summary with a per-instance disposition. Never silently let them pass.
-
-The verification runs **before** the "done" claim, not after a reviewer finds the gap. The gate is the same regardless of which reviewer or agent wrote the fixes.
-
-### A Check That Cannot Fail Is Not a Check
-
-Item 4 of Test Coverage Discipline makes a *test* prove it can fail. The same burden
-applies to everything else that reports pass/fail — gates, guards, scripts, probes.
-Each of these shipped green while checking nothing:
-
-- A guard parsed `[[bin]]` blocks and was blind to `src/main.rs` autobins.
-- A harness rebuilt into `CARGO_TARGET_DIR` and launched from a hardcoded
-  `target/debug`, so it tested whichever stale binary was there.
-- `check-protocol-purity.sh` was invoked by no gate, and its crate list omitted the
-  crate this branch exists to build.
-- A probe detected a spec violation, printed a warning, and exited 0.
-- Script legs captured `$?` after a plain command under `set -e`, so the shell exited
-  before the assignment and every failure branch was unreachable.
-- A compliance row asserted "no framework path emits this code" without grepping for
-  the literal.
-
-Before claiming a check works, answer three questions with evidence:
-
-1. **Does it run?** Follow the invocation to a gate — `grep` the script name in
-   `ci-gates.sh` *and* one level of indirection (`verify_all_examples_unattended.sh`
-   calls six scripts `ci-gates.sh` never names). Watch a counter move in the log.
-2. **Can it fail?** Break the thing deliberately and watch it go red. If it stays
-   green, it is calibrated to the mechanism you were thinking about, not the defect.
-3. **Does the failure say why?** A check that fails without naming the cause costs
-   the next reader the same diagnosis. Report the discriminating fact — which port,
-   which token, exited-or-hung.
-
-Applies equally to a shell exit code, a `#[test]`, a CI step and a compliance row.
-
-**Any agent spawned to review code, audit compliance, or critique a design MUST first read the rules they'll be judging against. Their report is worth nothing if they don't know what "compliant" means in this repo.**
-
-When spawning a reviewer agent (Explore, Plan, code-reviewer, devils-advocate, etc.), the prompt MUST tell them — explicitly, by path — to read:
-
-1. `~/turul-mcp-framework/AGENTS.md` — repo policy (source of truth, wins on conflict)
-2. `~/turul-mcp-framework/CLAUDE.md` — operator playbook (this file)
-3. Any ADR in `docs/adr/` that governs the area under review
-
-Agents have filesystem access via the `Read` tool. They will NOT magically know about the Comments rule, the Branch Lock, the Protocol Crate Purity rule, the schema-line-numbers-rot caveat, or the `@see` anchor convention unless the prompt instructs them to read CLAUDE.md/AGENTS.md and apply those rules. Don't assume — instruct.
-
-The reviewer's report should cite the rule it's invoking (e.g. "violates CLAUDE.md §Comments: schema line reference in production code") so the operator can verify the rule actually says what the agent claims.
-
-### Scope Discipline
-
-- **Stay inside the approved plan and stated requirement** — do not broaden scope by changing adjacent contracts, tests, or semantics unless directly required
-- **If a fix forces unrelated API behavior changes or test expectation changes, stop and reassess** — that's a signal you're modifying the wrong layer
-- **If scope or architecture becomes ambiguous, stop and ask** — do not improvise
-- **`replace_all` edits must be scoped precisely** — never use `replace_all` on patterns that appear in unrelated code paths
-
-## Before Modifying Core Crates
-
-- **Impact Analysis**: All examples, tests, user code affected?
-- **Breaking changes documented** clearly
-- **No panics** — `Result<T, McpError>` for all fallible operations
-- **Zero warnings**: `cargo check` must be clean
-- **Doctests**: Every ```rust block MUST compile — fix errors, don't convert to ```text
-- **Extend existing** components, never create "enhanced" versions
-- **Test with framework-native APIs**, not raw JSON manipulation
-
-```rust
-// Framework-native testing
-let tool = CalculatorTool { a: 5.0, b: 3.0 };
-let result = tool.call(json!({"a": 5.0, "b": 3.0}), None).await?;
-
-// NOT raw JSON manipulation
-let json_request = r#"{"method":"tools/call"}"#;
-```
-
-## Pre-Release Checklist
-
-Before publishing a new version:
-
-1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml` AND its pin in `[workspace.dependencies]`. Per §Crate Versioning Policy, `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
-2. **Example server versions**: Update `.version("x.y.z")` strings in `examples/*/src/main.rs`
-3. **Plugin skill versions**: Skills use the generic minor version (`v0.4`, not
-   `v0.4.1`) — do NOT bump on patch releases, only when the minor changes. Bump
-   *current-state* references only; see §Version References — since-markers and
-   changelog entries stay put.
-4. **CHANGELOG.md**: Add release entry with date and comparison links
-5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
-6. **Publish order** (dependency-first, derived from the actual non-dev dependency graph):
-   ```
-   protocol-2026-07-28 → protocol → session-storage → http-server → builders → derive* →
-   ext-tasks → oauth → schema-validation → server-state-storage → task-storage →
-   server → aws-lambda → client → ext-apps
-   ```
-   *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
-
-   Frozen `turul-mcp-json-rpc-server`, `turul-mcp-protocol-2025-06-18` and
-   `turul-mcp-protocol-2025-11-25` stay published at `0.3.47` — no republish step.
-   `turul-mcp-framework-integration-tests` is `publish = false`.
-
-   Regenerate this list rather than hand-editing it — `turul-mcp-server` depends on
-   `turul-mcp-oauth` non-optionally, so an order that publishes the server first fails:
-   ```bash
-   cargo metadata --format-version 1 --no-deps   # then topo-sort on kind == null deps
-   ```
-7. **Git tag**: `git tag v0.x.y && git push origin v0.x.y`
-
 ## Architecture
 
-### Workspace Crates
-Keep in sync with `ls crates/` — 18 as of 2026-07-31.
-
-- `turul-mcp-server/` - High-level framework (main entry point)
-- `turul-mcp-protocol/` - Protocol re-export crate (always use this)
-- `turul-mcp-protocol-2026-07-28/` - Current spec binding; where new MCP spec work lands (internal only)
-- `turul-mcp-protocol-2025-11-25/` - Versioned protocol types, FROZEN at 0.3.47 (internal only)
-- `turul-mcp-protocol-2025-06-18/` - Legacy protocol, FROZEN at 0.3.47
-- `turul-mcp-ext-tasks/` - Tasks extension, spec-neutral by design (ADR-028)
-- `turul-mcp-ext-apps/` - MCP Apps extension
-- `turul-mcp-schema-validation/` - JSON Schema validation
-- `turul-mcp-builders/` - Runtime builders + framework authoring traits
-- `turul-mcp-derive/` - Proc macros (McpTool, McpResource, McpPrompt, mcp_tool)
-- `turul-http-mcp-server/` - HTTP/SSE transport
-- `turul-mcp-json-rpc-server/` - **Compatibility shim** since 0.3.39 — re-exports [`turul-rpc`](https://github.com/aussierobots/turul-rpc) (sibling repo). New code should depend on `turul-rpc` directly. No 0.4 of this crate; framework 0.4.0 drops the dep entirely. See ADR-025.
-- `turul-mcp-client/` - Client library
-- `turul-mcp-session-storage/` - Pluggable session storage (InMemory, SQLite, PostgreSQL, DynamoDB)
-- `turul-mcp-task-storage/` - Task storage for long-running operations
-- `turul-mcp-server-state-storage/` - Server-global state for dynamic tool coordination
-- `turul-mcp-aws-lambda/` - AWS Lambda integration
-- `turul-mcp-oauth/` - OAuth 2.1 Resource Server support
+Full crate list lives in `AGENTS.md` §Architecture Overview — don't duplicate it here.
 
 ### Session Management
 - UUID v7 sessions with automatic cleanup
@@ -781,3 +302,34 @@ git commit        # Only when user explicitly requests a commit
 ### Commit Message Style
 - **No `Co-Authored-By` attribution** — omit Claude/AI co-author trailers
 - **Succinct** — one-line summary, optional body only if non-obvious
+
+## Pre-Release Checklist
+
+Before publishing a new version:
+
+1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml` AND its pin in `[workspace.dependencies]`. Per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md), `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
+2. **Example server versions**: Update `.version("x.y.z")` strings in `examples/*/src/main.rs`
+3. **Plugin skill versions**: Skills use the generic minor version (`v0.4`, not
+   `v0.4.1`) — do NOT bump on patch releases, only when the minor changes. Bump
+   *current-state* references only; see [docs/rules/crate-versioning.md § Version References](docs/rules/crate-versioning.md#version-references-what-is-stale-and-what-is-not) —
+   since-markers and changelog entries stay put.
+4. **CHANGELOG.md**: Add release entry with date and comparison links
+5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
+6. **Publish order** (dependency-first, derived from the actual non-dev dependency graph):
+   ```
+   protocol-2026-07-28 → protocol → session-storage → http-server → builders → derive* →
+   ext-tasks → oauth → schema-validation → server-state-storage → task-storage →
+   server → aws-lambda → client → ext-apps
+   ```
+   *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
+
+   Frozen `turul-mcp-json-rpc-server`, `turul-mcp-protocol-2025-06-18` and
+   `turul-mcp-protocol-2025-11-25` stay published at `0.3.47` — no republish step.
+   `turul-mcp-framework-integration-tests` is `publish = false`.
+
+   Regenerate this list rather than hand-editing it — `turul-mcp-server` depends on
+   `turul-mcp-oauth` non-optionally, so an order that publishes the server first fails:
+   ```bash
+   cargo metadata --format-version 1 --no-deps   # then topo-sort on kind == null deps
+   ```
+7. **Git tag**: `git tag v0.x.y && git push origin v0.x.y`

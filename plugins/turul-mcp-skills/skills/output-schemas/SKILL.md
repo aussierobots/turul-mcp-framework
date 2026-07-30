@@ -176,7 +176,7 @@ Tools with `outputSchema` must provide `structuredContent` in the response. The 
 3. **Never construct `structuredContent` yourself** in handler code.
 4. Under 2026-07-28, `structuredContent` (`CallToolResult::structured_content` in `turul-mcp-protocol-2026-07-28`) is typed as `Option<Value>` — any JSON value, not just an object. This widening isn't yet reachable from `output = Type` (see [Vec\<T\> Output](#vect-output--still-use-wrapper-structs) above) but applies if you set `structuredContent` through lower-level builder/manual paths.
 
-See: [CLAUDE.md — MCP Tool Output Compliance](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#mcp-tool-output-compliance)
+See: [CLAUDE.md — MCP Tool Output Compliance](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/wire-format-compliance.md#mcp-tool-output-compliance)
 
 ## Complete Decision Table
 

@@ -322,8 +322,8 @@ let tool = ToolBuilder::new("slow_tool")
 2. **Using `.tool()` for function macros** — use `.tool_fn(name)` instead
 3. **Forgetting `output = Type` on derive macros** — schema will show inputs instead of outputs
 4. **Putting `Arc<DatabaseConnection>` as a derive macro struct field** — all struct fields become MCP parameters. Use `OnceLock` for shared state.
-5. **Creating `JsonRpcError` directly** — return `McpError` variants instead. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
-6. **Adding method strings** — framework auto-determines from types. See: [CLAUDE.md — Zero-Configuration Design](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#zero-configuration-design)
+5. **Creating `JsonRpcError` directly** — return `McpError` variants instead. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/notification-architecture.md#critical-error-handling-rules)
+6. **Adding method strings** — framework auto-determines from types. See: [CLAUDE.md — Zero-Configuration Design](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/zero-configuration-design.md#zero-configuration-design)
 
 ## Server Identity (Icons)
 
@@ -398,4 +398,4 @@ registry.activate_tool("multiply").await?;     // Broadcasts notifications/tools
 
 **Server configuration?** Use `McpServer::builder()`. See: [CLAUDE.md — Basic Server](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#basic-server)
 
-**Import hierarchy?** Prefer `turul_mcp_server::prelude::*`. See: [CLAUDE.md — Protocol Re-export Rule](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#protocol-re-export-rule-mandatory)
+**Import hierarchy?** Prefer `turul_mcp_server::prelude::*`. See: [CLAUDE.md — Protocol Re-export Rule](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/protocol-reexport.md#protocol-re-export-rule-mandatory)

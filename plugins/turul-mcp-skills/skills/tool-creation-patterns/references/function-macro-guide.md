@@ -127,7 +127,7 @@ async fn divide(a: f64, b: f64) -> McpResult<f64> {
 }
 ```
 
-See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
+See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/notification-architecture.md#critical-error-handling-rules)
 
 ## Complete Example
 

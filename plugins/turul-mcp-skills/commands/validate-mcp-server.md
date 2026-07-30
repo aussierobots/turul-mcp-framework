@@ -85,7 +85,7 @@ Run these checks by reading project files (no compilation needed):
 **Check 3: Direct protocol imports (forbidden)**
 - Search `src/` for `use turul_mcp_protocol_2025_11_25` or `use turul_mcp_protocol_2025_06_18`
 - **FAIL** if found — must use `turul_mcp_protocol` re-export crate
-- See: [CLAUDE.md — Protocol Re-export Rule](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#protocol-re-export-rule-mandatory)
+- See: [CLAUDE.md — Protocol Re-export Rule](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/protocol-reexport.md#protocol-re-export-rule-mandatory)
 
 **Check 4: Derive macro output attribute**
 - Search `src/` for `#[derive(McpTool)]` blocks that have a custom return type in `execute()` but no `output = Type` attribute
@@ -100,7 +100,7 @@ Run these checks by reading project files (no compilation needed):
 **Check 6: JsonRpcError in handlers**
 - Search `src/` for `JsonRpcError` construction in tool/resource/prompt handler code
 - **WARN** if found — handlers should return `McpError` variants; framework handles conversion
-- See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
+- See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/notification-architecture.md#critical-error-handling-rules)
 
 ### 4. Report
 

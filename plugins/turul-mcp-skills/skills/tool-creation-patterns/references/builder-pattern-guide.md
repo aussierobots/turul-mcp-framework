@@ -198,7 +198,7 @@ Builder execute closures return `Result<Value, E>` where `E: Into<String>`:
 })
 ```
 
-The framework wraps these into `McpError::ToolExecutionError` automatically. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
+The framework wraps these into `McpError::ToolExecutionError` automatically. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/notification-architecture.md#critical-error-handling-rules)
 
 ## Complete Example
 

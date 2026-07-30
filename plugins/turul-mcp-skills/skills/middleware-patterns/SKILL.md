@@ -336,7 +336,7 @@ MiddlewareError::custom("CUSTOM_ERR", "Something specific")
 
 1. **Keying cross-request state (rate limits, caches) on `session.session_id()`** — on 2026-07-28 every request gets a fresh throwaway session, so a session-keyed counter never accumulates. Key on API key, bearer subject, or another caller-stable identifier from `ctx.metadata()` instead. (On a 2025-11-25 build, `session` is `None` during `initialize` — skip early for `ctx.method() == "initialize"` if your middleware requires a session.)
 
-2. **Creating `JsonRpcError` directly** — Always return `MiddlewareError` variants. The framework handles conversion. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
+2. **Creating `JsonRpcError` directly** — Always return `MiddlewareError` variants. The framework handles conversion. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/notification-architecture.md#critical-error-handling-rules)
 
 3. **Confusing `Unauthenticated` vs `Unauthorized`** — `Unauthenticated` = no credentials at all (-32001). `Unauthorized` = credentials present but insufficient permissions (-32005).
 
