@@ -48,6 +48,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a known SKIP is not mistaken for a regression. Cross-linked from the README
   and from the existing manual-verification checklist.
 
+### Fixed (2026-07-30, the 2025-lane test harness lost port races)
+
+- **`TestServerManager` handed out ephemeral ports it no longer held.**
+  `find_available_port()` bound `127.0.0.1:0`, read the number, dropped the
+  listener, and returned. Between that drop and the child's own bind the port
+  belonged to nobody — and tests within one binary run on parallel threads, so two
+  could be handed the same number. The loser died on bind, and after 50 probes over
+  ~15s surfaced as `Failed to start test server <name>`.
+
+  This is the same defect class fixed for the 2026 wire tests, where
+  `common::reserve_port()` holds a process-wide mutex across the handoff. The 2025
+  harness never got that treatment. It now does: allocation and `spawn()` happen
+  under a `PORT_HANDOFF` mutex, narrowing the window to the child's own bind. The
+  `cargo build` step stays outside the lock — slow, and needs no exclusion.
+
+- **The failure message could not distinguish the two causes.**
+  `Failed to start test server <name>` said nothing about whether the child had
+  died (lost port) or was merely slow, which is what made this expensive to
+  diagnose. It now calls `try_wait()` and reports either "exited before becoming
+  ready on port N (status …) — most likely lost the port" or "still running but
+  never answered on port N after N probes over ~15s".
+
+- `start()` also retries the whole allocate-and-spawn cycle up to three times. The
+  window is narrowed, not eliminated — the real bind happens in the child, not
+  under our lock — so a collision remains possible and is worth another roll.
+
+  **Evidence, and its limit:** the prompts suite went 5/5 green and two further
+  full-gate runs were clean (73 PASS, 0 FAIL each). That is not proof the flake is
+  gone — the original failure appeared once in roughly four gate runs, so this
+  sample cannot distinguish "fixed" from "got lucky". What is verifiable is that
+  the mechanism is closed by construction, and that if it does recur the message
+  now names which cause.
+
 ### Removed (2026-07-30, the two progress APIs that could not be used compliantly)
 
 - **`SessionContext::notify_progress` and `notify_progress_with_total` are gone.**

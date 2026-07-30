@@ -11,6 +11,17 @@ use tokio::process::{Child, Command};
 use tokio::time::sleep;
 use tracing::{debug, info};
 
+/// Serializes the gap between choosing an ephemeral port and the child binding it.
+///
+/// `find_available_port` binds `127.0.0.1:0`, reads the number, then releases the
+/// listener so the child can take it. Between those two events the port belongs to
+/// nobody, and tests in one binary run on parallel threads — so two of them can be
+/// handed the same number and the loser dies with "address in use", surfacing as a
+/// startup timeout. Holding this from allocation until just after `spawn()` narrows
+/// the window to the child's own bind.
+static PORT_HANDOFF: std::sync::LazyLock<tokio::sync::Mutex<()>> =
+    std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
+
 /// Path of a debug binary in the same target directory `cargo build` writes to.
 ///
 /// `cargo` honours `CARGO_TARGET_DIR`, so resolving `<root>/target` unconditionally
@@ -419,9 +430,6 @@ impl TestServerManager {
         server_name: &str,
         extra_args: &[&str],
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        // Build a combined args list: --port <port> + extra_args
-        let port = Self::find_available_port().ok_or("Failed to find available port")?;
-
         let workspace_root =
             find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
 
@@ -450,16 +458,23 @@ impl TestServerManager {
             }
         }
 
-        let mut cmd_args: Vec<String> = vec!["--port".to_string(), port.to_string()];
-        for arg in extra_args {
-            cmd_args.push(arg.to_string());
-        }
+        // Allocate and spawn under the handoff lock — see PORT_HANDOFF.
+        let (port, server_process) = {
+            let _handoff = PORT_HANDOFF.lock().await;
+            let port = Self::find_available_port().ok_or("Failed to find available port")?;
 
-        let server_process = Command::new(&binary_path)
-            .args(&cmd_args)
-            .current_dir(&workspace_root)
-            .spawn()
-            .map_err(|e| format!("Failed to start {}: {}", server_name, e))?;
+            let mut cmd_args: Vec<String> = vec!["--port".to_string(), port.to_string()];
+            for arg in extra_args {
+                cmd_args.push(arg.to_string());
+            }
+
+            let child = Command::new(&binary_path)
+                .args(&cmd_args)
+                .current_dir(&workspace_root)
+                .spawn()
+                .map_err(|e| format!("Failed to start {}: {}", server_name, e))?;
+            (port, child)
+        };
 
         // Wait for server to start (match the wait time in start())
         tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
@@ -471,13 +486,26 @@ impl TestServerManager {
         })
     }
 
-    /// Start a test server by name on random port with robust port allocation
+    /// Start a test server by name on a random port.
+    ///
+    /// Retries the whole allocate-and-spawn cycle: the port handoff is narrowed but
+    /// not eliminated (the child, not this process, performs the real bind), so a
+    /// collision stays possible and is worth one more roll rather than a failed run.
     pub async fn start(server_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let port = Self::find_available_port()
-            .ok_or("Failed to find available port after exhaustive search - network binding may be restricted in this environment")?;
+        let mut last_err = None;
+        for attempt in 1..=3 {
+            match Self::start_once(server_name).await {
+                Ok(server) => return Ok(server),
+                Err(e) => {
+                    info!("Start attempt {attempt}/3 for {server_name} failed: {e}");
+                    last_err = Some(e);
+                }
+            }
+        }
+        Err(last_err.expect("loop runs at least once"))
+    }
 
-        info!("Starting {} on port {}", server_name, port);
-
+    async fn start_once(server_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
         // Find workspace root dynamically instead of using hardcoded path
         let workspace_root =
             find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
@@ -519,16 +547,26 @@ impl TestServerManager {
             .into());
         }
 
-        let mut server_process = Command::new(&binary_path)
-            .args(["--port", &port.to_string()])
-            .current_dir(&workspace_root)
-            .spawn()
-            .map_err(|e| {
-                format!(
-                    "Failed to start server {}: {}. Binary path: {:?}, Workspace: {:?}",
-                    server_name, e, binary_path, workspace_root
-                )
-            })?;
+        // Allocate and spawn under the handoff lock so a sibling test on another
+        // thread cannot be handed the same port before this child binds it. The
+        // build above stays outside the lock — it is slow and needs no exclusion.
+        let (port, mut server_process) = {
+            let _handoff = PORT_HANDOFF.lock().await;
+            let port = Self::find_available_port()
+                .ok_or("Failed to find available port after exhaustive search - network binding may be restricted in this environment")?;
+            info!("Starting {} on port {}", server_name, port);
+            let child = Command::new(&binary_path)
+                .args(["--port", &port.to_string()])
+                .current_dir(&workspace_root)
+                .spawn()
+                .map_err(|e| {
+                    format!(
+                        "Failed to start server {}: {}. Binary path: {:?}, Workspace: {:?}",
+                        server_name, e, binary_path, workspace_root
+                    )
+                })?;
+            (port, child)
+        };
 
         // Wait for server to start
         let mut attempts = 0;
@@ -571,8 +609,23 @@ impl TestServerManager {
             attempts += 1;
         }
 
-        server_process.kill().await?;
-        Err(format!("Failed to start test server {}", server_name).into())
+        // "Failed to start" alone cannot tell a lost port race (child already dead,
+        // usually "address in use") from a server that is merely slow, which is what
+        // made this flake expensive to diagnose. Report which it was.
+        let exited = server_process.try_wait().ok().flatten();
+        server_process.kill().await.ok();
+        Err(match exited {
+            Some(status) => format!(
+                "Test server {server_name} exited before becoming ready on port {port} \
+                 (status {status}) — most likely lost the port to another process \
+                 between allocation and bind"
+            ),
+            None => format!(
+                "Test server {server_name} still running but never answered on port \
+                 {port} after {attempts} probes over ~15s"
+            ),
+        }
+        .into())
     }
 
     /// Start resource test server
