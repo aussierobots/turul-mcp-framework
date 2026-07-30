@@ -13,11 +13,18 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 > - **docs/adr/** — architectural decisions
 > - If conflict: AGENTS.md wins.
 
-## Branch Lock: `2026-07-28-MCP-Specification`
+## Branch Lock: `feat/turul-mcp-protocol-2026-07-28`
 
 **This branch tracks adoption of MCP 2026-07-28, now the released current specification** (stateless core, `initialize`/`Mcp-Session-Id` removed, Tasks moved to extension, error code `-32002` → `-32602`, JSON Schema 2020-12, MCP Apps, caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging). See https://modelcontextprotocol.io/specification/2026-07-28.
 
-- **DO NOT merge `2026-07-28-MCP-Specification` into `main` without the maintainer's express authority.**
+Confirm the name before relying on the rules below — they bind whatever branch holds
+the 2026-07-28 work, and a stale name here would make them unenforceable as written:
+
+```bash
+git branch --show-current      # expect feat/turul-mcp-protocol-2026-07-28
+```
+
+- **DO NOT merge `feat/turul-mcp-protocol-2026-07-28` into `main` without the maintainer's express authority.**
 - **DO NOT fast-forward, rebase-onto-main, squash-to-main, or open a merge PR for this branch** unless the maintainer (Nick) has explicitly authorized that specific action in the current session.
 - **DO NOT delete the branch, force-push it, or treat it as "complete"** without express authority. "Tests pass" / "all SEPs implemented" is not sufficient — final disposition is the maintainer's call.
 - All work for the 2026-07-28 spec lands on this branch. `main` continues to hold 2025-11-25 — now the *previous* spec, not the current one — until the maintainer chooses to cut over.
@@ -51,9 +58,28 @@ check only.
 ### Protocol Crate Purity
 **NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2026-07-28` unless it directly relates to MCP spec compliance.** No framework features, middleware hooks, or convenience additions.
 
-**Forbidden**: Trait hierarchies, builder patterns, framework helpers, tutorial docs
+**Forbidden**: *Invented* trait hierarchies, builder patterns, framework helpers, tutorial docs
 **Allowed**: MCP spec types, serde derives, basic builder methods on concrete types, spec error types
 **Framework traits belong in `turul-mcp-builders`** (`turul-mcp-builders/src/traits/`)
+
+**Schema-mirroring traits are not the forbidden kind.** Each protocol crate carries
+75–80 traits in `traits.rs` (`HasMethod`, `HasParams`, `HasMeta`, …) that exist only
+because the MCP schema is TypeScript and uses interface inheritance —
+`ProgressNotificationParams extends NotificationParams` has no direct Rust
+equivalent. Their names follow the schema's own interface names, so they are part of
+the 1:1 mapping, not machinery layered on top. This is the shape in all three
+protocol crates and predates 0.4.
+
+The distinction is **transcribed vs. invented**. If the trait exists because the
+schema declares that relationship, it belongs in the protocol crate. If it exists to
+make the framework nicer to use — `HasInputSchema`, `HasExecution`, `HasIcons` — it
+belongs in `turul-mcp-builders`. No trait name is defined in both places; keep it
+that way.
+
+`scripts/check-protocol-purity.sh` enforces the crude parts of this and runs in
+`gate_default`. It greps for the word "Framework" in `//` comments, so describing
+protocol traits as "framework traits" trips it — correctly, since that phrasing
+misfiles them.
 
 ### Frozen Protocol Crates (DO NOT MODIFY)
 
@@ -75,7 +101,9 @@ trait McpResourceV2 { ... }      // Avoid versioned APIs
 - **Work within existing architecture** - don't rebuild what works
 - **Major changes are too costly** - fix problems with minimal impact
 - **One obvious way to do it** - avoid multiple patterns for the same thing
-- **If it compiles and tests pass** - you probably fixed it correctly
+- **Green is not proof** - a passing suite says the checks ran, not that they
+  could have failed. Establish that a check *can* fail on the bug before
+  believing it passed for the right reason. See §Test Coverage Discipline item 4.
 
 ### Test Compliance
 
@@ -106,13 +134,14 @@ use turul_mcp_protocol::*;
 use turul_mcp_protocol::elicitation::ElicitResult;
 
 // WRONG - NEVER reference versioned crates directly
+use turul_mcp_protocol_2026_07_28::*;   // FORBIDDEN
 use turul_mcp_protocol_2025_11_25::*;   // FORBIDDEN
 use turul_mcp_protocol_2025_06_18::*;   // FORBIDDEN
 ```
 
 **Only exceptions**:
 1. `crates/turul-mcp-protocol/` (the re-export crate itself).
-2. `crates/turul-mcp-protocol-2025-11-25/` (its own source).
+2. Each versioned protocol crate within its own source (`turul-mcp-protocol-2026-07-28`, `-2025-11-25`, `-2025-06-18`).
 3. **`crates/turul-mcp-client/`** — the bilingual client links **both** versioned protocol crates directly (`turul-mcp-protocol-2025-11-25` and `turul-mcp-protocol-2026-07-28`, gated by the `client-bilingual` / `client-2025-11-25-only` / `client-2026-07-28-only` features) so a single client can negotiate and speak either wire spec per connection. It does **not** route through the `turul-mcp-protocol` alias. This is the one consumer-side exception; it is documented in ADR-030 and ADR-001's revision log.
 
 ### Spec-Version Naming: ALWAYS the full date, NEVER a bare year
@@ -165,13 +194,13 @@ Default features: `["http", "sse"]` — in-memory only, no backend deps compiled
 
 ```toml
 # In-memory only (default)
-turul-mcp-server = "0.3"
+turul-mcp-server = "0.4"
 
 # With DynamoDB backends
-turul-mcp-server = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-server = { version = "0.4", features = ["dynamodb"] }
 
 # With DynamoDB + dynamic tools
-turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
+turul-mcp-server = { version = "0.4", features = ["dynamodb", "dynamic-tools"] }
 ```
 
 Backend features (`sqlite`, `postgres`, `dynamodb`) forward to both `turul-mcp-session-storage` AND `turul-mcp-task-storage`. When `dynamic-tools` is enabled, they also forward to `turul-mcp-server-state-storage` via weak dep syntax (`?/`).
@@ -184,7 +213,7 @@ Backend features (`sqlite`, `postgres`, `dynamodb`) forward to both `turul-mcp-s
 
 ### JSON Naming: camelCase ONLY
 
-**CRITICAL**: All JSON fields MUST use camelCase per MCP 2025-11-25.
+**CRITICAL**: All JSON fields MUST use camelCase — true of both 2025-11-25 and 2026-07-28.
 
 ```rust
 // CORRECT - Always rename snake_case fields
@@ -286,7 +315,10 @@ async fn count_words(text: String) -> McpResult<WordCount> {
 
 **Testing:** All requests need valid Accept header (application/json, text/event-stream, or */*)
 
-### MCP 2025-11-25 Compliance
+### MCP 2025-11-25 Compliance (opt-in lane)
+
+The 2026-07-28 lane is the default; this section is the 2025-11-25 build.
+
 
 **Notification method strings**: `notifications/*/list_changed` (underscore) — spec-compliant form. Server accepts legacy `listChanged` (camelCase) for backward compat only.
 
@@ -417,9 +449,28 @@ let server = McpServer::builder()
 server.run().await
 ```
 
+### The two spec lanes cannot be built together
+
+`protocol-2025-11-25` and `protocol-2026-07-28` are mutually exclusive features on
+`turul-mcp-protocol`, so **`--workspace` and any `-p` list mixing lanes fail**:
+
+```
+error: turul-mcp-protocol: features `protocol-2025-11-25` and
+       `protocol-2026-07-28` are mutually exclusive — a build re-exports
+       exactly one MCP spec. Enable one.
+```
+
+That is the mutex working, not a broken tree. Split the `-p` list by lane. Give each
+lane its own `CARGO_TARGET_DIR` (e.g. `target-2025`) or every switch triggers a full
+rebuild. `scripts/ci-gates.sh` already separates them: `default` = 2026-07-28,
+`opt-in-2025` = 2025-11-25, `mutex` proves they still refuse to co-compile.
+
+Runnable per-lane commands and the client × server matrix live in
+[`docs/manual-e2e-matrix.md`](docs/manual-e2e-matrix.md).
+
 ### Development Commands
 ```bash
-cargo build
+cargo build     # 2026-07-28 default lane only — see the mutex above
 cargo test
 cargo run -p minimal-server
 
@@ -504,7 +555,35 @@ For ambiguous hits — historical migration notes that explain a current shape v
 
 The verification runs **before** the "done" claim, not after a reviewer finds the gap. The gate is the same regardless of which reviewer or agent wrote the fixes.
 
-### Reviewing Agents (spawned subagents)
+### A Check That Cannot Fail Is Not a Check
+
+Item 4 of Test Coverage Discipline makes a *test* prove it can fail. The same burden
+applies to everything else that reports pass/fail — gates, guards, scripts, probes.
+Each of these shipped green while checking nothing:
+
+- A guard parsed `[[bin]]` blocks and was blind to `src/main.rs` autobins.
+- A harness rebuilt into `CARGO_TARGET_DIR` and launched from a hardcoded
+  `target/debug`, so it tested whichever stale binary was there.
+- `check-protocol-purity.sh` was invoked by no gate, and its crate list omitted the
+  crate this branch exists to build.
+- A probe detected a spec violation, printed a warning, and exited 0.
+- Script legs captured `$?` after a plain command under `set -e`, so the shell exited
+  before the assignment and every failure branch was unreachable.
+- A compliance row asserted "no framework path emits this code" without grepping for
+  the literal.
+
+Before claiming a check works, answer three questions with evidence:
+
+1. **Does it run?** Follow the invocation to a gate — `grep` the script name in
+   `ci-gates.sh` *and* one level of indirection (`verify_all_examples_unattended.sh`
+   calls six scripts `ci-gates.sh` never names). Watch a counter move in the log.
+2. **Can it fail?** Break the thing deliberately and watch it go red. If it stays
+   green, it is calibrated to the mechanism you were thinking about, not the defect.
+3. **Does the failure say why?** A check that fails without naming the cause costs
+   the next reader the same diagnosis. Report the discriminating fact — which port,
+   which token, exited-or-hung.
+
+Applies equally to a shell exit code, a `#[test]`, a CI step and a compliance row.
 
 **Any agent spawned to review code, audit compliance, or critique a design MUST first read the rules they'll be judging against. Their report is worth nothing if they don't know what "compliant" means in this repo.**
 
@@ -548,7 +627,7 @@ let json_request = r#"{"method":"tools/call"}"#;
 
 Before publishing a new version:
 
-1. **Workspace version**: Update `version` in `Cargo.toml` `[workspace.package]` and all internal crate dependency versions
+1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml` AND its pin in `[workspace.dependencies]`. Per §Crate Versioning Policy, `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
 2. **Example server versions**: Update `.version("x.y.z")` strings in `examples/*/src/main.rs`
 3. **Plugin skill versions**: Skills use generic minor version (`v0.3`, not `v0.3.13`) — do NOT bump on patch releases. Only update when the minor version changes (e.g., `v0.3` → `v0.4`).
 4. **CHANGELOG.md**: Add release entry with date and comparison links
@@ -575,11 +654,17 @@ Before publishing a new version:
 ## Architecture
 
 ### Workspace Crates
+Keep in sync with `ls crates/` — 18 as of 2026-07-31.
+
 - `turul-mcp-server/` - High-level framework (main entry point)
 - `turul-mcp-protocol/` - Protocol re-export crate (always use this)
-- `turul-mcp-protocol-2025-11-25/` - Versioned protocol types (internal only)
-- `turul-mcp-protocol-2025-06-18/` - Legacy protocol (backward compat)
-- `turul-mcp-builders/` - Runtime builders + framework traits
+- `turul-mcp-protocol-2026-07-28/` - Current spec binding; where new MCP spec work lands (internal only)
+- `turul-mcp-protocol-2025-11-25/` - Versioned protocol types, FROZEN at 0.3.47 (internal only)
+- `turul-mcp-protocol-2025-06-18/` - Legacy protocol, FROZEN at 0.3.47
+- `turul-mcp-ext-tasks/` - Tasks extension, spec-neutral by design (ADR-028)
+- `turul-mcp-ext-apps/` - MCP Apps extension
+- `turul-mcp-schema-validation/` - JSON Schema validation
+- `turul-mcp-builders/` - Runtime builders + framework authoring traits
 - `turul-mcp-derive/` - Proc macros (McpTool, McpResource, McpPrompt, mcp_tool)
 - `turul-http-mcp-server/` - HTTP/SSE transport
 - `turul-mcp-json-rpc-server/` - **Compatibility shim** since 0.3.39 — re-exports [`turul-rpc`](https://github.com/aussierobots/turul-rpc) (sibling repo). New code should depend on `turul-rpc` directly. No 0.4 of this crate; framework 0.4.0 drops the dep entirely. See ADR-025.
@@ -596,7 +681,7 @@ Before publishing a new version:
 - Pluggable storage (InMemory, SQLite, PostgreSQL, DynamoDB)
 
 ### HTTP Transport Routing
-- **Protocol >= 2025-03-26**: `StreamableHttpHandler` (chunked SSE, MCP 2025-11-25)
+- **Protocol >= 2025-03-26**: `StreamableHttpHandler` — serves both 2026-07-28 (stateless, `server/discover`) and 2025-11-25 (session handshake); which one is compiled in is the feature mutex's decision, not a runtime branch
 - **Protocol <= 2024-11-05**: `SessionMcpHandler` (buffered JSON, legacy compatibility)
 
 Routing in `crates/turul-http-mcp-server/src/server.rs`
