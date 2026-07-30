@@ -48,6 +48,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a known SKIP is not mistaken for a regression. Cross-linked from the README
   and from the existing manual-verification checklist.
 
+### Fixed (2026-07-30, the last invented progress tokens, and a guard for the example)
+
+What the spec actually requires, since every progress defect this session traced
+back to it. `ProgressNotificationParams.progressToken` is **required**, and the
+schema defines it as "the progress token which was given in the initial request,
+used to associate this notification with the request that is proceeding"
+(`schema/schema.ts:1009-1013`). The spec's progress pattern states it as a MUST:
+"Progress notifications MUST only reference tokens that: Were provided in an
+active request; Are associated with an in-progress operation." Opt-in is the
+caller's, and the receiver "is not obligated to provide these notifications"
+(`schema.ts:65`), so sending nothing when no token was supplied is explicitly
+allowed. There is therefore **no compliant call** to
+`notify_progress(arbitrary_string, ..)` unless the string happens to equal the
+request's token.
+
+- **11 test fixtures across 6 files stopped inventing tokens** —
+  `tests/{derive_examples, session_context_macro_tests, server_examples,
+  http_server_examples, lambda_examples, lambda_streaming_real}.rs`. Each now
+  calls `notify_request_progress(progress, total)` with a `total` the loop
+  actually knows, or `None` for the open-ended counters. `examples/` and
+  `tests/` are now both free of invented tokens.
+
+- **The example's progress behaviour is now gated.**
+  `crates/turul-mcp-server/tests/progress_token_match_2025_11_25.rs` pins the
+  framework contract with a purpose-built tool, so no *example* was covered —
+  `echo_sse` could regress silently. Two links of the chain were broken: nothing
+  gated ran the 2025 client against the 2025 server, and the client **detected**
+  a token mismatch and still exited 0, reporting a compliance failure as a pass.
+  The client now errors and exits non-zero, and
+  `verify_client_examples.sh::test_progress_token_echo` drives it against
+  `client-initialise-server` inside `gate_examples` (that file's total went 5 → 6).
+  Revert-and-fail: restoring `notify_progress("echo_processing", ..)` in
+  `echo_sse` fails the leg with `progress notifications referenced
+  ["echo_processing", "streamable-demo-1"] instead of the request's token`.
+
+  That leg also captures its exit status in a condition rather than the bare
+  `cmd; TEST_EXIT=$?` the file's other legs use — under `set -e` a failing
+  command aborts the script before the assignment, so their `FAILED` reporting
+  branches are unreachable and the reason is lost. Fixed for the new leg only;
+  the pre-existing ones are noted, not swept.
+
 ### Fixed (2026-07-30, three middleware error variants aborted the request)
 
 - **`InvalidRequest`, `Internal` and `Custom` panicked instead of answering.**

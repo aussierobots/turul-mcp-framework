@@ -32,7 +32,7 @@ fi
 
 PASSED=0
 FAILED=0
-TOTAL=5
+TOTAL=6
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -227,6 +227,54 @@ test_session_compliance() {
     fi
 }
 
+# Test 4b: the 2025-11-25 raw-wire client against client-initialise-server.
+# This is what covers the EXAMPLE's progress behaviour. The framework contract
+# is pinned by crates/turul-mcp-server/tests/progress_token_match_2025_11_25.rs,
+# but that drives a purpose-built tool — nothing else exercises echo_sse, which
+# previously answered with a token of its own choosing. The client exits
+# non-zero when the token it sent is not the token that comes back.
+test_progress_token_echo() {
+    echo "----------------------------------------"
+    echo "Testing: streamable-http-client-2025-11-25 → client-initialise-server"
+    echo "Description: progress notifications echo the request's progressToken"
+    echo "----------------------------------------"
+
+    RUST_LOG=error timeout 30s "$BIN_DIR/client-initialise-server" --port 52952 &
+    SERVER_PID=$!
+    PIDS+=($SERVER_PID)
+    sleep 3
+
+    if ! kill -0 $SERVER_PID 2>/dev/null; then
+        echo -e "${RED}FAILED${NC}: client-initialise-server failed to start"
+        FAILED=$((FAILED + 1))
+        return 1
+    fi
+
+    # `set -e` aborts on a failing command in plain position, which would skip
+    # the reporting below and lose the reason. Capture the status in a condition.
+    if RUST_LOG=error timeout 20s "$BIN_DIR/streamable-http-client-2025-11-25" \
+        --url http://127.0.0.1:52952/mcp > /tmp/progress_token_echo.log 2>&1
+    then
+        TEST_EXIT=0
+    else
+        TEST_EXIT=$?
+    fi
+
+    kill $SERVER_PID 2>/dev/null || true
+    sleep 1
+
+    if [ $TEST_EXIT -eq 0 ]; then
+        echo -e "${GREEN}PASSED${NC}: progress notifications carried the request's token"
+        PASSED=$((PASSED + 1))
+        return 0
+    else
+        echo -e "${RED}FAILED${NC}: progress-token echo check exited $TEST_EXIT"
+        echo "Output: $(tail -20 /tmp/progress_token_echo.log)"
+        FAILED=$((FAILED + 1))
+        return 1
+    fi
+}
+
 # Test 5: session-logging-proof-test (protocol-2025-11-25; hardcodes port 8001
 # in main.rs — it has no clap/CLI arg parsing at all, so a --port flag would
 # be silently ignored).
@@ -275,6 +323,7 @@ test_client_initialization
 test_streamable_client
 test_logging_client
 test_session_compliance
+test_progress_token_echo
 test_session_logging
 
 # Final summary

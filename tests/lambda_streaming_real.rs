@@ -30,7 +30,9 @@ impl ProgressTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
         if let Some(session) = session {
             for i in 1..=self.count {
-                session.notify_progress("progress_tool", i as u64).await;
+                session
+                    .notify_request_progress(i as f64, Some(self.count as f64))
+                    .await;
             }
         }
         Ok(format!("Sent {} progress notifications", self.count))

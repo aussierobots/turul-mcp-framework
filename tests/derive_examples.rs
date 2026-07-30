@@ -90,7 +90,9 @@ fn test_progress_notifications_function_macro() {
         for i in 1..=steps.min(3) {
             // Limit for testing
             if let Some(ref session) = session {
-                session.notify_progress("slow-task", i as u64).await;
+                session
+                    .notify_request_progress(i as f64, Some(steps.min(3) as f64))
+                    .await;
             }
 
             // Don't actually sleep in tests

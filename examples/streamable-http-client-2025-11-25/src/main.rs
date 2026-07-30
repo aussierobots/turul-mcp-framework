@@ -496,15 +496,21 @@ async fn main() -> Result<()> {
         if echoed {
             info!("✅ Server echoed our progressToken '{PROGRESS_TOKEN}'");
         } else {
-            // The spec requires the token from params._meta.progressToken to
-            // come back unchanged, so a mismatch is the server's bug.
-            warn!(
-                "⚠️  Server did NOT echo progressToken '{PROGRESS_TOKEN}' — saw {:?}",
-                result
-                    .progress_updates
-                    .iter()
-                    .filter_map(|u| u.token.clone())
-                    .collect::<Vec<_>>()
+            // `ProgressNotificationParams.progressToken` is "the progress token
+            // which was given in the initial request", and the spec's progress
+            // pattern makes referencing any other token a MUST NOT. A probe that
+            // detected that and still exited 0 would report a compliance failure
+            // as a pass, so this is an error rather than a warning.
+            let seen: Vec<String> = result
+                .progress_updates
+                .iter()
+                .filter_map(|u| u.token.clone())
+                .collect();
+            error!("❌ Server did NOT echo progressToken '{PROGRESS_TOKEN}' — saw {seen:?}");
+            client.disconnect().await.ok();
+            anyhow::bail!(
+                "progress notifications referenced {seen:?} instead of the request's token \
+                 '{PROGRESS_TOKEN}'"
             );
         }
     }
