@@ -10,6 +10,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PROTOCOL_CRATES=(
     "crates/turul-mcp-protocol"
     "crates/turul-mcp-protocol-2025-06-18"
+    "crates/turul-mcp-protocol-2025-11-25"
+    "crates/turul-mcp-protocol-2026-07-28"
 )
 
 echo "🔍 Checking Protocol Crate Purity..."

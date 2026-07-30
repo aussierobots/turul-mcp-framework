@@ -159,20 +159,33 @@ async fn lambda_handler(request: Request) -> Result<Response<Body>, Error> {
 Middleware errors are mapped to semantic JSON-RPC error codes:
 
 ```rust
-fn map_middleware_error_to_jsonrpc(error: MiddlewareError) -> JsonRpcError {
-    match error {
-        MiddlewareError::Unauthenticated(msg) => JsonRpcError::new(error_codes::UNAUTHENTICATED, msg, None),
-        MiddlewareError::Unauthorized(msg) => JsonRpcError::new(error_codes::UNAUTHORIZED, msg, None),
-        MiddlewareError::RateLimitExceeded { message, retry_after } => {
-            JsonRpcError::new(error_codes::RATE_LIMIT_EXCEEDED, message, Some(json!({"retryAfter": retry_after})))
-        }
-        MiddlewareError::InvalidRequest(msg) => JsonRpcError::new(error_codes::INVALID_REQUEST, msg, None),
-        MiddlewareError::Internal(msg) => JsonRpcError::new(error_codes::INTERNAL_ERROR, msg, None),
-        MiddlewareError::Custom { message, .. } => JsonRpcError::new(error_codes::INTERNAL_ERROR, message, None),
+// crates/turul-http-mcp-server/src/middleware/error.rs — the sole owner.
+pub fn map_middleware_error_to_jsonrpc(
+    err: MiddlewareError,
+    request_id: RequestId,
+) -> JsonRpcResponse {
+    let error_obj = match err {
+        // Server-range codes: server_error's -32099..=-32000 assert admits these.
+        MiddlewareError::Unauthenticated(msg) =>
+            JsonRpcErrorObject::server_error(error_codes::UNAUTHENTICATED, &msg, None),
+        MiddlewareError::Unauthorized(msg) =>
+            JsonRpcErrorObject::server_error(error_codes::UNAUTHORIZED, &msg, None),
+        MiddlewareError::RateLimitExceeded { message, retry_after } =>
+            JsonRpcErrorObject::server_error(
+                error_codes::RATE_LIMIT_EXCEEDED,
+                &message,
+                retry_after.map(|s| json!({ "retryAfter": s })),
+            ),
+        // Standard JSON-RPC codes: their own constructors, not server_error.
+        MiddlewareError::InvalidRequest(msg) =>
+            JsonRpcErrorObject::invalid_request(Some(json!({ "reason": msg }))),
+        MiddlewareError::Internal(msg) => JsonRpcErrorObject::internal_error(Some(msg)),
+        MiddlewareError::Custom { message, .. } => JsonRpcErrorObject::internal_error(Some(message)),
         // Answered as a raw HTTP challenge before JSON-RPC dispatch is reached,
         // so this arm is unreachable rather than mapped.
         MiddlewareError::HttpChallenge { .. } => unreachable!(),
-    }
+    };
+    JsonRpcResponse::Error(JsonRpcError::new(Some(request_id), error_obj))
 }
 ```
 
@@ -189,19 +202,18 @@ dispatch. `Unauthorized` keeps the JSON-RPC form because a request that is
 well-formed but fails during processing is answered `200` with the error in the
 body — the two are different layers, not an inconsistency.
 
-**Only the first three rows above are reachable.** The mapping builds every
-error through `JsonRpcErrorObject::server_error`, which asserts the code lies in
-`-32099..=-32000`. `-32600` and `-32603` are outside it, so `InvalidRequest`,
-`Internal` and `Custom` panic instead of returning — verified by calling
-`server_error` with each of the five codes: `-32001`, `-32005` and `-32003`
-construct, `-32600` and `-32603` panic on
-`turul-rpc-core-0.2.3/src/error.rs:96`. The three rows describe the intended
-mapping, not shipped behaviour. Fixing it means either routing those two codes
-around `server_error` or widening the assert in the sibling `turul-rpc` crate;
-until then a middleware that returns any of the three variants aborts the
-request. Owner: this crate's maintainer. Removal trigger: the first middleware
-that needs a non-auth rejection, or a `turul-rpc` release that admits the
-standard codes.
+**The constructor is chosen by code class.** `JsonRpcErrorObject::server_error`
+asserts the code lies in the implementation-defined `-32099..=-32000`, so it
+serves the three server-range codes only. `-32600` and `-32603` are standard
+JSON-RPC codes with their own constructors (`invalid_request`, `internal_error`)
+and use those. Routing all six through `server_error` tripped the assert, which
+meant `InvalidRequest`, `Internal` and `Custom` aborted the request rather than
+answering it; every variant now produces a response.
+
+**One owner.** The mapping lives in `middleware/error.rs` beside the enum and the
+codes it maps to. Both transports call it, so the code a client receives cannot
+depend on which handler served the request — it was previously duplicated
+verbatim in `session_handler.rs` and `streamable_http.rs`.
 
 ### Builder Integration
 
@@ -292,3 +304,4 @@ See framework examples:
 |---|---|
 | 2026-07-30 | `Unauthorized` remapped `-32002` → `-32005`. 2026-07-28 states implementations of that version MUST NOT emit `-32002`, which it reassigns to resource-not-found. Recorded the `HttpChallenge` variant, which predated this ADR's error table, and corrected `SessionError` to the actual `Internal`/`Custom` variants. |
 | 2026-07-30 | Recorded that `InvalidRequest`, `Internal` and `Custom` do not reach the wire: their `-32600`/`-32603` codes fall outside the `-32099..=-32000` range `JsonRpcErrorObject::server_error` asserts, so the mapping panics rather than returning. The error table had documented all six arms as if they were served. Verified by calling `server_error` with each of the five codes the mapping produces. Debt named in place with an owner and removal trigger rather than corrected here — the fix is a code change in this crate or in the sibling `turul-rpc`, and this revision is documentation-only. |
+| 2026-07-30 | **Debt above discharged, no `turul-rpc` change needed.** `server_error` was simply the wrong constructor for standard JSON-RPC codes: `turul-rpc` already exposes `invalid_request` and `internal_error`, which carry no range assert. The three affected arms now use them, so every variant a middleware can return produces a response. `Custom` reports `-32603` and its application-level `code` string does not reach the wire — the error table said it did. The mapping also moved out of the two transports, which held verbatim copies, into `middleware/error.rs` beside the enum and the codes, giving it one owner. Guarded by `every_returnable_variant_maps_to_a_response_without_panicking` (all six variants, code asserted per variant) and `rate_limit_carries_retry_after_but_only_when_given`. Revert-and-fail: restoring `server_error` for `InvalidRequest` panics that test on `turul-rpc-core-0.2.3/src/error.rs:96`. |

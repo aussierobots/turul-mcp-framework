@@ -138,9 +138,12 @@ cargo run -p origin-policy-server          # Origin enforcement
 Note the deliberate layering: `middleware-auth-server` answers HTTP 200 with a
 JSON-RPC error, while `oauth-resource-server` answers HTTP 401 with a
 `WWW-Authenticate` header. Different layers, not an inconsistency — see ADR-012
-§Error Mapping. That section also records that `InvalidRequest`, `Internal` and
-`Custom` middleware errors **panic** rather than reaching the wire, so do not
-expect a `-32600`/`-32603` body from a middleware rejection.
+§Error Mapping.
+
+All six `MiddlewareError` variants now reach the wire. `InvalidRequest` answers
+`-32600` with the message in `data.reason`; `Internal` and `Custom` answer
+`-32603`. Until 2026-07-30 those three panicked instead, so a middleware
+rejection other than auth or rate-limiting aborted the request.
 
 ---
 

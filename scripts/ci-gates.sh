@@ -14,6 +14,7 @@ run() { echo "=== $1 ==="; shift; if "$@"; then echo "  PASS"; else echo "  FAIL
 
 gate_default() {
   run "schema pin integrity" ./scripts/check-schema-pin.sh
+  run "protocol crate purity" ./scripts/check-protocol-purity.sh
   run "build (default = protocol-2026-07-28)" cargo build
   run "clippy (deny warnings)" cargo clippy --all-targets -- -D warnings
   run "test" cargo test

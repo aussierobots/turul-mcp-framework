@@ -48,6 +48,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a known SKIP is not mistaken for a regression. Cross-linked from the README
   and from the existing manual-verification checklist.
 
+### Fixed (2026-07-30, three middleware error variants aborted the request)
+
+- **`InvalidRequest`, `Internal` and `Custom` panicked instead of answering.**
+  All six variants were built through `JsonRpcErrorObject::server_error`, which
+  asserts the code lies in the implementation-defined `-32099..=-32000`. `-32600`
+  and `-32603` are standard JSON-RPC codes outside that range, so any middleware
+  returning one of those three variants aborted the request. No `turul-rpc`
+  change was needed — `server_error` was simply the wrong constructor;
+  `invalid_request` and `internal_error` already exist and carry no range assert.
+  `InvalidRequest` now answers `-32600` with the message in `data.reason`;
+  `Internal` and `Custom` answer `-32603`.
+
+  `Custom`'s application-level `code` string does not reach the wire. The enum
+  docs claimed it became the JSON-RPC code, which was never true — there is no
+  number to send, and inventing one would land in a range the spec governs.
+
+- **The mapping had two verbatim copies and now has one owner.**
+  `map_middleware_error_to_jsonrpc` was duplicated in `session_handler.rs` and
+  `streamable_http.rs`, so the code a client received could drift by which
+  transport served the request. It now lives in `middleware/error.rs` beside the
+  enum and the codes it maps to; both transports call it.
+
+  Guarded by `every_returnable_variant_maps_to_a_response_without_panicking`
+  (all six variants, code asserted per variant) and
+  `rate_limit_carries_retry_after_but_only_when_given`. Revert-and-fail:
+  restoring `server_error` for `InvalidRequest` panics the first test at
+  `turul-rpc-core-0.2.3/src/error.rs:96`. The pre-existing middleware test
+  asserted only that the stack returned `Unauthenticated` and *commented* that
+  the handler "would map this to -32001" — it never called the mapping, which is
+  why three panicking arms survived. ADR-012 §Error Mapping and its revision log
+  updated in the same slice.
+
+- **`scripts/check-protocol-purity.sh` was run by nothing, and checked the wrong
+  crates.** No gate, workflow or doc referenced it, and its list covered
+  `turul-mcp-protocol` and `turul-mcp-protocol-2025-06-18` — not
+  `turul-mcp-protocol-2025-11-25` and not `turul-mcp-protocol-2026-07-28`, the
+  crate this branch exists to build. Both added, and the script is now a
+  `gate_default` step. It passes.
+
+  It warns on `traits.rs` in the 2026 crate. Left alone deliberately: that file
+  holds ~75 traits whose names mirror the schema's own TypeScript interfaces, so
+  whether it is a purity violation or schema fidelity is an ADR-level question,
+  not something to settle by moving code. Recorded here rather than silently
+  refactored or silently ignored.
+
+- **`scripts/quick_test_middleware.sh` deleted.** 47 lines of `echo` printing
+  manual instructions, asserting nothing, referenced nowhere. Its content is in
+  `docs/manual-e2e-matrix.md` §1 A5, which also states the HTTP-layering contract
+  it did not mention.
+
 ### Fixed (2026-07-30, the E2E harness launched a binary it had not built)
 
 - **`TestServerManager` rebuilt into `CARGO_TARGET_DIR` and then spawned from a

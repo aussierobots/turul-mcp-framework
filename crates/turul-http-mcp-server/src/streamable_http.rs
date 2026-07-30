@@ -1232,7 +1232,7 @@ impl StreamableHttpHandler {
                     // Non-challenge pre-session errors → JSON-RPC error
                     if let JsonRpcMessage::Request(ref req) = message {
                         let response =
-                            Self::map_middleware_error_to_jsonrpc(other_err, req.id.clone());
+                            crate::middleware::error::map_middleware_error_to_jsonrpc(other_err, req.id.clone());
                         let response_value =
                             serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
                         return StreamableResponse::Json(response_value)
@@ -2756,7 +2756,7 @@ impl StreamableHttpHandler {
         {
             Ok(inj) => inj,
             Err(err) => {
-                return (Self::map_middleware_error_to_jsonrpc(err, request.id), None);
+                return (crate::middleware::error::map_middleware_error_to_jsonrpc(err, request.id), None);
             }
         };
 
@@ -2819,7 +2819,7 @@ impl StreamableHttpHandler {
                 (result, None)
             }
             Err(middleware_err) => (
-                Self::map_middleware_error_to_jsonrpc(middleware_err, request_id),
+                crate::middleware::error::map_middleware_error_to_jsonrpc(middleware_err, request_id),
                 None,
             ),
         }
@@ -2865,46 +2865,6 @@ impl StreamableHttpHandler {
         }
     }
 
-    /// Map MiddlewareError to JSON-RPC error with semantic error codes
-    fn map_middleware_error_to_jsonrpc(
-        err: crate::middleware::MiddlewareError,
-        request_id: turul_rpc::RequestId,
-    ) -> turul_rpc::JsonRpcResponse {
-        use crate::middleware::MiddlewareError;
-        use crate::middleware::error::error_codes;
-
-        let (code, message, data) = match err {
-            MiddlewareError::Unauthenticated(msg) => (error_codes::UNAUTHENTICATED, msg, None),
-            MiddlewareError::Unauthorized(msg) => (error_codes::UNAUTHORIZED, msg, None),
-            MiddlewareError::RateLimitExceeded {
-                message,
-                retry_after,
-            } => {
-                let data = retry_after.map(|s| serde_json::json!({"retryAfter": s}));
-                (error_codes::RATE_LIMIT_EXCEEDED, message, data)
-            }
-            MiddlewareError::InvalidRequest(msg) => (error_codes::INVALID_REQUEST, msg, None),
-            MiddlewareError::Internal(msg) => (error_codes::INTERNAL_ERROR, msg, None),
-            MiddlewareError::Custom { message, .. } => (error_codes::INTERNAL_ERROR, message, None),
-            MiddlewareError::HttpChallenge { .. } => {
-                unreachable!(
-                    "HttpChallenge must be caught at transport level before JSON-RPC dispatch"
-                )
-            }
-        };
-
-        let error_obj = if let Some(d) = data {
-            turul_rpc::error::JsonRpcErrorObject::server_error(code, &message, Some(d))
-        } else {
-            turul_rpc::error::JsonRpcErrorObject::server_error(
-                code,
-                &message,
-                None::<serde_json::Value>,
-            )
-        };
-
-        turul_rpc::JsonRpcResponse::Error(turul_rpc::JsonRpcError::new(Some(request_id), error_obj))
-    }
 }
 
 use crate::middleware::bearer::{extract_bearer_token, is_bearer_scheme};

@@ -25,12 +25,13 @@ use std::fmt;
 /// violation for a `SHOULD NOT`: `-32005` still sits in the legacy
 /// `-32000..-32019` sub-range the spec says new implementations should avoid
 /// entirely, rather than in the unreserved space above `-32099` the spec
-/// recommends for new codes. The spec's recommended range is unreachable here:
-/// both call sites that build these responses — `map_middleware_error_to_jsonrpc`
-/// in `session_handler.rs` and `streamable_http.rs` — construct the object with
+/// recommends for new codes. The spec's recommended range is unreachable for
+/// these three: [`map_middleware_error_to_jsonrpc`] builds them with
 /// `JsonRpcErrorObject::server_error`, whose `assert!` requires the code to lie
 /// in `-32099..=-32000` (a release decision of the sibling `turul-rpc` crate,
-/// not this one) and panics otherwise.
+/// not this one) and panics otherwise. `INVALID_REQUEST` and `INTERNAL_ERROR`
+/// are standard JSON-RPC codes and use their own constructors, so the assert
+/// does not apply to them.
 pub mod error_codes {
     /// Authentication required (-32001)
     pub const UNAUTHENTICATED: i64 = -32001;
@@ -64,9 +65,12 @@ pub mod error_codes {
 /// - `Unauthenticated` → `-32001` "Authentication required"
 /// - `Unauthorized` → `-32005` "Permission denied"
 /// - `RateLimitExceeded` → `-32003` "Rate limit exceeded"
-/// - `InvalidRequest` → `-32600` (standard Invalid Request)
+/// - `InvalidRequest` → `-32600` (standard Invalid Request), with the message in
+///   `data.reason`
 /// - `Internal` → `-32603` (standard Internal error)
-/// - `Custom{code, msg}` → custom code from variant
+/// - `Custom{code, msg}` → `-32603`; the `code` string is application-level and
+///   has no JSON-RPC number, so it does not reach the wire
+/// - `HttpChallenge` → no JSON-RPC code; answered as a raw 401/403 before dispatch
 ///
 /// # Examples
 ///
@@ -238,6 +242,65 @@ impl MiddlewareError {
     }
 }
 
+/// Convert a middleware rejection into the JSON-RPC error response the client sees.
+///
+/// The sole owner of this mapping. Both transports call it, so the code a client
+/// receives cannot differ by which handler served the request.
+///
+/// The constructor is chosen by code class, not uniformly: `-32600` and `-32603`
+/// are standard JSON-RPC codes with their own constructors, while
+/// `JsonRpcErrorObject::server_error` asserts the code lies in the
+/// implementation-defined `-32099..=-32000`. Routing the standard codes through
+/// `server_error` tripped that assert, so `InvalidRequest`, `Internal` and
+/// `Custom` aborted the request instead of answering it.
+///
+/// `Custom` reports `-32603`: its `code` is a free-form application string with
+/// no JSON-RPC number, and inventing one would put it in a range the spec governs.
+///
+/// # Panics
+///
+/// On `HttpChallenge`, which the transport answers as a raw 401/403 before
+/// dispatch and must never reach here.
+pub fn map_middleware_error_to_jsonrpc(
+    err: MiddlewareError,
+    request_id: turul_rpc::RequestId,
+) -> turul_rpc::JsonRpcResponse {
+    use turul_rpc::error::JsonRpcErrorObject;
+
+    let error_obj = match err {
+        MiddlewareError::Unauthenticated(msg) => JsonRpcErrorObject::server_error(
+            error_codes::UNAUTHENTICATED,
+            &msg,
+            None::<serde_json::Value>,
+        ),
+        MiddlewareError::Unauthorized(msg) => JsonRpcErrorObject::server_error(
+            error_codes::UNAUTHORIZED,
+            &msg,
+            None::<serde_json::Value>,
+        ),
+        MiddlewareError::RateLimitExceeded {
+            message,
+            retry_after,
+        } => JsonRpcErrorObject::server_error(
+            error_codes::RATE_LIMIT_EXCEEDED,
+            &message,
+            retry_after.map(|s| serde_json::json!({ "retryAfter": s })),
+        ),
+        MiddlewareError::InvalidRequest(msg) => {
+            JsonRpcErrorObject::invalid_request(Some(serde_json::json!({ "reason": msg })))
+        }
+        MiddlewareError::Internal(msg) => JsonRpcErrorObject::internal_error(Some(msg)),
+        MiddlewareError::Custom { message, .. } => {
+            JsonRpcErrorObject::internal_error(Some(message))
+        }
+        MiddlewareError::HttpChallenge { .. } => {
+            unreachable!("HttpChallenge must be caught at transport level before JSON-RPC dispatch")
+        }
+    };
+
+    turul_rpc::JsonRpcResponse::Error(turul_rpc::JsonRpcError::new(Some(request_id), error_obj))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,6 +333,67 @@ mod tests {
 
         let err = MiddlewareError::custom("CUSTOM_ERROR", "Something went wrong");
         assert_eq!(err.to_string(), "CUSTOM_ERROR: Something went wrong");
+    }
+
+    /// Every variant a middleware can return must produce a response. Three of
+    /// them used to panic: `-32600`/`-32603` fall outside the
+    /// `-32099..=-32000` that `JsonRpcErrorObject::server_error` asserts, and
+    /// all six were routed through it, so `InvalidRequest`, `Internal` and
+    /// `Custom` aborted the request instead of answering it.
+    #[test]
+    fn every_returnable_variant_maps_to_a_response_without_panicking() {
+        let id = turul_rpc::RequestId::Number(1);
+        let cases: Vec<(MiddlewareError, i64)> = vec![
+            (MiddlewareError::unauthenticated("no token"), -32001),
+            (MiddlewareError::unauthorized("wrong scope"), -32005),
+            (MiddlewareError::rate_limit("slow down", Some(60)), -32003),
+            (MiddlewareError::invalid_request("malformed"), -32600),
+            (MiddlewareError::internal("db down"), -32603),
+            (MiddlewareError::custom("APP_CODE", "boom"), -32603),
+        ];
+
+        for (err, expected) in cases {
+            let label = err.to_string();
+            let response = map_middleware_error_to_jsonrpc(err, id.clone());
+            let turul_rpc::JsonRpcResponse::Error(e) = response else {
+                panic!("{label} must map to an error response");
+            };
+            assert_eq!(
+                e.error.code,
+                expected,
+                "{label} must answer {expected}"
+            );
+        }
+    }
+
+    /// `retryAfter` is the one piece of data the mapping carries through, and a
+    /// client uses it to decide when to retry.
+    #[test]
+    fn rate_limit_carries_retry_after_but_only_when_given() {
+        let id = turul_rpc::RequestId::Number(1);
+
+        let with = map_middleware_error_to_jsonrpc(
+            MiddlewareError::rate_limit("slow down", Some(30)),
+            id.clone(),
+        );
+        let turul_rpc::JsonRpcResponse::Error(e) = with else {
+            panic!("expected an error response");
+        };
+        assert_eq!(
+            e.error.data.as_ref().and_then(|d| d.get("retryAfter")),
+            Some(&serde_json::json!(30))
+        );
+
+        let without =
+            map_middleware_error_to_jsonrpc(MiddlewareError::rate_limit("slow down", None), id);
+        let turul_rpc::JsonRpcResponse::Error(e) = without else {
+            panic!("expected an error response");
+        };
+        assert!(
+            e.error.data.is_none(),
+            "no retry_after means no data object: {:?}",
+            e.error.data
+        );
     }
 
     /// `UNAUTHENTICATED` and `RATE_LIMIT_EXCEEDED` are frozen legacy
