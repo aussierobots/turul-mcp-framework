@@ -5,7 +5,8 @@ lanes. Companion to `docs/plans/2026-07-28-manual-verification.md`, which covers
 judgement calls and a curl-level smoke test; this file covers **which binaries to
 point at which**, and what a correct run looks like.
 
-**What is verified here, and what is not.** On 2026-07-30 I ran §1 A1, §2 B1,
+**What is verified here, and what is not.** On 2026-07-30 I ran §1 A1, §2 B1
+(twice — before and after the `echo_sse` progress-token fix),
 §3 (cross-lane), §6's `ci-gates.sh all` and the reachability guard, and the
 lane-mutex error in §0 — the expected-output blocks for those are transcribed
 from real runs, warnings included. The remaining commands are constructed from
@@ -155,20 +156,22 @@ CARGO_TARGET_DIR=target-2025 cargo run -p streamable-http-client-2025-11-25 -- -
 Expect the full handshake, an SSE stream of 5 events, 2 progress notifications,
 a final `structuredContent` result, and a `DELETE` session teardown → HTTP 200.
 
-**Expect one warning**, and it is a real finding, not noise:
+The progress notifications must carry **the token the client sent**:
 
 ```
-⚠️  Server did NOT echo progressToken 'streamable-demo-1' — saw
-    ["echo_processing", "echo_processing"]
+📈 progress: ProgressUpdate { progress: Some(50.0),  token: Some("streamable-demo-1") }
+📈 progress: ProgressUpdate { progress: Some(100.0), token: Some("streamable-demo-1") }
+✅ Server echoed our progressToken 'streamable-demo-1'
 ```
 
-The 2025 lane now *has* the correlation API (`SessionContext::progress_token()`
-and `notify_request_progress()`, pinned by
-`crates/turul-mcp-server/tests/progress_token_match_2025_11_25.rs`), but
-`client-initialise-server`'s `echo_sse` tool still calls `notify_progress()` with
-a token of its own choosing. The framework is compliant; this example does not
-yet demonstrate it. Fixing the example is a one-line swap to
-`notify_request_progress`.
+If instead you see `⚠️ Server did NOT echo progressToken … — saw
+["echo_processing", …]`, the tool has regressed to `notify_progress()` with a
+token of its own choosing. `echo_sse` uses `notify_request_progress()`, which
+reads the caller's `_meta.progressToken` and returns `false` when the caller
+declared none — progress was then never opted into, so nothing is sent. The
+underlying contract is pinned by
+`crates/turul-mcp-server/tests/progress_token_match_2025_11_25.rs`; this run is
+what covers the *example*.
 
 ### B2. Storage backends behind the same server
 
@@ -411,7 +414,7 @@ ss -ltn | grep -E '8641|52950|8005'      # expect no output
 
 | What you see | Verdict |
 |---|---|
-| `⚠️ Server did NOT echo progressToken` in B1 | Real, in the *example*; framework API exists and is tested. §2 B1 |
+| `⚠️ Server did NOT echo progressToken` in B1 | **A regression, not noise** — `echo_sse` must echo the caller's token. §2 B1 |
 | `LEG … SKIP peer exposed no …` from the probe | Expected against a minimal peer. Not a failure |
 | `SKIP not exercisable: cargo lambda watch serves invocations serially` | Emulator limitation, stated in full by the script |
 | `SKIPPED: DynamoDB unavailable` | No live table; build and boot still verified |

@@ -48,14 +48,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a known SKIP is not mistaken for a regression. Cross-linked from the README
   and from the existing manual-verification checklist.
 
-- **Found while verifying the matrix, not fixed:** `client-initialise-server`'s
-  `echo_sse` tool still calls `notify_progress()` with a token of its own
-  choosing, so the 2025-lane client reports `Server did NOT echo progressToken
-  'streamable-demo-1' — saw ["echo_processing", "echo_processing"]`. The
-  framework gained the correlation API and a test for it, but this example was
-  not migrated to it, so the example still demonstrates the gap the API closed.
-  One-line swap to `notify_request_progress`; recorded in the matrix as an
-  expected warning rather than left to look like a framework defect.
+### Fixed (2026-07-30, `echo_sse` emitted a progress token no client could match)
+
+- **`client-initialise-server`'s `echo_sse` invented its own progress token.**
+  It called `notify_progress("echo_processing", …)`, so the 2025-lane client
+  reported `Server did NOT echo progressToken 'streamable-demo-1' — saw
+  ["echo_processing", "echo_processing"]`. 2025-11-25 requires a progress
+  notification to reference the token from the originating request; an arbitrary
+  string is noise the client cannot correlate. The framework gained the
+  correlation API in the earlier progress-token slice, but this example was never
+  migrated onto it, so the flagship 2025-lane demo still taught the wrong shape.
+
+  Now uses `notify_request_progress()`, which reads the caller's
+  `_meta.progressToken`. It returns `false` when the caller declared none — that
+  means progress was never opted into, so the example sends nothing and logs why,
+  rather than substituting a token of its own. Verified live end to end: both
+  notifications now carry `token: Some("streamable-demo-1")` and the client
+  prints `✅ Server echoed our progressToken 'streamable-demo-1'`.
+
+  Coverage note: the framework contract is pinned by
+  `crates/turul-mcp-server/tests/progress_token_match_2025_11_25.rs`, which uses
+  its own tool. The *example* is covered only by the manual run in
+  `docs/manual-e2e-matrix.md` §2 B1 — `scripts/verify_client_examples.sh` starts
+  this server but never inspects progress, and is not in `ci-gates.sh` anyway.
+
+- **Four more examples have the same defect, surfaced and left alone** — outside
+  the slice, and each needs its own call on what a correct token would be:
+  `zero-config-getting-started/src/main.rs:48` passes `self.message`, the
+  human-readable text, as the correlation ID;
+  `tools-test-server/src/main.rs:376` mints a fresh `Uuid::now_v7()`, which reads
+  as deliberate and is still uncorrelatable;
+  `stateful-server/src/main.rs:76,100,112,160` uses `cart_item_{n}` and
+  `cart_clear`. The getting-started one matters most — it is the first example a
+  new user reads.
 
 ### Fixed (2026-07-30, two orphan autobins the guard could not see, and dead dependency pins)
 

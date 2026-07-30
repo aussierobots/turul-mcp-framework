@@ -66,10 +66,20 @@ impl EchoSseTool {
         // Log the call on the server side
         info!("echo_sse called with text: '{}'", self.text);
 
-        // Send a progress notification if we have a session
+        // Progress must reference the token the CALLER supplied in
+        // `params._meta.progressToken`; a token of the tool's own choosing is
+        // noise the client cannot match to its request. `notify_request_progress`
+        // returns false when the caller declared none — which means progress was
+        // never opted into, so the correct response is to send nothing.
         if let Some(session_context) = &session {
-            info!("Sending progress notification via SessionContext");
-            session_context.notify_progress("echo_processing", 50).await;
+            if session_context
+                .notify_request_progress(50.0, Some(100.0))
+                .await
+            {
+                info!("Sent 50/100 against the request's own progressToken");
+            } else {
+                info!("Caller declared no progressToken — no progress to send");
+            }
 
             // Also send a log message notification
             session_context
@@ -91,7 +101,7 @@ impl EchoSseTool {
         // Send completion notification
         if let Some(session_context) = &session {
             session_context
-                .notify_progress("echo_processing", 100)
+                .notify_request_progress(100.0, Some(100.0))
                 .await;
             session_context
                 .notify_log(
