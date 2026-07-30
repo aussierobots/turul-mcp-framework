@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### Documentation (2026-07-30, middleware error mapping, and a manual E2E matrix)
+
+- **ADR-012's error table documented three arms that cannot execute.**
+  `InvalidRequest`, `Internal` and `Custom` map to `-32600`/`-32603`, and the
+  mapping builds every error through `JsonRpcErrorObject::server_error`, which
+  asserts `-32099..=-32000`. Both codes fall outside it, so those three variants
+  panic rather than returning. Verified by calling `server_error` with each of
+  the five codes the mapping produces: `-32001`, `-32005`, `-32003` construct;
+  `-32600` and `-32603` panic at `turul-rpc-core-0.2.3/src/error.rs:96`. Recorded
+  in §Error Mapping with an owner and a removal trigger, and in the revision log.
+  The defect itself is untouched — it needs a code change here or in the sibling
+  `turul-rpc`, and this slice is documentation-only. It had been noted in
+  ADR-027 but nowhere near the mapping it describes.
+
+- **The `-32002` → `-32005` correction and the `HttpChallenge` variant were
+  already in ADR-012** (landed in `78953a5`); no further change was needed there,
+  and the section is consistent with `docs/compliance/base-protocol.md` §11 and
+  §5. ADR-027's account of it was still written in the present tense as a live
+  MUST NOT violation; both halves are closed, so it now reads as history and
+  points at the compliance row for current state.
+
+- **The shipped skills plugin still taught `-32002`.** Four sites across
+  `middleware-patterns/SKILL.md` and its `middleware-error-guide.md` gave
+  `Unauthorized` as `-32002` — the code 2026-07-28 reassigns to
+  resource-not-found and forbids this version's implementations from emitting.
+  Corrected to `-32005`. The same tables listed `Custom` as producing a "custom"
+  wire code when it maps to `-32603` and discards the `code` string, and gave no
+  hint that three of the six variants panic; both are now stated, since this is
+  the document a user writing middleware reads.
+
+- **New `docs/manual-e2e-matrix.md`** — runnable client × server combinations per
+  lane and across lanes, plus interop, Lambda, curl and cleanup. Leads with the
+  feature mutex, because putting a 2025-lane and a 2026-lane package in one
+  `cargo` invocation fails and reads like a broken tree. Distinguishes the
+  commands whose output was transcribed from real runs from those constructed
+  from the repo but not executed, and carries a table of expected-noisy results
+  so a known SKIP is not mistaken for a regression. Cross-linked from the README
+  and from the existing manual-verification checklist.
+
+- **Found while verifying the matrix, not fixed:** `client-initialise-server`'s
+  `echo_sse` tool still calls `notify_progress()` with a token of its own
+  choosing, so the 2025-lane client reports `Server did NOT echo progressToken
+  'streamable-demo-1' — saw ["echo_processing", "echo_processing"]`. The
+  framework gained the correlation API and a test for it, but this example was
+  not migrated to it, so the example still demonstrates the gap the API closed.
+  One-line swap to `notify_request_progress`; recorded in the matrix as an
+  expected warning rather than left to look like a framework defect.
+
 ### Fixed (2026-07-30, two orphan autobins the guard could not see, and dead dependency pins)
 
 - **`tests/reachability_guard.rs` parsed `[[bin]]` blocks only, so it could not

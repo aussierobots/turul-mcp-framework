@@ -306,11 +306,19 @@ MiddlewareError → McpError → JsonRpcError → HTTP/Lambda response
 | Variant | JSON-RPC Code | When to Use |
 |---|---|---|
 | `Unauthenticated(msg)` | -32001 | No credentials provided |
-| `Unauthorized(msg)` | -32002 | Credentials provided but insufficient |
+| `Unauthorized(msg)` | -32005 | Credentials provided but insufficient |
 | `RateLimitExceeded { message, retry_after }` | -32003 | Rate limit exceeded |
-| `InvalidRequest(msg)` | -32600 | Malformed request |
-| `Internal(msg)` | -32603 | Internal error (do not expose details to client) |
-| `Custom { code, message }` | custom | Application-specific errors |
+| `InvalidRequest(msg)` | -32600 | Malformed request — **panics today** |
+| `Internal(msg)` | -32603 | Internal error — **panics today** |
+| `Custom { code, message }` | -32603 | Application-specific — **panics today**; `code` is discarded |
+
+`Unauthorized` is `-32005`: MCP 2026-07-28 reassigns `-32002` to
+resource-not-found and forbids this version's implementations from emitting it.
+
+The bottom three do not reach the wire. Middleware errors are built through
+`JsonRpcErrorObject::server_error`, which asserts `-32099..=-32000`, so a
+`-32600`/`-32603` code aborts the request rather than answering it. Use one of
+the top three until that is fixed.
 
 **Constructors:**
 ```rust
@@ -330,7 +338,7 @@ MiddlewareError::custom("CUSTOM_ERR", "Something specific")
 
 2. **Creating `JsonRpcError` directly** — Always return `MiddlewareError` variants. The framework handles conversion. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
 
-3. **Confusing `Unauthenticated` vs `Unauthorized`** — `Unauthenticated` = no credentials at all (-32001). `Unauthorized` = credentials present but insufficient permissions (-32002).
+3. **Confusing `Unauthenticated` vs `Unauthorized`** — `Unauthenticated` = no credentials at all (-32001). `Unauthorized` = credentials present but insufficient permissions (-32005).
 
 4. **Holding `Mutex` across `.await`** — `std::sync::Mutex` is fine for quick in-memory operations (no `.await` while held). For async-heavy workloads, use `tokio::sync::Mutex` instead.
 

@@ -5,8 +5,10 @@
 > exact expected result. Tick a box only when you have seen the expected output with your
 > own eyes.
 >
-> Companion document: [`2026-07-28-release-checklist.md`](./2026-07-28-release-checklist.md)
-> (the engineering work items). This file is only the human-in-the-loop verification.
+> Companion documents: [`2026-07-28-release-checklist.md`](./2026-07-28-release-checklist.md)
+> (the engineering work items), and [`../manual-e2e-matrix.md`](../manual-e2e-matrix.md)
+> for the runnable client × server combinations per lane and across lanes. This
+> file is only the human-in-the-loop verification.
 >
 > Baseline recorded 2026-07-29 at HEAD `2958508`:
 > `cargo test -p turul-mcp-protocol-2026-07-28 --features compliance` → **423 passed, 0 failed, 2 ignored**.

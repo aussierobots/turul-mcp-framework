@@ -32,7 +32,7 @@ MiddlewareError::Unauthorized(String)
 MiddlewareError::unauthorized("Insufficient permissions for admin endpoint")
 ```
 
-- **JSON-RPC code:** -32002
+- **JSON-RPC code:** -32005
 - **Use when:** A valid credential is present but lacks the required scope/role
 - **Wire message:** `"Unauthorized: Insufficient permissions for admin endpoint"`
 
@@ -113,11 +113,23 @@ Middleware NEVER creates `McpError` or `JsonRpcError` directly. Return `Middlewa
 | Variant | Constructor | JSON-RPC Code |
 |---|---|---|
 | `Unauthenticated` | `unauthenticated(msg)` | -32001 |
-| `Unauthorized` | `unauthorized(msg)` | -32002 |
+| `Unauthorized` | `unauthorized(msg)` | -32005 |
 | `RateLimitExceeded` | `rate_limit(msg, retry_after)` | -32003 |
-| `InvalidRequest` | `invalid_request(msg)` | -32600 |
-| `Internal` | `internal(msg)` | -32603 |
-| `Custom` | `custom(code, msg)` | custom |
+| `InvalidRequest` | `invalid_request(msg)` | -32600 — **panics, see below** |
+| `Internal` | `internal(msg)` | -32603 — **panics, see below** |
+| `Custom` | `custom(code, msg)` | -32603 — **panics, see below**; the `code` string is discarded |
+
+`Unauthorized` is `-32005`, not the `-32002` earlier revisions of this guide
+listed: MCP 2026-07-28 reassigns `-32002` to resource-not-found and forbids
+implementations of that version from emitting it at all.
+
+**Only the first three variants reach the wire today.** The framework builds
+every middleware error through `JsonRpcErrorObject::server_error`, which asserts
+the code lies in `-32099..=-32000`. `-32600` and `-32603` are outside that
+range, so returning `InvalidRequest`, `Internal` or `Custom` from a middleware
+aborts the request instead of answering it. Until that is fixed, express
+non-auth rejections as `Custom`'s intent through one of the three working
+variants, or handle the condition before the middleware boundary.
 
 ## Unauthenticated vs Unauthorized
 

@@ -341,6 +341,8 @@ For detailed testing instructions, server running guides, and compliance verific
 
 **📚 Testing**: lane-by-lane gates run via `./scripts/ci-gates.sh all`; the per-requirement test inventory is `docs/plans/2026-07-28-spec-compliance.md` §E2E test plan
 
+**🔧 Driving it by hand**: [`docs/manual-e2e-matrix.md`](docs/manual-e2e-matrix.md) — which client to point at which server, per lane and across lanes, plus the interop, Lambda and curl paths
+
 This guide includes:
 - ✅ All server running instructions with expected outputs
 - ✅ Manual MCP compliance verification (2026-07-28 default; 2025-11-25 opt-in)  

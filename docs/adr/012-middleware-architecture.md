@@ -189,6 +189,20 @@ dispatch. `Unauthorized` keeps the JSON-RPC form because a request that is
 well-formed but fails during processing is answered `200` with the error in the
 body — the two are different layers, not an inconsistency.
 
+**Only the first three rows above are reachable.** The mapping builds every
+error through `JsonRpcErrorObject::server_error`, which asserts the code lies in
+`-32099..=-32000`. `-32600` and `-32603` are outside it, so `InvalidRequest`,
+`Internal` and `Custom` panic instead of returning — verified by calling
+`server_error` with each of the five codes: `-32001`, `-32005` and `-32003`
+construct, `-32600` and `-32603` panic on
+`turul-rpc-core-0.2.3/src/error.rs:96`. The three rows describe the intended
+mapping, not shipped behaviour. Fixing it means either routing those two codes
+around `server_error` or widening the assert in the sibling `turul-rpc` crate;
+until then a middleware that returns any of the three variants aborts the
+request. Owner: this crate's maintainer. Removal trigger: the first middleware
+that needs a non-auth rejection, or a `turul-rpc` release that admits the
+standard codes.
+
 ### Builder Integration
 
 Middleware is registered via the builder's `.middleware()` method:
@@ -277,3 +291,4 @@ See framework examples:
 | Date | Change |
 |---|---|
 | 2026-07-30 | `Unauthorized` remapped `-32002` → `-32005`. 2026-07-28 states implementations of that version MUST NOT emit `-32002`, which it reassigns to resource-not-found. Recorded the `HttpChallenge` variant, which predated this ADR's error table, and corrected `SessionError` to the actual `Internal`/`Custom` variants. |
+| 2026-07-30 | Recorded that `InvalidRequest`, `Internal` and `Custom` do not reach the wire: their `-32600`/`-32603` codes fall outside the `-32099..=-32000` range `JsonRpcErrorObject::server_error` asserts, so the mapping panics rather than returning. The error table had documented all six arms as if they were served. Verified by calling `server_error` with each of the five codes the mapping produces. Debt named in place with an owner and removal trigger rather than corrected here — the fix is a code change in this crate or in the sibling `turul-rpc`, and this revision is documentation-only. |
