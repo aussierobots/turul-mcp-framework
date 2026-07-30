@@ -43,15 +43,27 @@ impl LogProgress {
         session: Option<turul_mcp_server::SessionContext>,
     ) -> turul_mcp_server::McpResult<String> {
         if let Some(session) = session {
-            // Send built-in MCP progress notification to connected clients via SSE
-            session
-                .notify_progress(&self.message, self.percent as u64)
+            // The notification's `progressToken` must be the one the CALLER put in
+            // `params._meta.progressToken` — that is what lets a client match the
+            // update to its own request. Human-readable text goes in `message`.
+            // Returns false when the caller declared no token, which means it never
+            // opted into progress, so there is nothing to send.
+            let sent = session
+                .notify_request_progress_with_message(
+                    self.percent as f64,
+                    Some(100.0),
+                    &self.message,
+                )
                 .await;
-            tracing::info!(
-                "Sent MCP progress notification: {} ({}%)",
-                self.message,
-                self.percent
-            );
+            if sent {
+                tracing::info!(
+                    "Sent progress {}% against the caller's own token: {}",
+                    self.percent,
+                    self.message
+                );
+            } else {
+                tracing::info!("Caller declared no progressToken — nothing to send");
+            }
         }
 
         Ok(format!(

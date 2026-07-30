@@ -45,7 +45,6 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use tracing::info;
-use uuid::Uuid;
 
 use turul_mcp_derive::McpTool;
 // Server prelude re-exports builders prelude + protocol types
@@ -373,39 +372,46 @@ impl ProgressTrackerTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<ProgressResult> {
         let steps = self.steps.unwrap_or(5).max(1);
         let step_duration = Duration::from_secs_f64(self.duration / steps as f64);
-        let progress_token = Uuid::now_v7().as_simple().to_string();
+
+        // A token minted here would be uncorrelatable: the client can only match
+        // an update to its request via the token IT supplied in
+        // `params._meta.progressToken`. Absent one, the caller did not opt in and
+        // the work proceeds without notifications.
+        // `as_str()` returns `&str` here, not `Option<&str>`: this example pins
+        // 2025-11-25, whose frozen `ProgressToken` is a newtype over `String`
+        // rather than the string-or-number enum the 2026 binding uses.
+        let requested_token = session
+            .as_ref()
+            .and_then(|s| s.progress_token())
+            .map(|t| t.as_str().to_string());
 
         info!(
             "Starting progress tracking operation: {} seconds, {} steps",
             self.duration, steps
         );
 
-        // Send initial progress notification
         if let Some(session_context) = &session {
-            session_context.notify_progress(&progress_token, 0).await;
-            info!(
-                "Starting progress tracking operation: {} seconds, {} steps",
-                self.duration, steps
-            );
+            if !session_context.notify_request_progress(0.0, Some(100.0)).await {
+                info!("Caller declared no progressToken — running without progress");
+            }
         }
 
         // Simulate work with progress updates
         for step in 1..=steps {
             sleep(step_duration).await;
 
+            let progress = step as f64 / steps as f64 * 100.0;
             if let Some(session_context) = &session {
-                let progress = (step as f64 / steps as f64 * 100.0) as u64;
                 session_context
-                    .notify_progress(&progress_token, progress)
+                    .notify_request_progress(progress, Some(100.0))
                     .await;
-                info!(
-                    "Progress: {}/{} steps completed ({}%)",
-                    step, steps, progress
-                );
-            } else {
-                info!("Progress: {}/{} steps completed (no session)", step, steps);
             }
+            info!("Progress: {}/{} steps completed ({}%)", step, steps, progress);
         }
+
+        // Echoing the caller's token back in the result lets a client verify the
+        // notifications and the response belong to the same request.
+        let progress_token = requested_token.unwrap_or_default();
 
         Ok(ProgressResult {
             operation: "progress_tracker".to_string(),

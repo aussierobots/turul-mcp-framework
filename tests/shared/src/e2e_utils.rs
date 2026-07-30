@@ -5,11 +5,33 @@
 use reqwest::Client;
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 use tracing::{debug, info};
+
+/// Path of a debug binary in the same target directory `cargo build` writes to.
+///
+/// `cargo` honours `CARGO_TARGET_DIR`, so resolving `<root>/target` unconditionally
+/// would rebuild into one directory and launch from another — silently running
+/// whatever stale artifact sat there, including one built for the other spec lane.
+/// Per-lane target directories are the normal way to work here, so that
+/// divergence is the default case rather than an edge one.
+fn debug_binary_path(workspace_root: &Path, binary_name: &str) -> PathBuf {
+    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+        .or_else(|| std::env::var_os("CARGO_BUILD_TARGET_DIR"))
+        .map(PathBuf::from)
+        .map(|dir| {
+            if dir.is_absolute() {
+                dir
+            } else {
+                workspace_root.join(dir)
+            }
+        })
+        .unwrap_or_else(|| workspace_root.join("target"));
+    target_dir.join("debug").join(binary_name)
+}
 
 /// Find the workspace root directory by looking for Cargo.toml with [workspace]
 fn find_workspace_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -403,10 +425,7 @@ impl TestServerManager {
         let workspace_root =
             find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
 
-        let binary_path = workspace_root
-            .join("target")
-            .join("debug")
-            .join(server_name);
+        let binary_path = debug_binary_path(&workspace_root, server_name);
 
         // Always rebuild before spawning so the binary matches the fixture's
         // current spec pin, not a stale artifact from a prior build.
@@ -463,10 +482,7 @@ impl TestServerManager {
         let workspace_root =
             find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
 
-        let binary_path = workspace_root
-            .join("target")
-            .join("debug")
-            .join(server_name);
+        let binary_path = debug_binary_path(&workspace_root, server_name);
 
         // Always rebuild before spawning so the binary matches the fixture's
         // current spec pin, not a stale artifact from a prior build.

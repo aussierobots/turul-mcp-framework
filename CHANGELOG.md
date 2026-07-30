@@ -48,6 +48,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a known SKIP is not mistaken for a regression. Cross-linked from the README
   and from the existing manual-verification checklist.
 
+### Fixed (2026-07-30, the E2E harness launched a binary it had not built)
+
+- **`TestServerManager` rebuilt into `CARGO_TARGET_DIR` and then spawned from a
+  hardcoded `<root>/target/debug`.** `cargo build` honours `CARGO_TARGET_DIR`;
+  the spawn path did not, so with a custom target directory the rebuild landed in
+  one place and the test launched whatever stale artifact sat in the other —
+  including one built for the opposite spec lane. The comment above the rebuild
+  said it existed "so the binary matches the fixture's current spec pin, not a
+  stale artifact from a prior build", which is precisely what the path defeated.
+  Both spawn sites now share one `debug_binary_path()` helper honouring
+  `CARGO_TARGET_DIR` / `CARGO_BUILD_TARGET_DIR`.
+
+  Found by editing `tools-test-server`, rebuilding, watching the suite pass, and
+  noticing the wire frames were the *old* shape: `"progress":0,25,50,75,100` with
+  no `total`, where the new code emits f64 progress and `total`. The suite was
+  reporting on a binary that predated the edit.
+
+  Not a CI false-pass: neither `ci-gates.sh` nor the workflows set
+  `CARGO_TARGET_DIR`, so there the two paths coincided. It hits anyone using a
+  per-lane target directory — which is the workflow `docs/manual-e2e-matrix.md`
+  recommends, so the doc was steering readers into it. Noted there.
+
+- **`test_progress_tracker_with_notifications` required non-compliant behaviour.**
+  It called `progress_tracker` with no `_meta.progressToken` and then asserted
+  progress notifications MUST arrive — i.e. it required the server to invent a
+  token, since with no token there is nothing to reference and a compliant tool
+  sends nothing. Once the harness ran the real binary, it failed. The request now
+  declares a token and every notification is asserted to carry *that* token
+  rather than merely to contain a `progressToken` field. A second assertion in
+  the same test checked only that the result's `progress_token` key existed —
+  true whether the tool echoed the caller's token, invented one, or reported
+  nothing — and now asserts the empty string for the no-token call.
+
 ### Fixed (2026-07-30, `echo_sse` emitted a progress token no client could match)
 
 - **`client-initialise-server`'s `echo_sse` invented its own progress token.**
@@ -72,15 +105,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `docs/manual-e2e-matrix.md` §2 B1 — `scripts/verify_client_examples.sh` starts
   this server but never inspects progress, and is not in `ci-gates.sh` anyway.
 
-- **Four more examples have the same defect, surfaced and left alone** — outside
-  the slice, and each needs its own call on what a correct token would be:
-  `zero-config-getting-started/src/main.rs:48` passes `self.message`, the
-  human-readable text, as the correlation ID;
-  `tools-test-server/src/main.rs:376` mints a fresh `Uuid::now_v7()`, which reads
-  as deliberate and is still uncorrelatable;
-  `stateful-server/src/main.rs:76,100,112,160` uses `cart_item_{n}` and
-  `cart_clear`. The getting-started one matters most — it is the first example a
-  new user reads.
+- **The same defect in three more examples, each needing a different answer.**
+  - `zero-config-getting-started` passed `self.message` — the human-readable
+    text — as the correlation ID. Now `notify_request_progress_with_message`,
+    which puts the text in `message` where it belongs and takes the token from
+    the request.
+  - `tools-test-server`'s `progress_tracker` minted a fresh `Uuid::now_v7()`,
+    which reads as deliberate and is still uncorrelatable. Now uses the caller's
+    token, and echoes it in `ProgressResult.progress_token` so a client can tie
+    the notifications and the response to one request.
+  - `stateful-server`'s four cart sites emitted `notifications/progress` with
+    `cart_item_{n}`/`cart_clear` and `progress: 1`. These are not progress at
+    all: a completed cart mutation is a state-change event, and progress is for
+    tracking a long-running request. Converted to `notify_log`, which needs no
+    token and says what actually happened.
+
+  Also removed the now-unused `uuid::Uuid` import, and noted at the `as_str()`
+  call that the frozen 2025-11-25 `ProgressToken` is a `String` newtype returning
+  `&str`, not the string-or-number enum the 2026 binding uses — the two lanes need
+  different code here.
 
 ### Fixed (2026-07-30, two orphan autobins the guard could not see, and dead dependency pins)
 

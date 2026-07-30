@@ -47,6 +47,14 @@ export CARGO_TARGET_DIR_2025=target-2025
 Prefix 2025-lane commands with `CARGO_TARGET_DIR=target-2025`. Every 2025 command
 below already does. Add `/target-2025/` to `.gitignore` if you keep it around.
 
+The E2E harness that spawns fixture servers (`tests/shared/src/e2e_utils.rs`)
+resolves binaries from the same `CARGO_TARGET_DIR`, so a per-lane directory is
+safe. It did not always: it rebuilt into `CARGO_TARGET_DIR` while launching from
+a hardcoded `target/debug`, which meant the suites silently exercised whatever
+stale binary sat there — possibly one built for the other lane. If you are on a
+checkout older than 2026-07-30 and using a custom target dir, the nested
+`tests/*` E2E results are not trustworthy.
+
 ---
 
 ## 1. Lane A — 2026-07-28 (stateless, the default)
