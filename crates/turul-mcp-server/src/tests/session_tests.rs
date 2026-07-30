@@ -364,7 +364,7 @@ mod session_context_tests {
         let manager = Arc::new(SessionManager::new(capabilities));
 
         let session_id = manager.create_session().await;
-        let context = manager.create_session_context(&session_id).unwrap();
+        let mut context = manager.create_session_context(&session_id).unwrap();
 
         // Test different notification types
         context
@@ -375,10 +375,11 @@ mod session_context_tests {
                 None,
             )
             .await;
-        context.notify_progress("test-token", 25).await;
         context
-            .notify_progress_with_total("test-token", 50, 100)
-            .await;
+            .extensions
+            .insert("mcp:progressToken".to_string(), serde_json::json!("test-token"));
+        assert!(context.notify_request_progress(25.0, None).await);
+        assert!(context.notify_request_progress(50.0, Some(100.0)).await);
         context.notify_resources_changed().await;
         context.notify_resource_updated("test://resource").await;
         context.notify_tools_changed().await;

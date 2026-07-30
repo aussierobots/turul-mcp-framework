@@ -438,62 +438,6 @@ impl SessionContext {
         debug!("🚀 SessionContext.notify() send_notification closure completed");
     }
 
-    /// Send a progress notification
-    pub async fn notify_progress(&self, progress_token: impl Into<String>, progress: u64) {
-        if self.has_broadcaster() {
-            debug!(
-                "🔔 notify_progress using NotificationBroadcaster for session: {}",
-                self.session_id
-            );
-            // TODO: Use broadcaster for MCP-compliant notifications
-        } else {
-            debug!(
-                "🔔 notify_progress using OLD SessionManager for session: {}",
-                self.session_id
-            );
-        }
-        let mut other = std::collections::HashMap::new();
-        other.insert(
-            "progressToken".to_string(),
-            serde_json::json!(progress_token.into()),
-        );
-        other.insert("progress".to_string(), serde_json::json!(progress));
-
-        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
-            "notifications/progress".to_string(),
-            other,
-        );
-        self.notify(SessionEvent::Notification(
-            serde_json::to_value(notification).unwrap(),
-        ))
-        .await;
-    }
-
-    /// Send a progress notification with total
-    pub async fn notify_progress_with_total(
-        &self,
-        progress_token: impl Into<String>,
-        progress: u64,
-        total: u64,
-    ) {
-        let mut other = std::collections::HashMap::new();
-        other.insert(
-            "progressToken".to_string(),
-            serde_json::json!(progress_token.into()),
-        );
-        other.insert("progress".to_string(), serde_json::json!(progress));
-        other.insert("total".to_string(), serde_json::json!(total));
-
-        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
-            "notifications/progress".to_string(),
-            other,
-        );
-        self.notify(SessionEvent::Notification(
-            serde_json::to_value(notification).unwrap(),
-        ))
-        .await;
-    }
-
     /// Send a logging message notification (with session-aware level filtering)
     // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
     // remains a valid feature the framework supports.
@@ -1990,7 +1934,7 @@ mod tests {
         let manager = Arc::new(SessionManager::new(capabilities));
 
         let session_id = manager.create_session().await;
-        let ctx = manager.create_session_context(&session_id).unwrap();
+        let mut ctx = manager.create_session_context(&session_id).unwrap();
 
         // Test state operations through context
         (ctx.set_state)("test", json!("value")).await;
@@ -2008,7 +1952,9 @@ mod tests {
             None,
         )
         .await;
-        ctx.notify_progress("test-token", 50).await;
+        ctx.extensions
+            .insert("mcp:progressToken".to_string(), serde_json::json!("test-token"));
+        assert!(ctx.notify_request_progress(50.0, None).await);
     }
 
     #[tokio::test]

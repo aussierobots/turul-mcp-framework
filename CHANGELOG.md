@@ -48,6 +48,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so a known SKIP is not mistaken for a regression. Cross-linked from the README
   and from the existing manual-verification checklist.
 
+### Removed (2026-07-30, the two progress APIs that could not be used compliantly)
+
+- **`SessionContext::notify_progress` and `notify_progress_with_total` are gone.**
+  Both took a caller-chosen `progress_token`, and the spec leaves no compliant use
+  for that: `ProgressNotificationParams.progressToken` is required and is defined
+  as the token given in the initial request, and the progress pattern states as a
+  MUST that notifications only reference tokens provided in an active request.
+  Any token a tool invents violates it unless it coincidentally matches. This was
+  not a weaker convenience API — it was a signature that produced MUST violations
+  by construction, and every progress defect fixed this session came through it.
+  `notify_request_progress` / `notify_request_progress_with_message` remain; they
+  read the request's token and return `false` when none was declared, which is the
+  correct outcome since the receiver "is not obligated to provide these
+  notifications".
+
+  Removed outright rather than deprecated: 0.4.0 is unpublished so nothing is
+  owed a migration window, and `clippy -D warnings` would have failed the build on
+  a `#[deprecated]` anyway, making deprecate-then-remove two steps for one result.
+
+  The 14 call sites were all internal unit tests of the removed functions. Each
+  now seeds `extensions["mcp:progressToken"]` — exactly what the `tools/call` and
+  `resources/read` handlers inject on the real path — and asserts
+  `notify_request_progress` returned `true`, so they verify delivery rather than
+  merely not panicking. The "different progress tokens" case became one fixed
+  token with varying progress values, which is what the wire contract actually
+  describes; the over-100 case keeps its assertion, since the schema says progress
+  "should increase every time progress is made, even if the total is unknown".
+
 ### Fixed (2026-07-30, the last invented progress tokens, and a guard for the example)
 
 What the spec actually requires, since every progress defect this session traced
