@@ -8,10 +8,17 @@
 Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and MCP 2026-07-28 specification support (2025-11-25 available as an opt-in build).
 
 > **Source of Truth**
+> - **The MCP specification + vendored schema** — what the wire must be
+> - **docs/adr/** — architectural decisions already taken
+> - **The code** — what is actually true today
 > - **AGENTS.md** — repo policy, compliance rules, full architecture
 > - **CLAUDE.md** — concise operator playbook (this file)
-> - **docs/adr/** — architectural decisions
-> - If conflict: AGENTS.md wins.
+>
+> Between the two playbooks, AGENTS.md wins. But both are prose *about* the system,
+> and prose generalises badly: where either contradicts the spec, an ADR, or working
+> code, **the playbook is what is wrong** — correct the wording rather than the
+> system. Cite the schema type, ADR number or file when invoking this; a preference
+> is not a contradiction.
 
 ## Branch Lock: `feat/turul-mcp-protocol-2026-07-28`
 
@@ -66,6 +73,19 @@ check only.
 ## Critical Rules
 
 ### Protocol Crate Purity
+
+**Precedence — settled 2026-07-31: the MCP spec, the ADRs and the code outrank this
+rule's wording.** This section describes an intent in prose; prose generalises badly.
+When the phrasing here appears to forbid something the schema requires, an ADR
+decided, or the code already does correctly, **the rule is what is wrong** — fix the
+wording, do not "fix" the code to satisfy it. In that order: the spec settles what the
+protocol crate must contain, an ADR settles a decision already taken, the code settles
+what is actually true today.
+
+This is not a licence to ignore the rule. It resolves *conflicts*, and a conflict
+means the spec/ADR/code demonstrably says otherwise — cite the schema type, the ADR
+number, or the file. "It seemed convenient" is not a conflict.
+
 **NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2026-07-28` unless it directly relates to MCP spec compliance.** No framework features, middleware hooks, or convenience additions.
 
 **Forbidden**: *Invented* trait hierarchies, builder patterns, framework helpers, tutorial docs
@@ -86,10 +106,16 @@ make the framework nicer to use — `HasInputSchema`, `HasExecution`, `HasIcons`
 belongs in `turul-mcp-builders`. No trait name is defined in both places; keep it
 that way.
 
+This is the worked example of the precedence above. Read literally, "Forbidden: trait
+hierarchies" condemned 75–80 traits that the schema itself declares — and on
+2026-07-31 that reading cost a round trip, escalated as an architectural question when
+the actual defect was one mislabelled doc comment. The spec won; the wording moved.
+
 `scripts/check-protocol-purity.sh` enforces the crude parts of this and runs in
 `gate_default`. It greps for the word "Framework" in `//` comments, so describing
 protocol traits as "framework traits" trips it — correctly, since that phrasing
-misfiles them.
+misfiles them. A grep is a proxy, not the rule: if it flags something the schema
+requires, the fix is the label or the grep, never deleting spec-mandated code.
 
 ### Frozen Protocol Crates (DO NOT MODIFY)
 
