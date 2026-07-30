@@ -128,11 +128,24 @@ request's token.
   crate this branch exists to build. Both added, and the script is now a
   `gate_default` step. It passes.
 
-  It warns on `traits.rs` in the 2026 crate. Left alone deliberately: that file
-  holds ~75 traits whose names mirror the schema's own TypeScript interfaces, so
-  whether it is a purity violation or schema fidelity is an ADR-level question,
-  not something to settle by moving code. Recorded here rather than silently
-  refactored or silently ignored.
+  It warned on `traits.rs` in the 2026 crate, which was first read as an
+  ADR-level purity question. It was not. The checker greps `^//.*Framework`, and
+  the 2026 crate's module doc opened `//! Framework traits for JSON-RPC types`
+  where 0.3's reads `//! Traits for JSON-RPC types as per MCP specification`.
+  The warning was the word.
+
+  The split CLAUDE.md prescribes has been in place since 2025-06-18 and is
+  intact: `traits.rs` carries ~80 protocol traits in every generation
+  (`HasMethod`, `HasParams`, `HasMeta` — the schema's `extends` relationships,
+  which Rust cannot express directly), while the authoring traits a tool
+  implements (`HasInputSchema`, `HasExecution`, `HasIcons`) live in
+  `turul-mcp-builders/src/traits/`. No trait name is defined in both. Only the
+  2026 crate's label had drifted, calling protocol traits "framework" ones —
+  corrected to match 0.3's wording, with a note on why the traits exist. A stray
+  "Framework trait impls" in `json_rpc.rs` fixed likewise, along with the
+  "predates this slice" dev-log narration on the same comment. The check now
+  passes with no warnings, by the label being accurate rather than the check
+  being suppressed.
 
 - **`scripts/quick_test_middleware.sh` deleted.** 47 lines of `echo` printing
   manual instructions, asserting nothing, referenced nowhere. Its content is in

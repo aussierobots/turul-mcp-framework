@@ -1,9 +1,13 @@
-//! Framework traits for JSON-RPC types per the MCP 2026-07-28 specification.
+//! Traits for JSON-RPC types as per MCP specification (2026-07-28).
 //!
-//! Trait names follow the schema's TypeScript interface names (`CallToolRequest`,
-//! `CallToolResult`, etc.). The `Has*Params` helpers expose per-interface field
-//! access without leaking the concrete Rust struct, so framework dispatchers
-//! can work with any Params implementation.
+//! These model the schema's own interface inheritance, which Rust has no
+//! equivalent for: `ProgressNotificationParams extends NotificationParams` in
+//! TypeScript becomes a `Has*` trait here. Names follow the schema's interface
+//! names (`CallToolRequest`, `CallToolResult`, etc.), so the mapping stays 1:1.
+//!
+//! They are protocol traits, not authoring traits. The traits a tool or resource
+//! implements — `HasInputSchema`, `HasExecution`, `HasIcons` and the rest — live
+//! in `turul-mcp-builders`, and no name is defined in both places.
 
 use serde::Serialize;
 use serde_json::Value;

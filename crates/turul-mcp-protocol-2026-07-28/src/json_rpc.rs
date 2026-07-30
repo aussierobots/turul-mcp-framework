@@ -81,9 +81,9 @@ impl HasDataParam for RequestParams {
     }
 }
 
-// `NotificationParams` lives in `crate::notifications` (it predates this slice
-// and has the same wire shape: `{ _meta?: MetaObject, [rest] }`). Framework
-// trait impls are co-located with the struct there.
+// `NotificationParams` lives in `crate::notifications` and has the same wire
+// shape: `{ _meta?: MetaObject, [rest] }`. Its trait impls are co-located with
+// the struct there.
 
 /// `params` shape for any request that extends `PaginatedRequest` —
 /// `PaginatedRequestParams extends RequestParams { cursor?: Cursor }`.
