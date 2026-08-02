@@ -27,13 +27,13 @@ test-utils = []
 turul-mcp-ext-tasks = { workspace = true, optional = true }
 # Framework dependencies
 turul-rpc = { workspace = true, features = ["async"] }
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }
-turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.0", default-features = false }
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0", default-features = false }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4", default-features = false }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
 turul-mcp-schema-validation = { workspace = true }
-turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4.0", default-features = false }
-turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4.0", default-features = false, optional = true }
-turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.0", default-features = false, optional = true }
+turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4", default-features = false }
+turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4", default-features = false, optional = true }
+turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4", default-features = false, optional = true }
 turul-mcp-server-state-storage = {workspace = true, optional = true}
 
 # Runtime utilities for task cancellation
@@ -58,7 +58,7 @@ urlencoding.workspace = true
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
 # Protocol feature comes from the server's own normal-dep forwarding; the dev-dep
 # must not also pull a default (protocol-2025-11-25), or the alias sees both specs.
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0", default-features = false }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
 turul-mcp-derive = { path = "../turul-mcp-derive" }
 reqwest = { workspace = true, features = ["stream"] }
 bytes.workspace = true

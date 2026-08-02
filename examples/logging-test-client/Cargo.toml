@@ -8,7 +8,7 @@ license.workspace = true
 # 2025-11-25 regression example; framework deps pinned to the 2025 opt-in
 # independent of the workspace 2026 default.
 [dependencies]
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 anyhow.workspace = true
 clap.workspace = true
 reqwest.workspace = true

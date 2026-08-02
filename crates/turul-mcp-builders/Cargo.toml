@@ -17,7 +17,7 @@ protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28"]
 
 [dependencies]
 # Protocol alias for current version
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0", default-features = false }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
 turul-rpc = { workspace = true, features = ["async"] }
 serde.workspace = true
 serde_json.workspace = true

@@ -1,15 +1,17 @@
 # ADR-032: Adopt turul-jwt-validator; turul-mcp-oauth stops owning JWT validation
 
-**Status**: Proposed
+**Status**: Accepted
 **Date**: 2026-08-02
 **Related**: ADR-021 (oauth-resource-server-architecture), ADR-022 (oauth-compliance), ADR-025 (extract-turul-rpc — the precedent this follows)
 
-> **Proposed, not Accepted.** This ADR stays Proposed until
-> `crates/turul-mcp-oauth/src/jwt.rs` no longer contains a second
-> implementation. An ADR that ratifies an intent while the alternative path
-> still ships is a claim, not a decision.
+> **Accepted 2026-08-02**, once the gate below was met rather than on
+> agreement alone. It was authored `Proposed` and stayed there while
+> `crates/turul-mcp-oauth/src/jwt.rs` still held a second implementation — an
+> ADR that ratifies an intent while the alternative path still ships is a
+> claim, not a decision. All four gate conditions are now satisfied; see the
+> revision log for the evidence.
 >
-> This is the first ADR in this repo to use `Proposed`; the template in
+> This was the first ADR in this repo to use `Proposed`; the template in
 > [README.md](./README.md) previously listed only Accepted / Superseded /
 > Deprecated, and has been extended to include it.
 
@@ -115,7 +117,7 @@ The complete surface this change touches:
 4. **Backend pinned to RustCrypto**, matching this workspace's existing choice:
 
    ```toml
-   turul-jwt-validator = { version = "0.3.2", default-features = false, features = ["rust_crypto"] }
+   turul-jwt-validator = { version = "0.3", default-features = false, features = ["rust_crypto"] }
    ```
 
    A version pin from crates.io, not a `path` dep — same rule ADR-025 set for
@@ -193,7 +195,7 @@ Ordered; each step is independently verifiable.
    `[workspace.dependencies]`, keeping `features = ["rust_crypto"]`. Build
    `turul-mcp-oauth` alone and fix any 10→11 API breakage before adding the new
    dependency. Isolates the bump from the swap.
-2. **Add `turul-jwt-validator = { version = "0.3.2", default-features = false, features = ["rust_crypto"] }`**
+2. **Add `turul-jwt-validator = { version = "0.3", default-features = false, features = ["rust_crypto"] }`**
    to `[workspace.dependencies]` and to `turul-mcp-oauth`.
 3. **Add `impl From<JwtValidationError> for OAuthError`** in `error.rs`,
    destructuring `JwksFetchError { kind, message }`. Decide explicitly whether
@@ -503,3 +505,26 @@ the provenance obscured.
   5. Plugin routing/index surfaces added to the step-8 inventory. One of them
      documents an `http://localhost` JWKS endpoint and survives only because
      step 9 exempts loopback — recorded, since the two decisions are coupled.
+- 2026-08-02: **Accepted.** All four gate conditions verified:
+  1. `jwt.rs` holds no second implementation — it is a re-export plus
+     `hardened_validator`, not a `#[cfg]`-disabled copy.
+  2. No implementation use of `jsonwebtoken` remains in
+     `crates/turul-mcp-oauth/src/`; the only uses are the `Algorithm`
+     re-export and dev-dependency token minting, both permitted by the gate.
+  3. The rewritten tests fail on a reverted delegation — corrupting the served
+     JWKS modulus turns 6 of them red. An earlier draft failed only 4, because
+     two negative cases asserted a bare `is_err()` and so passed for the wrong
+     reason; each now pins its rejection reason. `symmetric_alg_rejected`
+     stays green under that break, correctly: HS256 is refused at the
+     algorithm allow-list before any key is consulted.
+  4. All seven documentation surfaces reconciled, and the TLS row re-graded
+     from Unknown to Implemented.
+
+  `scripts/ci-gates.sh default` reports ALL GATES PASSED; `cargo fmt --all --
+  --check` and `check-protocol-purity.sh` are clean.
+
+  Landed in `c1ba164` (code) and `bc7423e` (documentation).
+- 2026-08-02: Internal `turul-*` version pins normalised from `x.y.z` to `x.y`
+  across the workspace and all member manifests, on the maintainer's
+  instruction. Cargo reads both as caret requirements, so `"0.3"` and `"0.3.2"`
+  admit the same 0.3.x range apart from the two pre-`rust_crypto` releases.

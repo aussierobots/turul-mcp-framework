@@ -61,7 +61,7 @@ Each ADR follows the standard format:
 | [029](./029-spec-coexistence-via-cargo-features.md) | Spec-version coexistence via mutually-exclusive cargo features | Accepted | 2026-05-31 | One protocol-`<date>` feature selects the alias; default 2026-07-28 |
 | [030](./030-turul-mcp-client-bilingual-spec-coexistence.md) | `turul-mcp-client` spec coexistence — bilingual default | Accepted | 2026-05-31 | Client links both versioned protocol crates and negotiates per connection |
 | [031](./031-origin-validation-dns-rebinding.md) | Origin validation (DNS-rebinding protection) on the HTTP transport | Accepted | 2026-06-11 | `Origin` enforcement in `turul-http-mcp-server`, builder passthrough in `turul-mcp-server` |
-| [032](./032-adopt-turul-jwt-validator.md) | Adopt `turul-jwt-validator`; `turul-mcp-oauth` stops owning JWT validation | Proposed | 2026-08-02 | Delegate JWT/JWKS to the extracted sibling crate; forces `jsonwebtoken` 10→11. Must land before 0.4.0 publishes |
+| [032](./032-adopt-turul-jwt-validator.md) | Adopt `turul-jwt-validator`; `turul-mcp-oauth` stops owning JWT validation | Accepted | 2026-08-02 | Delegate JWT/JWKS to the extracted sibling crate; forces `jsonwebtoken` 10→11. Must land before 0.4.0 publishes |
 
 ## Tasks Architecture ADRs
 

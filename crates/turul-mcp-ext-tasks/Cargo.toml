@@ -20,7 +20,7 @@ protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
 [dependencies]
 # Extension modules bind to their protocol-schema-version sibling directly,
 # behind the matching feature gate.
-turul-mcp-protocol-2026-07-28 = { version = "0.4.0", path = "../turul-mcp-protocol-2026-07-28", optional = true }
+turul-mcp-protocol-2026-07-28 = { version = "0.4", path = "../turul-mcp-protocol-2026-07-28", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true

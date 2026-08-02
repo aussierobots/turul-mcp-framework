@@ -80,10 +80,10 @@ wiremock.workspace = true
 # Real-server e2e: bilingual client against an in-process 2026 stateless server.
 # Default features (http, sse -> protocol-2026-07-28); no alias-mutex conflict
 # because this crate links the versioned protocol crates directly, not the alias.
-turul-mcp-server = { path = "../turul-mcp-server", version = "0.4.0", features = ["ext-tasks"] }
-turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4.0" }
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.4", features = ["ext-tasks"] }
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4" }
 # The derive macros expand to `turul_mcp_protocol::` / `turul_mcp_builders::`
 # paths, so the e2e test target needs both (2026 default, matching the dev
 # server). Dev-only: the published client library links neither.
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.0" }
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.0" }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4" }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4" }

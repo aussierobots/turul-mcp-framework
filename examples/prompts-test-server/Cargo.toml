@@ -13,9 +13,9 @@ path = "src/main.rs"
 # 2025-11-25 E2E fixture; framework deps pinned to the 2025 opt-in independent of the workspace 2026 default.
 [dependencies]
 # Framework dependencies
-turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4.0", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 
 # Async runtime
 tokio.workspace = true

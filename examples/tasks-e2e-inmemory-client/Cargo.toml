@@ -9,7 +9,7 @@ license.workspace = true
 # bilingual; turul-mcp-protocol is pinned to the 2025 opt-in for the task types.
 [dependencies]
 turul-mcp-client.workspace = true
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 clap.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

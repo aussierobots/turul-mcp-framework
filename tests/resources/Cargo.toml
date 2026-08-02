@@ -7,13 +7,13 @@ autotests = false
 
 # 2025-11-25 E2E regression crate; framework deps pinned to the 2025 opt-in independent of the workspace 2026 default.
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4.0", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
-turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server", version = "0.4.0", default-features = false, features = ["sse", "protocol-2025-11-25"] }
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server", version = "0.4", default-features = false, features = ["sse", "protocol-2025-11-25"] }
 turul-mcp-json-rpc-server.workspace = true
-turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", version = "0.4.0", default-features = false, features = ["in-memory", "protocol-2025-11-25"] }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", version = "0.4", default-features = false, features = ["in-memory", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

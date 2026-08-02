@@ -6,16 +6,16 @@ edition.workspace = true
 # 2025-11-25 regression example; framework deps pinned to the 2025 opt-in
 # independent of the workspace 2026 default.
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4.0", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_yml = { workspace = true }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive", version = "0.4.0", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
