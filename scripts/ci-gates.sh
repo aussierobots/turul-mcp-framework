@@ -5,12 +5,19 @@
 #   opt-in lane   = 2025-11-25 (legacy)
 #
 # Gates mirror docs/plans/2026-07-28-final-readiness-audit.md §7.
-# Usage:  scripts/ci-gates.sh [default|opt-in-2025|lambda|mutex|docs|examples|all]  (default: all)
+# Usage:  scripts/ci-gates.sh [fmt|default|opt-in-2025|lambda|mutex|docs|examples|all]  (default: all)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 fail=0
 run() { echo "=== $1 ==="; shift; if "$@"; then echo "  PASS"; else echo "  FAIL ($*)"; fail=1; fi; }
+
+# Lane-neutral: rustfmt ignores cargo features, so this is not part of either
+# spec lane's gate. Runs first in `all` because it costs ~1s and a formatting
+# failure is the cheapest possible thing to find out about.
+gate_fmt() {
+  run "rustfmt (--check, whole workspace)" cargo fmt --all -- --check
+}
 
 gate_default() {
   run "schema pin integrity" ./scripts/check-schema-pin.sh
@@ -187,14 +194,15 @@ gate_examples() {
 }
 
 case "${1:-all}" in
+  fmt)          gate_fmt ;;
   default)      gate_default ;;
   opt-in-2025)  gate_opt_in_2025 ;;
   lambda)       gate_lambda ;;
   mutex)        gate_mutex ;;
   docs)         gate_docs ;;
   examples)     gate_examples ;;
-  all)          gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs; gate_examples ;;
-  *) echo "usage: $0 [default|opt-in-2025|lambda|mutex|docs|examples|all]"; exit 2 ;;
+  all)          gate_fmt; gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs; gate_examples ;;
+  *) echo "usage: $0 [fmt|default|opt-in-2025|lambda|mutex|docs|examples|all]"; exit 2 ;;
 esac
 
 echo; [ "$fail" = "0" ] && echo "ALL GATES PASSED" || echo "ONE OR MORE GATES FAILED"

@@ -88,7 +88,7 @@ Build the curated default-members set, then any opt-in member individually.
 - Schema pin integrity: `./scripts/check-schema-pin.sh`
 - Lint: `cargo clippy --all-targets -- -D warnings`
 - All release gates: `./scripts/ci-gates.sh` (mirrors the CI lanes)
-- Format: `cargo fmt --all -- --check`  •  Fix: `cargo fmt --all`
+- Format: `cargo fmt --all -- --check`  •  Fix: `cargo fmt --all`  •  Gated as `./scripts/ci-gates.sh fmt` (also first in `all`)
 - Run example: `cd examples/minimal-server && cargo run` (adjust folder as needed)
 - Middleware smoke tests: `bash scripts/test_middleware_live.sh` (HTTP) and `cargo lambda watch --package middleware-auth-lambda` (Lambda) for interactive validation.
 - Schema/notification regressions:
@@ -204,7 +204,7 @@ _On the 2026-07-28 branch the `notifications/initialized` rule does not apply �
 
 ## Commit & Pull Request Guidelines
 - Commits: imperative subject (≤72 chars), meaningful body; reference issues (`Fixes #123`).
-- Pre‑PR: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test`, `./scripts/ci-gates.sh`; update README/examples/docs when APIs change.
+- Pre‑PR: `./scripts/ci-gates.sh` covers fmt, clippy and test across both lanes; run it rather than the individual commands. Update README/examples/docs when APIs change.
 - PRs: clear description, linked issues, testing notes (commands/output), risk/rollback.
 
 ## Security & Configuration Tips
