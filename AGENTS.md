@@ -87,7 +87,7 @@ Build the curated default-members set, then any opt-in member individually.
 - Compliance tests: `cargo test -p turul-mcp-protocol-2026-07-28 --features compliance`
 - Schema pin integrity: `./scripts/check-schema-pin.sh`
 - Lint: `cargo clippy --all-targets -- -D warnings`
-- All release gates: `./scripts/ci-gates.sh`. This is a **superset** of hosted CI, not a mirror of it — `.github/workflows/ci.yml` is the fast per-push subset and omits the lambda and examples jobs entirely, plus ~22 step invocations across the two lanes (counts in that file's header). A green CI run is necessary but not sufficient; run this script before tagging.
+- All release gates: `./scripts/ci-gates.sh`. This is a **superset** of hosted CI, not a mirror of it — `.github/workflows/ci.yml` is the fast per-push subset: the 2025-11-25 lane is now at exact parity (35 invocations both sides), but the 2026 default lane is 9 short and the lambda and examples jobs have no hosted equivalent at all (counts in that file's header). A green CI run is necessary but not sufficient; run this script before tagging.
 - Format: `cargo fmt --all -- --check`  •  Fix: `cargo fmt --all`  •  Gated as `./scripts/ci-gates.sh fmt` (also first in `all`)
 - Run example: `cd examples/minimal-server && cargo run` (adjust folder as needed)
 - Middleware smoke tests: `bash scripts/test_middleware_live.sh` (HTTP) and `cargo lambda watch --package middleware-auth-lambda` (Lambda) for interactive validation.

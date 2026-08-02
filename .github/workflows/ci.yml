@@ -7,10 +7,10 @@ name: CI
 # All jobs use standard ubuntu-latest runners (free on public repos).
 #
 # Relationship to scripts/ci-gates.sh: hosted CI is a SUBSET, not a mirror.
-# Measured 2026-08-02 (gate invocations, local -> hosted):
+# Measured 2026-08-02, counting cargo invocations (local -> hosted):
 #   fmt          1  -> 1   parity
-#   default-2026 28 -> 22  6 steps local-only
-#   opt-in-2025  19 -> 3   16 steps local-only
+#   opt-in-2025  35 -> 35  parity
+#   default-2026 28 -> 19  9 local-only
 #   mutex/docs         parity
 #   lambda       3  -> 0   no hosted job: needs the cargo-lambda + Zig
 #                          cross-compilation toolchain
@@ -21,6 +21,10 @@ name: CI
 # `./scripts/ci-gates.sh` (all) before tagging — that is the release gate;
 # this workflow is the fast per-push subset. Do not re-describe these as "the
 # same gates" without first closing the counts above.
+#
+# Count by cargo invocation, not by `- name:` step: several steps here run a
+# dozen commands under one name, and comparing step names against the script's
+# `run` lines understates hosted coverage badly.
 
 on:
   push:
@@ -138,9 +142,23 @@ jobs:
           # reference in a non-cfg-gated build() branch, so the crate did not
           # compile at all for anyone opting out of cors.
           cargo clippy -p turul-mcp-aws-lambda  --no-default-features --features protocol-2025-11-25 --all-targets -- -D warnings
-          cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
-          cargo build  -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
+          # Tests, not builds. These two feature sets select different #[cfg]
+          # dispatch arms from the bilingual default, so compiling them proves
+          # nothing about the code a single-spec consumer actually runs.
+          cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
+          cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
           cargo build  -p client-initialise-server --no-default-features
+          # Every example whose manifest pins protocol-2025-11-25. They cannot
+          # join [default-members] — unifying their features with the 2026
+          # default trips the spec mutex — so this is the only thing that
+          # compiles them.
+          cargo build --bins \
+            -p dynamic-tools-server -p elicitation-server -p lambda-turul-mcp-server \
+            -p logging-test-client -p logging-test-server -p prompts-test-server \
+            -p resource-test-server -p roots-server -p sampling-server \
+            -p session-aware-resource-server -p session-logging-proof-test \
+            -p stateful-server -p tasks-e2e-inmemory-client -p tasks-e2e-inmemory-server \
+            -p tools-test-server
       - name: 2025-11-25 regression E2E (real servers)
         run: |
           set -euxo pipefail
@@ -170,6 +188,13 @@ jobs:
           cargo test -p turul-mcp-framework-integration-tests --test derive_zero_config_output_schema_test
           cargo test -p turul-mcp-framework-integration-tests --test dynamic_tools_e2e
           cargo test -p turul-mcp-framework-integration-tests --test event_dispatcher_persistence
+          cargo test -p turul-mcp-framework-integration-tests --test client_integration_test
+          cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capabilities_validation
+          cargo test -p turul-mcp-framework-integration-tests --test streamable_http_behavior_regression
+          # The two guards that catch "present in the tree, absent from CI" rot.
+          # They were themselves absent from CI until 2026-08-02.
+          cargo test -p turul-mcp-framework-integration-tests --test examples_guard
+          cargo test -p turul-mcp-framework-integration-tests --test reachability_guard
 
   spec-mutex:
     name: Spec mutex (both features must not compile)
