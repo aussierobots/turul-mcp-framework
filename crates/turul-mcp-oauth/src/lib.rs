@@ -67,7 +67,10 @@ pub mod middleware;
 pub mod well_known;
 
 pub use error::OAuthError;
-pub use jwt::{JwtValidator, TokenClaims};
+pub use jwt::{
+    Algorithm, JwksFetchErrorKind, JwtValidationError, JwtValidator, TokenClaims,
+    hardened_validator,
+};
 pub use metadata::ProtectedResourceMetadata;
 pub use middleware::OAuthResourceMiddleware;
 pub use well_known::WellKnownOAuthHandler;
@@ -110,7 +113,7 @@ pub fn oauth_resource_server(
     }
     let audience = &metadata.resource;
     let issuer = &metadata.authorization_servers[0];
-    let validator = Arc::new(JwtValidator::new(jwks_uri, audience).with_issuer(issuer));
+    let validator = Arc::new(jwt::hardened_validator(jwks_uri, audience)?.with_issuer(issuer));
     let middleware = Arc::new(OAuthResourceMiddleware::new(validator, metadata.clone()));
     let handler: Arc<dyn turul_http_mcp_server::routes::RouteHandler> =
         Arc::new(WellKnownOAuthHandler::new(&metadata));

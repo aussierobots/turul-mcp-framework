@@ -233,6 +233,12 @@ bytes = "1"
 # every crate; 0.1 is not referenced anywhere on this branch.
 turul-rpc = { version = "0.2", default-features = false }
 
+# turul-jwt-validator — generic JWT/JWKS validator, upstream of what was
+# turul-mcp-oauth::jwt. Published crates.io pin (not a path dep) so the branch
+# builds without a sibling checkout. `rust_crypto` keeps the workspace's
+# existing jsonwebtoken backend; the crate defaults to aws_lc_rs.
+turul-jwt-validator = { version = "0.3.2", default-features = false, features = ["rust_crypto"] }
+
 # Internal crate dependencies.
 # Per-crate independent versioning: each crate publishes at its own semver.
 # The version pinned here is what consumers of this workspace see for
@@ -276,6 +282,10 @@ tempfile = "3"
 toml = "1.1"
 regex = "1.13"
 base64 = "0.22"
+wiremock = "0.6"
+# Test-only: reads RSA modulus/exponent out of a generated key to build a JWKS
+# document. Must track the crypto-bigint that `rsa` itself uses.
+crypto-bigint = "0.7"
 urlencoding = "2.1"
 
 # AWS SDK dependencies
@@ -290,7 +300,7 @@ lambda_http = "1"
 aws_lambda_events = "1"
 
 # Auth/Crypto dependencies
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto", "use_pem"] }
 rsa = "0.10.0-rc.17"
 
 # Other dependencies

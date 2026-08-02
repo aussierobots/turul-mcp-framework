@@ -46,8 +46,8 @@ use clap::Parser;
 use serde_json::json;
 use turul_mcp_derive::McpTool;
 use turul_mcp_oauth::{
-    JwtValidator, OAuthResourceMiddleware, ProtectedResourceMetadata, TokenClaims,
-    WellKnownOAuthHandler,
+    OAuthResourceMiddleware, ProtectedResourceMetadata, TokenClaims, WellKnownOAuthHandler,
+    hardened_validator,
 };
 use turul_mcp_protocol::{McpError, McpResult};
 use turul_mcp_server::prelude::*;
@@ -132,8 +132,17 @@ async fn main() -> McpResult<()> {
     // Manual construction (vs the one-call `oauth_resource_server` factory)
     // so the middleware can enforce required scopes: tokens missing any of
     // them are rejected with 403 + WWW-Authenticate `insufficient_scope`.
+    //
+    // `hardened_validator` rather than `JwtValidator::new`: it applies the
+    // framework's key max-age, stale window and fetch retry, which the bare
+    // constructor leaves disabled, and rejects a non-loopback plaintext
+    // jwks_uri.
     let validator = std::sync::Arc::new(
-        JwtValidator::new(&args.jwks_uri, &args.resource).with_issuer(&args.auth_server),
+        hardened_validator(&args.jwks_uri, &args.resource)
+            .map_err(|e| McpError::InvalidRequest {
+                message: format!("Invalid JWKS configuration: {}", e),
+            })?
+            .with_issuer(&args.auth_server),
     );
     let auth_middleware = std::sync::Arc::new(
         OAuthResourceMiddleware::new(validator, metadata.clone())

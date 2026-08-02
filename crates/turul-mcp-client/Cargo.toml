@@ -76,7 +76,7 @@ client-2026-07-28-only = ["dep:turul-mcp-protocol-2026-07-28"]
 
 [dev-dependencies]
 tokio-test.workspace = true
-wiremock = "0.6"
+wiremock.workspace = true
 # Real-server e2e: bilingual client against an in-process 2026 stateless server.
 # Default features (http, sse -> protocol-2026-07-28); no alias-mutex conflict
 # because this crate links the versioned protocol crates directly, not the alias.

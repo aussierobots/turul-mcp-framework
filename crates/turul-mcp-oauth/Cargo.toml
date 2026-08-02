@@ -26,10 +26,14 @@ protocol-2026-07-28 = [
 turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.0", default-features = false, features = ["sse"] }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.0", default-features = false, features = ["in-memory"] }
 
+turul-jwt-validator.workspace = true
+
 async-trait.workspace = true
 bytes.workspace = true
 http-body-util.workspace = true
 hyper = { workspace = true, features = ["http1", "http2"] }
+# Only for the `Algorithm` re-export in jwt.rs — no validation logic here.
+# Must stay on the same major as turul-jwt-validator's own jsonwebtoken dep.
 jsonwebtoken.workspace = true
 reqwest = { workspace = true, default-features = false, features = [
   "rustls",
@@ -42,7 +46,14 @@ tracing.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+base64.workspace = true
 chrono.workspace = true
+crypto-bigint.workspace = true
+# Mints test tokens. The crate itself only re-exports `Algorithm`.
+jsonwebtoken.workspace = true
 rand.workspace = true
 rsa.workspace = true
 tokio = { workspace = true, features = ["full"] }
+# Serves a real JWKS endpoint: the upstream validator exposes no key-injection
+# point, so token tests exercise the actual fetch/parse/cache path.
+wiremock.workspace = true
