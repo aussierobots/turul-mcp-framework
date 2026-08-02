@@ -5,7 +5,22 @@ name: CI
 #   - 2025-11-25 is the opt-in legacy lane
 # Gates derived from docs/plans/2026-07-28-final-readiness-audit.md §7.
 # All jobs use standard ubuntu-latest runners (free on public repos).
-# The same gates run locally via scripts/ci-gates.sh.
+#
+# Relationship to scripts/ci-gates.sh: hosted CI is a SUBSET, not a mirror.
+# Measured 2026-08-02 (gate invocations, local -> hosted):
+#   fmt          1  -> 1   parity
+#   default-2026 28 -> 22  6 steps local-only
+#   opt-in-2025  19 -> 3   16 steps local-only
+#   mutex/docs         parity
+#   lambda       3  -> 0   no hosted job: needs the cargo-lambda + Zig
+#                          cross-compilation toolchain
+#   examples     5  -> 0   no hosted job: boots real servers over six phases
+#                          (minutes of wall clock), and one leg wants DynamoDB
+#
+# So a green CI run is necessary but NOT sufficient for release. Run
+# `./scripts/ci-gates.sh` (all) before tagging — that is the release gate;
+# this workflow is the fast per-push subset. Do not re-describe these as "the
+# same gates" without first closing the counts above.
 
 on:
   push:
