@@ -108,6 +108,13 @@ gate_opt_in_2025() {
   run "elicitation E2E" cargo test -p mcp-elicitation-tests
   run "tasks E2E"       cargo test -p turul-mcp-framework-integration-tests --test tasks_e2e_inmemory
   run "ping auth E2E"   cargo test -p turul-mcp-framework-integration-tests --test ping_auth_2025
+  # The integration suite spawns example server binaries out of target/debug
+  # (client_integration_test launches minimal-server, and others launch their
+  # own). `cargo build` over the default members produces them. This gate must
+  # NOT rely on gate_default having run first: `ci-gates.sh opt-in-2025` alone,
+  # on a clean checkout, has to work. Without this the suite fails with
+  # "Failed to start minimal-server: No such file or directory (os error 2)".
+  run "example binaries the integration suite spawns" cargo build
   # Every [[test]] target in tests/Cargo.toml must appear here; a target with no
   # line below is invisible to CI.
   for t in compliance schema_tests example_validation e2e_tests feature_tests \

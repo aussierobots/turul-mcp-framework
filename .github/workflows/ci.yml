@@ -191,6 +191,14 @@ jobs:
           cargo test -p turul-mcp-framework-integration-tests --test tasks_e2e_inmemory
           cargo test -p turul-mcp-framework-integration-tests --test ping_auth_2025
 
+      # The integration suite spawns example server binaries out of target/debug.
+      # This job only ever builds the 2025-11-25 lane, so those binaries do not
+      # otherwise exist here — unlike a local `ci-gates.sh all`, where
+      # gate_default's `cargo build` has already produced them. Mirrors the
+      # matching line in gate_opt_in_2025.
+      - name: Example binaries the integration suite spawns
+        run: cargo build
+
       # Every [[test]] target declared in tests/Cargo.toml must be invoked here.
       # Adding a target without a line below silently drops it from CI — the
       # defect that let `example_validation` stop compiling unnoticed.
