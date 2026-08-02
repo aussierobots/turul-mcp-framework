@@ -303,8 +303,9 @@ survives adoption unchanged unless this section is implemented.
 
 This ADR does not accept "the capability now exists upstream" as the benefit.
 Either the framework sets a policy, or the Consequences below must drop the
-security claim. Proposed defaults, applied in `oauth_resource_server` (the
-opinionated constructor — a hand-built `JwtValidator` stays fully configurable):
+security claim. The defaults, applied by `hardened_validator` — which both
+`oauth_resource_server` and hand-built multi-AS deployments call, per the
+subsection below:
 
 | Knob | Default | Rationale |
 |---|---|---|

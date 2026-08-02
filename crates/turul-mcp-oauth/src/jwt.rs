@@ -46,8 +46,8 @@ pub const DEFAULT_RETRY_BASE_DELAY: Duration = Duration::from_millis(100);
 ///
 /// # Errors
 ///
-/// [`OAuthError::InvalidConfiguration`] if `jwks_uri` is not `https` and is not
-/// a loopback host.
+/// [`OAuthError::InvalidConfiguration`] if `jwks_uri` is neither `https` nor
+/// `http` on a loopback host.
 pub fn hardened_validator(jwks_uri: &str, audience: &str) -> Result<JwtValidator, OAuthError> {
     require_secure_jwks_uri(jwks_uri)?;
     Ok(JwtValidator::new(jwks_uri, audience)
@@ -58,8 +58,8 @@ pub fn hardened_validator(jwks_uri: &str, audience: &str) -> Result<JwtValidator
 
 /// Reject a JWKS URI that would fetch signing keys over plaintext.
 ///
-/// Loopback is exempt so local development against a non-TLS authorization
-/// server keeps working.
+/// `http` on a loopback host is exempt so local development against a non-TLS
+/// authorization server keeps working. No other scheme is.
 fn require_secure_jwks_uri(jwks_uri: &str) -> Result<(), OAuthError> {
     let parsed = url::Url::parse(jwks_uri).map_err(|e| {
         OAuthError::InvalidConfiguration(format!("jwks_uri is not a valid URL: {}", e))
@@ -69,12 +69,15 @@ fn require_secure_jwks_uri(jwks_uri: &str) -> Result<(), OAuthError> {
         return Ok(());
     }
 
-    if is_loopback_host(parsed.host_str()) {
+    // The exemption is for plaintext HTTP against a local authorization server,
+    // not for any scheme that happens to name a loopback host — `ftp://localhost`
+    // is not a JWKS endpoint and must not pass as one.
+    if parsed.scheme() == "http" && is_loopback_host(parsed.host_str()) {
         return Ok(());
     }
 
     Err(OAuthError::InvalidConfiguration(format!(
-        "jwks_uri must use https (loopback exempt), got: {}",
+        "jwks_uri must use https (http permitted on loopback only), got: {}",
         jwks_uri
     )))
 }
@@ -135,6 +138,23 @@ mod tests {
                 hardened_validator(uri, "aud").is_ok(),
                 "loopback must be exempt: {uri}"
             );
+        }
+    }
+
+    #[test]
+    fn non_http_scheme_on_loopback_rejected() {
+        // The loopback exemption is scheme-scoped: a non-HTTP scheme naming a
+        // loopback host is not a JWKS endpoint and must not slip through.
+        for uri in [
+            "ftp://localhost/jwks.json",
+            "file://localhost/jwks.json",
+            "ws://127.0.0.1/jwks.json",
+        ] {
+            match hardened_validator(uri, "aud") {
+                Err(OAuthError::InvalidConfiguration(_)) => {}
+                Err(other) => panic!("expected InvalidConfiguration for {uri}, got: {other}"),
+                Ok(_) => panic!("non-http loopback scheme must be rejected: {uri}"),
+            }
         }
     }
 

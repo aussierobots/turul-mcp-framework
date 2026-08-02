@@ -7,12 +7,13 @@ This directory contains Architecture Decision Records (ADRs) that document impor
 Each ADR follows the standard format:
 - **Status**: current state. The vocabulary actually in use in the table below,
   with counts as of 2026-08-02:
-  - **Accepted** (30) — decided and implemented.
+  - **Accepted** (31) — decided and implemented.
   - **Mandatory** (5) — ADRs 001–005, the always-on architectural rules. Stronger
     than Accepted: these are not per-slice decisions but standing constraints.
-  - **Proposed** (1) — decided in principle, but an alternative path still ships.
-    An ADR that ratifies an intent before the duplicate is deleted is a claim,
-    not a decision; it stays Proposed until the duplicate is gone.
+  - **Proposed** (0 in use) — decided in principle, but an alternative path
+    still ships. An ADR that ratifies an intent before the duplicate is deleted
+    is a claim, not a decision; it stays Proposed until the duplicate is gone.
+    ADR-032 was authored this way and moved to Accepted once its gate was met.
   - **Superseded by [NNN]** (1) — replaced; the row names its replacement.
   - **Closed** (1) — investigated and settled with no ongoing obligation.
   - **Deprecated** — available, currently unused.
