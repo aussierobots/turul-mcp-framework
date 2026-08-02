@@ -87,7 +87,7 @@ Build the curated default-members set, then any opt-in member individually.
 - Compliance tests: `cargo test -p turul-mcp-protocol-2026-07-28 --features compliance`
 - Schema pin integrity: `./scripts/check-schema-pin.sh`
 - Lint: `cargo clippy --all-targets -- -D warnings`
-- All release gates: `./scripts/ci-gates.sh`. This is a **superset** of hosted CI, not a mirror of it — `.github/workflows/ci.yml` now matches it command-for-command on the fmt, default-2026, opt-in-2025, mutex and docs gates. Only `lambda` (needs the cargo-lambda + Zig cross-compilation toolchain) and `examples` (boots real servers for minutes; one leg wants DynamoDB) remain local-only, so a green CI run still is not sufficient for release — run this script before tagging. A green CI run is necessary but not sufficient; run this script before tagging.
+- All release gates: `./scripts/ci-gates.sh`. `.github/workflows/ci.yml` matches it command-for-command on the fmt, default-2026, opt-in-2025, mutex and docs gates, but `lambda` (needs the cargo-lambda + Zig cross-compilation toolchain) and `examples` (boots real servers for minutes; one leg wants DynamoDB) have no hosted equivalent. So the script remains a superset: a green CI run is necessary but not sufficient — run it before tagging.
 - Format: `cargo fmt --all -- --check`  •  Fix: `cargo fmt --all`  •  Gated as `./scripts/ci-gates.sh fmt` (also first in `all`)
 - Run example: `cd examples/minimal-server && cargo run` (adjust folder as needed)
 - Middleware smoke tests: `bash scripts/test_middleware_live.sh` (HTTP) and `cargo lambda watch --package middleware-auth-lambda` (Lambda) for interactive validation.
