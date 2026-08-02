@@ -40,31 +40,3 @@ pub fn schema_for_impl(input: TokenStream) -> Result<TokenStream> {
 
     Ok(expanded.into())
 }
-
-#[cfg(test)]
-mod tests {
-    use syn::parse_quote;
-
-    // Note: This test is commented out because procedural macro functions
-    // cannot be tested directly in unit tests - they require compilation context
-    #[test]
-    #[ignore]
-    fn test_schema_for_primitive_types() {
-        // Test that the function parses basic types without errors
-        let types_to_test: Vec<syn::Type> = vec![
-            parse_quote!(String),
-            parse_quote!(i32),
-            parse_quote!(f64),
-            parse_quote!(bool),
-            parse_quote!(Vec<String>),
-        ];
-
-        // This would need to be tested via integration tests that actually
-        // compile code using the macro
-        for _type_input in types_to_test {
-            // let result = schema_for_impl(quote::quote!(#type_input).into());
-            // // Disabled assert:result.is_ok(), "Failed to generate schema for type"
-            // Procedural macro testing requires compilation context
-        }
-    }
-}

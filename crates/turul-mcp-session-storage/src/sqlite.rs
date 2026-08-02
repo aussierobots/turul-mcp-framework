@@ -730,18 +730,33 @@ mod tests {
     use serde_json::json;
     use turul_mcp_protocol::ServerCapabilities;
 
-    async fn create_test_storage() -> SqliteSessionStorage {
+    /// Backing store for a test's database file. Held by the caller so the
+    /// directory outlives the storage and is removed on drop.
+    fn test_db_dir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("create temp dir for sqlite test")
+    }
+
+    /// `verify_tables`/`create_tables` default to false, so `with_config` skips
+    /// `migrate()` and every query fails with "no such table: sessions". They
+    /// must be opted into here.
+    ///
+    /// A real file is required: `SqliteConnectOptions::filename(":memory:")`
+    /// leaves the schema unreachable to the querying connection regardless of
+    /// pool size, so `:memory:` cannot be substituted back in.
+    async fn create_test_storage(dir: &tempfile::TempDir) -> SqliteSessionStorage {
         let config = SqliteConfig {
-            database_path: ":memory:".into(), // Use in-memory SQLite for tests
+            database_path: dir.path().join("sessions.db"),
+            verify_tables: true,
+            create_tables: true,
             ..SqliteConfig::default()
         };
         SqliteSessionStorage::with_config(config).await.unwrap()
     }
 
     #[tokio::test]
-    #[ignore = "In-memory SQLite database setup issues - use dedicated simple-sqlite-session example instead"]
     async fn test_session_lifecycle() {
-        let storage = create_test_storage().await;
+        let dir = test_db_dir();
+        let storage = create_test_storage(&dir).await;
         let capabilities = ServerCapabilities::default();
 
         // Create session
@@ -763,9 +778,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "In-memory SQLite database setup issues - use dedicated simple-sqlite-session example instead"]
     async fn test_session_state_management() {
-        let storage = create_test_storage().await;
+        let dir = test_db_dir();
+        let storage = create_test_storage(&dir).await;
         let capabilities = ServerCapabilities::default();
 
         let session = storage.create_session(capabilities).await.unwrap();
@@ -809,9 +824,9 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "In-memory SQLite database setup issues - use dedicated simple-sqlite-session example instead"]
     async fn test_event_storage() {
-        let storage = create_test_storage().await;
+        let dir = test_db_dir();
+        let storage = create_test_storage(&dir).await;
         let capabilities = ServerCapabilities::default();
 
         let session = storage.create_session(capabilities).await.unwrap();

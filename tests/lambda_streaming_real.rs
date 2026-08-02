@@ -60,51 +60,6 @@ where
     Ok(frames)
 }
 
-/// Test that handler.handle_streaming() actually returns SSE frames
-#[tokio::test]
-#[ignore = "Requires Body::from_stream implementation"]
-async fn test_lambda_streaming_handler_execution() {
-    let _ = tracing_subscriber::fmt::try_init();
-
-    // Build Lambda server with streaming enabled
-    let storage = Arc::new(InMemorySessionStorage::new());
-    let server = LambdaMcpServerBuilder::new()
-        .name("streaming-test-server")
-        .version("1.0.0")
-        .tool(ProgressTool::default())
-        .storage(storage)
-        .sse(true)
-        .build()
-        .await
-        .expect("Failed to build server");
-
-    let _handler = server.handler().await.expect("Failed to create handler");
-
-    // TODO: Implement this test - currently just a stub
-    // Example of what the request should look like:
-    // let initialize_body = serde_json::json!({
-    //     "jsonrpc": "2.0",
-    //     "id": 1,
-    //     "method": "initialize",
-    //     "params": {
-    //         "protocolVersion": "2025-11-25",
-    //         "capabilities": {},
-    //         "clientInfo": {
-    //             "name": "test-client",
-    //             "version": "1.0.0"
-    //         }
-    //     }
-    // });
-    // let req = Request::default();
-    // TODO: Set Accept: text/event-stream header
-    // TODO: Set body to initialize_body JSON
-    // TODO: Call handler.handle_streaming(req).await
-    // TODO: Collect SSE frames from response
-    // TODO: Verify frames contain expected data
-
-    println!("⚠️  TEST STUB: This test needs implementation");
-}
-
 /// Test that progress notifications appear in SSE frames
 #[tokio::test]
 #[ignore = "Requires Body::from_stream implementation"]
@@ -299,52 +254,6 @@ async fn test_buffered_notification_collection() {
     println!("✅ Buffered notification collection test passed");
     println!("Collected {} total frames", frames.len());
     println!("Found {} progress notifications", notification_count);
-}
-
-/// TEST: Verify POST Streamable HTTP notifications work in Lambda
-///
-/// IMPORTANT: This test documents a THEORETICAL concern about background task lifecycle,
-/// but NO EMPIRICAL TESTING has been done to verify whether this is actually broken.
-///
-/// Theoretical concern: Progress notifications might be lost if Lambda terminates
-/// background tasks (tokio::spawn) before they forward notifications to response stream.
-///
-/// Current status: UNTESTED - lambda_http documentation says streaming works via
-/// run_with_streaming_response() and Body::from_stream(). Need actual testing to verify.
-///
-/// TODO: Implement this test properly with cargo lambda watch to determine if concern is valid.
-#[tokio::test]
-#[ignore = "Test incomplete - needs implementation to verify if Lambda streaming actually works"]
-async fn test_lambda_post_streamable_http_notifications() {
-    let _ = tracing_subscriber::fmt::try_init();
-
-    let storage = Arc::new(InMemorySessionStorage::new());
-    let server = LambdaMcpServerBuilder::new()
-        .name("streaming-verification-server")
-        .version("1.0.0")
-        .tool(ProgressTool { count: 3 })
-        .storage(storage)
-        .sse(true)
-        .build()
-        .await
-        .expect("Failed to build server");
-
-    let _handler = server.handler().await.expect("Failed to create handler");
-
-    // TODO: Create proper POST request with Accept: text/event-stream
-    // TODO: Use cargo lambda watch to test actual Lambda behavior
-    // TODO: Collect chunked response frames
-    // TODO: Verify progress notifications are present or absent
-
-    // This test should verify whether the theoretical concern is valid by:
-    // 1. Sending POST request with tools/call and Accept: text/event-stream
-    // 2. Collecting chunked response frames from Lambda streaming response
-    // 3. Checking if progress notifications appear in frames
-    // 4. Documenting actual behavior (works or broken) with evidence
-
-    println!("⚠️  TEST INCOMPLETE: Needs implementation to verify Lambda streaming behavior");
-    println!("📖 lambda_http docs say streaming works - verify empirically");
-    println!("🔧 Use cargo lambda watch for proper testing");
 }
 
 /// Test memory limits during buffering

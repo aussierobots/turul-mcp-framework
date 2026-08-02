@@ -39,3 +39,4 @@ dynamodb = ["aws-config", "aws-sdk-dynamodb"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+tempfile = { workspace = true }
