@@ -228,11 +228,7 @@ mod mcp_notification_tests {
         for i in 0..4u64 {
             let progress = (i + 1) as f64 * 25.0;
             assert!(context.notify_request_progress(progress, None).await);
-            assert!(
-                context
-                    .notify_request_progress(progress, Some(100.0))
-                    .await
-            );
+            assert!(context.notify_request_progress(progress, Some(100.0)).await);
         }
 
         // Test edge cases

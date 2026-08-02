@@ -1996,7 +1996,9 @@ mod provided_sampling_handler_tests {
     use std::sync::Arc;
     use turul_mcp_builders::prelude::*;
     use turul_mcp_protocol::prompts::ContentBlock;
-    use turul_mcp_protocol::sampling::{CreateMessageRequest, CreateMessageResult, Role, SamplingMessage};
+    use turul_mcp_protocol::sampling::{
+        CreateMessageRequest, CreateMessageResult, Role, SamplingMessage,
+    };
 
     /// A sampling provider whose only distinguishing trait is its model id —
     /// equal priority (default 0) and unconditional `can_handle` (default

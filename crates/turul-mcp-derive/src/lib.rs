@@ -368,7 +368,6 @@ pub fn derive_mcp_resource(input: TokenStream) -> TokenStream {
         .into()
 }
 
-
 /// Declarative macro for creating simple resources
 ///
 /// This provides a concise syntax for resource creation.

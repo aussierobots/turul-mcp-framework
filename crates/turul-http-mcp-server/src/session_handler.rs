@@ -454,8 +454,10 @@ impl SessionMcpHandler {
                 Err(other_err) => {
                     // Non-challenge pre-session errors → JSON-RPC error
                     if let JsonRpcMessage::Request(ref req) = message {
-                        let response =
-                            crate::middleware::error::map_middleware_error_to_jsonrpc(other_err, req.id.clone());
+                        let response = crate::middleware::error::map_middleware_error_to_jsonrpc(
+                            other_err,
+                            req.id.clone(),
+                        );
                         let response_json =
                             serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
                         return Ok(Response::builder()
@@ -1214,7 +1216,10 @@ impl SessionMcpHandler {
             Ok(inj) => inj,
             Err(err) => {
                 // Map middleware error to proper JSON-RPC error code
-                return (crate::middleware::error::map_middleware_error_to_jsonrpc(err, request.id), None);
+                return (
+                    crate::middleware::error::map_middleware_error_to_jsonrpc(err, request.id),
+                    None,
+                );
             }
         };
 
@@ -1271,7 +1276,10 @@ impl SessionMcpHandler {
                 (result, None)
             }
             Err(middleware_err) => (
-                crate::middleware::error::map_middleware_error_to_jsonrpc(middleware_err, request_id),
+                crate::middleware::error::map_middleware_error_to_jsonrpc(
+                    middleware_err,
+                    request_id,
+                ),
                 None,
             ),
         }
@@ -1316,7 +1324,6 @@ impl SessionMcpHandler {
             },
         }
     }
-
 }
 
 #[cfg(test)]

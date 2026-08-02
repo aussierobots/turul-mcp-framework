@@ -391,7 +391,10 @@ impl ProgressTrackerTool {
         );
 
         if let Some(session_context) = &session {
-            if !session_context.notify_request_progress(0.0, Some(100.0)).await {
+            if !session_context
+                .notify_request_progress(0.0, Some(100.0))
+                .await
+            {
                 info!("Caller declared no progressToken — running without progress");
             }
         }
@@ -406,7 +409,10 @@ impl ProgressTrackerTool {
                     .notify_request_progress(progress, Some(100.0))
                     .await;
             }
-            info!("Progress: {}/{} steps completed ({}%)", step, steps, progress);
+            info!(
+                "Progress: {}/{} steps completed ({}%)",
+                step, steps, progress
+            );
         }
 
         // Echoing the caller's token back in the result lets a client verify the

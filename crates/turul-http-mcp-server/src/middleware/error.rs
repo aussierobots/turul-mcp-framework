@@ -358,11 +358,7 @@ mod tests {
             let turul_rpc::JsonRpcResponse::Error(e) = response else {
                 panic!("{label} must map to an error response");
             };
-            assert_eq!(
-                e.error.code,
-                expected,
-                "{label} must answer {expected}"
-            );
+            assert_eq!(e.error.code, expected, "{label} must answer {expected}");
         }
     }
 

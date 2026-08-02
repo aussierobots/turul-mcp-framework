@@ -117,7 +117,9 @@ fn test_session_context() {
                 session.set_typed_state("counter", new_count).await.unwrap();
 
                 // Send progress notification
-                session.notify_request_progress(new_count as f64, None).await;
+                session
+                    .notify_request_progress(new_count as f64, None)
+                    .await;
 
                 Ok(new_count)
             } else {

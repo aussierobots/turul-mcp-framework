@@ -1231,8 +1231,10 @@ impl StreamableHttpHandler {
                 Err(other_err) => {
                     // Non-challenge pre-session errors → JSON-RPC error
                     if let JsonRpcMessage::Request(ref req) = message {
-                        let response =
-                            crate::middleware::error::map_middleware_error_to_jsonrpc(other_err, req.id.clone());
+                        let response = crate::middleware::error::map_middleware_error_to_jsonrpc(
+                            other_err,
+                            req.id.clone(),
+                        );
                         let response_value =
                             serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
                         return StreamableResponse::Json(response_value)
@@ -2756,7 +2758,10 @@ impl StreamableHttpHandler {
         {
             Ok(inj) => inj,
             Err(err) => {
-                return (crate::middleware::error::map_middleware_error_to_jsonrpc(err, request.id), None);
+                return (
+                    crate::middleware::error::map_middleware_error_to_jsonrpc(err, request.id),
+                    None,
+                );
             }
         };
 
@@ -2819,7 +2824,10 @@ impl StreamableHttpHandler {
                 (result, None)
             }
             Err(middleware_err) => (
-                crate::middleware::error::map_middleware_error_to_jsonrpc(middleware_err, request_id),
+                crate::middleware::error::map_middleware_error_to_jsonrpc(
+                    middleware_err,
+                    request_id,
+                ),
                 None,
             ),
         }
@@ -2864,7 +2872,6 @@ impl StreamableHttpHandler {
             },
         }
     }
-
 }
 
 use crate::middleware::bearer::{extract_bearer_token, is_bearer_scheme};

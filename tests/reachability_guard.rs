@@ -221,7 +221,10 @@ fn nested_crate_bins() -> Vec<(String, String, &'static str)> {
             .any(|line| line.trim().replace(' ', "") == "autobins=false");
         if !autobins_disabled && entry.path().join("src/main.rs").is_file() {
             let name = package_name(&manifest).unwrap_or_else(|| {
-                panic!("{} has a src/main.rs but no package name", manifest_path.display())
+                panic!(
+                    "{} has a src/main.rs but no package name",
+                    manifest_path.display()
+                )
             });
             bins.push((dir, name, "src/main.rs autobin"));
         }

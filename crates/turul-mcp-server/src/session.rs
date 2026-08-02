@@ -1952,8 +1952,10 @@ mod tests {
             None,
         )
         .await;
-        ctx.extensions
-            .insert("mcp:progressToken".to_string(), serde_json::json!("test-token"));
+        ctx.extensions.insert(
+            "mcp:progressToken".to_string(),
+            serde_json::json!("test-token"),
+        );
         assert!(ctx.notify_request_progress(50.0, None).await);
     }
 

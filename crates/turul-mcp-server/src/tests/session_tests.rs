@@ -375,9 +375,10 @@ mod session_context_tests {
                 None,
             )
             .await;
-        context
-            .extensions
-            .insert("mcp:progressToken".to_string(), serde_json::json!("test-token"));
+        context.extensions.insert(
+            "mcp:progressToken".to_string(),
+            serde_json::json!("test-token"),
+        );
         assert!(context.notify_request_progress(25.0, None).await);
         assert!(context.notify_request_progress(50.0, Some(100.0)).await);
         context.notify_resources_changed().await;
