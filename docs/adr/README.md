@@ -5,7 +5,17 @@ This directory contains Architecture Decision Records (ADRs) that document impor
 ## ADR Format
 
 Each ADR follows the standard format:
-- **Status**: Current state (Accepted, Superseded, Deprecated)
+- **Status**: current state. The vocabulary actually in use in the table below,
+  with counts as of 2026-08-02:
+  - **Accepted** (30) — decided and implemented.
+  - **Mandatory** (5) — ADRs 001–005, the always-on architectural rules. Stronger
+    than Accepted: these are not per-slice decisions but standing constraints.
+  - **Proposed** (1) — decided in principle, but an alternative path still ships.
+    An ADR that ratifies an intent before the duplicate is deleted is a claim,
+    not a decision; it stays Proposed until the duplicate is gone.
+  - **Superseded by [NNN]** (1) — replaced; the row names its replacement.
+  - **Closed** (1) — investigated and settled with no ongoing obligation.
+  - **Deprecated** — available, currently unused.
 - **Context**: Problem description and constraints
 - **Decision**: What was decided and why
 - **Consequences**: Positive and negative outcomes
@@ -50,6 +60,8 @@ Each ADR follows the standard format:
 | [028](./028-extensions-strategy.md) | Extensions strategy — separate `turul-mcp-ext-*` crates | Accepted | 2026-05-24 | Mirror upstream `ext-*` repos; Tasks become a 2026 extension |
 | [029](./029-spec-coexistence-via-cargo-features.md) | Spec-version coexistence via mutually-exclusive cargo features | Accepted | 2026-05-31 | One protocol-`<date>` feature selects the alias; default 2026-07-28 |
 | [030](./030-turul-mcp-client-bilingual-spec-coexistence.md) | `turul-mcp-client` spec coexistence — bilingual default | Accepted | 2026-05-31 | Client links both versioned protocol crates and negotiates per connection |
+| [031](./031-origin-validation-dns-rebinding.md) | Origin validation (DNS-rebinding protection) on the HTTP transport | Accepted | 2026-06-11 | `Origin` enforcement in `turul-http-mcp-server`, builder passthrough in `turul-mcp-server` |
+| [032](./032-adopt-turul-jwt-validator.md) | Adopt `turul-jwt-validator`; `turul-mcp-oauth` stops owning JWT validation | Proposed | 2026-08-02 | Delegate JWT/JWKS to the extracted sibling crate; forces `jsonwebtoken` 10→11. Must land before 0.4.0 publishes |
 
 ## Tasks Architecture ADRs
 
@@ -77,7 +89,7 @@ When adding a new ADR:
 ```markdown
 # ADR-NNN: Title
 
-**Status**: Accepted | Superseded | Deprecated
+**Status**: Proposed | Accepted | Mandatory | Superseded by NNN | Closed | Deprecated
 
 **Date**: YYYY-MM-DD
 
