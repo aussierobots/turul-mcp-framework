@@ -208,3 +208,24 @@ OAuth 2.1 Section 5.3. Applied in both Streamable HTTP and legacy transports.
   (mitigated by caching + rate limiting)
 - Token replay attacks if tokens have long expiration
   (mitigated by exp validation, out of scope for RS)
+
+## Revision log
+
+- 2026-08-02 (ADR-032): **`JwtValidator` is no longer owned by this crate.**
+  Signature verification, JWKS fetch/cache/refresh and `TokenClaims` moved to
+  the sibling `turul-jwt-validator`; `turul-mcp-oauth` re-exports them. The
+  descriptions above of `JwtValidator`'s internals (RS256/ES256, caching,
+  kid-miss refresh, 60-second fetch rate limiting) now describe upstream
+  behaviour rather than code in this repository.
+
+  Two contract changes follow:
+
+  - `JwtValidator::validate` returns `JwtValidationError`, not `OAuthError`.
+  - `hardened_validator` is the framework's entry point. It applies a key
+    max-age (15 min), stale window (5 min) and bounded fetch retry — all of
+    which upstream leaves disabled — so worst-case revocation exposure is
+    20 minutes rather than unbounded.
+
+  This also retires the "TLS enforced on JWKS / issuer URIs" posture this ADR
+  claimed but never implemented: `hardened_validator` now rejects a
+  non-loopback plaintext `jwks_uri`. See `docs/compliance/base-protocol.md`.

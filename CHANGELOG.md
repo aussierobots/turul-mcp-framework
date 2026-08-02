@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### JWT validation moves to `turul-jwt-validator` (2026-08-02, ADR-032)
+
+- **BREAKING (`turul-mcp-oauth`): `JwtValidator::validate` now returns
+  `JwtValidationError`, not `OAuthError`.** The type is owned by the sibling
+  [`turul-jwt-validator`](https://crates.io/crates/turul-jwt-validator) `0.3.2`
+  and re-exported; `turul_mcp_oauth::{JwtValidator, TokenClaims}` still resolve.
+  `turul-mcp-oauth` kept ~300 lines that had been extracted to that crate, which
+  had since gained a revocation safety-net, stale-while-revalidate serving,
+  fetch retry and typed JWKS failures — so the two had begun to diverge.
+  Callers matching on `OAuthError` from `validate()` must switch; the only
+  in-tree caller already mapped it.
+
+- **BREAKING: `OAuthError::JwksFetchError` is now a struct variant**
+  `{ kind, message }`, carrying `JwksFetchErrorKind`
+  (`Timeout`/`Transport`/`HttpStatus`/`InvalidJson`/`NoSigningKeys`) instead of
+  a flattened string. `OAuthError` also gained `#[non_exhaustive]`.
+
+- **Added `turul_mcp_oauth::hardened_validator(jwks_uri, audience)`** — applies
+  a signing-key max-age (15 min), stale window (5 min) and bounded fetch retry
+  (3 × 100 ms), all of which upstream ships **disabled**. Worst-case revocation
+  exposure goes from unbounded to `max_age + stale_window` = 20 minutes.
+  `oauth_resource_server` routes through it, so the convenience and manual
+  multi-AS paths share one definition of the policy. Prefer it over
+  `JwtValidator::new`, which applies no hardening.
+
+- **TLS is now enforced on `jwks_uri`** (loopback exempt for local development),
+  closing a SHOULD that ADR-021 claimed but no code implemented. Tracked in
+  `docs/compliance/base-protocol.md` as Implemented rather than Unknown.
+
+- **Added `turul_mcp_oauth::Algorithm`** — re-exported so callers can use
+  `with_algorithms` without adding a matching `jsonwebtoken` dependency of their
+  own. Workspace `jsonwebtoken` moved 10 → 11, which upstream requires.
+
+- The seven key-injection unit tests are replaced by wiremock-backed tests that
+  assert through `OAuthResourceMiddleware` — the path a real request takes —
+  and each negative case pins its rejection reason rather than asserting a bare
+  `is_err()`.
+
 ### Documentation (2026-07-30, middleware error mapping, and a manual E2E matrix)
 
 - **ADR-012's error table documented three arms that cannot execute.**

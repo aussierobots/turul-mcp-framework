@@ -77,7 +77,7 @@ let server = builder.build()?;
 ```
 
 **What `oauth_resource_server()` does for you:**
-- Creates a `JwtValidator` with audience = resource URL, issuer = first AS
+- Creates a hardened `JwtValidator` (via `hardened_validator`) with audience = resource URL, issuer = first AS
 - Wraps it in `OAuthResourceMiddleware` (pre-session, so 401s don't allocate sessions)
 - Registers `WellKnownOAuthHandler` for both root-form and path-form endpoints
 - Returns `(Arc<OAuthResourceMiddleware>, Vec<RouteEntry>)` ready to wire in
@@ -91,12 +91,12 @@ When you need custom audience, multiple ASes, or algorithm restrictions:
 ```rust
 // turul-mcp-server v0.4
 use std::sync::Arc;
-use turul_mcp_oauth::{JwtValidator, OAuthResourceMiddleware, ProtectedResourceMetadata,
+use turul_mcp_oauth::{hardened_validator, OAuthResourceMiddleware, ProtectedResourceMetadata,
                        WellKnownOAuthHandler};
 
 // Custom audience (not the resource URL)
 let validator = Arc::new(
-    JwtValidator::new(
+    hardened_validator(
         "https://auth.example.com/.well-known/jwks.json",
         "my-custom-audience",  // Audience is ALWAYS required
     )
@@ -225,7 +225,7 @@ The AS uses `resource` to set the token's `aud` claim. The RS later validates th
 
 1. Pick a single canonical resource URI for your MCP server (e.g. `https://api.example.com/mcp`).
 2. Pass that exact URI as the first argument to `ProtectedResourceMetadata::new(...)`.
-3. Pass that exact URI as the audience argument to `JwtValidator::new(...)` (or let `oauth_resource_server()` propagate it for you).
+3. Pass that exact URI as the audience argument to `hardened_validator(...)` / `JwtValidator::new(...)` (or let `oauth_resource_server()` propagate it for you).
 4. Document the URI so client integrators know what to send as `resource` and `aud`.
 
 ## Accessing Auth Claims in Tools
@@ -436,7 +436,7 @@ When `scopes_supported` is configured, `scope="mcp:read mcp:write"` is included 
 
 1. **Forgetting audience validation is mandatory** — `JwtValidator::new()` requires an audience string. There's no way to skip it. This is by design per OAuth 2.1.
 
-2. **Using `oauth_resource_server()` with multiple ASes** — The convenience function takes only the first AS from `authorization_servers`. For multi-AS setups, construct `JwtValidator` and `OAuthResourceMiddleware` manually.
+2. **Using `oauth_resource_server()` with multiple ASes** — The convenience function takes only the first AS from `authorization_servers`. For multi-AS setups, build the validator with `hardened_validator(jwks_uri, audience)` and wire `OAuthResourceMiddleware` manually. Do **not** reach for `JwtValidator::new` here: it leaves key max-age, stale window and retry disabled, so the multi-AS path would be the only unhardened one.
 
 3. **Wrong extension key for claims** — Claims are currently stored at `"__turul_internal.auth_claims"` (no public constant yet). Use this exact string. If the framework introduces a public constant, prefer that.
 
@@ -448,7 +448,7 @@ When `scopes_supported` is configured, `scope="mcp:read mcp:write"` is included 
 
 7. **Manually dispatching well-known routes in `run_streaming_with()`** — You don't need custom dispatch for `.well-known` routes. Register them via `.route()` on `LambdaMcpServerBuilder` — `handle_streaming()` checks the route registry before MCP dispatch. Use `run_streaming_with()` only when you need pre-dispatch logic that isn't route-based (e.g., request logging, custom health checks).
 
-8. **Resource / audience URI mismatch between RS and what clients send** — The single most common interop failure. If your `ProtectedResourceMetadata::new("https://api.example.com/mcp", ...)` declares one URI but clients send `resource=https://api.example.com` (no `/mcp` path), the AS issues `aud=https://api.example.com` and your RS rejects with `invalid audience`. Fix: pick one canonical URI, use it verbatim in `ProtectedResourceMetadata::new`, `JwtValidator::new`, and document it so client integrators send the exact same string as `resource` in both `/authorize` and `/token`.
+8. **Resource / audience URI mismatch between RS and what clients send** — The single most common interop failure. If your `ProtectedResourceMetadata::new("https://api.example.com/mcp", ...)` declares one URI but clients send `resource=https://api.example.com` (no `/mcp` path), the AS issues `aud=https://api.example.com` and your RS rejects with `invalid audience`. Fix: pick one canonical URI, use it verbatim in `ProtectedResourceMetadata::new`, `hardened_validator`, and document it so client integrators send the exact same string as `resource` in both `/authorize` and `/token`.
 
 9. **Expecting the RS to serve `/.well-known/oauth-authorization-server`** — That endpoint lives on the AS, not the RS. The RS only serves `/.well-known/oauth-protected-resource` (RFC 9728); it advertises the AS URL via the `authorization_servers` field and clients fetch RFC 8414 metadata from the AS directly.
 

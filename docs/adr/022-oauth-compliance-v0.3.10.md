@@ -79,3 +79,12 @@ for tool-level scope checks returning 403 with `error="insufficient_scope"`.
 8. CHANGELOG.md updated
 9. Version bumped workspace-wide
 10. Dry publish passes
+
+## Revision log
+
+- 2026-08-02 (ADR-032): the `JwtValidator::new(jwks_uri, audience)` signature
+  described here is now `turul-jwt-validator`'s, re-exported by
+  `turul-mcp-oauth`. Mandatory audience validation is unchanged — it remains a
+  required constructor parameter with no opt-out. New code should prefer
+  `hardened_validator`, which wraps that constructor with the framework's
+  key max-age, stale window and fetch retry.

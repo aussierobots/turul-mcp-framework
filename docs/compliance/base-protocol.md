@@ -103,10 +103,10 @@ than counted as gaps, because implementing them here would be wrong.
 
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
-| JWKS signature validation, alg pinned, `alg:none` rejected | MUST | Implemented | `c/turul-mcp-oauth/src/jwt.rs:124` | `jwt.rs::test_alg_none_rejected`, `::test_valid_jwt_accepted` | pass | — | — | — |
-| Expired token rejected | MUST | Implemented | `jwt.rs:157,171` | `jwt.rs::test_expired_jwt_rejected_401` | pass | — | — | — |
-| Audience validated always, no opt-out | MUST | Implemented | `jwt.rs:93,163-167` | `jwt.rs::test_audience_always_validated`, `::test_wrong_audience_rejected` | pass | — | — | — |
-| Token `iss` validated when an issuer is configured | SHOULD | Implemented | `jwt.rs:159-161` | `jwt.rs::test_wrong_issuer_rejected` | pass | — | — | — |
+| JWKS signature validation, alg pinned, `alg:none` rejected | MUST | Implemented | `turul-jwt-validator` (owner, ADR-032); wired at `c/turul-mcp-oauth/src/middleware.rs:102` | `middleware.rs::symmetric_alg_rejected`, `::token_signed_by_unknown_key_rejected`, `::valid_jwt_accepted` | pass | — | — | — |
+| Expired token rejected | MUST | Implemented | `turul-jwt-validator` (owner, ADR-032) | `middleware.rs::expired_jwt_rejected` | pass | — | — | — |
+| Audience validated always, no opt-out | MUST | Implemented | Required constructor param — `turul-jwt-validator` (owner, ADR-032); `hardened_validator` / `oauth_resource_server` propagate resource→audience | `middleware.rs::wrong_audience_rejected` | pass | — | — | — |
+| Token `iss` validated when an issuer is configured | SHOULD | Implemented | `turul-jwt-validator` (owner, ADR-032); issuer auto-wired by `oauth_resource_server` | `middleware.rs::wrong_issuer_rejected` | pass | — | — | — |
 | Single-AS issuer policy, no silent fallback | SHOULD | Implemented | `c/turul-mcp-oauth/src/lib.rs:100-126` | `lib.rs::test_single_as_ok`, `::test_multiple_as_rejected` | pass | — | — | — |
 | RFC 9728 Protected Resource Metadata, root and path form | MUST | Implemented | `well_known.rs:30-44`, `metadata.rs:185-198` | `oauth_2026.rs::protected_resource_metadata_is_served_on_well_known_routes`, `well_known.rs::test_path_form_endpoint_returns_same_metadata` | pass | — | — | — |
 | Missing bearer → 401 + `WWW-Authenticate` | MUST | Implemented | `middleware.rs` | `oauth_2026.rs::missing_bearer_gets_401_with_www_authenticate_challenge` | pass | — | — | — |
@@ -114,7 +114,7 @@ than counted as gaps, because implementing them here would be wrong.
 | Insufficient scope → 403 `insufficient_scope` | SHOULD | Implemented | `middleware.rs` | `middleware.rs::insufficient_scope_returns_403_challenge` | pass | — | — | — |
 | 401 outranks `_meta` validation 400 | SHOULD | Implemented | `streamable_http.rs:1309` | `oauth_2026.rs::auth_401_outranks_meta_validation_400` | pass | — | — | — |
 | `Cache-Control: no-store` on auth challenges | SHOULD | Implemented | `build_http_challenge_response` (`streamable_http.rs:2907-2929`) sets it on every challenge it builds, reached from the pre-session middleware branch at `streamable_http.rs:1219` | `oauth_2026.rs::challenges_are_not_cacheable` | pass | — | — | — |
-| TLS enforced on JWKS / issuer URIs | SHOULD | **Unknown** | no scheme check in `JwtValidator::new` | NOT FOUND | — | — | — | — |
+| TLS enforced on JWKS / issuer URIs | SHOULD | Implemented | `hardened_validator` rejects a non-`https` `jwks_uri`, loopback exempt for local dev — `c/turul-mcp-oauth/src/jwt.rs`; `oauth_resource_server` routes through it | `jwt.rs::plaintext_jwks_uri_rejected`, `::loopback_plaintext_jwks_uri_accepted`, `::https_jwks_uri_accepted` | pass | — | — | — |
 | RFC 9207 `iss` in the authorization response (SEP-2468) | MUST | **Out-of-role** | absent by design — an RS never handles the authorization response | n/a | n/a | n/a | n/a | n/a |
 | OIDC `application_type` on DCR (SEP-837) | MUST | **Out-of-role** | MUST is to specify `application_type` at all during DCR; SHOULD applies only to the `native`/`web` choice. Binds MCP clients performing DCR; `oauth/src/lib.rs:24-27` states this crate never implements a DCR surface | n/a | n/a | n/a | n/a | n/a |
 | Refresh Tokens — RS half (SEP-2207) | SHOULD | **Partial** | RS (Protected Resource) half implemented: `c/turul-mcp-oauth/src/metadata.rs:112-136` filters `offline_access` out of advertised scopes / `WWW-Authenticate`, per "MCP Servers (Protected Resources) SHOULD NOT include offline_access in WWW-Authenticate scope or Protected Resource Metadata scopes_supported." Client half (advertising `refresh_token` in `grant_types`, requesting `offline_access`) is out-of-role — this crate is RS-only | `metadata.rs::offline_access_is_filtered_from_scopes` | pass | — | — | — |
@@ -274,7 +274,7 @@ answering 400 like the null-id and header-validation checks; see §1.
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
 | `inputSchema` validated at build time (dialect, size, depth) — SEP-2106 | MUST | Implemented | `c/turul-mcp-schema-validation/src/lib.rs:78`, wired at `builder.rs:1658` | `lib.rs::unsupported_dialect_is_rejected`, `::oversized_schema_names_the_limit_in_its_message` | pass | — | — | — |
-| No hardcoded credentials | SHOULD | Implemented | config passed to `JwtValidator::new` | `jwt.rs::test_audience_always_validated` | pass | — | — | — |
+| No hardcoded credentials | SHOULD | Implemented | config passed to `hardened_validator` / `JwtValidator::new` | `middleware.rs::wrong_audience_rejected` | pass | — | — | — |
 | Rate limiting | SHOULD | **Partial** | example only (`examples/middleware-rate-limit-server`) | NOT FOUND | — | — | — | — |
 
 ### State handle hijacking
@@ -317,10 +317,13 @@ Ordered by consequence, not by area.
    `JsonRpcErrorObject::server_error`, whose `assert!` demands
    `-32099..=-32000`, so moving there panics rather than failing. Closing this
    properly needs a change in the sibling `turul-rpc` crate.
-3. **TLS is not enforced on JWKS / issuer URIs.** `JwtValidator::new` performs
-   no scheme check, so a misconfigured `http://` JWKS endpoint is accepted
-   silently. ADR-021 claims the posture; no code implements it and no test
-   looks. (The `Cache-Control: no-store` half of this entry closed — see §5.)
+3. ~~**TLS is not enforced on JWKS / issuer URIs.**~~ **Closed** (ADR-032).
+   `hardened_validator` rejects a non-`https` `jwks_uri`, exempting loopback so
+   local development against a plaintext authorization server still works, and
+   `oauth_resource_server` routes through it. Raw `JwtValidator::new` remains
+   unchecked — it is the upstream general-purpose constructor and is documented
+   as the opt-out. (The `Cache-Control: no-store` half of this entry closed
+   earlier — see §5.)
 4. **The 403 `insufficient_scope` challenge has no wire test.** It shares
    `build_http_challenge_response` with the three challenges
    `oauth_2026.rs::challenges_are_not_cacheable` drives, so the header is

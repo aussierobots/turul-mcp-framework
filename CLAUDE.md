@@ -323,6 +323,11 @@ Before publishing a new version:
    ```
    *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
 
+   External sibling crates are **not** in this sequence — they publish from their
+   own repos and must already be on crates.io: `turul-rpc` (0.2) and
+   `turul-jwt-validator` (>= 0.3.2, required by `turul-mcp-oauth` — the
+   `rust_crypto` feature does not exist before 0.3.2).
+
    Frozen `turul-mcp-json-rpc-server`, `turul-mcp-protocol-2025-06-18` and
    `turul-mcp-protocol-2025-11-25` stay published at `0.3.47` — no republish step.
    `turul-mcp-framework-integration-tests` is `publish = false`.
