@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+### `OUTSTANDING.md` retired (2026-08-02)
+
+- **The 0.4 compliance punch list is folded and deleted**, as the file itself
+  instructed ("do not let it become a second, competing status authority
+  alongside the driver doc"). It had one open item left —
+  `SubscriptionsListenResult` graceful-close emission — now carried by
+  `docs/plans/2026-07-28-spec-compliance.md` rows 336 and 356, which previously
+  cited it by line number and are now self-contained. Earlier entries in this
+  changelog that link to `OUTSTANDING.md` (including the 2026-07-13 burn-down
+  below) are dated records and stand as written; the file's content remains in
+  git history.
+- Its second surviving line, a pagination test recorded as failing and
+  "Untriaged", was verified closed: see the entry below.
+
 ### JWT validation moves to `turul-jwt-validator` (2026-08-02, ADR-032)
 
 - **BREAKING (`turul-mcp-oauth`): `JwtValidator::validate` now returns

@@ -30,7 +30,7 @@ are worded differently depending on your answer.
       3. If it stays, what is the new stated trigger for cutting over to `main`, and who
          records it?
       **Until A1 is answered, do not rename the branch, retitle ADR-027's file, or delete
-      `OUTSTANDING.md`** — all three read as "this branch is done" signals.
+      `OUTSTANDING.md` (retired 2026-08-02)** — all three read as "this branch is done" signals.
 
 - [ ] **A2 — Publish 0.4.0 now, or merge without publishing?** *The original argument against
       has been retired:* a third party (FastMCP 4) now completes the full stateless journey

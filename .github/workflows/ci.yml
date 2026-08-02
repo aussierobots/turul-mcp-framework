@@ -19,6 +19,21 @@ env:
 # transient workspace-crate warning outside the audited gates).
 
 jobs:
+  # Lane-neutral and cheap: rustfmt ignores cargo features, so this needs no
+  # toolchain matrix, no build cache and no disk cleanup. Kept as its own job so
+  # a formatting failure is reported in seconds rather than behind a full build.
+  # Mirrors `scripts/ci-gates.sh fmt`.
+  fmt:
+    name: rustfmt (--check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format check
+        run: cargo fmt --all -- --check
+
   default-2026:
     name: Default lane (2026-07-28)
     runs-on: ubuntu-latest

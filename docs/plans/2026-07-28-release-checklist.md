@@ -390,7 +390,7 @@ earliest-removal of 2027-07-28. The protocol-crate types do carry
       `1.0.0`, 2 at `2.0.0`, 1 at `0.1.0`. Either sync all to the crate version or drop
       CLAUDE.md §Pre-Release item 2; currently neither is true.
 - [ ] **4.3** No crate declares `readme = "README.md"` (0 of 18), though 16 have the file.
-- [ ] **4.4** `OUTSTANDING.md` is self-flagged for deletion at "final release preparation".
+- [x] **4.4** `OUTSTANDING.md` is self-flagged for deletion at "final release preparation". **Done 2026-08-02:** burned down to a single open item (`SubscriptionsListenResult` graceful-close emission), which was folded into `2026-07-28-spec-compliance.md` rows 336/356; the file was then deleted so it could not become a second, competing status authority.
       **Sequencing hazard:** `2026-07-28-final-readiness-audit.md:3` points to it by name, and
       CI points to *that*. Order: disposition the readiness-audit rows → repoint the two CI
       comments → only then delete. Also gated on manual item A1.

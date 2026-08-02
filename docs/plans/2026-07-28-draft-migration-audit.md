@@ -47,7 +47,7 @@ and `docs/seps/2243-http-standardization.mdx`, same note):
 
 ### D2 — matrix-basis → pin-commit window (2026-06-12 → 2026-07-02, 30 commits enumerated by date)
 
-Schema-side items were actioned in the 2026-07-02 re-vendor + OUTSTANDING.md burn-down.
+Schema-side items were actioned in the 2026-07-02 re-vendor and the 2026-07-13 compliance burn-down.
 Prose items requiring implementation-level disposition (codex review P2; §5 below):
 
 | Upstream commit | Change | Disposition status |
@@ -138,7 +138,7 @@ journal (session records). Triage:
 | Authorization sub-pages (discovery, client-registration, security-considerations; pages created 2026-06-04/05, before the audit but evidently swept thinly) | 62 | Server-role items (PRM issuer identity, discovery mechanisms, WWW-Authenticate content): mostly implemented in `turul-mcp-oauth` — author rows citing tests. Client-role items (WWW-Authenticate parsing, CIMD hosting/validation, issuer-identity checks): framework ships no OAuth *client* flow — author ➖ n/a rows with the role rationale, or record as roadmap. |
 | `server/utilities/caching.mdx` TTL/cacheScope semantics | ~23 | Client-side caching heuristics (ttlMs default-0, stale handling, jitter/backoff MUST-if-polling): client implements no result caching — n/a-or-gap rows per item. Server-side (same `cacheScope` across pages MUST; MUST NOT rely on cacheScope for auth): audit `CacheableResult` producers, likely small fixes or n/a. |
 | Transports (intermediary MUST/SHOULDs, SSE colon-comment MUST, Mcp-Name Base64 MUST, statically-reachable MUST, D1 Mcp-Param MUST) | 13 | Intermediary-role: n/a (framework ships no intermediary). SSE colon-comment: verify client SSE parser ignores comment lines (ties to D2 keep-alive item). Mcp-Name Base64 + statically-reachable: audit `headers.rs` (D2 rows). Mcp-Param MUST: satisfied by binding cache once B1 lands. |
-| Cancellation/subscriptions patterns | 9 | stdio-server-only items (server-sent `notifications/cancelled` closing a listen stream): framework ships no stdio server binding — n/a rows. Subscription teardown SHOULDs: ties to the OUTSTANDING.md surviving graceful-close item. |
+| Cancellation/subscriptions patterns | 9 | stdio-server-only items (server-sent `notifications/cancelled` closing a listen stream): framework ships no stdio server binding — n/a rows. Subscription teardown SHOULDs: ties to the surviving `SubscriptionsListenResult` graceful-close item (tracked in `2026-07-28-spec-compliance.md`). |
 | Architecture/index meta-principles, elicitation/roots/sampling additions | rest | Mostly INFO/SHOULD design-principle rows; author with brief dispositions. |
 
 ### 6.3 Defect status after sweep
@@ -233,7 +233,7 @@ Codex review findings verified and dispositioned:
 | Row | Gap | Scope |
 |---|---|---|
 | ~207 | JSON Schema dialect validation ($schema inspection + unsupported-dialect error) — BP-3 | server + client, own slice |
-| ~332 | Server-sent `notifications/cancelled` / subscription-close emission (ties to the OUTSTANDING.md graceful-close item) | server, needs shutdown-signal infra |
+| ~332 | Server-sent `notifications/cancelled` / subscription-close emission (ties to the `SubscriptionsListenResult` graceful-close item) | server, needs shutdown-signal infra |
 | ~410 | ~~Client MUST Base64-sentinel-encode `Mcp-Name` values~~ **FIXED 2026-07-14** — `apply_request_metadata_headers` routes through `encode_param_value`; wire test `mcp_name_header_is_base64_sentinel_encoded_when_not_plain_ascii`, revert-and-fail recorded; matrix row re-graded ✅ | done |
 | ~537 | Sampling message-shape enforcement (tool-result-only user messages, toolUseId pairing) — GAP-CF-9 | protocol validation helper + reject path |
 
@@ -297,9 +297,9 @@ Codex round-3 findings, each verified against code before acting:
   server-MUST to emit `notifications/cancelled` on HTTP teardown; the server-sent form is
   **stdio-only**, and this framework ships no stdio server. So: row 332 regraded ❌→🟡
   (SHOULD graceful-closure; `SubscriptionsListenResult` bound+wire-tested, server-shutdown
-  emission unwired = the OUTSTANDING "sole survivor" SHOULD item); rows 326/333 kept 🟡
+  emission unwired = the "sole survivor" SHOULD item); rows 326/333 kept 🟡
   with the misread "server-sent teardown MUST" reasoning removed. **No shutdown-signal
-  infrastructure is warranted.** OUTSTANDING.md was already accurate (it never claimed a
+  infrastructure is warranted.** The punch list was already accurate (it never claimed a
   `notifications/cancelled` MUST) — no change needed there. Tally: ❌ 13→12, 🟡 71→72.
 - **Remaining MUST-❌: exactly two** — BP-3 (row 207) and GAP-CF-9 (row 537). Everything
   else ❌ is SHOULD/MAY-level. BP-3 scope (per codex): JSON Schema 2020-12 only; absent
