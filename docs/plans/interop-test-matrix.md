@@ -39,13 +39,20 @@ because they asserted the framing we had chosen.
 | Short | Implementation | Role support | Availability | 2026-07-28? |
 |---|---|---|---|---|
 | **R** | turul (this repo, Rust) | client + server | local | yes (default lane) |
-| **P** | FastMCP (Python) | client + server | `fastmcp==4.0.0b1` via `uv`, PyPI pre-release | yes |
+| **P** | FastMCP (Python) | client + server | `fastmcp==4.0.0b2` via `uv`, PyPI pre-release | yes |
+| **P2** | **MCP Python SDK** (reference) | client + server | `mcp==2.0.0` on PyPI | yes — **stable** |
 | **T** | MCP TypeScript SDK | client + server | `@modelcontextprotocol/client@2.0.0` on npm | yes — **stable** |
 | **G** | MCP Go SDK | client + server | `v1.7.0`, released 2026-07-28 | yes — **stable** |
 
-Two of the three tested peers are stable releases, not pre-releases: the Go
-SDK v1.7.0 and the TypeScript SDK 2.0.0. A fourth stable peer exists and is
-**not yet tested** — the MCP Python SDK, `mcp==2.0.0` on PyPI.
+Three of the four tested peers are stable releases, not pre-releases: the Go
+SDK v1.7.0, the TypeScript SDK 2.0.0, and the Python SDK `mcp==2.0.0`. Only
+FastMCP is still a beta.
+
+**P2 matters more than its row suggests.** FastMCP is a third-party framework
+that happens to speak MCP; `mcp` is the reference implementation published by
+the protocol authors. Until 2026-08-08 it had never been pointed at this
+framework — "Python interop" was covered only by FastMCP. A wire disagreement
+with the reference client is a stronger signal than one with any other peer.
 
 An earlier revision of this document called the Go SDK "the only stable peer".
 That was false when written: `@modelcontextprotocol/core@2.0.0` (npm,
@@ -82,13 +89,36 @@ logic.
 
 | client ↓ / server → | **R** (turul) | **P** (FastMCP) | **T** (TS SDK) | **G** (Go SDK) |
 |---|---|---|---|---|
-| **R** (turul) | control — **pass** | **R→P — pass, 8 methods** (9 now reachable — see below) | R→T — not built | R→G — not built |
+| **R** (turul) | control — **pass** | **R→P — 9 driven, 8 answered** (see below) | R→T — not built | R→G — not built |
 | **P** (FastMCP) | **P→R — pass, 9 methods + 5 negatives** | peer control | n/a | n/a |
+| **P2** (Python SDK) | **P2→R — pass, 9 methods + 5 negatives** | n/a | n/a | n/a |
 | **T** (TS SDK) | **T→R — pass, 9 methods + 5 negatives** | n/a | peer control | n/a |
 | **G** (Go SDK) | **G→R — pass, 9 methods + 5 negatives** | n/a | n/a | peer control |
 
-Scripts: `interop-fastmcp.sh` (P→R), `interop-turul-client.sh` (R→R control and
-R→P), `interop-typescript-sdk.sh` (T→R), `interop-go-sdk.sh` (G→R).
+Scripts: `interop-fastmcp.sh` (P→R), `interop-python-sdk.sh` (P2→R),
+`interop-turul-client.sh` (R→R control and R→P), `interop-typescript-sdk.sh`
+(T→R), `interop-go-sdk.sh` (G→R).
+
+All five cells re-measured 2026-08-08 against the pins recorded in §2.
+
+### G→R had silently stopped running
+
+The pin-currency check added under §6 was placed **above** the
+`GO_SDK_VERSION` assignment it reads. Under `set -u` that aborted
+`interop-go-sdk.sh` at line 42 on every invocation, so the cell recorded as
+"pass" here was a stale measurement that nothing could reproduce. Fixed
+2026-08-08 by moving the check below the assignment; the cell then passed for
+real (J1+J2+J5, `sessionId=""` on all nine requests).
+
+Two lessons, both now applied to the scripts:
+
+- **A skipped cell exited 0.** `interop-go-sdk.sh` with no Go toolchain, and
+  `interop-turul-client.sh` with no `uv`, both returned success. An absent peer
+  was indistinguishable from a green run for anything reading the status code.
+  Both now exit **77**.
+- The probe that guards against a stale pin was itself the thing that broke the
+  probe. A currency check is not free; it is code, and it needs the same
+  once-through execution check as anything else.
 
 ### T→R: a resolved disagreement, and the lesson from it
 
@@ -116,9 +146,14 @@ because **no client method existed** — that was our gap, not the peer's, and i
 is now closed on our side. The 8-method R→P result predates both methods and has
 not been re-run, so this section records what is *reachable*, not what passed:
 
-- **`completion/complete` — now fillable.** Extending `examples/interop-client-probe`
-  with a completion leg would take R→P from 8 to 9 methods, matching the 9 the
-  three foreign clients drive against us. Nothing blocks it but the run.
+- **`completion/complete` — measured 2026-08-08, and the ceiling is the peer's.**
+  Our client now *drives* 9 methods, so the client-side gap is closed. The peer
+  answers 8: FastMCP returns `-32601 Method not found` for
+  `completion/complete` on its server side. The R→R control passes the same leg,
+  which is exactly what the control is for — it places the fault at the peer, not
+  in our client. **Record R→P as "9 driven, 8 answered", not as "9 methods"**;
+  reporting the drive count as coverage would credit us with a leg no peer ever
+  served.
 - **`notifications/cancelled` — reachable, and outside the ladder.** J1–J6 have
   no cancellation journey. Adding one would be new scope, not a re-run.
 

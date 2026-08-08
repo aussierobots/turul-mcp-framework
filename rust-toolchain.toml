@@ -1,0 +1,18 @@
+# Pin the local toolchain to what CI actually runs.
+#
+# Every job in .github/workflows/ci.yml uses `dtolnay/rust-toolchain@stable`.
+# Without this file the local toolchain floats to whatever rustup default a
+# developer happens to have, so `scripts/ci-gates.sh` stops being a predictor
+# of the hosted result in both directions — it can fail on lints CI never runs,
+# and pass over lints CI would catch.
+#
+# Observed 2026-08-08: on nightly 1.99.0 (2026-08-07), `clippy::double_must_use`
+# fires on `async_trait`-generated code in turul-mcp-task-storage, failing
+# `ci-gates.sh opt-in-2025` twice while hosted CI stayed green. The same command
+# under `cargo +stable` finishes clean. No code defect existed.
+#
+# Tracks the stable channel rather than a frozen version so this matches
+# `@stable` as it moves, instead of silently pinning the repo to one release.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

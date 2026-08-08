@@ -52,5 +52,7 @@ rather than counted in aggregate.
 ## Related
 
 - `logging-test-client` — the automated PASS/FAIL prover
-- `session-logging-proof-test` — the same idea with three concurrent sessions,
-  but verified by hand rather than automatically
+
+`session-logging-proof-test` covered the same ground across three concurrent
+sessions but was verified by hand; it was archived on 2026-08-08 to
+`examples/archived/` (see EXAMPLES.md §Archived).

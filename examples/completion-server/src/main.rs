@@ -225,7 +225,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("ide-completion-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("IDE Auto-Completion Server")
         .instructions("Provides intelligent auto-completion suggestions for developers. Use the ide_completion tool with category (language/framework/command/extension/all) and optional prefix parameters.")
         .tool(completion_tool)

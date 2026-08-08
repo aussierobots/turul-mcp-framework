@@ -602,7 +602,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("development-resource-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Development Team Resource Server")
         .instructions("Real-world MCP resources server for development teams. Provides access to project documentation, API specs, configuration files, database schemas, and system status. Loads data from external files demonstrating production resource management patterns.")
         .resource(ProjectDocumentationResource)

@@ -287,7 +287,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("function-resource-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Function Resource Example Server")
         .instructions("This server demonstrates the .resource_fn() method for registering resources using constructor functions with automatic template detection.")
         .resource_fn(create_config_resource)       // Static resource

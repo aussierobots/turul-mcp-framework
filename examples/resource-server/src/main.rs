@@ -187,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("resource-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Resource Server Example")
         .instructions("This server demonstrates the #[derive(McpResource, Clone)] macro with various resource types.")
         .resource(config_resource)

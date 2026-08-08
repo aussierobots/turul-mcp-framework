@@ -352,7 +352,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("stateful-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Stateful Server Example")
         .instructions("This server demonstrates session-based state management. State persists across requests within the same session and is automatically cleaned up when sessions expire.")
         .tool(ShoppingCartTool::default())

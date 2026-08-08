@@ -4,6 +4,10 @@ target/
 # Per-lane build dirs for the Lambda client E2E: the two lanes build the same
 # binary name with mutually exclusive features and must not share a target dir.
 /target-lambda-e2e-*/
+# Per-lane target dirs. The two spec lanes are mutually exclusive cargo
+# features, so sharing one target dir makes every lane switch a full rebuild.
+# CLAUDE.md and scripts/ci-gates.sh both use `CARGO_TARGET_DIR=target-2025`.
+target-2025/
 
 # Remove Cargo.lock from gitignore if creating an executable, leave it for libraries
 # More information here https://doc.rust-lang.org/cargo/guide/cargo-toml-vs-cargo-lock.html

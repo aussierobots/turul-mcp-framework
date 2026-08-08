@@ -878,7 +878,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("prompts-test-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("MCP Prompts Test Server")
         .instructions(
             "Comprehensive test server providing various types of prompts for E2E testing.\n\

@@ -158,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build MCP server with the SQLite backend wired in
     let server = McpServer::builder()
         .name("simple-sqlite-session")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("SQLite Storage Backend Example")
         .instructions("Demonstrates durable SQLite-backed storage wiring on the 2026 stateless lane. Tools drive the backend API directly against one demo record per run.")
         .with_session_storage(sqlite_storage)

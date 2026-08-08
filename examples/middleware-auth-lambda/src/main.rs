@@ -270,7 +270,7 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
     // Build server with middleware using builder pattern
     let server = turul_mcp_aws_lambda::LambdaMcpServerBuilder::new()
         .name("middleware-auth-lambda")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .middleware(auth_middleware)
         .storage(storage)
         .cors_allow_all_origins()

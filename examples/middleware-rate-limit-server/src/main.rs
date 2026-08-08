@@ -133,7 +133,7 @@ async fn main() -> McpResult<()> {
 
     let server = McpServer::builder()
         .name("middleware-rate-limit-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Rate Limiting Middleware Example")
         .instructions(
             "Demonstrates stateless rate limiting. Max 5 requests per X-API-Key per window.",

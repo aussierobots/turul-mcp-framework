@@ -464,7 +464,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("audit-trail-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Audit Trail Server")
         .instructions(
             "This server provides compliance-focused audit trail logging with SQLite persistence.",

@@ -116,7 +116,19 @@ let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 // Manual impls MUST include: impl HasExecution for MyTool {}
 ```
 
-### Task Support (per-tool)
+### Task Support (per-tool) — **2025-11-25 lane only**
+
+> **This section does not apply to the default build.** `TaskSupport` and
+> `ToolExecution` exist only in `turul-mcp-protocol-2025-11-25` (0 occurrences in
+> `turul-mcp-protocol-2026-07-28/src/`), and `.with_task_storage()` is
+> `#[cfg(feature = "protocol-2025-11-25")]` (`builder.rs:1412`). The derive macros
+> emit the attribute's code unconditionally, so a `task_support = "..."` tool on
+> the 2026-07-28 default lane fails to compile with `cannot find TaskSupport in
+> tools` / `cannot find type ToolExecution`. Removing the attribute clears both.
+>
+> On 2026-07-28, tasks moved to the **extension** `io.modelcontextprotocol/tasks`
+> (SEP-2663) — see `crates/turul-mcp-ext-tasks` and `examples/ext-tasks-server`,
+> and note SEP-2133 keeps it off by default. `tasks/list` was removed.
 
 Tools can declare `task_support` to enable the "Run as Task" button in MCP Inspector:
 

@@ -150,7 +150,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // ZERO CONFIGURATION - Framework handles everything automatically
     let server = McpServer::builder()
         .name("zero-config-demo")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .tool(Calculator { a: 0.0, b: 0.0 }) // Framework → tools/call
         .tool(LogProgress {
             message: String::new(),

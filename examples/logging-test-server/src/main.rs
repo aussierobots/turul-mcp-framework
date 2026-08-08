@@ -248,7 +248,7 @@ async fn main() -> Result<()> {
     let storage = Arc::new(InMemorySessionStorage::new());
     let server = McpServer::builder()
         .name("logging-test-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Session-Aware Logging Test Server")
         .bind_address(bind_address)
         .with_session_storage(storage)

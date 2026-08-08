@@ -176,7 +176,7 @@ jobs:
             -p dynamic-tools-server -p elicitation-server -p lambda-turul-mcp-server \
             -p logging-test-client -p logging-test-server -p prompts-test-server \
             -p resource-test-server -p roots-server -p sampling-server \
-            -p session-aware-resource-server -p session-logging-proof-test \
+            -p session-aware-resource-server \
             -p stateful-server -p tasks-e2e-inmemory-client -p tasks-e2e-inmemory-server \
             -p tools-test-server
       - name: 2025-11-25 regression E2E (real servers)

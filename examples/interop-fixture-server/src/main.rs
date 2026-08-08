@@ -177,7 +177,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("interop-fixture-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .tool_fn(echo)
         .tool_fn(add)
         .resource(FixtureResource)

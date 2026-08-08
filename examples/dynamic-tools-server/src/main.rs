@@ -147,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("dynamic-tools-demo")
-        .version("0.1.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .tool_change_mode(ToolChangeMode::Dynamic)
         .tool(AddTool::default())
         .tool(MultiplyTool::default())

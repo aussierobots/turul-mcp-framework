@@ -186,7 +186,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("ext-tasks-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Tasks Extension Example")
         .instructions(
             "crunch and deploy are task-electing: declare \

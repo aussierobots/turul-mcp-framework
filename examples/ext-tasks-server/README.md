@@ -54,7 +54,7 @@ McpServer::builder()
     .with_ext_tasks(Arc::new(InMemoryTaskStore::new()))  // advertises + registers tasks/*
     .ext_task_tool(CrunchTool::new())                    // elect when declared, sync otherwise
     .ext_task_tool(DeployTool::new())
-    // .ext_task_tool_required(...)                      // -32003 when undeclared
+    // .ext_task_tool_required(...)                      // -32021 when undeclared
 ```
 
 Requires the `ext-tasks` cargo feature on `turul-mcp-server` (extensions are
@@ -81,7 +81,7 @@ Requires the `ext-tasks` cargo feature on `turul-mcp-client`.
 - `mrtr-elicitation-server` — the synchronous MRTR round trip the `deploy`
   tool also works under
 - `crates/turul-mcp-server/tests/ext_tasks_2026.rs` — the wire contract suite
-  (incl. `-32003` for required tools and `taskIds`-filtered
+  (incl. `-32021` for required tools and `taskIds`-filtered
   `notifications/tasks` over `subscriptions/listen`)
 - `tasks-e2e-inmemory-server` — the 2025-11-25 core task lifecycle this
   extension replaces (kept on the pinned 2025 lane)

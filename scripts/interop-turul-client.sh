@@ -24,7 +24,7 @@ FIXTURE_PORT="$PORT"
 PEER_PORT=$((PORT + 1))
 PROXY_PORT=$((PORT + 2))
 WORK="${TMPDIR:-/tmp}/turul-interop-client"
-FASTMCP_VERSION="4.0.0b1"   # 4.0.0a1 also spoke 2026-07-28; this is the beta we measured
+FASTMCP_VERSION="4.0.0b2"   # 4.0.0a1/b1 also spoke 2026-07-28; b2 is the beta we measured
 
 # Pin-currency check. A pinned peer is a claim about the outside world that goes
 # stale silently — the TypeScript probe measured a superseded pre-release for
@@ -41,7 +41,8 @@ fi
 
 PYTHON_VERSIONS="${PYTHON_VERSIONS:-3.14 3.12}"
 
-command -v uv >/dev/null || { echo "SKIP: uv not found — https://docs.astral.sh/uv/" >&2; exit 0; }
+# Exit 77 (not 0) on skip: an unrunnable probe must not read as a green cell.
+command -v uv >/dev/null || { echo "SKIP: uv not found — https://docs.astral.sh/uv/" >&2; exit 77; }
 
 fail=0
 mkdir -p "$WORK"

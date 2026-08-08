@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("header-bound-tools-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("SEP-2243 Header-Bound Tools Example")
         .instructions(
             "route_query's region argument is x-mcp-header-annotated: mirror \

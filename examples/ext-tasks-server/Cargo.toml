@@ -4,6 +4,9 @@
 [package]
 name = "ext-tasks-server"
 version = "0.4.0"
+# Two [[bin]] targets, so a bare `cargo run -p ext-tasks-server` is ambiguous
+# without this — which is the form both README.md:9 and src/main.rs:18 document.
+default-run = "ext-tasks-server"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true

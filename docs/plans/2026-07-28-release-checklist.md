@@ -37,6 +37,56 @@
 
 ---
 
+## 0a. Reconciliation — verified 2026-08-08
+
+**Unchecked boxes below are not a reliable open/closed signal.** Every item in
+§2–§4 was re-verified against the code on 2026-08-08. Most that still read as
+open are in fact done; the boxes were never ticked. Verification commands are
+given so this can be redone rather than trusted.
+
+**Verified CLOSED (box unticked, work actually complete):**
+
+| Item | Check run | Result |
+|---|---|---|
+| **2.2** Roots posture | `grep -n "with_roots" crates/turul-mcp-server/src/builder.rs` | `builder.rs:1251` carries `#[cfg(feature = "protocol-2025-11-25")]`, as do `root()` and `with_sampling`. Matches A4's resolution. |
+| **3.1** draft citation URLs | `grep -c "specification/draft" docs/plans/2026-07-28-spec-compliance.md` | **0** |
+| **3.2** ADR-027 status | head of `docs/adr/027-*.md` | "Accepted — the spec has finalized; the regeneration trigger has fired" |
+| **3.4** `BP-3` on crates.io | `grep -n "BP-3"` across the three manifests | **0 hits** |
+| **3.9** `--workspace` in AGENTS.md | `grep -n "cargo build --workspace" AGENTS.md` | **0 hits** |
+| **4.6** bare `#[ignore]` | `grep -n "ignore" crates/turul-mcp-derive/src/macros/schema.rs` | gone — the whole test module was deleted |
+
+**Verified DONE 2026-08-08 (this slice):**
+
+- **4.2** example `.version()` spread — all 48 call sites now read
+  `.version(env!("CARGO_PKG_VERSION"))`. The 25/20/2/1 split was 48 hand-maintained
+  copies of a value each example's own `Cargo.toml` already owns. Deriving it
+  removes the drift class and retires CLAUDE.md §Pre-Release item 2 as a chore.
+- **4.8** `turul-mcp-client` `PROTOCOL_VERSION` — deleted. It was *behaviourally*
+  correct (every `initialize_session` call site is the 2025 lane: `client.rs:366`,
+  `:381`, `:392`) but it was a second definition of a string
+  `McpVersion::V2025_11_25.as_str()` already owns. Call sites now consume the
+  owner. Its test asserted the constant's value under a name claiming it checked
+  the init request; replaced with one that builds the request.
+
+**Verified STILL OPEN:**
+
+| Item | Check run | Result |
+|---|---|---|
+| **4.3** `readme = "README.md"` | `grep -rl 'readme = ' crates/*/Cargo.toml \| wc -l` | **0 of 18** — unchanged |
+
+Not re-verified this pass, so still to be treated as open: §2.1, §2.3a–c, §3.5,
+§3.6, §3.7, §3.8, §4.1, §4.5.
+
+**One number in this document is stale:** §2.3c cites "10 of 87 (11.5%)" fixture
+modeling. The current figure is **12 of 88 (13.6%)** — 76 `NotModeled` plus 1
+`Params`, 2 `Response`, 6 `Result`, 3 `Struct` in
+`crates/turul-mcp-protocol-2026-07-28/src/compliance/coverage.rs`. The interop
+matrix's 13.6% is the correct one. Note that a naive `grep -c Modeled` returns
+80 for *both* categories, because `NotModeled` contains `Modeled` — count
+`kind: Kind::<variant>` instead.
+
+---
+
 ## 0. What finalization actually changed
 
 Verified against upstream, not assumed:

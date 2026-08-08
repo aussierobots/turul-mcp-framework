@@ -233,9 +233,32 @@ fn every_example_is_documented_in_examples_md() {
     );
 }
 
+/// Directory names under `examples/archived/`. These are retired examples: the
+/// workspace `exclude` list keeps them out of every build, so they deliberately
+/// do NOT appear in [`example_packages`] and are not required to be gated. They
+/// are still in the tree, though, so EXAMPLES.md §Archived may name them.
+fn archived_examples() -> BTreeSet<String> {
+    let archived = repo_root().join("examples").join("archived");
+    let Ok(entries) = std::fs::read_dir(&archived) else {
+        return BTreeSet::new(); // no archive directory is fine
+    };
+    entries
+        .filter_map(|entry| {
+            let path = entry.ok()?.path();
+            if !path.join("Cargo.toml").is_file() {
+                return None;
+            }
+            Some(path.file_name()?.to_string_lossy().into_owned())
+        })
+        .collect()
+}
+
 #[test]
 fn examples_md_names_no_example_that_no_longer_exists() {
-    let dirs: BTreeSet<String> = example_packages().into_keys().collect();
+    let mut dirs: BTreeSet<String> = example_packages().into_keys().collect();
+    // An archived example still exists — it is excluded from the build, not
+    // deleted — so a §Archived row naming one is correct, not stale.
+    dirs.extend(archived_examples());
     let mut stale: Vec<String> = examples_md_row_names()
         .into_iter()
         .filter(|name| !dirs.contains(name))
@@ -244,8 +267,9 @@ fn examples_md_names_no_example_that_no_longer_exists() {
 
     assert!(
         stale.is_empty(),
-        "EXAMPLES.md has table row(s) for {} example(s) that are not in the tree: \
-         {stale:?}. Remove the row in the same change that removes the directory.",
+        "EXAMPLES.md has table row(s) for {} example(s) that are in neither \
+         examples/ nor examples/archived/: {stale:?}. Remove the row in the same \
+         change that removes the directory.",
         stale.len()
     );
 }

@@ -104,7 +104,6 @@ points at the server, so a bare `cargo run -p simple-sqlite-session` works.
 |---|---|---|---|
 | **logging-test-server** | 2025-11-25 (pinned) | 8003 | `logging/setLevel` plus per-session SSE log delivery |
 | **logging-test-client** | 2025-11-25 (pinned) | targets `:8003` | Drives the server across three thresholds with PASS/FAIL counts |
-| **session-logging-proof-test** | 2025-11-25 (pinned) | 8001 | Three sessions at three log levels. ⚠️ **Recommended for removal** — it asserts nothing and ends by asking a human to eyeball three terminals; `logging-test-server` + `logging-test-client` cover the same property automatically |
 
 ## Tasks
 
@@ -179,6 +178,18 @@ time, or pass an explicit port:
 core by default, the 2025-11-25 stateful line as a per-manifest opt-in.
 Registered spec-gap status lives in `docs/plans/2026-07-28-spec-compliance.md`.
 
-The former `examples/archived/` directory was removed on 2026-07-29: those 29
-examples predated the 2026-07-28 spec, were never workspace members, and so
-were never built by any gate. They remain in git history.
+## Archived
+
+`examples/archived/` holds examples retired from the build. It is in the
+workspace `exclude` list, so nothing here is compiled, gated, or published —
+these are reference reading only, and may not compile against the current API.
+
+| Example | Lane | Archived | Why |
+|---|---|---|---|
+| **session-logging-proof-test** | 2025-11-25 (pinned) | 2026-08-08 | Asserted nothing — it printed three sessions' log output and asked a human to eyeball three terminals. `logging-test-server` + `logging-test-client` prove the same property with PASS/FAIL counts. Logging is also deprecated for removal under SEP-2577, so the surface it demonstrated is on a clock. |
+
+An earlier `examples/archived/` directory was emptied on 2026-07-29: those 29
+examples predated the 2026-07-28 spec, were never workspace members, and so were
+never built by any gate. They were deleted rather than kept, and remain in git
+history. The directory was reinstated on 2026-08-08 under the exclusion rule
+above, so an archived example is inert rather than absent.

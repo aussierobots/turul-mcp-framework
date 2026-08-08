@@ -89,7 +89,7 @@ async fn main() -> McpResult<()> {
 
     let server = McpServer::builder()
         .name("middleware-logging-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Request Timing Middleware Example")
         .instructions("Demonstrates request timing and tracing middleware. Every request is logged with timing info.")
         // Register timing middleware - this is the key demonstration

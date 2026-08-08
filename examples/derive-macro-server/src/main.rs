@@ -1365,7 +1365,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("code-generation-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Code Generation and Template Engine Server")
         .instructions("This server provides comprehensive code generation, validation, and transformation tools for developers working with multiple programming languages and frameworks.")
         .tool(CodeGeneratorTool {

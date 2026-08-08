@@ -163,7 +163,7 @@ async fn main() -> McpResult<()> {
 
     let mut builder = McpServer::builder()
         .name("oauth-resource-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("OAuth 2.1 Resource Server Example")
         .instructions(
             "This server requires a valid Bearer token from the configured \

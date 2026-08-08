@@ -152,7 +152,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build MCP server with PostgreSQL session storage
     let server = McpServer::builder()
         .name("simple-postgres-session")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("PostgreSQL Session Storage Example")
         .instructions("Demonstrates PostgreSQL-backed session storage for MCP servers. Use the tools to store and retrieve values that persist across server restarts.")
         .with_session_storage(postgres_storage)

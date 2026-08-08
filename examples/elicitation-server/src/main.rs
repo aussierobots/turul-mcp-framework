@@ -958,7 +958,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("customer-onboarding-platform")
-        .version("2.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Customer Onboarding and Data Collection Platform")
         .instructions("This platform provides customer onboarding workflows, compliance forms, preference collection, and survey capabilities. Every tool returns a JSON Schema describing the form the caller should render; the MCP elicitation protocol is not used. All workflows are driven by external configuration files.")
         .tool(StartOnboardingWorkflowTool::default())

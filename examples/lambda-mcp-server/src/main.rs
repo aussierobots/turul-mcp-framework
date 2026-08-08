@@ -76,7 +76,7 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
     // Build Lambda MCP server with all AWS tools
     let server = LambdaMcpServerBuilder::new()
         .name("aws-lambda-mcp-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         // AWS Lambda tools
         .tool(DynamoDbQueryTool::default())
         .tool(SnsPublishTool::default())

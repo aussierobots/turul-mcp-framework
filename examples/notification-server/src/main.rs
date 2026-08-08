@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("notification-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("2026 Notification Surfaces Demo")
         .instructions(
             "Open a subscriptions/listen stream, then call trigger_changes to see \

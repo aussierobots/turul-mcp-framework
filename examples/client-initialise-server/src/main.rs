@@ -442,7 +442,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("0.4.0")
+                    .version(env!("CARGO_PKG_VERSION"))
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -475,7 +475,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("0.4.0")
+                    .version(env!("CARGO_PKG_VERSION"))
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -517,7 +517,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("0.4.0")
+                    .version(env!("CARGO_PKG_VERSION"))
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -545,7 +545,7 @@ async fn main() -> Result<()> {
 
             McpServer::builder()
                 .name("client-initialise-server")
-                .version("0.4.0")
+                .version(env!("CARGO_PKG_VERSION"))
                 .title("MCP Initialize Test Server")
                 .bind_address(bind_address)
                 .with_session_storage(storage_arc)

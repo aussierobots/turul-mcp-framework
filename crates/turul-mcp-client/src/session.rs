@@ -1,7 +1,12 @@
 //! Session management for MCP client
-
-/// The protocol version this client advertises and supports
-pub const PROTOCOL_VERSION: &str = "2025-11-25";
+//!
+//! Everything here is the **2025-11-25 handshake**: `initialize`,
+//! `Mcp-Session-Id`, negotiated-version validation. The 2026-07-28 lane is
+//! stateless and reaches none of it — `McpClient::negotiate_protocol` only
+//! calls into this module on the legacy arm.
+//!
+//! The wire string for that lane has one owner, [`McpVersion::V2025_11_25`];
+//! this module consumes it rather than redeclaring it.
 
 use serde_json::Value;
 use std::sync::Arc;
@@ -11,6 +16,7 @@ use tracing::{debug, info, warn};
 
 use crate::config::ClientConfig;
 use crate::error::{McpClientResult, SessionError};
+use crate::version::McpVersion;
 use turul_mcp_protocol_2025_11_25::{
     ClientCapabilities, Implementation, InitializeRequest, ServerCapabilities,
 };
@@ -340,7 +346,7 @@ impl SessionManager {
         let client_info = &self.config.client_info;
 
         InitializeRequest {
-            protocol_version: PROTOCOL_VERSION.to_string(),
+            protocol_version: McpVersion::V2025_11_25.as_str().to_string(),
             capabilities: self.create_client_capabilities(),
             client_info: Implementation {
                 name: client_info.name.clone(),
@@ -353,14 +359,19 @@ impl SessionManager {
         }
     }
 
-    /// Validate that the server's negotiated protocol version is supported
+    /// Validate the version the server negotiated in its `initialize` reply.
+    ///
+    /// Only 2025-11-25 is accepted, and that is not a narrowing: `initialize`
+    /// exists solely on that lane, so a reply naming any other version means
+    /// the server answered a handshake it should have rejected.
     pub fn validate_protocol_version(version: &str) -> McpClientResult<()> {
-        if version == PROTOCOL_VERSION {
+        let expected = McpVersion::V2025_11_25.as_str();
+        if version == expected {
             Ok(())
         } else {
             Err(crate::error::ProtocolError::UnsupportedVersion(format!(
-                "Server negotiated '{}', client supports '{}'",
-                version, PROTOCOL_VERSION
+                "Server negotiated '{}', the initialize handshake is '{}' only",
+                version, expected
             ))
             .into())
         }
@@ -447,10 +458,24 @@ mod tests {
         assert!(err.to_string().contains("2099-01-01"));
     }
 
+    /// The old version of this test asserted `PROTOCOL_VERSION == "2025-11-25"`
+    /// under a name claiming it checked the init request — it never built one.
+    /// Build the request and read the version off it.
+    #[tokio::test]
+    async fn init_request_advertises_the_legacy_wire_version() {
+        let manager = SessionManager::new(ClientConfig::default());
+        let request = manager.create_initialize_request().await;
+        assert_eq!(request.protocol_version, "2025-11-25");
+        assert_eq!(request.protocol_version, McpVersion::V2025_11_25.as_str());
+    }
+
+    /// `initialize` does not exist on 2026-07-28, so a server naming it in an
+    /// initialize reply is answering a handshake it should have rejected.
     #[test]
-    fn test_protocol_version_constant_used_in_init_request() {
-        // Verify the constant is used, not a hardcoded string
-        assert_eq!(PROTOCOL_VERSION, "2025-11-25");
+    fn init_reply_naming_the_stateless_spec_is_rejected() {
+        let result = SessionManager::validate_protocol_version(McpVersion::V2026_07_28.as_str());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("2026-07-28"));
     }
 
     #[tokio::test]

@@ -772,7 +772,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("pagination-server")
-        .version("2.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("SQLite Pagination Server")
         .instructions("Tools that paginate their own SQLite-backed result sets. Pass the pagination.next_cursor value from one call as the cursor argument of the next.")
         .tool(ListUsersTool::default())

@@ -67,20 +67,39 @@ both ends of the wire.
 **Externally verified.** Independent implementations that have completed a real
 journey against this framework:
 
+All cells below re-measured **2026-08-08**.
+
 | Peer | Version | Stable? | Direction | Methods | Probe |
 |---|---|---|---|---|---|
-| FastMCP (Python) | 4.0.0b1 | beta | peer → turul | 9 + 5 negatives | `scripts/interop-fastmcp.sh` |
-| FastMCP (Python) | 4.0.0b1 | beta | turul → peer | 8 | `scripts/interop-turul-client.sh` |
+| FastMCP (Python) | 4.0.0b2 | beta | peer → turul | 9 + 5 negatives | `scripts/interop-fastmcp.sh` |
+| FastMCP (Python) | 4.0.0b2 | beta | turul → peer | 9 driven, 8 answered | `scripts/interop-turul-client.sh` |
+| **MCP Python SDK** | **2.0.0 (PyPI)** | **stable** | peer → turul | 9 + 5 negatives | `scripts/interop-python-sdk.sh` |
 | MCP Go SDK | v1.7.0 | **stable** | peer → turul | 9 + 5 negatives | `scripts/interop-go-sdk.sh` |
 | MCP TypeScript SDK | 2.0.0 (npm) | **stable** | peer → turul | 9 + 5 negatives | `scripts/interop-typescript-sdk.sh` |
 
-**Two stable peers now agree with this framework on the same 14 checks** — the
-Go SDK and the TypeScript SDK each drove `server/discover`, `tools/list`,
-`tools/call`, `resources/list`, `resources/read`, `resources/templates/list`,
-`prompts/list`, `prompts/get` and `completion/complete`, every request carrying
-`MCP-Protocol-Version: 2026-07-28` and correct `Mcp-Method`/`Mcp-Name` headers,
-with no `initialize` and no session id anywhere, plus all five negative paths.
-Neither found a wire disagreement.
+**Three stable peers now agree with this framework on the same 14 checks** — the
+Python SDK, the Go SDK and the TypeScript SDK each drove `server/discover`,
+`tools/list`, `tools/call`, `resources/list`, `resources/read`,
+`resources/templates/list`, `prompts/list`, `prompts/get` and
+`completion/complete`, every request carrying `MCP-Protocol-Version: 2026-07-28`
+and correct `Mcp-Method`/`Mcp-Name` headers, with no `initialize` and no session
+id anywhere, plus all five negative paths. None found a wire disagreement.
+
+The reference Python SDK is the newest and most load-bearing of the three:
+`mcp` is published by the protocol authors, so agreement with it is a stronger
+signal than agreement with any framework built on top of MCP.
+
+Two accounting notes, both deliberate:
+
+- **turul → FastMCP reads "9 driven, 8 answered".** Our client now issues all
+  nine; the peer returns `-32601` for `completion/complete` on its server side.
+  The R→R control passes that leg, which places the gap at the peer. Counting
+  the drive as coverage would credit a leg no peer ever served.
+- **The Go cell was not reproducible until 2026-08-08.** Its pin-currency check
+  referenced `GO_SDK_VERSION` above the line that assigns it, so under `set -u`
+  the probe aborted on every run while the recorded result stayed green. Fixed,
+  re-run, genuinely passing. Skips in the Go and turul-client probes now exit
+  **77** rather than 0, so an unrunnable cell can no longer read as a pass.
 
 An earlier revision of this file recorded the TypeScript cell as failing and
 called the Go SDK "the only stable peer". Both were wrong, from one cause: the
@@ -89,8 +108,14 @@ was already published, and the freshness watch pointed at
 `@modelcontextprotocol/sdk`, which carries only the 1.x line. Each probe now
 asserts its pin against the registry.
 
-A fourth stable peer is available and **untested**: the Python SDK,
-`mcp==2.0.0`.
+That fourth peer — the reference Python SDK `mcp==2.0.0` — was recorded here as
+**untested** until 2026-08-08. It is now covered by `scripts/interop-python-sdk.sh`
+and passed on its first run, finding no wire disagreement.
+
+Still uncovered by **any** peer: **J3 (MRTR)** and **J4 (subscriptions and
+progress)** — the two headline 2026-07-28 features — plus J6's legacy-fallback
+leg. Those remain self-verified only. See
+[`../plans/interop-test-matrix.md`](../plans/interop-test-matrix.md) §4–§5.
 
 A third measure sits behind all of it: **12 of 88 upstream fixture directories are
 modeled** (13.6%). The fixtures are the only externally-authored bytes in the

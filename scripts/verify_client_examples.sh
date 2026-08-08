@@ -283,48 +283,6 @@ test_progress_token_echo() {
     fi
 }
 
-# Test 5: session-logging-proof-test (protocol-2025-11-25; hardcodes port 8001
-# in main.rs — it has no clap/CLI arg parsing at all, so a --port flag would
-# be silently ignored).
-test_session_logging() {
-    echo "----------------------------------------"
-    echo "Testing: session-logging-proof-test"
-    echo "Description: Session-aware logging verification"
-    echo "----------------------------------------"
-
-    echo "Running session logging proof test..."
-    RUST_LOG=error timeout 10s "$BIN_DIR/session-logging-proof-test" &
-    SERVER_PID=$!
-    PIDS+=($SERVER_PID)
-    sleep 3
-
-    # Check if server started
-    if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo -e "${RED}FAILED${NC}: session-logging-proof-test failed to start"
-        FAILED=$((FAILED + 1))
-        return 1
-    fi
-
-    # Test basic initialization
-    SESSION_ID=$(curl -i -s -X POST "http://127.0.0.1:8001/mcp" \
-        -H "Content-Type: application/json" \
-        -H "Accept: application/json" \
-        -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
-        | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
-
-    kill $SERVER_PID 2>/dev/null || true
-    sleep 1
-
-    if [ -n "$SESSION_ID" ]; then
-        echo -e "${GREEN}PASSED${NC}: Session logging test successful"
-        PASSED=$((PASSED + 1))
-        return 0
-    else
-        echo -e "${RED}FAILED${NC}: Could not get session ID from header"
-        FAILED=$((FAILED + 1))
-        return 1
-    fi
-}
 
 # Run all client tests
 test_client_initialization
@@ -332,7 +290,6 @@ test_streamable_client
 test_logging_client
 test_session_compliance
 test_progress_token_echo
-test_session_logging
 
 # Final summary
 echo "======================================================================"

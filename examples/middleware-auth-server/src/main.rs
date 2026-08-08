@@ -160,7 +160,7 @@ async fn main() -> McpResult<()> {
 
     let server = McpServer::builder()
         .name("middleware-auth-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Authentication Middleware Example")
         .instructions(
             "This server demonstrates middleware-based authentication. \

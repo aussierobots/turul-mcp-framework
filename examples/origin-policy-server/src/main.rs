@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("origin-policy-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Origin Policy Example")
         .instructions("Demonstrates Origin-header validation (DNS-rebinding protection).")
         .tool(WhereAmITool::default())

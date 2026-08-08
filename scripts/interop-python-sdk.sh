@@ -1,11 +1,20 @@
 #!/usr/bin/env bash
-# Third-party interoperability probe for the MCP 2026-07-28 lane.
+# Third-party interoperability probe for the MCP 2026-07-28 lane: cell "P2 -> R"
+# in docs/plans/interop-test-matrix.md.
 #
-# Drives a turul server with FastMCP — an independent implementation, no turul
-# code in the client path — through a logging proxy, and asserts on the bytes
-# the client actually sent. This is one of the few checks in the repo whose
-# client half was not written by this project; most of the suite is our code on
-# both ends.
+# Drives a turul server with the OFFICIAL MCP Python SDK (`mcp` on PyPI) — an
+# independent implementation, no turul code in the client path — through a
+# logging proxy, and asserts on the bytes the proxy captured. Architecture
+# mirrors scripts/interop-fastmcp.sh: peer client -> local logging proxy ->
+# turul server, assertions on captured bytes only, never on the client's
+# self-report.
+#
+# This is a DIFFERENT peer from scripts/interop-fastmcp.sh. FastMCP is a
+# third-party framework that happens to speak MCP; `mcp` is the reference
+# implementation published by the protocol authors. A wire disagreement with
+# the reference client is a stronger signal than one with any other peer, and
+# until this script existed the reference Python client had never been pointed
+# at this framework at all.
 #
 # Journeys (see docs/plans/interop-test-matrix.md):
 #   J1  server/discover -> tools/list -> tools/call
@@ -13,52 +22,47 @@
 #   J5  negative paths, driven with raw HTTP because a conformant client will
 #       not emit the malformed requests they test
 #
-# Not wired into the blocking gate: it needs network access and pins a
-# pre-release FastMCP. Run it by hand before a release, and re-run whenever the
-# pinned client moves.
+# Not wired into the blocking gate: it needs network access to install from
+# PyPI. Run it by hand before a release, and re-run whenever the pin moves.
 #
-#   scripts/interop-fastmcp.sh [PORT]
+#   scripts/interop-python-sdk.sh [PORT]
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
-PORT="${1:-8690}"
+PORT="${1:-8740}"
 PROXY_PORT=$((PORT + 1))
-WORK="${TMPDIR:-/tmp}/turul-interop-fastmcp"
-FASTMCP_VERSION="4.0.0b2"   # 4.0.0a1/b1 also spoke 2026-07-28; b2 is the beta we measured
-# Preferred first. FastMCP 4.0.0b1 segfaults inside CPython 3.14's asyncio C
-# module after completing the exchange — reproduced with FastMCP's OWN server as
-# the peer, so it is a client/interpreter fault, not a wire-format issue. We try
-# 3.14 first and fall back so the probe still asserts a completed round trip.
-PYTHON_VERSIONS="${PYTHON_VERSIONS:-3.14 3.12}"
+WORK="${TMPDIR:-/tmp}/turul-interop-python-sdk"
+MCP_VERSION="2.0.0"   # first `mcp` release with 2026-07-28 support (PyPI, 2026-07-28)
 
-# Pin-currency check. A pinned peer is a claim about the outside world that goes
-# stale silently — this probe once measured a superseded pre-release for weeks
-# because nothing compared the pin to the registry. Warns rather than fails: the
-# probe's job is to test the version it pinned, not to refuse to run when the
-# peer ships.
-LATEST=$(curl -sS --max-time 15 https://pypi.org/pypi/fastmcp/json 2>/dev/null \
-  | jq -r '[.releases | to_entries[] | select(.value | length > 0)
-            | {v: .key, t: .value[0].upload_time}] | sort_by(.t) | last | .v' 2>/dev/null)
-if [ -n "$LATEST" ] && [ "$LATEST" != "null" ] && [ "$LATEST" != "$FASTMCP_VERSION" ]; then
-  echo "WARN: PyPI's newest fastmcp is $LATEST, this probe pins $FASTMCP_VERSION —" >&2
+# The SDK supports 3.10+; 3.12 is the version this cell was measured on. Unlike
+# the FastMCP probe there is no CPython 3.14 asyncio segfault to dodge here,
+# so a single version is enough.
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+
+# Pin-currency check — same rationale as the sibling probes. Warns, never fails:
+# the probe's job is to test the version it pinned, not to refuse to run when
+# the peer ships a new one.
+LATEST=$(curl -sS --max-time 15 https://pypi.org/pypi/mcp/json 2>/dev/null \
+  | jq -r '.info.version' 2>/dev/null)
+if [ -n "$LATEST" ] && [ "$LATEST" != "null" ] && [ "$LATEST" != "$MCP_VERSION" ]; then
+  echo "WARN: PyPI's newest mcp is $LATEST, this probe pins $MCP_VERSION —" >&2
   echo "      re-pin and re-run before treating the result as current" >&2
 fi
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
-command -v uv >/dev/null || fail "uv not found — https://docs.astral.sh/uv/"
+# Exit 77 (not 0) on skip: an unrunnable probe must not read as a green cell.
+command -v uv >/dev/null || { echo "SKIP: uv not found — https://docs.astral.sh/uv/" >&2; exit 77; }
 
 mkdir -p "$WORK"
 cd "$WORK"
 
-setup_env() {
-  rm -rf .venv
-  uv venv --python "$1" --quiet 2>/dev/null || return 1
-  uv pip install --quiet --prerelease=allow "fastmcp==$FASTMCP_VERSION" 2>/dev/null || return 1
-  .venv/bin/python -c "import sys,fastmcp;print(f'  fastmcp {fastmcp.__version__} on Python {sys.version.split()[0]}')"
-}
+rm -rf .venv
+uv venv --python "$PYTHON_VERSION" --quiet 2>/dev/null || fail "could not create a Python $PYTHON_VERSION venv"
+uv pip install --quiet "mcp==$MCP_VERSION" 2>/dev/null || fail "could not install mcp==$MCP_VERSION"
+.venv/bin/python -c "import sys, mcp; print(f'  mcp $MCP_VERSION on Python {sys.version.split()[0]}')"
 
 cat > probe.py <<PYEOF
-"""FastMCP client -> logging proxy -> turul server. Asserts on captured bytes."""
+"""MCP Python SDK client -> logging proxy -> turul server. Asserts on captured bytes."""
 import http.server, socketserver, json, sys, threading, urllib.request, urllib.error, subprocess
 
 UPSTREAM = "http://127.0.0.1:$PORT/mcp"
@@ -80,17 +84,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 data, code, ctype = r.read(), r.status, r.headers.get("Content-Type", "application/json")
         except urllib.error.HTTPError as e:
             data, code, ctype = e.read(), e.code, e.headers.get("Content-Type", "application/json")
-        # The response is captured too: J2's assertions are about what the
-        # server returned, and reading it here avoids trusting the client's
-        # rendering of it.
+        # Capture the response too: J2's assertions are about what the server
+        # returned, and reading it here avoids trusting the client's rendering.
         result, error = None, None
         try:
             parsed = json.loads(data)
         except Exception:
             # The server answers a POST with either a single JSON object or an
-            # SSE stream, and picks per request; FastMCP negotiates its way into
-            # both. Unwrap the framing so the assertions below see the payload
-            # either way.
+            # SSE stream, choosing per request. Unwrap the framing so the
+            # assertions below see the payload either way.
             parsed, text = None, data.decode("utf-8", "replace")
             for line in text.splitlines():
                 if line.startswith("data: "):
@@ -201,28 +203,32 @@ if errors:
     print("\nFAILURES:")
     for e in errors: print(f"  - {e}")
     sys.exit(1)
-print(f"\nPASS: FastMCP completed {len([c for c in CAPTURED])} requests over the stateless "
+print(f"\nPASS: MCP Python SDK completed {len(CAPTURED)} requests over the stateless "
       f"2026-07-28 wire (no initialize, no session header)")
 PYEOF
 
 cat > client.py <<'PYEOF'
 import asyncio, sys
-from fastmcp import Client
+from mcp.client import Client
 
 async def main(url: str) -> None:
+    # mode='auto' is the SDK's era negotiation: it probes server/discover and
+    # only falls back to the initialize handshake for a pre-2026 server. Left
+    # at the default deliberately — that this reaches the modern era against a
+    # turul server IS the assertion, and the proxy capture proves it.
     async with Client(url) as client:
         # J1
         tools = await client.list_tools()
-        names = sorted(t.name for t in tools)
+        names = sorted(t.name for t in tools.tools)
         print("TOOLS:", ", ".join(names) or "(none)")
         if "echo" not in names:
             raise SystemExit(f"fixture server must advertise echo, got {names}")
         result = await client.call_tool("echo", {"text": "interop"})
         print("CALL echo ->", str(getattr(result, "content", result))[:120])
 
-        # J2 — each leg is individually guarded: a FastMCP release that lacks
-        # one of these methods should surface as an unexercised leg, not as a
-        # failure of the server it was pointed at.
+        # J2 — each leg individually guarded: an SDK release lacking one of
+        # these should surface as an unexercised leg, not as a failure of the
+        # server it was pointed at.
         for label, coro in (
             ("resources/list", client.list_resources()),
             ("resources/templates/list", client.list_resource_templates()),
@@ -255,83 +261,70 @@ cd - >/dev/null
 echo "=== starting interop-fixture-server on :$PORT (2026-07-28 default build) ==="
 RUST_LOG=error cargo run -q -p interop-fixture-server -- --port "$PORT" >/dev/null 2>&1 &
 SERVER_PID=$!
-trap 'kill "$SERVER_PID" 2>/dev/null' EXIT
+cleanup() { kill "$SERVER_PID" 2>/dev/null; wait "$SERVER_PID" 2>/dev/null; }
+trap cleanup EXIT
 
 for _ in $(seq 1 60); do
   curl -sf -o /dev/null "http://127.0.0.1:$PORT/mcp" 2>/dev/null && break
-  sleep 1
+  kill -0 "$SERVER_PID" 2>/dev/null || fail "fixture server exited during startup"
+  sleep 0.5
 done
-sleep 2
+
+echo "=== J1 + J2: MCP Python SDK $MCP_VERSION -> proxy -> turul ==="
+( cd "$WORK" && .venv/bin/python -u probe.py )
+J1J2=$?
 
 # --- J5: negative paths, driven with raw HTTP -------------------------------
-# A conformant client will not send these, so they are issued directly. The
-# codes are the 2026-07-28 set: -32020 header mismatch, -32022 unsupported
-# version, -32601 unknown method, -32602 invalid params.
-#
-# The HTTP status is part of the contract and splits by layer: a request the
-# transport rejects before dispatch (bad or missing headers, unsupported
-# version) answers 4xx, an unknown method answers 404, and a well-formed
-# request that fails inside a handler answers 200 with the error in the
-# JSON-RPC body. The unknown-resource case below pins that last rule.
+META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"interop","version":"1.0.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
+J5=0
 echo
 echo "=== J5: negative paths (raw HTTP, no client involved) ==="
-META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"interop","version":"1.0.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
-j5_fail=0
-j5() {
-  local case="$1" want_status="$2" want_code="$3"; shift 3
-  local body status code
-  body=$(curl -sS -o /tmp/j5.$$ -w '%{http_code}' "$@" "http://127.0.0.1:$PORT/mcp" 2>/dev/null)
-  status="$body"; code=$(jq -r '.error.code // "none"' /tmp/j5.$$ 2>/dev/null)
+
+check() {
+  local label="$1" want_status="$2" want_code="$3"; shift 3
+  local out status code
+  out=$(curl -s -w '\n%{http_code}' "$@" 2>/dev/null)
+  status=$(echo "$out" | tail -1)
+  code=$(echo "$out" | sed '$d' | jq -r '.error.code // empty' 2>/dev/null)
   if [ "$status" = "$want_status" ] && [ "$code" = "$want_code" ]; then
-    echo "  PASS  $case -> $status + $code"
+    echo "  OK    $label (status=$status code=$code)"
   else
-    echo "  FAIL  $case -> got $status + $code, wanted $want_status + $want_code"
-    cat /tmp/j5.$$; echo
-    j5_fail=1
+    echo "  FAIL  $label: got status=$status code=$code, want status=$want_status code=$want_code"
+    J5=1
   fi
-  rm -f /tmp/j5.$$
 }
 
-j5 "unsupported MCP-Protocol-Version" 400 -32022 \
-  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+U="http://127.0.0.1:$PORT/mcp"
+check "unsupported MCP-Protocol-Version -> -32022" 400 -32022 \
+  -X POST "$U" -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H 'MCP-Protocol-Version: 1999-01-01' -H 'Mcp-Method: tools/list' \
-  --data "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{$META}}"
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{$META}}"
 
-j5 "missing MCP-Protocol-Version" 400 -32020 \
-  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+check "missing MCP-Protocol-Version -> -32020" 400 -32020 \
+  -X POST "$U" -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H 'Mcp-Method: tools/list' \
-  --data "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{$META}}"
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{$META}}"
 
-j5 "Mcp-Method disagrees with body" 400 -32020 \
-  -H 'Accept: application/json' -H 'Content-Type: application/json' \
-  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: prompts/list' \
-  --data "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\",\"params\":{$META}}"
+check "Mcp-Method disagrees with body -> -32020" 400 -32020 \
+  -X POST "$U" -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: tools/call' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{$META}}"
 
-j5 "unknown method" 404 -32601 \
-  -H 'Accept: application/json' -H 'Content-Type: application/json' \
-  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: does/not/exist' \
-  --data "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"does/not/exist\",\"params\":{$META}}"
+check "unknown method -> 404 + -32601" 404 -32601 \
+  -X POST "$U" -H 'Content-Type: application/json' -H 'Accept: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: totally/unknown' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"totally/unknown\",\"params\":{$META}}"
 
-j5 "unknown resource uri" 200 -32602 \
-  -H 'Accept: application/json' -H 'Content-Type: application/json' \
+check "unknown resource URI -> -32602" 200 -32602 \
+  -X POST "$U" -H 'Content-Type: application/json' -H 'Accept: application/json' \
   -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: resources/read' \
-  -H 'Mcp-Name: file:///nope.txt' \
-  --data "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"resources/read\",\"params\":{\"uri\":\"file:///nope.txt\",$META}}"
+  -H 'Mcp-Name: file:///fixture/missing.md' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"resources/read\",\"params\":{\"uri\":\"file:///fixture/missing.md\",$META}}"
 
-cd "$WORK"
-STATUS=1
-for PY_VER in $PYTHON_VERSIONS; do
-  echo
-  echo "=== J1+J2 environment (uv, Python $PY_VER, fastmcp $FASTMCP_VERSION) ==="
-  setup_env "$PY_VER" || { echo "  (Python $PY_VER unavailable — skipping)"; continue; }
-  .venv/bin/python probe.py
-  STATUS=$?
-  if [ "$STATUS" -eq 0 ]; then
-    echo "  (verified on Python $PY_VER)"
-    break
-  fi
-  echo "  (probe did not complete on Python $PY_VER — trying next interpreter)"
-done
-
-[ "$j5_fail" = "0" ] || STATUS=1
-exit "$STATUS"
+echo
+if [ "$J1J2" -eq 0 ] && [ "$J5" -eq 0 ]; then
+  echo "PASS: cell Python SDK -> R (mcp==$MCP_VERSION) — J1 + J2 + J5 all green"
+  exit 0
+fi
+echo "FAIL: cell Python SDK -> R — J1/J2 exit=$J1J2, J5 exit=$J5"
+exit 1

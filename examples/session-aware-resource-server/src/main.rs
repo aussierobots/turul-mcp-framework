@@ -145,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("session-aware-resource-server")
-        .version("0.4.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Session-Aware Resource Server")
         .instructions("This server demonstrates session-aware resources. Resources can access session context to provide personalized content based on user state and preferences.")
         .resource(SessionAwareProfileResource)

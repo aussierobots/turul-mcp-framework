@@ -590,7 +590,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("real-prompts-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Real MCP Prompts Server")
         .instructions(
             "This server demonstrates ACTUAL MCP prompt protocol implementation. \

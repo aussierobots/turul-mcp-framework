@@ -35,7 +35,15 @@ set -uo pipefail
 cd "$(dirname "$0")/.."
 REPO_ROOT="$(pwd)"
 
+PORT="${1:-8710}"
+PROXY_PORT=$((PORT + 1))
+WORK="${TMPDIR:-/tmp}/turul-interop-go-sdk"
+GO_SDK_VERSION="v1.7.0"  # github.com/modelcontextprotocol/go-sdk — pinned in scripts/interop-go-sdk-probe/go.mod
+
 # Pin-currency check — see the note in scripts/interop-fastmcp.sh. Warns only.
+# Must stay BELOW the GO_SDK_VERSION assignment: this block used to sit above
+# it, and under `set -u` the unbound reference aborted the probe at line 42 on
+# every run, so the whole G->R cell silently stopped executing.
 GO_LATEST=$(curl -sS --max-time 15 \
   https://proxy.golang.org/github.com/modelcontextprotocol/go-sdk/@latest 2>/dev/null \
   | jq -r .Version 2>/dev/null)
@@ -43,11 +51,6 @@ if [ -n "$GO_LATEST" ] && [ "$GO_LATEST" != "null" ] && [ "$GO_LATEST" != "$GO_S
   echo "WARN: the module proxy's newest go-sdk is $GO_LATEST, this probe pins $GO_SDK_VERSION —" >&2
   echo "      re-pin and re-run before treating the result as current" >&2
 fi
-
-PORT="${1:-8710}"
-PROXY_PORT=$((PORT + 1))
-WORK="${TMPDIR:-/tmp}/turul-interop-go-sdk"
-GO_SDK_VERSION="v1.7.0"  # github.com/modelcontextprotocol/go-sdk — pinned in scripts/interop-go-sdk-probe/go.mod
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -67,7 +70,10 @@ fi
 if [ -z "$GO_BIN" ]; then
   echo "SKIP: no Go toolchain found (checked \$GOBIN_OVERRIDE, the scratchpad path, and PATH)."
   echo "      Install Go 1.25+ or set GOBIN_OVERRIDE=/path/to/go to run this probe."
-  exit 0
+  # 77, not 0: a skipped cell is NOT a passing cell. Exiting 0 here made an
+  # absent toolchain indistinguishable from a green G->R run for anything
+  # reading only the status code.
+  exit 77
 fi
 GOROOT_DIR="$(dirname "$(dirname "$GO_BIN")")"
 "$GO_BIN" version || fail "found $GO_BIN but it would not run"

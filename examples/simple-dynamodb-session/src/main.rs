@@ -146,7 +146,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Build MCP server with DynamoDB session storage
     let server = McpServer::builder()
         .name("simple-dynamodb-session")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("DynamoDB Session Storage Example")
         .instructions("Demonstrates DynamoDB-backed session storage for MCP servers. Use the tools to store and retrieve values that persist in AWS DynamoDB.")
         .with_session_storage(dynamodb_storage)

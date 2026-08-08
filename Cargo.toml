@@ -80,7 +80,6 @@ members = [
   "examples/client-initialise-report",
   "examples/logging-test-client",
   "examples/logging-test-server",
-  "examples/session-logging-proof-test",
   "examples/session-management-compliance-test",
   "examples/streamable-http-client",
   "examples/streamable-http-client-2025-11-25",
@@ -180,6 +179,9 @@ default-members = [
 ]
 
 exclude = [
+  # Archived examples: kept for reference, deliberately not built.
+  # See EXAMPLES.md §Archived for why each was retired.
+  "examples/archived",
   # AWS examples for future phase - re-enabled for 0.2.0
 ]
 
