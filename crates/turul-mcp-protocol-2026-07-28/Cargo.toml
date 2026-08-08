@@ -10,6 +10,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Model Context Protocol (MCP) specification implementation - 2026-07-28 version"
+readme = "README.md"
 
 [features]
 default = []

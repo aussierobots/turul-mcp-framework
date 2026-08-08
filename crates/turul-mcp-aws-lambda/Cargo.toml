@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "AWS Lambda integration for turul-mcp-framework servers"
+readme = "README.md"
 autoexamples = false                                                   # Disable auto-discovery to prevent duplicate target warnings
 
 [features]

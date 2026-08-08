@@ -120,13 +120,25 @@ reference Python SDK cell also covers:
   round trip — with the **SDK driving the retry itself**, so a foreign client
   finished MRTR unaided. No `elicitation/create` and no elicitation-complete
   notification appear anywhere in the capture.
-- **J4 — request-scoped progress.** SSE framing plus three
-  `notifications/progress`, each echoing the token the *client* declared. The
-  probe asserts that match; a token a client cannot correlate is noise.
+- **J4 — the notification surface, both halves.** Request-scoped progress: SSE
+  framing plus three `notifications/progress`, each echoing the token the
+  *client* declared; the probe asserts that match, because a token a client
+  cannot correlate is noise. And `subscriptions/listen`: acknowledged first,
+  then opt-in filtering — the fixture broadcasts four flavours and only the
+  requested one is delivered, each frame carrying a `subscriptionId`.
 
-Still uncovered by any peer: `subscriptions/listen` (the other half of J4) and
-J6's legacy-fallback leg. See
-[`../plans/interop-test-matrix.md`](../plans/interop-test-matrix.md) §4–§5.
+**Still uncovered by any peer**, stated plainly so the absence is not read as
+coverage:
+
+- **The tasks extension (SEP-2663).** No interop probe drives it. Our own
+  `ext_tasks_2026.rs` has turul code on both ends, so it cannot detect a
+  disagreement about how a client declares the extension. Task #71.
+- **`turul-mcp-client` against a real 2025-11-25 server.** The 2026 lane is
+  covered against a real server; the 2025 lane is covered only against wiremock
+  stubs, which cannot disagree with the client that shares their author. This
+  also blocks J6's legacy-fallback leg. Task #72.
+
+See [`../plans/interop-test-matrix.md`](../plans/interop-test-matrix.md) §4–§5.
 
 A third measure sits behind all of it: **12 of 88 upstream fixture directories are
 modeled** (13.6%). The fixtures are the only externally-authored bytes in the

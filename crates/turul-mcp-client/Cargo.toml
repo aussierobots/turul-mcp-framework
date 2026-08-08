@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Comprehensive MCP client library with multi-transport support"
+readme = "README.md"
 
 [dependencies]
 # MCP framework dependencies.

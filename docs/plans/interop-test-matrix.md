@@ -234,8 +234,9 @@ one said J3 and J4 were untouched, true until 2026-08-08.)
 | **3** | R→P: drive a FastMCP server with `turul-mcp-client` | **done** — 8 methods, with an R→R control |
 | **3a** | G→R: the Go SDK v1.7.0, the only stable peer | **done** — J1+J2+J5 green, no wire disagreement |
 | **3b** | P2→R: the reference MCP Python SDK `mcp==2.0.0` | **done 2026-08-08** — J1+J2+J5 green on its first run |
-| **4** | J3 (MRTR) and J4 (progress) against a live peer | **done 2026-08-08** — both green in the P2→R cell; see below |
-| **4a** | J4 subscriptions (`subscriptions/listen` + filtered delivery) | not started — the progress half of J4 is covered, the subscription half is not |
+| **4** | J3 (MRTR) and J4 (progress + subscriptions) against a live peer | **done 2026-08-08** — all green in the P2→R cell; see below |
+| **4a** | J7: the tasks extension (SEP-2663) driven by a peer | **not started** — no interop probe mentions tasks at all; `ext_tasks_2026.rs` is turul-on-both-ends. Task #71 |
+| **4b** | turul-mcp-client against a REAL 2025-11-25 turul server | **not started** — the 2025 half of ADR-030 is verified only against wiremock stubs. Task #72 |
 | **5** | One runner, one matrix report, per-cell skip when a peer is unavailable | not started — currently five ad-hoc scripts |
 
 ### Phase 4: what J3 and J4 actually proved
@@ -258,20 +259,50 @@ gained a `confirm` tool (MRTR) and a `count` tool (progress) for the purpose.
 - Negatively: no `elicitation/create` and no `notifications/elicitation/complete`
   appear anywhere in the capture, which is what the stateless core requires.
 
-**J4 — request-scoped progress:** a `tools/call` declaring
-`_meta.progressToken` is answered with SSE framing and three
-`notifications/progress` frames, **each echoing the client's own token**. The
-probe asserts the token matches the one the request declared — a token a client
-cannot match to its own request is noise, not correlation. The no-token case
-correctly gets plain JSON and zero notifications (ADR-006).
+**J4 — the notification surface, both halves:**
+
+- *Request-scoped progress.* A `tools/call` declaring `_meta.progressToken` is
+  answered with SSE framing and three `notifications/progress` frames, **each
+  echoing the client's own token**. The probe asserts the token matches the one
+  the request declared — a token a client cannot match to its own request is
+  noise, not correlation. The no-token case correctly gets plain JSON and zero
+  notifications (ADR-006).
+- *`subscriptions/listen`.* The peer opens a stream asking for
+  `resourcesListChanged` only; a second connection then calls `emit_changes`,
+  which broadcasts four different flavours. The stream acknowledges **first**,
+  then delivers only the requested type, each frame carrying
+  `_meta["io.modelcontextprotocol/subscriptionId"]`. Emitting all four is what
+  makes the filter assertion meaningful: if the fixture broadcast only the
+  watched type, "filtered correctly" and "emitted nothing else" would be
+  indistinguishable.
+
+Driving a long-lived stream through the capture proxy needed two fixes worth
+recording, because both produced *misleading green or hung* rather than a clean
+failure:
+
+- The proxy's buffering `read()` blocks forever on a stream. The listen branch
+  now forwards incrementally under a socket `timeout=`, because a deadline
+  consulted only *after* a line arrives never fires on an idle stream.
+- The listen handler runs on a daemon thread that can still be streaming when
+  the client finishes. Appending its capture entry at the *end* raced the
+  assertion pass, which then reported "no subscriptions/listen reached the
+  server" while the client had demonstrably received notifications. The entry is
+  now registered up-front and its frame list mutated in place.
 
 Coverage today, measured rather than estimated: **9 of 22 methods** exercised by
 each of four independent clients (FastMCP, the Go SDK, the TypeScript SDK and
 the reference Python SDK), **9 driven / 8 answered** by our client against an
 independent server (R→P — the peer does not serve `completion/complete`), 5
-negative paths confirmed four times over, and MRTR + progress confirmed once,
-by the reference Python SDK. Still uncovered by any peer: `subscriptions/listen`
-and J6's legacy-fallback leg.
+negative paths confirmed four times over, and MRTR + progress + subscriptions
+confirmed once, by the reference Python SDK.
+
+**Still uncovered by any peer**, stated so the absence cannot read as coverage:
+
+| Gap | Why it matters | Tracked |
+|---|---|---|
+| The **tasks extension** (SEP-2663) | `grep -l tasks scripts/interop-*.sh` returns nothing. Extensions *negotiate* — the client declares them in per-request `_meta` `clientCapabilities.extensions` and the server elects task execution only if declared. Whether a foreign client's declaration shape matches what our server looks for is exactly the both-ends-agree-wrongly assumption interop exists to catch. `ext_tasks_2026.rs` cannot catch it: turul is on both ends. | #71 |
+| **turul-mcp-client against a real 2025-11-25 server** | `bilingual_negotiation.rs` proves the downgrade *decision* correctly, but every 2025 case uses a wiremock stub. A mock cannot disagree with the client, because the same author wrote both. `ci-gates.sh:91` only *builds* `client-initialise-server` and never points the client at it. | #72 |
+| **J6's legacy-fallback leg** | Needs a 2025-lane fixture server, which #72 would also provide. | #72 |
 
 ---
 

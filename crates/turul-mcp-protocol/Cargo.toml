@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Model Context Protocol (MCP) specification implementation - Current version alias"
+readme = "README.md"
 
 [features]
 # Spec-version coexistence: exactly one protocol-<date> feature selects which

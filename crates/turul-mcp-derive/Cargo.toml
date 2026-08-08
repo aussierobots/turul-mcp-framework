@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Procedural macros for the MCP framework"
+readme = "README.md"
 
 [lib]
 proc-macro = true

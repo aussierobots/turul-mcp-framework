@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Runtime builders for MCP (Model Context Protocol) components"
+readme = "README.md"
 keywords = ["mcp", "protocol", "builders", "runtime"]
 categories = ["development-tools", "api-bindings"]
 

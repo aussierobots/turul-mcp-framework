@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Server-global state storage for MCP entity registries (tools, resources, prompts) — pluggable backends for cross-instance coordination"
+readme = "README.md"
 
 [dependencies]
 # Core dependencies

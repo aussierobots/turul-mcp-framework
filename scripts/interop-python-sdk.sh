@@ -22,13 +22,21 @@
 #   J3  MRTR (SEP-2322): the capability gate (-32021 for a client that did not
 #       declare elicitation) and the two-leg round trip. The SDK drives both
 #       legs itself, so a pass here is a foreign client completing MRTR unaided.
-#   J4  request-scoped notifications/progress: SSE framing, and every frame
-#       echoing the progressToken the CLIENT declared.
+#   J4  the notification surface, both halves:
+#       (a) request-scoped notifications/progress — SSE framing, and every
+#           frame echoing the progressToken the CLIENT declared;
+#       (b) subscriptions/listen — acknowledged first, then opt-in filtering:
+#           the fixture broadcasts four flavours and only the requested one
+#           may be delivered, each carrying a subscriptionId.
 #   J5  negative paths, driven with raw HTTP because a conformant client will
 #       not emit the malformed requests they test
 #
 # J3 and J4 are the two headline 2026-07-28 features, and until this probe
 # covered them no peer had exercised either against this framework.
+#
+# NOT covered here: the tasks extension (SEP-2663). No interop probe drives it
+# — see the interop matrix, and note our own ext_tasks_2026.rs has turul code
+# on both ends.
 #
 # Not wired into the blocking gate: it needs network access to install from
 # PyPI. Run it by hand before a release, and re-run whenever the pin moves.
@@ -71,7 +79,7 @@ uv pip install --quiet "mcp==$MCP_VERSION" 2>/dev/null || fail "could not instal
 
 cat > probe.py <<PYEOF
 """MCP Python SDK client -> logging proxy -> turul server. Asserts on captured bytes."""
-import http.server, socketserver, json, sys, threading, urllib.request, urllib.error, subprocess
+import http.server, socketserver, json, sys, threading, time, urllib.request, urllib.error, subprocess
 
 UPSTREAM = "http://127.0.0.1:$PORT/mcp"
 CAPTURED = []
@@ -96,6 +104,57 @@ class Handler(http.server.BaseHTTPRequestHandler):
         for k, v in self.headers.items():
             if k.lower() not in ("host", "content-length"):
                 req.add_header(k, v)
+
+        # subscriptions/listen is a LONG-LIVED stream. The buffering path below
+        # does a blocking read() and would hang here forever, so it gets its
+        # own incremental branch: forward each SSE frame as it arrives, capture
+        # it, and close after a deadline. Without this the subscription leg
+        # cannot be driven through the proxy at all, and asserting on the
+        # client's self-report instead would break this file's one rule.
+        if rpc == "subscriptions/listen":
+            frames, deadline = [], time.monotonic() + 6.0
+            # Register the entry BEFORE streaming and mutate `frames` in place.
+            # This handler runs on a daemon thread that can still be streaming
+            # when the client finishes; appending at the end raced the assertion
+            # pass, which then reported "no subscriptions/listen reached the
+            # server" while the client had demonstrably received notifications.
+            CAPTURED.append({
+                "protocol_version": self.headers.get("MCP-Protocol-Version"),
+                "mcp_method": self.headers.get("Mcp-Method"),
+                "mcp_name": self.headers.get("Mcp-Name"),
+                "session_id": self.headers.get("Mcp-Session-Id"),
+                "rpc": rpc, "status": 200, "result": None, "error": None,
+                "framing": "sse", "progress_token": None, "progress_frames": [],
+                "listen_frames": frames,
+            })
+            try:
+                # timeout= sets the SOCKET timeout, so a quiet stream raises
+                # instead of blocking. Without it the deadline below is only
+                # consulted after a line arrives — which never happens once the
+                # server goes idle, so the probe hangs instead of finishing.
+                with urllib.request.urlopen(req, timeout=3) as r:
+                    self.send_response(r.status)
+                    self.send_header("Content-Type",
+                                     r.headers.get("Content-Type", "text/event-stream"))
+                    self.send_header("Cache-Control", "no-cache")
+                    self.end_headers()
+                    for raw in r:
+                        self.wfile.write(raw)
+                        self.wfile.flush()
+                        line = raw.decode("utf-8", "replace").strip()
+                        if line.startswith("data: "):
+                            try:
+                                frames.append(json.loads(line[6:]))
+                            except Exception:
+                                pass
+                        if time.monotonic() > deadline:
+                            break
+            except Exception as exc:
+                # A socket timeout here is the NORMAL end of a quiet stream, not
+                # a failure — the entry is already registered above either way.
+                frames.append({"proxy_error": str(exc)})
+            return
+
         try:
             with urllib.request.urlopen(req) as r:
                 data, code, ctype = r.read(), r.status, r.headers.get("Content-Type", "application/json")
@@ -140,6 +199,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             "framing": framing,
             "progress_token": progress_token,
             "progress_frames": progress_frames,
+            "listen_frames": [],
         })
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -303,6 +363,43 @@ else:
                 f"{count_calls[0]['framing']}, expected sse"
             )
 
+# --- J4b: subscriptions/listen, opt-in filtering --------------------------
+listens = [c for c in CAPTURED if c["rpc"] == "subscriptions/listen"]
+if not listens:
+    errors.append(
+        "J4b: no subscriptions/listen reached the server. `emit_changes` and the\n"
+        "        listen leg are both part of the fixture contract."
+    )
+else:
+    # A trailing proxy_error is the socket timeout that ends a quiet stream —
+    # expected, and not a delivered notification.
+    frames = [f for f in listens[0]["listen_frames"] if "proxy_error" not in f]
+    methods = [f.get("method") for f in frames]
+    if not methods or methods[0] != "notifications/subscriptions/acknowledged":
+        errors.append(
+            f"J4b: the stream must acknowledge before it delivers; got {methods}"
+        )
+    # The fixture broadcasts four flavours; only the requested one may arrive.
+    forbidden = {
+        "notifications/prompts/list_changed",
+        "notifications/tools/list_changed",
+        "notifications/resources/updated",
+    }
+    leaked = [m for m in methods if m in forbidden]
+    if leaked:
+        errors.append(
+            f"J4b: the filter is opt-in, but unrequested types were delivered: {leaked}"
+        )
+    if "notifications/resources/list_changed" not in methods:
+        errors.append(
+            f"J4b: requested resourcesListChanged was never delivered; got {methods}"
+        )
+    for f in frames:
+        if "io.modelcontextprotocol/subscriptionId" not in f.get("params", {}).get("_meta", {}):
+            errors.append(
+                f"J4b: frame {f.get('method')!r} carries no subscriptionId in _meta"
+            )
+
 if "RESULT: ok" not in client.stdout:
     errors.append(f"client did not complete the journey; stderr tail: {client.stderr.strip()[-600:]}")
 
@@ -417,8 +514,39 @@ async def mrtr(url: str) -> None:
     print("MRTR: done")
 
 
+async def subscriptions(url: str) -> None:
+    """J4b — subscriptions/listen with an opt-in filter.
+
+    Asks for resourcesListChanged ONLY, then triggers a broadcast of four
+    different notification types. The server must acknowledge first, then
+    deliver only the requested type.
+    """
+    async with Client(url) as client:
+        try:
+            async with client.listen(resources_list_changed=True) as sub:
+                # A second connection fires the broadcast; the fixture emits
+                # four flavours so filtering has something to filter.
+                async with Client(url) as trigger:
+                    await trigger.call_tool("emit_changes", {})
+                got = []
+                try:
+                    async with asyncio.timeout(6):
+                        async for note in sub:
+                            got.append(getattr(note, "method", str(note)))
+                            if len(got) >= 1:
+                                break
+                except (TimeoutError, asyncio.TimeoutError):
+                    pass
+                print(f"J4b listen received: {got}")
+        except Exception as exc:
+            print(f"J4b !! {type(exc).__name__}: {exc}")
+
+    print("SUBS: done")
+
+
 asyncio.run(main(sys.argv[1]))
 asyncio.run(mrtr(sys.argv[1]))
+asyncio.run(subscriptions(sys.argv[1]))
 PYEOF
 
 cd - >/dev/null

@@ -18,6 +18,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+use turul_http_mcp_server::notification_bridge::SharedNotificationBroadcaster;
 use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_protocol::completion::{
     CompleteArgument, CompleteRequest, CompleteResult, CompletionReference, CompletionResult,
@@ -31,6 +32,7 @@ use turul_mcp_protocol::prompts::{PromptArgument, PromptMessage};
 use turul_mcp_protocol::resources::ResourceContent;
 use turul_mcp_server::prelude::*;
 use turul_mcp_server::{McpCompletion, McpPrompt, McpResource};
+use turul_rpc::JsonRpcNotification;
 
 const FIXTURE_URI: &str = "file:///fixture/readme.md";
 const FIXTURE_TEXT: &str = "# Interop fixture\n\nStable text for cross-implementation probes.\n";
@@ -177,6 +179,55 @@ impl CountTool {
     }
 }
 
+/// J4 fixture, subscriptions half: broadcast one of each list-changed flavour
+/// plus a `resources/updated` for the fixture URI.
+///
+/// A peer holding a `subscriptions/listen` stream with an opt-in filter should
+/// receive only the types it asked for. Emitting all four here is what makes
+/// the filter assertion meaningful — if the server broadcast only the watched
+/// type, "filtered correctly" and "emitted nothing else" would be
+/// indistinguishable.
+#[derive(McpTool, Default, Clone)]
+#[tool(
+    name = "emit_changes",
+    description = "Broadcast list-changed and resource-updated notifications",
+    output = String
+)]
+struct EmitChangesTool {}
+
+impl EmitChangesTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        let broadcaster = session
+            .broadcaster
+            .as_ref()
+            .and_then(|any| any.downcast_ref::<SharedNotificationBroadcaster>())
+            .ok_or_else(|| McpError::tool_execution("broadcaster unavailable"))?
+            .clone();
+
+        for method in [
+            "notifications/resources/list_changed",
+            "notifications/prompts/list_changed",
+            "notifications/tools/list_changed",
+        ] {
+            let _ = broadcaster
+                .broadcast_to_all_sessions(JsonRpcNotification::new_no_params(method.to_string()))
+                .await;
+        }
+
+        let mut params = HashMap::new();
+        params.insert("uri".to_string(), serde_json::json!(FIXTURE_URI));
+        let _ = broadcaster
+            .broadcast_to_all_sessions(JsonRpcNotification::new_with_object_params(
+                "notifications/resources/updated".to_string(),
+                params,
+            ))
+            .await;
+
+        Ok("emitted 4 notifications".to_string())
+    }
+}
+
 struct FixtureResource;
 
 impl HasResourceMetadata for FixtureResource {
@@ -313,6 +364,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool_fn(add)
         .tool(ConfirmTool::default())
         .tool(CountTool::default())
+        .tool(EmitChangesTool::default())
         .resource(FixtureResource)
         .prompt(GreetingPrompt)
         .completion_provider(GreetingNameCompleter)

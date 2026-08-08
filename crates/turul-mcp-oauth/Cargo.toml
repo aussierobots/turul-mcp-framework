@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "OAuth 2.1 Resource Server support for Turul MCP framework"
+readme = "README.md"
 
 [features]
 # Spec selection forwards to the transport/storage deps (one per build —
