@@ -3,7 +3,7 @@
 //! The client leg of the MRTR round trip against `mrtr-elicitation-server`:
 //!
 //! 1. Declare the `elicitation` capability (servers MUST NOT demand inputs a
-//!    client didn't declare — without it the call fails with `-32003`).
+//!    client didn't declare — without it the call fails with `-32021`).
 //! 2. Call `deploy_service` and catch `McpClientError::InputRequired`.
 //! 3. "Ask the user" (hardcoded yes here), then retry the ORIGINAL request
 //!    via `call_tool_with_input_responses`, echoing `requestState` verbatim.

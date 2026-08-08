@@ -216,10 +216,11 @@ Point it at a turul **2026** server → expect era `modern`. Point it at a turul
 `legacy`. This is the only external test of ADR-030's bilingual contract, and nothing in
 the repo tests the fallback direction against foreign code.
 
-Coverage today: **J1, J2 and J5 across four cells** — see §5 for the measured
-numbers. J3, J4 and J6's legacy leg are untouched by any peer. (An earlier
-revision of this line still read "J1 only, in one cell — 3 of 22 methods", which
-described the state before Phase 1.)
+Coverage today: **J1, J2 and J5 across five cells**, plus **J3 and J4 in the
+Python SDK cell** — see §5 for the measured numbers. Only J6's legacy leg is
+still untouched by any peer. (An earlier revision of this line read "J1 only, in
+one cell — 3 of 22 methods", which described the state before Phase 1; a later
+one said J3 and J4 were untouched, true until 2026-08-08.)
 
 ---
 
@@ -232,17 +233,45 @@ described the state before Phase 1.)
 | **2** | `scripts/interop-typescript-sdk.sh`, J1+J2+J5+J6 | **done** — 9 methods + 5 negatives against npm `@modelcontextprotocol/client@2.0.0`; J6 modern leg passes, legacy leg untested |
 | **3** | R→P: drive a FastMCP server with `turul-mcp-client` | **done** — 8 methods, with an R→R control |
 | **3a** | G→R: the Go SDK v1.7.0, the only stable peer | **done** — J1+J2+J5 green, no wire disagreement |
-| **4** | J3 (MRTR) and J4 (subscriptions/progress) across live cells | not started — the two headline 2026 features remain self-verified only |
-| **5** | One runner, one matrix report, per-cell skip when a peer is unavailable | not started — currently four ad-hoc scripts |
+| **3b** | P2→R: the reference MCP Python SDK `mcp==2.0.0` | **done 2026-08-08** — J1+J2+J5 green on its first run |
+| **4** | J3 (MRTR) and J4 (progress) against a live peer | **done 2026-08-08** — both green in the P2→R cell; see below |
+| **4a** | J4 subscriptions (`subscriptions/listen` + filtered delivery) | not started — the progress half of J4 is covered, the subscription half is not |
+| **5** | One runner, one matrix report, per-cell skip when a peer is unavailable | not started — currently five ad-hoc scripts |
+
+### Phase 4: what J3 and J4 actually proved
+
+Both run in `scripts/interop-python-sdk.sh` against the shared fixture, which
+gained a `confirm` tool (MRTR) and a `count` tool (progress) for the purpose.
+
+**J3 — MRTR (SEP-2322), two assertions:**
+
+- *The capability gate.* A client that declares no `elicitation` capability is
+  refused with `-32021`, carrying `data.requiredCapabilities.elicitation`. The
+  server must not demand an input the client cannot answer. This one fired
+  unprompted on the first run, against a probe that had simply forgotten to
+  declare the capability — the gate works.
+- *The round trip.* A client that does declare it gets `input_required` with
+  `inputRequests` and an opaque `requestState`, and the **MCP Python SDK drives
+  the retry itself** — the wire capture shows two consecutive `tools/call`
+  frames and a final `resultType: "complete"` carrying the elicited answer. A
+  foreign client completed MRTR unaided.
+- Negatively: no `elicitation/create` and no `notifications/elicitation/complete`
+  appear anywhere in the capture, which is what the stateless core requires.
+
+**J4 — request-scoped progress:** a `tools/call` declaring
+`_meta.progressToken` is answered with SSE framing and three
+`notifications/progress` frames, **each echoing the client's own token**. The
+probe asserts the token matches the one the request declared — a token a client
+cannot match to its own request is noise, not correlation. The no-token case
+correctly gets plain JSON and zero notifications (ADR-006).
 
 Coverage today, measured rather than estimated: **9 of 22 methods** exercised by
-each of three independent clients (FastMCP, the Go SDK and the TypeScript SDK),
-**8** driven by our client against an independent server (R→P), 5 negative paths
-confirmed three times over, and **zero** coverage of MRTR, subscriptions or
-progress by any peer. A fourth peer, the Python SDK `mcp==2.0.0`, is available
-and untested. The R→P 8 is now a *stale* measurement rather than a ceiling:
-`completion/complete` became reachable from `turul-mcp-client` on 2026-07-29
-(§3), so a re-run with a completion leg should read 9.
+each of four independent clients (FastMCP, the Go SDK, the TypeScript SDK and
+the reference Python SDK), **9 driven / 8 answered** by our client against an
+independent server (R→P — the peer does not serve `completion/complete`), 5
+negative paths confirmed four times over, and MRTR + progress confirmed once,
+by the reference Python SDK. Still uncovered by any peer: `subscriptions/listen`
+and J6's legacy-fallback leg.
 
 ---
 

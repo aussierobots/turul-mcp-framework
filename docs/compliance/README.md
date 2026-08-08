@@ -112,9 +112,20 @@ That fourth peer — the reference Python SDK `mcp==2.0.0` — was recorded here
 **untested** until 2026-08-08. It is now covered by `scripts/interop-python-sdk.sh`
 and passed on its first run, finding no wire disagreement.
 
-Still uncovered by **any** peer: **J3 (MRTR)** and **J4 (subscriptions and
-progress)** — the two headline 2026-07-28 features — plus J6's legacy-fallback
-leg. Those remain self-verified only. See
+**The two headline features are no longer self-verified.** As of 2026-08-08 the
+reference Python SDK cell also covers:
+
+- **J3 — MRTR (SEP-2322).** The `-32021` capability gate fires for a client that
+  did not declare `elicitation`, and a client that did completes the two-leg
+  round trip — with the **SDK driving the retry itself**, so a foreign client
+  finished MRTR unaided. No `elicitation/create` and no elicitation-complete
+  notification appear anywhere in the capture.
+- **J4 — request-scoped progress.** SSE framing plus three
+  `notifications/progress`, each echoing the token the *client* declared. The
+  probe asserts that match; a token a client cannot correlate is noise.
+
+Still uncovered by any peer: `subscriptions/listen` (the other half of J4) and
+J6's legacy-fallback leg. See
 [`../plans/interop-test-matrix.md`](../plans/interop-test-matrix.md) §4–§5.
 
 A third measure sits behind all of it: **12 of 88 upstream fixture directories are

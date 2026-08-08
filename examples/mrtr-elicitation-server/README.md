@@ -35,7 +35,7 @@ client                                         server
 - Retry leg: `session.input_responses()` is `Some`, and
   `session.mrtr_request_state()` returns the client's echoed state.
 - Capability gate (framework-enforced): a client whose per-request `_meta`
-  `clientCapabilities` does not declare `elicitation` gets JSON-RPC `-32003`
+  `clientCapabilities` does not declare `elicitation` gets JSON-RPC `-32021`
   instead of an input request. Try it: comment out the
   `declared_capabilities.elicitation = true` line in the client.
 

@@ -12,7 +12,7 @@
 //! completes (or aborts) based on the user's answer.
 //!
 //! Capability gate: clients that do not declare `elicitation` in their
-//! per-request `_meta` `clientCapabilities` get JSON-RPC `-32003` instead of
+//! per-request `_meta` `clientCapabilities` get JSON-RPC `-32021` instead of
 //! an input request — servers MUST NOT demand inputs a client can't answer.
 //!
 //! Pair with the client leg:

@@ -18,11 +18,15 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use turul_mcp_derive::mcp_tool;
+use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_protocol::completion::{
     CompleteArgument, CompleteRequest, CompleteResult, CompletionReference, CompletionResult,
     PromptReference,
 };
+use turul_mcp_protocol::elicitation::{
+    ElicitRequest, ElicitationSchema, PrimitiveSchemaDefinition,
+};
+use turul_mcp_protocol::input_required::{InputRequest, InputRequests, InputResponse};
 use turul_mcp_protocol::prompts::{PromptArgument, PromptMessage};
 use turul_mcp_protocol::resources::ResourceContent;
 use turul_mcp_server::prelude::*;
@@ -44,6 +48,133 @@ async fn add(
     #[param(description = "Second addend")] b: f64,
 ) -> McpResult<f64> {
     Ok(a + b)
+}
+
+/// The confirmation form the MRTR tool requests on leg 1 and validates on
+/// leg 2. Re-derived each leg — nothing persists between them on the
+/// stateless lane, which is the property J3 exists to prove.
+fn confirm_schema() -> ElicitationSchema {
+    let mut schema = ElicitationSchema::new()
+        .with_property("proceed".to_string(), PrimitiveSchemaDefinition::boolean());
+    schema.required = Some(vec!["proceed".to_string()]);
+    schema
+}
+
+/// J3 fixture: the MRTR round trip (SEP-2322).
+///
+/// Leg 1 answers `resultType: "input_required"` with one elicit request and an
+/// opaque `requestState`. The peer retries the ORIGINAL `tools/call` carrying
+/// `inputResponses` plus that state verbatim, and leg 2 completes.
+///
+/// The probes assert there is no server-initiated `elicitation/create` and no
+/// `notifications/elicitation/complete` anywhere in the capture — on 2026-07-28
+/// the server never pushes a request to the client.
+#[derive(McpTool, Default, Clone)]
+#[tool(
+    name = "confirm",
+    description = "Ask for confirmation via MRTR, then report the answer",
+    output = String
+)]
+struct ConfirmTool {
+    #[param(description = "What is being confirmed")]
+    subject: String,
+}
+
+impl ConfirmTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("request context missing"))?;
+
+        if let Some(responses) = session.input_responses() {
+            // Leg 2. The opaque state must come back exactly as handed out.
+            let state = session.mrtr_request_state().unwrap_or_default();
+            let expected = format!("confirm:{}", self.subject);
+            if state != expected {
+                return Err(McpError::InvalidParameters(format!(
+                    "requestState mismatch: got {state:?}, expected {expected:?}"
+                )));
+            }
+
+            let elicit = responses
+                .get("proceed")
+                .and_then(|r| match r {
+                    InputResponse::Elicit(e) => e.content.clone(),
+                    _ => None,
+                })
+                .ok_or_else(|| McpError::InvalidParameters("proceed response missing".into()))?;
+
+            let content = serde_json::to_value(&elicit)
+                .map_err(|e| McpError::tool_execution(&e.to_string()))?;
+            turul_mcp_builders::validate_elicit_content(&confirm_schema(), &content)
+                .map_err(McpError::InvalidParameters)?;
+
+            let proceed = content
+                .get("proceed")
+                .and_then(|v| v.as_bool())
+                .ok_or_else(|| McpError::InvalidParameters("proceed must be a boolean".into()))?;
+
+            return Ok(if proceed {
+                format!("confirmed: {}", self.subject)
+            } else {
+                format!("declined: {}", self.subject)
+            });
+        }
+
+        // Leg 1.
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "proceed".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form(
+                format!("Confirm {}?", self.subject),
+                confirm_schema(),
+            )),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some(format!("confirm:{}", self.subject)),
+        })
+    }
+}
+
+/// J4 fixture: request-scoped `notifications/progress`.
+///
+/// Emits `steps` progress notifications carrying the client's own
+/// `_meta.progressToken`, then returns. A peer that supplied no token gets no
+/// notifications and a plain JSON answer — which is the ADR-006 content
+/// negotiation rule, and is itself worth asserting.
+#[derive(McpTool, Default, Clone)]
+#[tool(
+    name = "count",
+    description = "Emit N progress notifications, then return the count",
+    output = String
+)]
+struct CountTool {
+    #[param(description = "How many progress notifications to emit (1-10)")]
+    steps: f64,
+}
+
+impl CountTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("request context missing"))?;
+        let steps = self.steps.clamp(1.0, 10.0) as u32;
+
+        let mut emitted = 0u32;
+        for i in 1..=steps {
+            // Returns false when the request carried no progressToken. Counting
+            // the trues means the tool reports what it actually sent, not what
+            // it attempted.
+            if session
+                .notify_request_progress_with_message(
+                    f64::from(i),
+                    Some(f64::from(steps)),
+                    format!("step {i} of {steps}"),
+                )
+                .await
+            {
+                emitted += 1;
+            }
+        }
+        Ok(format!("counted {steps}, emitted {emitted}"))
+    }
 }
 
 struct FixtureResource;
@@ -180,6 +311,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version(env!("CARGO_PKG_VERSION"))
         .tool_fn(echo)
         .tool_fn(add)
+        .tool(ConfirmTool::default())
+        .tool(CountTool::default())
         .resource(FixtureResource)
         .prompt(GreetingPrompt)
         .completion_provider(GreetingNameCompleter)

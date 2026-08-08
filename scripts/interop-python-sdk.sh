@@ -19,8 +19,16 @@
 # Journeys (see docs/plans/interop-test-matrix.md):
 #   J1  server/discover -> tools/list -> tools/call
 #   J2  the read surface: resources, templates, prompts, completion
+#   J3  MRTR (SEP-2322): the capability gate (-32021 for a client that did not
+#       declare elicitation) and the two-leg round trip. The SDK drives both
+#       legs itself, so a pass here is a foreign client completing MRTR unaided.
+#   J4  request-scoped notifications/progress: SSE framing, and every frame
+#       echoing the progressToken the CLIENT declared.
 #   J5  negative paths, driven with raw HTTP because a conformant client will
 #       not emit the malformed requests they test
+#
+# J3 and J4 are the two headline 2026-07-28 features, and until this probe
+# covered them no peer had exercised either against this framework.
 #
 # Not wired into the blocking gate: it needs network access to install from
 # PyPI. Run it by hand before a release, and re-run whenever the pin moves.
@@ -73,8 +81,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_POST(self):
         body = self.rfile.read(int(self.headers.get("Content-Length") or 0))
-        try: rpc = json.loads(body).get("method")
-        except Exception: rpc = None
+        rpc, progress_token = None, None
+        try:
+            parsed_req = json.loads(body)
+            rpc = parsed_req.get("method")
+            # J4: the token the CLIENT declared. Progress notifications must
+            # echo this exact value back, or the client cannot correlate them.
+            progress_token = (
+                parsed_req.get("params", {}).get("_meta", {}).get("progressToken")
+            )
+        except Exception:
+            pass
         req = urllib.request.Request(UPSTREAM, data=body, method="POST")
         for k, v in self.headers.items():
             if k.lower() not in ("host", "content-length"):
@@ -86,7 +103,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             data, code, ctype = e.read(), e.code, e.headers.get("Content-Type", "application/json")
         # Capture the response too: J2's assertions are about what the server
         # returned, and reading it here avoids trusting the client's rendering.
-        result, error = None, None
+        result, error, progress_frames = None, None, []
         try:
             parsed = json.loads(data)
         except Exception:
@@ -100,6 +117,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                         frame = json.loads(line[6:])
                     except Exception:
                         continue
+                    if frame.get("method") == "notifications/progress":
+                        progress_frames.append(frame)
                     if "result" in frame or "error" in frame:
                         parsed = frame
             framing = "sse"
@@ -112,12 +131,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
         CAPTURED.append({
             "protocol_version": self.headers.get("MCP-Protocol-Version"),
             "mcp_method": self.headers.get("Mcp-Method"),
+            "mcp_name": self.headers.get("Mcp-Name"),
             "session_id": self.headers.get("Mcp-Session-Id"),
             "rpc": rpc,
             "status": code,
             "result": result,
             "error": error,
             "framing": framing,
+            "progress_token": progress_token,
+            "progress_frames": progress_frames,
         })
         self.send_response(code)
         self.send_header("Content-Type", ctype)
@@ -178,7 +200,10 @@ for method in J2:
 
 for c in CAPTURED:
     if c["result"] is None:
-        if c["error"] is not None:
+        # The J3a capability-gate call is a DELIBERATE negative: it is supposed
+        # to come back -32021. Asserting on it here would report the probe's own
+        # intended behaviour as a server fault.
+        if c["error"] is not None and c["mcp_name"] != "confirm":
             errors.append(f"J2 {c['rpc']}: server returned an error: {c['error']}")
         continue
     if "resultType" not in c["result"]:
@@ -192,6 +217,91 @@ if "resources/templates/list" in rpcs:
     tmpl = next(c["result"] for c in CAPTURED if c["rpc"] == "resources/templates/list")
     if tmpl is None or "resourceTemplates" not in tmpl:
         errors.append(f"J2: resources/templates/list must answer with a list, got {tmpl}")
+
+# --- J3: MRTR round trip (SEP-2322) ---------------------------------------
+# The property that matters is NEGATIVE as much as positive: on 2026-07-28 the
+# server never pushes a request to the client, so an elicitation/create or an
+# elicitation-complete notification anywhere in the capture is a violation even
+# if the round trip otherwise succeeded.
+for c in CAPTURED:
+    if c["rpc"] in ("elicitation/create", "notifications/elicitation/complete"):
+        errors.append(
+            f"J3: {c['rpc']} appeared on the wire; 2026-07-28 carries inputs "
+            "inside InputRequiredResult, the server never initiates"
+        )
+
+# J3a — the capability gate. A client that did not declare `elicitation` must
+# be refused with -32021, NOT handed an input request it cannot answer.
+gate = [c for c in CAPTURED
+        if c["mcp_name"] == "confirm" and c["error"]
+        and c["error"].get("code") == -32021]
+if not gate:
+    errors.append("J3a: no -32021 capability-gate response observed. The fixture\n        server always registers `confirm`, so this is a regression, not an\n        environmental skip.")
+else:
+    required = gate[0]["error"].get("data", {}).get("requiredCapabilities", {})
+    if "elicitation" not in required:
+        errors.append(
+            f"J3a: -32021 did not name the capability it needs; data was {required}"
+        )
+
+# J3b — the round trip, from the client that DID declare elicitation.
+leg1 = [c for c in CAPTURED
+        if c["result"] and c["result"].get("resultType") == "input_required"]
+if not leg1:
+    errors.append("J3b: no input_required leg observed — the MRTR round trip did\n        not happen. `confirm` is part of the fixture contract.")
+else:
+    first = leg1[0]["result"]
+    state = first.get("requestState")
+    if not state:
+        errors.append("J3b leg 1: input_required carried no requestState to echo back")
+    if not first.get("inputRequests"):
+        errors.append("J3b leg 1: input_required carried no inputRequests")
+    # Leg 2 must be a SECOND tools/call for the same tool that completes.
+    completed = [c for c in CAPTURED
+                 if c["result"] and c["result"].get("resultType") == "complete"
+                 and c["mcp_name"] == "confirm"]
+    if not completed:
+        errors.append(
+            "J3b leg 2: the retry never completed — no resultType=complete for confirm"
+        )
+    else:
+        # The whole point of MRTR: the ORIGINAL call is what resumes, and the
+        # opaque state must have travelled back verbatim for the server to
+        # accept it. A mismatch would have surfaced as -32602 instead.
+        text = json.dumps(completed[0]["result"])
+        if "confirmed" not in text:
+            errors.append(
+                f"J3b leg 2: completed, but not with the elicited answer: {text[:200]}"
+            )
+
+# --- J4: progress (request-scoped notifications) ---------------------------
+count_calls = [c for c in CAPTURED if c["mcp_name"] == "count"]
+if not count_calls:
+    errors.append("J4: no call to `count` reached the server — progress was never\n        exercised. `count` is part of the fixture contract.")
+else:
+    tok = count_calls[0]["progress_token"]
+    if tok is None:
+        skips.append("J4: client sent no _meta.progressToken; server correctly streams nothing")
+    else:
+        frames = count_calls[0]["progress_frames"]
+        if not frames:
+            errors.append(
+                f"J4: request declared progressToken {tok!r} but no "
+                "notifications/progress were framed in the response"
+            )
+        for f in frames:
+            got = f.get("params", {}).get("progressToken")
+            if got != tok:
+                errors.append(
+                    f"J4: progress notification carried progressToken {got!r}, "
+                    f"but the request declared {tok!r} — a token a client "
+                    "cannot match to its own request is noise, not correlation"
+                )
+        if count_calls[0]["framing"] != "sse":
+            errors.append(
+                f"J4: a progressToken request was framed as "
+                f"{count_calls[0]['framing']}, expected sse"
+            )
 
 if "RESULT: ok" not in client.stdout:
     errors.append(f"client did not complete the journey; stderr tail: {client.stderr.strip()[-600:]}")
@@ -210,6 +320,7 @@ PYEOF
 cat > client.py <<'PYEOF'
 import asyncio, sys
 from mcp.client import Client
+from mcp.types import ElicitResult
 
 async def main(url: str) -> None:
     # mode='auto' is the SDK's era negotiation: it probes server/discover and
@@ -252,9 +363,62 @@ async def main(url: str) -> None:
         except Exception as exc:
             print(f"completion/complete !! {type(exc).__name__}: {exc}")
 
+        # J4 — progress. Supplying progress_callback makes the SDK put a
+        # progressToken in the request's _meta; the server then answers SSE and
+        # streams notifications/progress. Assertions are on the proxy capture,
+        # but we record what the client's own callback saw too, because the two
+        # disagreeing would itself be the finding.
+        seen = []
+
+        async def on_progress(progress, total, message):
+            seen.append((progress, total, message))
+
+        try:
+            out = await client.call_tool(
+                "count", {"steps": 3}, progress_callback=on_progress
+            )
+            print(f"J4 count -> {str(getattr(out, 'content', out))[:100]}")
+            print(f"J4 progress events seen by client: {len(seen)} {seen}")
+        except Exception as exc:
+            print(f"J4 !! {type(exc).__name__}: {exc}")
+
+        # J3a — the capability gate. THIS client declared no elicitation
+        # capability (no elicitation_callback), so the server must refuse to
+        # demand an input it cannot answer, with -32021. A server that instead
+        # returned input_required here would be violating SEP-2322.
+        try:
+            await client.call_tool("confirm", {"subject": "gate"})
+            print("J3a !! expected -32021, but the call succeeded")
+        except Exception as exc:
+            print(f"J3a capability gate -> {type(exc).__name__}: {exc}")
+
     print("RESULT: ok")
 
+
+async def mrtr(url: str) -> None:
+    """J3b — the MRTR round trip, with a client that DOES declare elicitation.
+
+    Passing elicitation_callback makes the SDK advertise the capability in the
+    per-request _meta clientCapabilities. With input_required_max_rounds > 0 the
+    SDK is expected to answer the input request and retry the ORIGINAL call
+    itself — so a pass here is a foreign client driving the whole two-leg
+    journey unaided, which is the strongest form this test can take.
+    """
+    async def on_elicit(context, params):
+        return ElicitResult(action="accept", content={"proceed": True})
+
+    async with Client(url, elicitation_callback=on_elicit) as client:
+        try:
+            out = await client.call_tool("confirm", {"subject": "launch"})
+            print(f"J3b MRTR -> {str(getattr(out, 'content', out))[:140]}")
+        except Exception as exc:
+            print(f"J3b !! {type(exc).__name__}: {exc}")
+
+    print("MRTR: done")
+
+
 asyncio.run(main(sys.argv[1]))
+asyncio.run(mrtr(sys.argv[1]))
 PYEOF
 
 cd - >/dev/null
@@ -270,7 +434,7 @@ for _ in $(seq 1 60); do
   sleep 0.5
 done
 
-echo "=== J1 + J2: MCP Python SDK $MCP_VERSION -> proxy -> turul ==="
+echo "=== J1 + J2 + J3 + J4: MCP Python SDK $MCP_VERSION -> proxy -> turul ==="
 ( cd "$WORK" && .venv/bin/python -u probe.py )
 J1J2=$?
 
@@ -323,8 +487,8 @@ check "unknown resource URI -> -32602" 200 -32602 \
 
 echo
 if [ "$J1J2" -eq 0 ] && [ "$J5" -eq 0 ]; then
-  echo "PASS: cell Python SDK -> R (mcp==$MCP_VERSION) — J1 + J2 + J5 all green"
+  echo "PASS: cell Python SDK -> R (mcp==$MCP_VERSION) — J1 + J2 + J3 + J4 + J5 all green"
   exit 0
 fi
-echo "FAIL: cell Python SDK -> R — J1/J2 exit=$J1J2, J5 exit=$J5"
+echo "FAIL: cell Python SDK -> R — J1/J2/J3/J4 exit=$J1J2, J5 exit=$J5"
 exit 1
