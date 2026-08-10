@@ -89,6 +89,13 @@ gate_opt_in_2025() {
   run "client 2025-11-25-only"   cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
   run "client 2026-07-28-only"   cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
   run "client-initialise-server" cargo build  -p client-initialise-server --no-default-features
+  # Building that server proved nothing about the client talking to it. This
+  # drives turul-mcp-client at an in-process REAL 2025-11-25 server: discover
+  # 404 -> initialize fallback -> session mint -> session reuse -> tools round
+  # trip. Every 2025 case elsewhere answers from a wiremock stub, which cannot
+  # disagree with the client that shares its author.
+  run "client against a real 2025-11-25 server" \
+    cargo test -p turul-mcp-framework-integration-tests --test client_real_2025_server_e2e
   # Every example whose manifest pins protocol-2025-11-25. They cannot join
   # [default-members] — unifying their features with the 2026 default trips the
   # spec mutex — so this is the only thing that compiles them. tests/examples_guard.rs

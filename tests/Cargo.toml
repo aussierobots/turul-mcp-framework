@@ -68,6 +68,13 @@ path = "consolidated/feature_tests.rs"
 name = "ping_auth_2025"
 path = "ping_auth_2025.rs"
 
+# turul-mcp-client driven at a REAL 2025-11-25 server. The client crate's own
+# tests cannot host this: its dev-dep on turul-mcp-server takes default
+# features, which is the 2026 lane.
+[[test]]
+name = "client_real_2025_server_e2e"
+path = "client_real_2025_server_e2e.rs"
+
 # Standalone: uses mod test_helpers which requires crate-root relative path
 [[test]]
 name = "session_context_macro_tests"
