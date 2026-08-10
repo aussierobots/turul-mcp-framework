@@ -80,6 +80,17 @@ single invocation, so building every member at once forces the mutually exclusiv
 (`features ... are mutually exclusive` + `E0659: MCP_VERSION is ambiguous`).
 Build the curated default-members set, then any opt-in member individually.
 
+That mutex is not only a build constraint — it fixes the framework's **server era
+posture**, so do not describe turul servers as supporting both specs at once. The
+2026-07-28 spec defines **dual-era** (one implementation serving modern and legacy
+clients, optionally on the same endpoint) and makes it a **MAY**. turul does not
+implement it: a server binary speaks 2026-07-28 *or* 2025-11-25, never both. Serving
+both means two instances. The **client** is the exception — it links both protocol
+crates and negotiates per connection (ADR-030). Consequence worth stating whenever
+lanes come up: per the spec's own compatibility matrix a legacy client → modern server
+**fails**, so a 2026-default turul server is unreachable to 2025-era clients. Full
+write-up with the wire evidence: `docs/compliance/base-protocol.md` §4.
+
 - Build: `cargo build` (default-members = the 2026-07-28 lane)
 - Test: `cargo test`
 - Opt-in 2025-11-25 member: `cargo build -p <crate> --no-default-features --features protocol-2025-11-25`

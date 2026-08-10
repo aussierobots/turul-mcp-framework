@@ -149,7 +149,10 @@ async fn the_2025_session_id_is_reused_across_requests() {
     // Drive real traffic between the two observations. A session id that
     // survives an idle client proves nothing; one that survives requests is
     // what "stateful" means on this lane.
-    client.list_tools().await.expect("tools/list over the session");
+    client
+        .list_tools()
+        .await
+        .expect("tools/list over the session");
     client
         .call_tool("echo", serde_json::json!({"message": "session reuse"}))
         .await

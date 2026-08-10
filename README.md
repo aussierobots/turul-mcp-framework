@@ -4,7 +4,9 @@ Build [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers an
 
 Turul gives you the full MCP surface (tools, resources, prompts, completion, notifications, extensions) behind a zero-configuration builder API: annotate a function or derive on a struct, add it to the builder, run. The framework generates the schemas, wires the transport, and keeps you spec-compliant.
 
-The default build targets **MCP 2026-07-28**, the current specification. The previous spec, **2025-11-25**, stays fully supported as an opt-in build (`--no-default-features --features protocol-2025-11-25`). Servers are single-spec per build; the client speaks both and negotiates per connection.
+The default build targets **MCP 2026-07-28**, the current specification. The previous spec, **2025-11-25**, stays fully supported as an opt-in build (`--no-default-features --features protocol-2025-11-25`).
+
+**A server speaks one spec or the other — never both at once.** The two protocol features are mutually exclusive at compile time, so a given server binary is either 2026-07-28 *or* 2025-11-25. The **client** is different: it links both and negotiates per connection. See [Single-era servers](#single-era-servers-not-dual-era) for what that means for clients trying to reach you.
 
 > **Pre-1.0 (0.4.x):** production-shaped — comprehensive test coverage, zero-warning gates — but public APIs may still change before 1.0.0.
 
@@ -226,6 +228,52 @@ this section and come back later. Migrating from 2025-11-25? Read it first.
 (`--no-default-features --features protocol-2025-11-25`) — the handshake, sessions,
 GET SSE, and core tasks all work there. Per-requirement compliance status:
 [`docs/plans/2026-07-28-spec-compliance.md`](docs/plans/2026-07-28-spec-compliance.md).
+
+### Single-era servers (not dual-era)
+
+The 2026-07-28 spec names three server postures in
+[§Versioning and Compatibility](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning):
+**modern** (per-request `_meta`), **legacy** (`initialize` handshake), and **dual-era** —
+one implementation serving both, which the spec permits to run "concurrently on the same
+endpoint or process".
+
+**Turul servers are single-era by construction.** `protocol-2026-07-28` and
+`protocol-2025-11-25` are mutually exclusive Cargo features enforced by a
+`compile_error!`, so a binary is one era or the other — never both. Turul does **not**
+implement dual-era servers.
+
+This is a conformant choice: the spec makes dual-era a **MAY**, not a requirement. But it
+has one consequence worth knowing before you pick a lane, because it is not symmetric:
+
+| Client era | Turul server built as | Outcome |
+|---|---|---|
+| Modern (2026-07-28) | 2026-07-28 default | Works |
+| Legacy (2025-11-25) | 2025-11-25 opt-in | Works |
+| **Legacy (2025-11-25)** | **2026-07-28 default** | **Fails** — legacy clients have no fall-forward mechanism |
+| Modern (2026-07-28) | 2025-11-25 opt-in | Fails |
+
+A legacy client sending `initialize` to a 2026-default turul server gets:
+
+```json
+HTTP 400
+{"jsonrpc":"2.0","id":1,"error":{"code":-32020,
+ "message":"Header mismatch: missing required MCP-Protocol-Version header",
+ "data":{"supported":["2026-07-28"]}}}
+```
+
+The `data.supported` list is deliberate — the spec says a modern-only server **SHOULD**
+name the versions it supports in any error it returns to `initialize`, because for a
+legacy client "this message may be the only diagnostic they can surface to users".
+
+**If you need to serve both eras, run two instances** (one per lane) behind your own
+routing. There is no single-binary dual-era mode, and adding one is not a flag: the
+server's whole type vocabulary and the derive macros' expansion both resolve through the
+single-spec `turul-mcp-protocol` alias.
+
+**Clients are unaffected.** `turul-mcp-client` links both protocol crates and picks the
+era per connection — it probes `server/discover` and falls back to `initialize` only on
+`-32601`. So a turul client reaches both kinds of server; only turul *servers* are
+single-era.
 
 ## 🚀 Running & Testing the Framework
 

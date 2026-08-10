@@ -94,6 +94,34 @@ write.
 | Unsupported version → 400 + `-32022`, naming supported versions | MUST | Implemented | `streamable_http.rs:1328-1359` | `discover_stateless_2026.rs::unsupported_protocol_version_header_is_rejected_with_32022` | pass | pass | pass | pass |
 | Unrecognised version is never silently downgraded | MUST | Implemented | `c/turul-http-mcp-server/src/server.rs` | `mcp_headers_2026.rs::headerless_initialize_rejection_names_supported_versions` | pass | — | — | — |
 | Lambda shares the same negotiation logic | Parity | Implemented | `c/turul-mcp-aws-lambda` builds `StreamableHttpHandler` | `lambda_2026_07_28_wire_compliance.rs::unsupported_protocol_version_returns_recognized_modern_error` | pass | n/a | n/a | n/a |
+| Modern-only server names supported versions in its `initialize` error | SHOULD | Implemented | `streamable_http.rs:1309-1362` | `mcp_headers_2026.rs::headerless_initialize_rejection_names_supported_versions` | pass | — | — | — |
+| Dual-era server (both eras on one endpoint) | MAY | **Not implemented — by construction** | Feature mutex: `compile_error!` at `turul-mcp-protocol/src/lib.rs:72-76` | n/a — the build cannot express it | n/a | n/a | n/a | n/a |
+
+### Server era posture: single-era, deliberately
+
+The spec's [§Versioning and Compatibility](https://modelcontextprotocol.io/specification/2026-07-28/basic/versioning)
+defines **dual-era** — one implementation serving modern and legacy clients, permitted to
+run "concurrently on the same endpoint or process" — and makes it a **MAY**.
+
+turul servers are **single-era**. `protocol-2026-07-28` and `protocol-2025-11-25` are
+mutually exclusive Cargo features enforced by a `compile_error!`, so a server binary
+speaks one spec or the other, never both. This is conformant (dual-era is optional), but
+record it as a *choice* rather than an omission, and note the asymmetry it creates:
+
+- The spec's compatibility matrix rates **Legacy client → Modern server** as **Fails**,
+  and legacy clients have no fall-forward mechanism. A 2026-default turul server is
+  therefore unreachable to 2025-era clients; it answers their `initialize` with
+  `400 -32020` carrying `data.supported`, which is the SHOULD row above.
+- Serving both eras means running two instances, one per lane.
+- Adding dual-era is not a feature flag. `turul-mcp-server` resolves its whole type
+  vocabulary through the single-spec `turul-mcp-protocol` alias, and the derive macros
+  expand to `turul_mcp_protocol::` paths, so both would need an era-neutral form first.
+
+**Clients are not affected by this.** `turul-mcp-client` links both protocol crates and
+selects the era per connection (ADR-030), so it reaches modern and legacy servers alike.
+Verified against real servers on both lanes:
+`crates/turul-mcp-client/tests/e2e_2026_real_server.rs` and
+`tests/client_real_2025_server_e2e.rs`.
 
 ## 5. Authorization
 
