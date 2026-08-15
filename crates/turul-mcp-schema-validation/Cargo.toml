@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "JSON Schema 2020-12 dialect validation for MCP tool inputSchema"
+readme = "README.md"
 keywords = ["mcp", "protocol", "jsonschema", "validation"]
 categories = ["development-tools"]
 

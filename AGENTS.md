@@ -102,10 +102,15 @@ write-up with the wire evidence: `docs/compliance/base-protocol.md` §4.
 - Format: `cargo fmt --all -- --check`  •  Fix: `cargo fmt --all`  •  Gated as `./scripts/ci-gates.sh fmt` (also first in `all`)
 - Run example: `cd examples/minimal-server && cargo run` (adjust folder as needed)
 - Middleware smoke tests: `bash scripts/test_middleware_live.sh` (HTTP) and `cargo lambda watch --package middleware-auth-lambda` (Lambda) for interactive validation.
-- Schema/notification regressions:
-  - `cargo test --test notification_payload_correctness`
-  - `cargo test --test mcp_vec_result_schema_test`
-  - `cargo test -p turul-mcp-derive schemars_integration_test`
+- Schema/notification regressions. The integration crate sets `autotests = false`,
+  so these files are **not** their own `--test` targets — each is pulled in with
+  `#[path]` by an aggregate target, and naming the file directly matches nothing:
+  - `cargo test -p turul-mcp-framework-integration-tests --test feature_tests`
+    (contains `notification_payload_correctness`)
+  - `cargo test -p turul-mcp-framework-integration-tests --test schema_tests`
+    (contains `mcp_vec_result_schema_test`)
+  - `cargo test -p turul-mcp-framework-integration-tests derive_schemars_integration_test`
+    (a filter, not a target; it lives in this crate, not in `turul-mcp-derive`)
 
 ## MCP Specification Compliance (2025-11-25 baseline)
 
@@ -113,7 +118,9 @@ _Rules below apply to `main` / the 2025-11-25 spec target. On the 2026-07-28 bra
 
 - Target spec: https://modelcontextprotocol.io/specification/2025-11-25
 - Requirements: correct JSON-RPC usage, `_meta` fields, version negotiation, pagination/cursors, progress, and session isolation/TTL.
-- Validate: run `cargo test --test mcp_compliance_tests`; for end‑to‑end session compliance, see README “MCP Session Management Compliance Testing”.
+- Validate: run `cargo test -p turul-mcp-framework-integration-tests --test compliance`
+  (the `mcp_compliance_tests` file is `#[path]`-included by that target, not a target
+  itself); for end‑to‑end session compliance, see README “MCP Session Management Compliance Testing”.
 
 ### TypeScript Schema Alignment (2025-11-25 baseline)
 - Shapes must match the latest TS schema in `turul-mcp-protocol-2025-11-25` (camelCase, optional `_meta` on params/results where spec allows). _On the 2026-07-28 branch, the equivalent reference is `crates/turul-mcp-protocol-2026-07-28/schema/schema.ts`._

@@ -12,6 +12,15 @@
 >
 > Baseline recorded 2026-07-29 at HEAD `2958508`:
 > `cargo test -p turul-mcp-protocol-2026-07-28 --features compliance` → **423 passed, 0 failed, 2 ignored**.
+>
+> **Staleness warning (2026-08-15).** Sections **A2** and **D1** below were written on
+> 2026-07-29, when FastMCP 4 beta was the only external peer and the official TypeScript SDK
+> had not shipped 2026-07-28 support. That is no longer true: three *stable* peers — the
+> reference MCP Python SDK `2.0.0`, the Go SDK `v1.7.0` and the TypeScript SDK `2.0.0` — now
+> each drive nine methods plus five negative paths against this framework with no wire
+> disagreement, re-measured 2026-08-08. **`docs/compliance/README.md` is the current
+> interop record; prefer it over D1 below.** D1 is retained as the dated first-contact
+> evidence, not as a statement of today's coverage.
 
 ---
 
@@ -34,10 +43,14 @@ are worded differently depending on your answer.
 
 - [ ] **A2 — Publish 0.4.0 now, or merge without publishing?** *The original argument against
       has been retired:* a third party (FastMCP 4) now completes the full stateless journey
-      against a 2026 build — see D1, reproducible via `scripts/interop-fastmcp.sh`. What remains
-      is narrower and worth a CHANGELOG sentence rather than a hold: interop is confirmed
-      against FastMCP 4 (itself a beta) and *not* against the official TypeScript SDK, which has
-      not shipped 2026-07-28 support. Publishing is still not forced by merging.
+      against a 2026 build — see D1, reproducible via `scripts/interop-fastmcp.sh`.
+      **Updated 2026-08-15: the residual objection in the original wording is also gone.** It
+      said interop was confirmed only against FastMCP 4 (a beta) and not against the official
+      TypeScript SDK. Since 2026-08-08 three *stable* peers pass — the reference MCP Python SDK
+      `2.0.0`, the Go SDK `v1.7.0` and the TypeScript SDK `2.0.0` — each on 9 methods plus 5
+      negative paths, and the Python cell additionally covers MRTR and the notification surface.
+      So there is no longer an interop-shaped reason to hold the publish. Publishing is still
+      not *forced* by merging — that remains a separate call.
 
 - [ ] **A3 — Is `plugins/turul-mcp-skills` currently listed or installable by third parties?**
       The staleness that made this urgent is being fixed regardless (task #15 rewrites the
@@ -108,9 +121,10 @@ Run these in order. Each is a real server plus a real HTTP client — the path a
       naming the server. `ttlMs`/`cacheScope` are required fields on `tools/list` this spec.
 
 - [ ] **B2 — `tools/call` with a correct `Mcp-Name` header.**
-      **The README for this example is currently WRONG** (it sends `Mcp-Name: test-client`).
       `Mcp-Name` must equal the *item name being invoked*, not a client identifier. Note the
-      argument is `text`, not `message`:
+      argument is `text`, not `message`.
+      *(The example README used to send `Mcp-Name: test-client`; fixed — `examples/minimal-server/README.md:75`
+      now sends `Mcp-Name: echo`. Kept as a smoke test, no longer a known-bad case.)*
       ```bash
       curl -s -X POST http://127.0.0.1:8641/mcp -H 'Content-Type: application/json' -H 'Accept: application/json' -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: tools/call' -H 'Mcp-Name: echo' -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"text":"Hello, MCP!"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | jq
       ```
@@ -267,7 +281,9 @@ Run after the engineering checklist is applied.
       → expect **≥ 423 passed, 0 failed** (baseline above; count should rise if fixtures are
       newly modeled).
 - [ ] **E2** — `cargo test -p turul-mcp-framework-integration-tests --test example_validation`
-      → currently **fails to compile**; expect green after the `origin_policy` fix.
+      → the `origin_policy` compile failure is fixed, and the target is now gated in both
+      `scripts/ci-gates.sh:127` and `.github/workflows/ci.yml:210`, so a regression here fails
+      CI rather than going unnoticed. Expect green.
 - [ ] **E3** — `cargo test -p turul-mcp-framework-integration-tests` (all binaries)
       → expect ~402 tests green once wired into CI.
 - [ ] **E4** — `bash scripts/ci-gates.sh` → all gates pass, including the new schema-pin gate.

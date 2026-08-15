@@ -19,6 +19,31 @@
 > (branch-lock disposition A1, publish-vs-merge A2, plugin listing status A3, network
 > drift job A5).
 >
+> ---
+>
+> **Unchecked-box audit — 2026-08-15.** Twenty items below still render as `- [ ]`.
+> Each was re-verified against the current tree, not against commit messages:
+> **18 of the 20 are DONE and were simply never ticked.** The boxes are left as-is
+> rather than mass-ticked, because the evidence lives in this note and in the tree,
+> and silently flipping twenty boxes would destroy the audit trail. Treat the two
+> below as the real remainder:
+>
+> | Line | Item | State on 2026-08-15 |
+> |---|---|---|
+> | 405 | **3.5** — ext-* crates vendor from mutable `schema/draft/` | **Resolved this slice.** `ext-apps` was already pinned to the released, tagged `apps-2026-01-26.mdx`. `ext-tasks` genuinely has no upstream tag to pin (upstream publishes only `schema/draft/` and cuts no releases), so it pins commit + content checksum — the strongest provenance available — and the crate now carries a `README.md` stating the experimental-upstream caveat at the top, with `readme = "README.md"` declared so crates.io shows it. |
+> | 436 | **4.1** — rename the vendored `schema.ts` (a misnomer) | **Still open.** Cosmetic, self-labelled nice-to-have in this document. `include_str!` sites in `tests/compliance.rs` and `tests/docs_consistency.rs` would move with it. Not a publish blocker. |
+>
+> Also fixed while auditing, outside the twenty: every publishable crate now ships a
+> `README.md` **and** declares `readme = "README.md"` (was 13/15; `turul-mcp-ext-tasks`
+> and `turul-mcp-schema-validation` had no README file at all). The three crates that
+> still omit the key are the frozen `0.3.47` trio, which correctly do not republish.
+>
+> One finding surfaced that belongs to no item here: `turul-mcp-json-rpc-server` appears
+> in **zero** gates (`grep -n 'json-rpc-server' scripts/ci-gates.sh .github/workflows/ci.yml`
+> → 0 matches), and its `tests/symbol_coverage.rs` may no longer compile against the
+> external `turul-rpc` re-export surface. Frozen crate, no republish step, so it cannot
+> ship broken — tracked separately as task #73.
+>
 > Originally produced 2026-07-29 at HEAD `2958508` by a 12-agent
 > audit (six parallel auditors, adversarial verification of every blocker-severity claim,
 > a completeness critic, and an independent devil's-advocate pass). 20 verification

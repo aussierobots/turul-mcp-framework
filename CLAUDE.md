@@ -320,7 +320,13 @@ git commit        # Only when user explicitly requests a commit
 Before publishing a new version:
 
 1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml` AND its pin in `[workspace.dependencies]`. Per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md), `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
-2. **Example server versions**: Update `.version("x.y.z")` strings in `examples/*/src/main.rs`
+2. **Example server versions**: nothing to hand-edit — all 45 examples that set a server
+   version use `.version(env!("CARGO_PKG_VERSION"))`, so bumping the example's own
+   `[package] version` in `examples/<name>/Cargo.toml` is what moves the wire value.
+   Verify no hardcoded string has crept back in:
+   ```bash
+   grep -rn '\.version("' examples/ | grep -v CARGO_PKG   # expect no output
+   ```
 3. **Plugin skill versions**: Skills use the generic minor version (`v0.4`, not
    `v0.4.1`) — do NOT bump on patch releases, only when the minor changes. Bump
    *current-state* references only; see [docs/rules/crate-versioning.md § Version References](docs/rules/crate-versioning.md#version-references-what-is-stale-and-what-is-not) —

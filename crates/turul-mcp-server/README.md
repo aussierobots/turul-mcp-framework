@@ -474,8 +474,8 @@ cargo test --package turul-mcp-server
 # Test with specific storage backend
 cargo test --package turul-mcp-server --features sqlite
 
-# Integration tests
-cargo test --package turul-mcp-server --test integration
+# Wire-acceptance suites (one target per behaviour; see tests/ for the full list)
+cargo test --package turul-mcp-server --test discover_stateless_2026
 ```
 
 ## License

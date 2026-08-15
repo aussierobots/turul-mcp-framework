@@ -11,6 +11,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "MCP Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) — spec-neutral crate, 2026-07-28 lane first"
+readme = "README.md"
 
 [features]
 default = ["protocol-2026-07-28"]

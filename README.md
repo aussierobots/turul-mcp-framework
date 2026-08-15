@@ -49,10 +49,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-> **Task support:**
-> - **2026-07-28** — tasks are the `io.modelcontextprotocol/tasks` extension (SEP-2663). Enable the `ext-tasks` feature, register the store with `.with_ext_tasks(store)`, and mark electable tools with `.ext_task_tool(tool)`. See `examples/ext-tasks-server`.
-> - **2025-11-25 opt-in** — tasks are a core capability: add `task_support = "optional"` (`"optional"` / `"required"` / `"forbidden"`) to enable the "Run as Task" button in MCP Inspector; requires `.with_task_storage()` on the builder.
-
 ### 2. Derive Macros (Struct-Based)
 
 ```rust
@@ -550,6 +546,15 @@ Tasks moved from a **core capability (2025-11-25)** to an **extension (2026-07-2
 
 - **2026-07-28** — the `io.modelcontextprotocol/tasks` extension (SEP-2663) in `turul-mcp-ext-tasks`, wired into the server behind the opt-in `ext-tasks` feature (`.with_ext_tasks(store)` + `.ext_task_tool(...)`) and the client (`call_tool_or_task`, `task_get`/`task_update`/`task_cancel`/`task_wait`). Server election, the `-32003` capability gate, mid-task input via `tasks/update`, and `notifications/tasks` over `subscriptions/listen` are all implemented. See `examples/ext-tasks-server`.
 - **2025-11-25 opt-in** — the original in-tree core task runtime, gated to `#[cfg(feature = "protocol-2025-11-25")]` (protocol types, storage, runtime, handlers, tests).
+
+Enabling it, per lane:
+
+- **2026-07-28** — enable the `ext-tasks` feature, register the store with
+  `.with_ext_tasks(store)`, and mark electable tools with `.ext_task_tool(tool)`.
+- **2025-11-25 opt-in** — add `task_support = "optional"` (`"optional"` / `"required"` /
+  `"forbidden"`) to the tool macro to enable the "Run as Task" button in MCP Inspector;
+  requires `.with_task_storage()` on the builder. This attribute does **not** compile on
+  the 2026 default lane — tasks are an extension there, not a tool attribute.
 
 Architecture decision records:
 
