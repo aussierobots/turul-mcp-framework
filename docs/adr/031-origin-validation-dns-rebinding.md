@@ -107,11 +107,17 @@ default-configured server.
 
 The TS SDK ships DNS-rebinding protection **off** by default; we ship it
 **on** because (a) the spec clause is a MUST, (b) the framework's primary
-deployment targets (Lambda behind API Gateway, EC2 behind ALB, loopback dev
-servers) all keep working — no Origin header, loopback origins, or
-same-host origins all pass — and (c) the only broken-by-default scenario is
-a browser app on a *different* origin calling the server directly, which is
-exactly the case that needs a conscious `AllowList`/`Disabled` decision.
+deployment targets keep working — Lambda behind API Gateway and EC2 behind
+ALB send no Origin header at all, and loopback dev servers pass on the
+loopback branch — and (c) the broken-by-default scenario is a browser app on
+a non-loopback origin calling the server directly, which needs a conscious
+`AllowList`/`Disabled` decision.
+
+> Amended 2026-08-15. This paragraph previously included "same-host origins"
+> in the list that keeps working. That was the vulnerable branch — see the
+> revision log below. A browser app on a non-loopback origin is now in
+> category (c) whether or not it is same-host, because the two are
+> indistinguishable from the headers.
 
 ## Consequences
 

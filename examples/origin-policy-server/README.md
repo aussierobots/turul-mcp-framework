@@ -1,9 +1,14 @@
 # Origin Policy Server (DNS-rebinding protection)
 
 Origin validation is **on by default** in this framework: a request whose
-`Origin` header is present but neither loopback nor same-host is rejected
-with HTTP 403 *before* auth or dispatch. This example makes the policy
-visible and configurable.
+`Origin` header is present and not loopback is rejected with HTTP 403
+*before* auth or dispatch. This example makes the policy visible and
+configurable.
+
+> The request's `Host` header is deliberately **not** consulted. It used to
+> be — an Origin matching Host was admitted — and that defeated the
+> protection entirely, because a rebinding attacker controls both headers and
+> sets them to agree. Removed 2026-08-15; see ADR-031's revision log.
 
 ## Why this exists
 
@@ -16,7 +21,7 @@ that stops it. The MCP spec makes Origin validation a MUST for HTTP servers.
 ## Run the three policies
 
 ```bash
-# Default: SameOriginOrLoopback — same-host or loopback origins only
+# Default: SameOriginOrLoopback — loopback origins only (Host is not trusted)
 cargo run -p origin-policy-server
 
 # Browser app on another origin: explicit allowlist (repeatable flag;
@@ -35,6 +40,12 @@ cargo run -p origin-policy-server -- --disable-origin-check
 | `Origin: https://evil.example` | **403** |
 | `Origin: https://app.example.com` (allowlisted) | 200 |
 | `Origin: http://localhost:3000` (loopback) | 200 |
+| `Host: evil.example` **and** `Origin: https://evil.example` (both attacker-set) | **403** |
+
+That last row is the one that matters, and it answered **200** until
+2026-08-15. Varying `Origin` alone while leaving `Host` truthful — the first
+four rows — cannot detect the bug, which is exactly how it survived a hand
+check and a wire-test suite. A rebinding attacker sets both.
 
 ```bash
 BODY='{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'

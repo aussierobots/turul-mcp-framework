@@ -1,6 +1,7 @@
-# Uses the ext-tasks features of both server and client, so it stays out of
-# default-members (like the other client-using examples) and is built by an
-# explicit gate step.
+# Uses the ext-tasks features of both server and client. NOTE: this header
+# used to claim the crate "stays out of default-members"; it is in fact listed
+# there (workspace Cargo.toml), so the ext-tasks feature is already unified
+# into a bare `cargo build`. Corrected 2026-08-15.
 [package]
 name = "ext-tasks-server"
 version = "0.4.0"

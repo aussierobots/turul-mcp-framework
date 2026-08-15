@@ -1,13 +1,15 @@
 //! # Origin Policy Server (DNS-rebinding protection + CORS)
 //!
 //! Origin validation is ON by default: a request whose `Origin` header is
-//! present but neither loopback nor same-host is rejected with HTTP 403
-//! before auth or dispatch. This stops DNS-rebinding — a malicious page on
+//! present and not loopback is rejected with HTTP 403 before auth or
+//! dispatch. The `Host` header is NOT consulted — it is attacker-controlled,
+//! and trusting agreement between Origin and Host admitted exactly the attack
+//! below (fixed 2026-08-15, ADR-031 revision log). This stops DNS-rebinding — a malicious page on
 //! `https://evil.example` rebinding its hostname to 127.0.0.1 so the
 //! victim's browser posts to your local MCP server with the browser's
 //! ambient network position.
 //!
-//! A browser app served from a *different* origin therefore needs a
+//! A browser app served from any *non-loopback* origin therefore needs a
 //! conscious allowlist decision — that is this example:
 //!
 //! ```bash

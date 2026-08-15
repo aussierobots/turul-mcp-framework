@@ -918,3 +918,153 @@ async fn roots_and_sampling_capability_arms_are_gated() {
         assert_eq!(body["result"]["resultType"], "input_required", "{body}");
     }
 }
+
+// ---- SEP-2322: a tool can READ the client's declared capabilities ----
+//
+// The framework already enforced the negative half (asking for an undeclared
+// capability answers -32021, covered above). But SEP-2322 also requires a
+// server to include inputRequests ONLY for capabilities the client declared,
+// which means degrading gracefully rather than failing — and that needs the
+// tool to see the declaration.
+//
+// `SessionContext::client_capabilities()` was added 2026-08-15 for exactly
+// this: `server.rs` already parsed `_meta.clientCapabilities` for the
+// tasks-extension check but never surfaced it to a tool body, so the
+// requirement was unimplementable by any server built on this framework.
+// Found by the upstream conformance scenario
+// `input-required-result-capability-check`.
+
+/// Asks for elicitation OR sampling depending on what the caller declared,
+/// and never for something undeclared.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "adaptive", description = "Asks only for declared capabilities", output = String)]
+struct AdaptiveCapabilityTool {}
+
+impl AdaptiveCapabilityTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        let caps = session
+            .client_capabilities()
+            .ok_or_else(|| McpError::tool_execution("clientCapabilities not surfaced"))?;
+
+        let mut requests = InputRequests::new();
+        if caps.elicitation.is_some() {
+            let schema = ElicitationSchema::new().with_property(
+                "answer".to_string(),
+                turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string(),
+            );
+            requests.insert(
+                "elicit".to_string(),
+                InputRequest::Elicit(ElicitRequest::new_form("q", schema)),
+            );
+        }
+        if caps.sampling.is_some() {
+            #[allow(deprecated)]
+            let request = turul_mcp_protocol::sampling::CreateMessageRequest::new(
+                vec![turul_mcp_protocol::sampling::SamplingMessage::user_text(
+                    "hi",
+                )],
+                16,
+            );
+            requests.insert("sample".to_string(), InputRequest::CreateMessage(request));
+        }
+        if requests.is_empty() {
+            return Ok("nothing declared".to_string());
+        }
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("adaptive-1".to_string()),
+        })
+    }
+}
+
+async fn start_adaptive_server() -> String {
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
+    let server = McpServer::builder()
+        .name("mrtr-2026-adaptive")
+        .version("0.4.0")
+        .tool(AdaptiveCapabilityTool::default())
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    url
+}
+
+fn input_request_methods(body: &serde_json::Value) -> Vec<String> {
+    body["result"]["inputRequests"]
+        .as_object()
+        .map(|m| {
+            let mut v: Vec<String> = m
+                .values()
+                .filter_map(|r| r["method"].as_str().map(String::from))
+                .collect();
+            v.sort();
+            v
+        })
+        .unwrap_or_default()
+}
+
+#[tokio::test]
+async fn a_tool_sees_the_capabilities_the_client_declared() {
+    let url = start_adaptive_server().await;
+
+    // sampling only -> must NOT ask for elicitation.
+    let (status, body) =
+        call_tool_with_caps(&url, "adaptive", serde_json::json!({ "sampling": {} })).await;
+    assert_eq!(status, 200, "sampling-only call should succeed: {body}");
+    assert_eq!(
+        input_request_methods(&body),
+        vec!["sampling/createMessage".to_string()],
+        "a client declaring only sampling must not be sent elicitation/create: {body}"
+    );
+
+    // elicitation only -> must NOT ask for sampling.
+    let (status, body) =
+        call_tool_with_caps(&url, "adaptive", serde_json::json!({ "elicitation": {} })).await;
+    assert_eq!(status, 200, "elicitation-only call should succeed: {body}");
+    assert_eq!(
+        input_request_methods(&body),
+        vec!["elicitation/create".to_string()],
+        "a client declaring only elicitation must not be sent sampling: {body}"
+    );
+
+    // Both -> both, proving the two branches are read independently rather
+    // than one being hardcoded.
+    let (_, body) = call_tool_with_caps(
+        &url,
+        "adaptive",
+        serde_json::json!({ "elicitation": {}, "sampling": {} }),
+    )
+    .await;
+    assert_eq!(
+        input_request_methods(&body),
+        vec![
+            "elicitation/create".to_string(),
+            "sampling/createMessage".to_string()
+        ],
+        "declaring both must yield both: {body}"
+    );
+
+    // Neither -> the accessor still resolves (it is Some for any request that
+    // reached a tool body); the tool completes rather than erroring.
+    let (_, body) = call_tool_with_caps(&url, "adaptive", serde_json::json!({})).await;
+    assert!(
+        body["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("nothing declared"),
+        "empty capabilities must still surface as Some, not None: {body}"
+    );
+}
