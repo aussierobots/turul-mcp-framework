@@ -1,3 +1,23 @@
+//! # DEPRECATED — superseded by `turul-mcp-ext-tasks`
+//!
+//! This crate stores tasks for the **2025-11-25 experimental tasks feature**.
+//! MCP 2026-07-28 moved tasks into the `io.modelcontextprotocol/tasks`
+//! extension (SEP-2663), and `turul-mcp-ext-tasks` now owns task persistence
+//! for the current spec — including SQLite, PostgreSQL and DynamoDB backends,
+//! all held to one cross-backend parity contract and gated by
+//! `scripts/ext-tasks-backends.sh`.
+//!
+//! **Owner**: turul-mcp-ext-tasks.
+//! **Removal trigger**: when the `protocol-2025-11-25` opt-in lane is retired.
+//! Until then this crate stays as-is for deployments on that lane; it is not
+//! receiving new capability, and new work belongs in `turul-mcp-ext-tasks`.
+//!
+//! Known limitation, recorded rather than fixed: no test drives its SQLite,
+//! PostgreSQL or DynamoDB backends against a real service, and no gate builds
+//! them. `parity_tests.rs` is a well-formed contract library that nothing
+//! invokes. That gap is precisely what motivated the 2026 crate's parity
+//! harness — see `turul-mcp-ext-tasks::v2026_07_28::parity`.
+
 //! # Task Storage Abstractions and Implementations
 //!
 //! **Pluggable task storage backends for MCP servers with durable state machines.**

@@ -4,7 +4,7 @@
 # version, never version.workspace = true.
 [package]
 name = "turul-mcp-ext-tasks"
-version = "0.1.1"
+version = "0.1.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -18,6 +18,20 @@ default = ["protocol-2026-07-28"]
 # The SEP-2663 extension surface for the 2026-07-28 stateless line.
 protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
 
+# The cross-backend behaviour contract (src/v2026_07_28/parity.rs), exposed so
+# implementors outside this workspace can hold their own TaskStore to it.
+# Every backend feature implies it, because a backend that is not run against
+# the contract is how the superseded 2025 store ended up with three never-
+# executed implementations.
+parity-harness = []
+
+# Durable backends. Each implies the parity harness: a backend that is not
+# held to the contract is how the superseded 2025 store ended up with three
+# never-executed implementations.
+sqlite = ["dep:sqlx", "sqlx/sqlite", "parity-harness"]
+postgres = ["dep:sqlx", "sqlx/postgres", "parity-harness"]
+dynamodb = ["dep:aws-config", "dep:aws-sdk-dynamodb", "parity-harness"]
+
 [dependencies]
 # Extension modules bind to their protocol-schema-version sibling directly,
 # behind the matching feature gate.
@@ -27,3 +41,11 @@ serde_json.workspace = true
 async-trait.workspace = true
 thiserror.workspace = true
 chrono.workspace = true
+tracing.workspace = true
+sqlx = { workspace = true, optional = true }
+aws-config = { workspace = true, optional = true }
+aws-sdk-dynamodb = { workspace = true, optional = true }
+
+[dev-dependencies]
+# The parity harness is async; #[tokio::test] drives it.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

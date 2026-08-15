@@ -34,8 +34,8 @@ pub use v2026_07_28::{
     CancelTaskParams, CreateTaskResult, DetailedTask, EXTENSION_IDENTIFIER, GetTaskParams,
     GetTaskResult, InMemoryTaskStore, InputDelivery, InvalidExtensionIdentifier,
     METHOD_NOTIFICATIONS_TASKS, METHOD_TASKS_CANCEL, METHOD_TASKS_GET, METHOD_TASKS_UPDATE,
-    Nullable, RESULT_TYPE_TASK, Task, TaskAckResult, TaskFields, TaskState, TaskStatus,
-    TaskStatusNotificationParams, TaskStore, TaskStoreError,
+    Nullable, RESULT_TYPE_TASK, RetentionPolicy, SweepAction, SweepReport, Task, TaskAckResult,
+    TaskFields, TaskState, TaskStatus, TaskStatusNotificationParams, TaskStore, TaskStoreError,
     TaskSubscriptionAcknowledgedNotifications, TaskSubscriptionNotifications, UpdateTaskParams,
     capability, declared_by_client, declared_by_server, validate_identifier,
 };

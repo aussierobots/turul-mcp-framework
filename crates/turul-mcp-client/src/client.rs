@@ -1499,6 +1499,53 @@ impl McpClient {
         .await
     }
 
+    /// The MRTR retry that may be answered with a task — SEP-2663
+    /// §Composition with Multi Round-Trip Requests.
+    ///
+    /// [`Self::call_tool_with_input_responses`] cannot express this: it routes
+    /// through the strict `resultType` check, which rejects `"task"` as
+    /// unrecognized. That check is right for a client that never declared the
+    /// extension ("a resultType of any value unrecognized by the client MUST
+    /// be considered invalid") and wrong for one that did — a server is
+    /// explicitly permitted to gather input over MRTR and then hand back a
+    /// `CreateTaskResult` on the final round. Without this method a client
+    /// could not consume that composition at all, which an e2e against a
+    /// server implementing it is the only thing that surfaces.
+    #[cfg(feature = "ext-tasks")]
+    pub async fn call_tool_or_task_with_input_responses(
+        &self,
+        name: &str,
+        arguments: Value,
+        input_responses: Value,
+        request_state: Option<String>,
+    ) -> McpClientResult<ToolCallOutcome> {
+        if self.negotiated_version().await != Some(crate::version::McpVersion::V2026_07_28) {
+            return Err(crate::error::ProtocolError::MethodNotFound(
+                "the Tasks extension requires a 2026-07-28 connection".to_string(),
+            )
+            .into());
+        }
+        let mut extra = json!({
+            "name": name,
+            "arguments": arguments,
+            "inputResponses": input_responses,
+        });
+        if let (Some(obj), Some(state)) = (extra.as_object_mut(), request_state) {
+            obj.insert("requestState".to_string(), Value::String(state));
+        }
+        self.send_2026_07_28_with_extra_headers("tools/call", extra, &[], |result| {
+            if result.get("resultType").and_then(|v| v.as_str())
+                == Some(turul_mcp_ext_tasks::RESULT_TYPE_TASK)
+            {
+                let task: turul_mcp_ext_tasks::CreateTaskResult =
+                    serde_json::from_value(result.clone())?;
+                return Ok(ToolCallOutcome::Task(task));
+            }
+            crate::protocol::v2026_07_28::parse_call_tool(result).map(ToolCallOutcome::Completed)
+        })
+        .await
+    }
+
     /// `tasks/get` — poll one task's state (SEP-2663).
     #[cfg(feature = "ext-tasks")]
     pub async fn task_get(

@@ -9,7 +9,6 @@
 //! fields.
 
 use serde::{Deserialize, Serialize};
-use turul_mcp_protocol_2026_07_28::input_required::InputResponses;
 use turul_mcp_protocol_2026_07_28::meta::MetaObject;
 use turul_mcp_protocol_2026_07_28::result_type::ResultType;
 
@@ -64,10 +63,22 @@ pub struct UpdateTaskParams {
     /// The task identifier to update.
     #[serde(rename = "taskId")]
     pub task_id: String,
-    /// Responses to outstanding `inputRequests`; each key MUST correspond to
-    /// a currently-outstanding input-request key.
+    /// Responses to outstanding `inputRequests`, held **untyped** on purpose.
+    ///
+    /// SEP-2663 says each key MUST correspond to a currently-outstanding
+    /// input-request key — but which keys are outstanding is *task state*, so
+    /// it is unknowable at deserialization time. Typing this as
+    /// `InputResponses` made serde reject the entire params object whenever
+    /// any value failed to match `InputResponse`, including for keys the task
+    /// was never waiting on. That answered `-32602` before the `taskId` could
+    /// even be read, and named no key.
+    ///
+    /// Each value is therefore converted to an `InputResponse` inside the
+    /// store, once the outstanding set is known and under the same lock, so a
+    /// shape error can be attributed to a key that actually matters. See
+    /// `TaskStore::provide_input`.
     #[serde(rename = "inputResponses")]
-    pub input_responses: InputResponses,
+    pub input_responses: std::collections::HashMap<String, serde_json::Value>,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<MetaObject>,
 }

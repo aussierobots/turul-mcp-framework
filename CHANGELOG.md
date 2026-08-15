@@ -7,6 +7,132 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Durable task storage for the 2026-07-28 Tasks extension** —
+  `turul-mcp-ext-tasks` 0.1.2 → 0.1.3. The extension shipped with an
+  in-memory store only, while the *superseded* 2025 crate had SQLite,
+  Postgres and DynamoDB. That is now inverted: `turul-mcp-ext-tasks` owns task
+  persistence and carries all four backends, laid out like the sibling storage
+  crates (`traits.rs` + one module per backend, features `in-memory` /
+  `sqlite` / `postgres` / `dynamodb`).
+
+  Every status rule, owner check and `tasks/update` key decision lives once, in
+  `traits.rs`, as pure transitions. A backend only does *load → apply → store*
+  under its own atomicity boundary — a row lock for SQL, optimistic
+  concurrency (`rev` + `ConditionExpression`) for DynamoDB, which has no
+  read-modify-write transaction. That makes cross-backend parity structural
+  rather than hoped for, and it is enforced by a 14-invariant contract in
+  `parity` run against all four.
+
+- **Task retention** — `RetentionPolicy` (orphan recovery, per-task `ttlMs`,
+  terminal deletion) plus `McpServerBuilder::with_ext_tasks_retention`.
+  Without that builder call **no sweep runs**, which is the correct default and
+  is now the documented, testable one; with it, one call configures both the
+  sweep loop and DynamoDB's native `ttlEpoch` expiry. The in-memory store used
+  to "solve" retention by losing everything on restart; a durable table only
+  grows.
+
+- **`McpClient::call_tool_or_task_with_input_responses`** — `turul-mcp-client`
+  0.4.0 → 0.4.1. See Fixed.
+
+- **`ExtTaskElection` and `McpServerBuilder::ext_task_tool_with`** —
+  `turul-mcp-server` 0.4.3 → 0.4.4. Makes the SEP-2663 × SEP-2322 composition
+  reachable: a task-electing tool can now resolve its MRTR input round
+  *synchronously* before any task is minted.
+
+  ```rust
+  use turul_mcp_server::prelude::*;
+
+  .ext_task_tool_with(ConfirmThenRun, ExtTaskElection::required().with_mrtr_first())
+  ```
+
+  With `mrtr_first`, the server withholds election while the call carries no
+  `inputResponses`: round 1 answers an `InputRequiredResult` with no `taskId`,
+  round 2 mints the task. `ext_task_tool` and `ext_task_tool_required` are
+  unchanged and keep their existing behaviour, so **no existing registration
+  changes**.
+
+  This satisfies a SHOULD, not a MUST. SEP-2663 §Composition with Multi
+  Round-Trip Requests names two legitimate mechanisms, split by *when* input is
+  needed — before the task exists (MRTR on the original request) versus during
+  execution (`inputRequests`/`tasks/update`). The second was already
+  implemented and remains the default; only the first was unreachable.
+
+### Fixed
+
+- **The client could not consume the SEP-2663 × SEP-2322 composition at all.**
+  `call_tool_with_input_responses` routes through the strict `resultType`
+  check, which rejects `"task"` as unrecognized — correct for a client that
+  never declared the extension, wrong for one that did. A server that gathered
+  input over MRTR and then minted a task on the final round (explicitly
+  permitted, and newly supported here) produced
+  `InvalidResponse("unrecognized resultType \"task\"")` on the client.
+  Fixed additively with `call_tool_or_task_with_input_responses`, mirroring the
+  existing `call_tool` / `call_tool_or_task` pair. Found by the client e2e —
+  server, wire and spec were all correct and the pair was still broken, which
+  is the only class of defect an e2e catches.
+
+- **A parked task could only be resumed by the instance running it.**
+  `ExtTasksRuntime` waited on an in-process `oneshot`, so a `tasks/update`
+  landing on any other instance was silently lost and the task sat in
+  `input_required` forever — precisely the deployment a shared Postgres or
+  DynamoDB store is for. The worker now watches the store instead, the same
+  store-and-fetch shape `SessionStorage` already uses for SSE events, and
+  `waiters` is deleted. Cooperative cancel across instances falls out for free.
+  Pinned by a two-server e2e that fails without it.
+
+- **`tasks/update` no longer rejects a whole request over an inert key** —
+  `turul-mcp-ext-tasks` 0.1.1 → 0.1.2. Two failure modes were conflated into
+  one hard error, and neither was reported usefully:
+
+  | Client sends | Affects task state? | Before | Now |
+  |---|---|---|---|
+  | A key the task is not waiting on | No — inert | `-32602`, no key named | ack `complete`, key ignored and logged |
+  | Malformed response for a key it **is** waiting on | Yes — blocks the round | `-32602`, no key named | `-32602`, **names the key** |
+
+  `UpdateTaskParams.input_responses` is now `HashMap<String, Value>` and
+  `TaskStore::provide_input` takes the untyped map, converting each value to an
+  `InputResponse` inside the store once the outstanding set is known. Typing it
+  as `InputResponses` made serde reject the entire params object — including
+  the `taskId` — whenever any value failed to match, for keys the task was
+  never waiting on. Outstanding-ness is task state, so it is simply unknowable
+  at deserialization time.
+
+  **`InputResponse` in the protocol crate is unchanged**; the MRTR path keeps
+  its strict typing. Grounded in SEP-2663's ack-only design (vendored SEP line
+  930), which reserves errors for "clearly invalid requests — such as an
+  unknown `taskId`"; "each key MUST correspond" binds the *client*, and an
+  error there gives it nothing actionable.
+
+  **Breaking for custom `TaskStore` implementors** (the signature changed) and
+  for anyone constructing `UpdateTaskParams` directly. `TaskStoreError::
+  UnknownInputKey` is replaced by `InvalidInputResponse { key, detail }`. Patch
+  bump per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md);
+  the only in-tree implementor is `InMemoryTaskStore`.
+
+- **Conformance fixture server**: `test_tool_with_task` now echoes the name
+  gathered during the MRTR phase, and `failing_job` is registered as a
+  required-task tool, which is what `tasks-required-task-error` expects.
+  `tasks-required-task-error` and `tasks-mrtr-composition`'s composition check
+  now pass; the upstream run moves 179/11 → **183/8**, and **every remaining
+  failure is the upstream `wire-schema-valid` gap** — nothing of ours fails.
+
+### Changed
+
+- **Vendored SEP-2663 prose** as a pinned, checksummed artifact
+  (`crates/turul-mcp-ext-tasks/schema/sep-2663-tasks-extension.md`, commit
+  `9b44c6b4dcd2451bc49abd39e47eda36b396e8dd`). Four rules this crate must
+  satisfy — MRTR/task sequencing, the two input mechanisms, phase-state
+  separation, durability-before-response — exist only in the prose and appear
+  nowhere in either schema, so the schema pin alone left them resting on an
+  unpinned web page. `scripts/check-schema-pin.sh` now reads the ext-tasks
+  checksums from that crate's provenance table and covers the SEP, which
+  discharges the temporary hardcoded-checksum block it carried.
+- **Schema-pin currency verified**: ext-tasks `8966bea` → upstream head
+  `2c1425d` touches `package-lock.json` only, so the vendored schema is
+  byte-current despite the older pin date.
+
 ## [0.4.3] - 2026-08-15
 
 **A security fix, and the compliance work that found it.** `turul-http-mcp-server`
