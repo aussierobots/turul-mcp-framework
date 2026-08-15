@@ -1545,6 +1545,176 @@ impl ToolWithTaskTool {
     }
 }
 
+// ---------------------------------------------------------------------------
+// `pending` scenarios. Not scored today, but "pending" means upstream intends
+// to promote them — so a failure here is a scored failure in waiting.
+// ---------------------------------------------------------------------------
+
+/// `json-schema-2020-12` (SEP-1613, SEP-2106): 2020-12 keywords must survive
+/// the round trip into `tools/list` unaltered.
+///
+/// `ToolSchema.additional` is `#[serde(flatten)]`, so arbitrary keywords pass
+/// through — this fixture is the proof rather than the claim. Asserted:
+/// `$schema`, `$defs`, `additionalProperties` (SEP-1613) plus `allOf`/`anyOf`,
+/// `if`/`then`/`else` and an `$anchor` inside `$defs` (SEP-2106).
+struct JsonSchema2020_12Tool {
+    input_schema: ToolSchema,
+}
+
+impl JsonSchema2020_12Tool {
+    fn new() -> Self {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "kind".to_string(),
+            serde_json::json!({ "type": "string", "enum": ["a", "b"] }),
+        );
+        properties.insert(
+            "count".to_string(),
+            serde_json::json!({ "type": "integer" }),
+        );
+
+        let mut additional = HashMap::new();
+        additional.insert(
+            "$schema".to_string(),
+            serde_json::json!("https://json-schema.org/draft/2020-12/schema"),
+        );
+        // Shapes dictated by the scenario: it looks for `$defs.address`
+        // carrying an `$anchor`, and for a nested `anyOf` INSIDE `allOf`
+        // (a bare sibling anyOf does not satisfy it).
+        additional.insert(
+            "$defs".to_string(),
+            serde_json::json!({
+                "address": {
+                    "$anchor": "address",
+                    "type": "object",
+                    "properties": { "street": { "type": "string" } }
+                }
+            }),
+        );
+        additional.insert("additionalProperties".to_string(), serde_json::json!(false));
+        additional.insert(
+            "allOf".to_string(),
+            serde_json::json!([
+                { "type": "object" },
+                { "anyOf": [
+                    { "required": ["kind"] },
+                    { "required": ["count"] }
+                ]}
+            ]),
+        );
+        additional.insert(
+            "if".to_string(),
+            serde_json::json!({ "properties": { "kind": { "const": "a" } } }),
+        );
+        additional.insert(
+            "then".to_string(),
+            serde_json::json!({ "required": ["count"] }),
+        );
+        additional.insert("else".to_string(), serde_json::json!({ "required": [] }));
+
+        Self {
+            input_schema: ToolSchema {
+                schema_type: "object".to_string(),
+                properties: Some(properties),
+                required: None,
+                additional,
+            },
+        }
+    }
+}
+
+impl HasBaseMetadata for JsonSchema2020_12Tool {
+    fn name(&self) -> &str {
+        "json_schema_2020_12_tool"
+    }
+}
+impl HasDescription for JsonSchema2020_12Tool {
+    fn description(&self) -> Option<&str> {
+        Some("Tool with JSON Schema 2020-12 features")
+    }
+}
+impl HasInputSchema for JsonSchema2020_12Tool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+impl HasOutputSchema for JsonSchema2020_12Tool {}
+impl HasAnnotations for JsonSchema2020_12Tool {}
+impl HasToolMeta for JsonSchema2020_12Tool {}
+impl HasIcons for JsonSchema2020_12Tool {}
+impl HasExecution for JsonSchema2020_12Tool {}
+
+#[async_trait]
+impl McpTool for JsonSchema2020_12Tool {
+    async fn call(&self, _args: Value, _s: Option<SessionContext>) -> McpResult<CallToolResult> {
+        Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
+    }
+}
+
+/// `http-custom-header-server-validation` (SEP-2243): a tool whose input
+/// properties carry `x-mcp-header` annotations, so the server must accept the
+/// named headers, base64-decode them, and reject a header that disagrees with
+/// the corresponding body parameter.
+///
+/// The framework already models this (`turul_mcp_protocol::headers::
+/// scan_x_mcp_headers`, `X_MCP_HEADER_SCHEMA_KEY`); nothing exercised it over
+/// the wire, so all five checks reported "Not testable".
+struct CustomHeadersTool {
+    name: &'static str,
+    input_schema: ToolSchema,
+}
+
+impl CustomHeadersTool {
+    fn new(name: &'static str, nullable: bool) -> Self {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "apiKey".to_string(),
+            serde_json::json!({
+                "type": if nullable { serde_json::json!(["string", "null"]) } else { serde_json::json!("string") },
+                "x-mcp-header": "X-Api-Key"
+            }),
+        );
+        properties.insert(
+            "tenant".to_string(),
+            serde_json::json!({ "type": "string", "x-mcp-header": "X-Tenant" }),
+        );
+        Self {
+            name,
+            input_schema: ToolSchema::object().with_properties(properties),
+        }
+    }
+}
+
+impl HasBaseMetadata for CustomHeadersTool {
+    fn name(&self) -> &str {
+        self.name
+    }
+}
+impl HasDescription for CustomHeadersTool {
+    fn description(&self) -> Option<&str> {
+        Some("Tool whose parameters mirror custom request headers")
+    }
+}
+impl HasInputSchema for CustomHeadersTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+impl HasOutputSchema for CustomHeadersTool {}
+impl HasAnnotations for CustomHeadersTool {}
+impl HasToolMeta for CustomHeadersTool {}
+impl HasIcons for CustomHeadersTool {}
+impl HasExecution for CustomHeadersTool {}
+
+#[async_trait]
+impl McpTool for CustomHeadersTool {
+    async fn call(&self, args: Value, _s: Option<SessionContext>) -> McpResult<CallToolResult> {
+        Ok(CallToolResult::success(vec![ToolResult::text(
+            args.to_string(),
+        )]))
+    }
+}
+
 /// `resources-read-text`: resource at test://static-text that returns plain text content.
 struct StaticTextResource;
 
@@ -1687,6 +1857,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(LoggingTool::default())
         .tool(StreamingElicitationTool::default())
         .tool(GreetTool::new())
+        .tool(JsonSchema2020_12Tool::new())
+        .tool(CustomHeadersTool::new("test_custom_headers", false))
+        .tool(CustomHeadersTool::new("test_custom_headers_null", true))
         // SEP-2133: the tasks extension is off unless opted in.
         .with_ext_tasks(std::sync::Arc::new(
             turul_mcp_ext_tasks::InMemoryTaskStore::new(),
