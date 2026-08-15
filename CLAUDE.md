@@ -20,32 +20,37 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 > system. Cite the schema type, ADR number or file when invoking this; a preference
 > is not a contradiction.
 
-## Branch Lock: `feat/turul-mcp-protocol-2026-07-28`
+## Released: 0.4.0 on `main` (MCP 2026-07-28)
 
-**This branch is the 0.4 release in preparation**, adopting MCP 2026-07-28 — now the
-released current specification (stateless core, `initialize`/`Mcp-Session-Id` removed,
-Tasks moved to extension, error code `-32002` → `-32602`, JSON Schema 2020-12, MCP Apps,
-caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging).
+**MCP 2026-07-28 is the default specification and it lives on `main`.** 2025-11-25
+remains fully supported as the opt-in lane
+(`--no-default-features --features protocol-2025-11-25`).
+
+Released **2026-08-15**: merged in [#18](https://github.com/aussierobots/turul-mcp-framework/pull/18),
+tagged `v0.4.0`, and published to crates.io — 13 crates at `0.4.0`, plus first
+publications of `turul-mcp-ext-apps` and `turul-mcp-ext-tasks` at `0.1.0`. The
+release branch `feat/turul-mcp-protocol-2026-07-28` was merged and deleted; its
+history is reachable from `main` and from the tag.
+
+What 2026-07-28 changed: stateless core, `initialize`/`Mcp-Session-Id` removed,
+Tasks moved to an extension, error code `-32002` → `-32602`, JSON Schema 2020-12,
+MCP Apps, caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging.
 See https://modelcontextprotocol.io/specification/2026-07-28.
 
-**0.4 becomes the current release only when the maintainer opens the PR and merges it.**
-Until then this branch is pre-release: it holds the 0.4 line, `main` holds 0.3 /
-2025-11-25, and neither fact licenses merging. Write about this branch's contents as
-**0.4** — every non-frozen crate is already `0.4.0`, so "0.3" in a *current-state*
-claim is stale (see [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md)
-for what legitimately stays 0.3).
+> **The branch lock that governed this work is retired.** It read "DO NOT merge
+> into `main` without express authority" and "`main` continues to hold 2025-11-25".
+> Both were correct until 2026-08-15 and are now false; leaving them would have
+> bound future sessions to a branch that no longer exists. Ordinary contribution
+> rules apply from here — feature branches, PRs, and the maintainer's call on
+> merging.
 
-Confirm the name before relying on the rules below — they bind whatever branch holds
-the 2026-07-28 work, and a stale name here would make them unenforceable as written:
+Normal release discipline still applies, and two habits from the lock are worth
+keeping because they are good practice rather than branch-specific:
 
-```bash
-git branch --show-current      # expect feat/turul-mcp-protocol-2026-07-28
-```
-
-- **DO NOT merge `feat/turul-mcp-protocol-2026-07-28` into `main` without the maintainer's express authority.**
-- **DO NOT fast-forward, rebase-onto-main, squash-to-main, or open a merge PR for this branch** unless the maintainer (Nick) has explicitly authorized that specific action in the current session.
-- **DO NOT delete the branch, force-push it, or treat it as "complete"** without express authority. "Tests pass" / "all SEPs implemented" is not sufficient — final disposition is the maintainer's call.
-- All work for the 2026-07-28 spec lands on this branch. `main` continues to hold 2025-11-25 — now the *previous* spec, not the current one — until the maintainer chooses to cut over.
+- **Never merge to `main`, force-push it, or tag a release without the maintainer
+  asking for that specific action.** "Tests pass" is not authority.
+- **`cargo publish` is irreversible** — crates.io has no unpublish, only yank. See
+  §Pre-Release Checklist before any publish.
 
 ### Check the schema pins BEFORE any 2026-07-28 work
 
@@ -67,7 +72,7 @@ shasum -a 256 crates/turul-mcp-protocol-2026-07-28/schema/schema.ts
 ```
 
 Governing rules — including the one-immutable-commit requirement and the
-`modeled=N` caveat — live in **AGENTS.md §Branch Lock → "Schema pin governance"**,
+`modeled=N` caveat — live in **AGENTS.md §Released: 0.4.0 → "Schema pin governance"**,
 which wins on conflict. Do not restate them here; this section is the runnable
 check only.
 

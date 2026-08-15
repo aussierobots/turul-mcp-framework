@@ -152,7 +152,7 @@ speak to those.
 These artifacts are reconciled **in the same slice** as any of:
 
 - a schema re-pin (`mcp-compliance-2026-07-28 refresh --write`) — see
-  AGENTS.md §Branch Lock → "Schema pin governance"
+  AGENTS.md §Released: 0.4.0 → "Schema pin governance"
 - a behaviour change to a governed requirement
 - a new or moved test that changes a "Verified by" cell
 - an interop probe run that changes an interop cell

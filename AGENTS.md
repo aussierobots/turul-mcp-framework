@@ -31,18 +31,21 @@
 
 External dependencies (`serde`, `tokio`, etc.) continue to use `workspace = true` references — only internal crate versions are independent.
 
-## Branch-Conditional Spec Guidance
+## Lane-Conditional Spec Guidance
 
 This file documents the framework under two simultaneous spec targets:
 
-- **`main` (and any branch derived from `main`)** — MCP 2025-11-25 (stateful core: `initialize`/`notifications/initialized` handshake, `Mcp-Session-Id` header, capability negotiation at handshake time).
-- **`feat/turul-mcp-protocol-2026-07-28`** (the 0.4 release in preparation) — MCP 2026-07-28, the released current specification (stateless core: handshake and session header removed, capabilities travel in `_meta` on every request, new `server/discover` method). See §"Branch Lock" below for the full diff.
+- **The default build** — MCP 2026-07-28, the released current specification (stateless core: handshake and session header removed, capabilities travel in `_meta` on every request, new `server/discover` method). This is what `main` builds and what 0.4.0 published.
+- **The opt-in lane** (`--no-default-features --features protocol-2025-11-25`) — MCP 2025-11-25 (stateful core: `initialize`/`notifications/initialized` handshake, `Mcp-Session-Id` header, capability negotiation at handshake time).
 
-Rules in §"MCP Specification Compliance", §"Notifications Compliance", §"Testing Guidelines", §"Agent-Specific Instructions", §"Critic Review Mode", and §"Reviewer Focus Areas" are written against the `main` 2025-11-25 baseline and are explicitly tagged `(2025-11-25 baseline)` where the draft branch supersedes them. On the draft branch, defer to:
+**These are Cargo features, not branches.** Before 2026-08-15 the split was branch-conditional; since 0.4.0 both lanes live on `main` and are selected at compile time. They are mutually exclusive — see §"Build, Test, and Development Commands" for the feature mutex.
 
-- `docs/adr/027-targeting-mcp-draft-2026-v1.md` — spec target + cutover plan
+Rules in §"MCP Specification Compliance", §"Notifications Compliance", §"Testing Guidelines", §"Agent-Specific Instructions", §"Critic Review Mode", and §"Reviewer Focus Areas" are written against the 2025-11-25 baseline and are explicitly tagged `(2025-11-25 baseline)` where 2026-07-28 supersedes them. **On the default build, those tagged rules do not apply** — defer to:
+
+- `docs/adr/027-targeting-mcp-draft-2026-v1.md` — spec target + cutover record
 - `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md` — current compliance state
-- §"Branch Lock" below — headline diffs vs 2025-11-25
+- `docs/compliance/` — per-area records naming the test that asserts each requirement
+- §"Released: 0.4.0 on `main`" below — headline diffs vs 2025-11-25
 
 If a `(2025-11-25 baseline)` rule conflicts with a draft-branch spec requirement, the draft-branch artifact wins on the draft branch; do not back-port the draft-branch shape to `main` without explicit instruction.
 - `turul-mcp-session-storage`: Pluggable session backends (in-memory, SQLite, Postgres, DynamoDB).
@@ -114,7 +117,7 @@ write-up with the wire evidence: `docs/compliance/base-protocol.md` §4.
 
 ## MCP Specification Compliance (2025-11-25 baseline)
 
-_Rules below apply to `main` / the 2025-11-25 spec target. On the 2026-07-28 branch, see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md` and §"Branch Lock" — stateless core, `_meta`-routed capability negotiation, error code `-32002 → -32602`._
+_Rules below apply to the **`protocol-2025-11-25` opt-in lane only**. They do **not** describe the default build. For 2026-07-28 see `crates/turul-mcp-protocol-2026-07-28/COMPLIANCE.md`, `docs/compliance/`, and §"Released: 0.4.0 on `main`" — stateless core, `_meta`-routed capability negotiation, error code `-32002 → -32602`._
 
 - Target spec: https://modelcontextprotocol.io/specification/2025-11-25
 - Requirements: correct JSON-RPC usage, `_meta` fields, version negotiation, pagination/cursors, progress, and session isolation/TTL.
@@ -229,11 +232,11 @@ _On the 2026-07-28 branch the `notifications/initialized` rule does not apply �
 - Never commit secrets. AWS examples require valid credentials; prefer env vars/roles.
 - Keep debug logs off by default; gate experimental features behind flags.
 
-## Branch Lock: `feat/turul-mcp-protocol-2026-07-28`
+## Released: 0.4.0 on `main` (MCP 2026-07-28)
 
-**This branch is the 0.4 release in preparation**, adopting MCP 2026-07-28 — now the released current specification (see https://modelcontextprotocol.io/specification/2026-07-28 and its [changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog)).
+**MCP 2026-07-28 is the default specification and it lives on `main`** (see https://modelcontextprotocol.io/specification/2026-07-28 and its [changelog](https://modelcontextprotocol.io/specification/2026-07-28/changelog)). 2025-11-25 remains fully supported as the opt-in lane (`--no-default-features --features protocol-2025-11-25`).
 
-**0.4 becomes the current release only when the maintainer opens the PR and merges it.** Until then the branch is pre-release: it carries the 0.4 line (every non-frozen crate is already `0.4.0`), `main` carries 0.3 / 2025-11-25, and neither fact authorises a merge. Describe this branch's contents as 0.4; the frozen crates, since-markers, changelog history and external crate pins that legitimately stay 0.3 are enumerated in CLAUDE.md §Version References.
+Released **2026-08-15**: merged in [#18](https://github.com/aussierobots/turul-mcp-framework/pull/18), tagged `v0.4.0`, published to crates.io (13 crates at `0.4.0`; `turul-mcp-ext-apps` and `turul-mcp-ext-tasks` first-published at `0.1.0`). The release branch `feat/turul-mcp-protocol-2026-07-28` was merged and deleted — its history is reachable from `main` and from the tag. The frozen crates, since-markers, changelog history and external crate pins that legitimately stay 0.3 are enumerated in CLAUDE.md §Version References.
 
 Headline changes the framework must absorb:
 
@@ -250,12 +253,13 @@ Headline changes the framework must absorb:
 - **Deprecations** (12-month window, annotation-only this version): Roots, Sampling, Logging.
 - **Breaking error code**: missing resource `-32002` → JSON-RPC standard `-32602`.
 
-**Branch governance — MANDATORY:**
-- **DO NOT merge `feat/turul-mcp-protocol-2026-07-28` into `main` without the maintainer's express authority.** This applies to merge commits, fast-forward merges, rebase-onto-main, squash-merges, and merge PRs alike.
-- **DO NOT mark this branch "done," delete it, force-push it, or open a release/merge PR** without explicit maintainer authorization in the current session.
-- "All SEPs implemented," "all tests pass," and "conformance suite green" are necessary but **not sufficient** — disposition is the maintainer's call.
-- `main` remains on MCP 2025-11-25 — now the *previous* spec, not the current one — throughout this work. Do not back-port 2026-07-28-only changes to `main` without explicit instruction.
-- Side-branches off `feat/turul-mcp-protocol-2026-07-28` may merge back into it freely; only the branch → `main` direction is locked.
+**Release governance — MANDATORY:**
+> The branch lock that governed the 2026-07-28 adoption is **retired as of 2026-08-15**. It said "DO NOT merge into `main` without express authority" and "`main` remains on MCP 2025-11-25". Both were true until the release and are now false — the branch is gone and `main` carries 2026-07-28. Retained below are the parts that were never branch-specific.
+
+- **DO NOT merge to `main`, force-push it, tag a release, or open a release PR** without explicit maintainer authorization in the current session. This applies to merge commits, fast-forward merges, rebase-onto-main and squash-merges alike.
+- "All SEPs implemented," "all tests pass," and "conformance suite green" are necessary but **not sufficient** — release disposition is the maintainer's call.
+- **`cargo publish` is irreversible.** crates.io has no unpublish, only yank; a failure partway through a multi-crate sequence leaves the earlier crates permanently at that version. Follow CLAUDE.md §Pre-Release Checklist, and halt rather than improvise if a publish fails mid-sequence.
+- Feature branches merge back into `main` through a PR, on the maintainer's call.
 
 **Schema pin governance — MANDATORY:**
 - **2026-07-28 has finalized.** The released schema lives at the immutable upstream path `schema/2026-07-28/schema.ts` (tag `2026-07-28`); upstream `schema/draft/` is now the *next* spec cycle's floating pointer and is no longer what this crate tracks. Any pin, fetch, or drift check still resolving against `schema/draft/` or against `main` will silently walk onto next-cycle content while claiming to implement 2026-07-28. **Verify the pin still names the released artifact at the START of every 2026-07-28 slice** — before writing code, and before trusting a green suite.
@@ -267,7 +271,7 @@ Headline changes the framework must absorb:
 
 ## Agent-Specific Instructions
 - Scope: this file applies to the entire repository.
-- Role: act as a strict critic for the **active branch's spec target** — MCP 2025-11-25 on `main`, MCP 2026-07-28 on the `feat/turul-mcp-protocol-2026-07-28` branch (see §"Branch-Conditional Spec Guidance") — within the Turul MCP Framework; flag deviations and propose compliant fixes.
+- Role: act as a strict critic for the **active build's spec target** — MCP 2026-07-28 on the default build, MCP 2025-11-25 on the `protocol-2025-11-25` opt-in lane (see §"Lane-Conditional Spec Guidance") — within the Turul MCP Framework; flag deviations and propose compliant fixes.
 - Do not relax security, logging, or API contracts to “make tests pass”; fix root causes while preserving spec compliance.
 - Boundaries: do not modify core framework areas unless explicitly requested. The ~9 areas are Tools, Resources, Prompts, Sampling, Completion, Logging, Roots, Elicitation, and Notifications.
  - Extensions: if introducing truly non-standard fields, document them clearly, keep optional, and ensure baseline compliance without them.
@@ -328,7 +332,7 @@ Headline changes the framework must absorb:
 - Treat docs/examples/agent-instruction changes as potentially compliance-impacting:
   - Flag docs that advertise unsupported capabilities or incorrect defaults.
   - Flag examples that imply `listChanged`/subscription/progress/lifecycle support without matching implementation/tests.
-  - Flag spec-version drift relative to the active branch's spec target (MCP 2025-11-25 on `main`; MCP 2026-07-28 on the `feat/turul-mcp-protocol-2026-07-28` branch). On `main`, do not back-port 2026-07-28 shapes; on the 2026-07-28 branch, do not preserve removed 2025-11-25 contracts (`initialize`/`notifications/initialized`/`Mcp-Session-Id`).
+  - Flag spec-version drift relative to the active build's spec target (MCP 2026-07-28 by default; MCP 2025-11-25 on the `protocol-2025-11-25` opt-in lane). On the default build, do not preserve removed 2025-11-25 contracts (`initialize`/`notifications/initialized`/`Mcp-Session-Id`); on the opt-in lane, do not back-port 2026-07-28 shapes.
 - When reviewing client/server API guidance, verify it preserves typed error propagation and truthful capability advertisement.
 
 ### Workspace State Triage (Required Before Review Conclusions)
