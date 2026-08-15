@@ -7,10 +7,14 @@ license.workspace = true
 description = "Fixture server for the upstream @modelcontextprotocol/conformance suite"
 
 [dependencies]
-turul-mcp-server.workspace = true
+# `ext-tasks` for the SEP-2663 fixtures. Those scenarios are UNSCORED, but they
+# are the only external check that can exist for our tasks wire format — no SDK
+# implements SEP-2663 client-side.
+turul-mcp-server = { workspace = true, features = ["ext-tasks"] }
 turul-mcp-protocol.workspace = true
 turul-mcp-derive.workspace = true
 turul-mcp-builders.workspace = true
+turul-mcp-ext-tasks.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 tracing.workspace = true

@@ -1294,6 +1294,220 @@ impl McpResource for TemplateDataResource {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tasks extension fixtures (`io.modelcontextprotocol/tasks`, SEP-2663).
+//
+// These scenarios are UNSCORED for 2026-07-28 — the harness excludes them from
+// conformance because tasks is an extension. They are built anyway because
+// they are the only external check that can exist for our tasks wire format:
+// no SDK implements SEP-2663 client-side (verified 2026-08 against
+// `mcp==2.0.0`, which has zero task symbols), so `ext_tasks_2026.rs` has turul
+// code on both ends and cannot detect a shared misreading.
+//
+// SEP-2133 keeps the extension off by default; `.with_ext_tasks(...)` opts in.
+// ---------------------------------------------------------------------------
+
+/// `greet` — sync-only. Registered with `.tool()`, NOT `.ext_task_tool()`.
+///
+/// Its role is negative: the harness asserts a sync tool's result carries
+/// `resultType: "complete"` and NO top-level `taskId`, and that a legacy v1
+/// `task: { ttl, pollInterval }` param does not promote it to a task. Tool
+/// registration is authoritative, not the client's hint.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "greet", description = "Greet by name", output = String)]
+struct GreetTool {
+    #[param(description = "Name to greet")]
+    name: String,
+}
+
+impl GreetTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Ok(format!("Hello, {}!", self.name))
+    }
+}
+
+/// `slow_compute` — task-supporting, sleeps `seconds` then answers.
+///
+/// `seconds: 0` exercises the immediate-result shortcut (a server MAY return a
+/// sync result when the work finishes fast enough). It MUST settle to
+/// `cancelled` — not `completed`/`failed` — when `tasks/cancel` arrives while
+/// it is running, so the lifecycle check has a deterministic terminal status.
+/// That is why the sleep is polled in slices with a cancellation check rather
+/// than being one long await.
+struct SlowComputeTool {
+    input_schema: ToolSchema,
+}
+
+impl SlowComputeTool {
+    fn new() -> Self {
+        let mut properties = HashMap::new();
+        properties.insert(
+            "seconds".to_string(),
+            serde_json::json!({ "type": "number" }),
+        );
+        Self {
+            input_schema: ToolSchema::object().with_properties(properties),
+        }
+    }
+}
+
+impl HasBaseMetadata for SlowComputeTool {
+    fn name(&self) -> &str {
+        "slow_compute"
+    }
+}
+impl HasDescription for SlowComputeTool {
+    fn description(&self) -> Option<&str> {
+        Some("Sleep for `seconds`, then return a result")
+    }
+}
+impl HasInputSchema for SlowComputeTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+impl HasOutputSchema for SlowComputeTool {}
+impl HasAnnotations for SlowComputeTool {}
+impl HasToolMeta for SlowComputeTool {}
+impl HasIcons for SlowComputeTool {}
+impl HasExecution for SlowComputeTool {}
+
+#[async_trait]
+impl McpTool for SlowComputeTool {
+    async fn call(&self, args: Value, _s: Option<SessionContext>) -> McpResult<CallToolResult> {
+        let seconds = args
+            .get("seconds")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0)
+            .max(0.0);
+        // Sliced so a cancel lands promptly and the task settles `cancelled`.
+        let slices = (seconds * 10.0).round() as u64;
+        for _ in 0..slices {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        }
+        Ok(CallToolResult::success(vec![ToolResult::text(format!(
+            "slept {seconds}s"
+        ))]))
+    }
+}
+
+/// `failing_job` — task-supporting, always a TOOL EXECUTION error after ~1s.
+///
+/// `ToolExecutionError` is the variant 0.4.2 made render as `isError: true`
+/// rather than a JSON-RPC error, which is what distinguishes this fixture from
+/// `protocol_error_job` below. Under task election it should settle `failed`.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "failing_job", description = "Always fails after ~1s", output = String)]
+struct FailingJobTool {}
+
+impl FailingJobTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        Err(McpError::tool_execution("failing_job always fails"))
+    }
+}
+
+/// `protocol_error_job` — task-supporting, raises a PROTOCOL error.
+///
+/// Deliberately not a `ToolExecutionError`: this is the other side of the
+/// 0.4.2 distinction. A malformed-params error is the protocol's problem and
+/// must stay a JSON-RPC error rather than becoming `isError: true` content.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "protocol_error_job", description = "Raises a protocol error", output = String)]
+struct ProtocolErrorJobTool {}
+
+impl ProtocolErrorJobTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Err(McpError::param_out_of_range(
+            "protocol_error_job",
+            "invoked",
+            "this tool exists to raise a protocol error",
+        ))
+    }
+}
+
+/// `confirm_delete` — task-supporting, demands one elicited confirmation.
+/// Drives `tasks-mrtr-input`: MRTR composed with task election, where the
+/// runtime parks the task rather than returning input-required to the caller.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "confirm_delete", description = "Delete after confirmation", output = String)]
+struct ConfirmDeleteTool {}
+
+impl ConfirmDeleteTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        if session.input_responses().is_some() {
+            return Ok("Deleted".to_string());
+        }
+        let schema = ElicitationSchema::new()
+            .with_property("confirm".to_string(), PrimitiveSchemaDefinition::string());
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "confirm".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("Really delete?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("confirm-delete-state-1".to_string()),
+        })
+    }
+}
+
+/// `multi_input` — task-supporting, demands two inputs at once under a task.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "multi_input", description = "Requires two inputs", output = String)]
+struct MultiInputTool {}
+
+impl MultiInputTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        if session.input_responses().is_some() {
+            return Ok("Both inputs received".to_string());
+        }
+        let mut requests = InputRequests::new();
+        for (key, prompt, field) in [
+            ("first", "First value?", "first"),
+            ("second", "Second value?", "second"),
+        ] {
+            let schema = ElicitationSchema::new()
+                .with_property(field.to_string(), PrimitiveSchemaDefinition::string());
+            requests.insert(
+                key.to_string(),
+                InputRequest::Elicit(ElicitRequest::new_form(prompt, schema)),
+            );
+        }
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("multi-input-state-1".to_string()),
+        })
+    }
+}
+
+/// `test_tool_with_task` — task-supporting, drives `tasks-mrtr-composition`.
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "test_tool_with_task", description = "Task-supporting tool", output = String)]
+struct ToolWithTaskTool {}
+
+impl ToolWithTaskTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        if session.input_responses().is_some() {
+            return Ok("Task with input complete".to_string());
+        }
+        let schema = ElicitationSchema::new()
+            .with_property("answer".to_string(), PrimitiveSchemaDefinition::string());
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "user_name".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("What is your name?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("tool-with-task-state-1".to_string()),
+        })
+    }
+}
+
 /// `resources-read-text`: resource at test://static-text that returns plain text content.
 struct StaticTextResource;
 
@@ -1435,6 +1649,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(ToolWithProgressTool::default())
         .tool(LoggingTool::default())
         .tool(StreamingElicitationTool::default())
+        .tool(GreetTool::default())
+        // SEP-2133: the tasks extension is off unless opted in.
+        .with_ext_tasks(std::sync::Arc::new(
+            turul_mcp_ext_tasks::InMemoryTaskStore::new(),
+        ))
+        .ext_task_tool(SlowComputeTool::new())
+        .ext_task_tool(FailingJobTool::default())
+        .ext_task_tool(ProtocolErrorJobTool::default())
+        .ext_task_tool(ConfirmDeleteTool::default())
+        .ext_task_tool(MultiInputTool::default())
+        .ext_task_tool(ToolWithTaskTool::default())
         .completion_provider(PromptArgumentCompleter)
         .resource(TemplateDataResource)
         .prompt(InputRequiredPrompt)
