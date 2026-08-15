@@ -32,9 +32,9 @@ must reject.
 ```rust
 pub enum OriginPolicy {
     /// Default. Origin absent → allowed. Origin present → allowed only if
-    /// its host is loopback (`localhost`, `127.0.0.0/8`, `[::1]`) or its
-    /// authority matches the request's `Host` header (default-port
-    /// normalized for http/https). Anything else → HTTP 403.
+    /// its host is loopback (`localhost`, `127.0.0.0/8`, `[::1]`).
+    /// Anything else → HTTP 403. The request's `Host` header is deliberately
+    /// NOT consulted — see the 2026-08-15 revision entry.
     SameOriginOrLoopback,
     /// `SameOriginOrLoopback` semantics PLUS an explicit allowlist of
     /// origins (`scheme://host[:port]`, compared case-insensitively,
@@ -135,3 +135,41 @@ exactly the case that needs a conscious `AllowList`/`Disabled` decision.
   and the `SameOriginOrLoopback` default (browser told "allowed", server
   403s). Added the §"CORS-derived policy" rule for the Lambda builder and the
   explicit non-derivation rule for `enable_cors`.
+- **2026-08-15 (security correction — the `Host` match is removed)** — the
+  original Decision admitted an origin "whose authority matches the request's
+  `Host` header". That rule **defeated the protection this ADR exists to
+  provide**, and the flaw is visible in this ADR's own §Context: the attacker
+  serves `attacker.example`, rebinds it to `127.0.0.1`, and the browser then
+  sends `Host: attacker.example` *and* `Origin: http://attacker.example` —
+  the two agree, so the request was admitted.
+
+  Found by the upstream conformance scenario `dns-rebinding-protection`, then
+  reproduced by hand against `examples/conformance-fixture-server`: with an
+  otherwise-valid request, `Origin: http://evil.example.com` alone answered
+  **403**, but `Host` + `Origin` both `evil.example.com` answered **200**.
+  The same class of bug carries a TypeScript SDK advisory,
+  [GHSA-w48q-cv73-mx4w](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-w48q-cv73-mx4w).
+
+  A legitimate same-origin deployment and a rebinding attack are
+  **indistinguishable from `Origin` and `Host` alone** — both headers are
+  attacker-controlled in the attack. So `Host` cannot be the trust anchor at
+  any level of care; only server-side knowledge of the expected origin can
+  decide. `matches_host_header` is deleted rather than tightened.
+
+  The branch was in any case redundant wherever it was safe: a loopback
+  deployment's origin already passes on the loopback branch. What it uniquely
+  admitted was the non-loopback case — exactly the unsafe one.
+
+  **Operator impact.** A browser app served from the same *non-loopback*
+  origin as the server must now declare that origin with
+  `OriginPolicy::AllowList(vec!["https://app.example".into()])`. Unchanged:
+  absent `Origin` (curl, every SDK client), loopback origins, `Disabled`, and
+  the Lambda CORS derivation. Regression tests:
+  `matching_host_header_does_not_admit_a_foreign_origin` and
+  `same_origin_on_a_public_host_is_reachable_via_allowlist`.
+
+  The prior unit test `same_host_passes_with_port_normalization` asserted the
+  vulnerable behaviour as correct, and `cross_origin_null_and_garbage_are_rejected`
+  only ever varied `Origin` while leaving `Host` truthful — the one
+  combination that was rejected. Neither could have caught this; the first is
+  inverted and kept under its new name.

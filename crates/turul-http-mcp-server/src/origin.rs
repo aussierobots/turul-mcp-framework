@@ -12,9 +12,13 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum OriginPolicy {
     /// Default. Origin absent → allowed. Origin present → allowed only if
-    /// its host is loopback (`localhost`, `127.0.0.0/8`, `[::1]`) or its
-    /// authority matches the request's `Host` header (default-port
-    /// normalized). Anything else → HTTP 403.
+    /// its host is loopback (`localhost`, `127.0.0.0/8`, `[::1]`). Anything
+    /// else → HTTP 403.
+    ///
+    /// The request's `Host` header is **not** consulted: it is
+    /// attacker-controlled, and a rebinding attacker sets it to agree with
+    /// `Origin`. To serve a browser app from a non-loopback origin, name that
+    /// origin with [`OriginPolicy::AllowList`]. See ADR-031 (2026-08-15).
     #[default]
     SameOriginOrLoopback,
     /// [`OriginPolicy::SameOriginOrLoopback`] semantics plus an explicit
@@ -88,23 +92,6 @@ fn is_loopback_host(host: &str) -> bool {
     false
 }
 
-/// Does the origin authority match the request `Host` header?
-///
-/// `Host` carries no scheme; when it has no explicit port, the origin
-/// matches if its effective port is a scheme default (80/443).
-fn matches_host_header(origin: &OriginAuthority, host_header: &str) -> bool {
-    let Some((host, host_port)) = split_host_port(host_header.trim()) else {
-        return false;
-    };
-    if origin.0 != host {
-        return false;
-    }
-    match host_port {
-        Some(p) => origin.1 == p,
-        None => origin.1 == 80 || origin.1 == 443,
-    }
-}
-
 /// Validate the request's `Origin` header against `policy`.
 ///
 /// `Ok(())` admits the request; `Err(origin_value)` means the caller MUST
@@ -138,14 +125,15 @@ pub(crate) fn validate_origin(headers: &HeaderMap, policy: &OriginPolicy) -> Res
     if is_loopback_host(&parsed.0) {
         return Ok(());
     }
-    let host_header = headers
-        .get(hyper::header::HOST)
-        .and_then(|h| h.to_str().ok());
-    if let Some(host) = host_header
-        && matches_host_header(&parsed, host)
-    {
-        return Ok(());
-    }
+    // Deliberately NOT compared against the request's `Host` header. `Host` is
+    // attacker-controlled, and in a DNS-rebinding attack the browser sends
+    // `Host` == the attacker's own name (the URL host, rebound to loopback),
+    // so `Origin` and `Host` always agree and the check would never fire —
+    // admitting exactly the attack this module exists to stop. A legitimate
+    // same-origin deployment and a rebinding attack are indistinguishable from
+    // these two headers alone, so only server-side knowledge of the expected
+    // origin can decide: operators declare it with `OriginPolicy::AllowList`.
+    // See ADR-031 revision 2026-08-15.
     Err(origin.to_string())
 }
 
@@ -189,20 +177,48 @@ mod tests {
         }
     }
 
+    /// A matching `Host` header MUST NOT admit a non-loopback origin.
+    ///
+    /// This is the DNS-rebinding case itself: the attacker controls both
+    /// headers and sets them consistently, so any rule that trusts their
+    /// agreement admits the attack. Before 2026-08-15 every case here
+    /// returned `Ok` — the conformance suite's `dns-rebinding-protection`
+    /// scenario caught it (`Host` + `Origin` both `evil.example.com` -> 200).
     #[test]
-    fn same_host_passes_with_port_normalization() {
+    fn matching_host_header_does_not_admit_a_foreign_origin() {
         let p = OriginPolicy::SameOriginOrLoopback;
         for (o, host) in [
+            ("http://evil.example.com", "evil.example.com"),
             ("http://app.example:8080", "app.example:8080"),
             ("http://app.example", "app.example"), // 80 vs portless
             ("https://app.example", "app.example"), // 443 vs portless
             ("https://APP.example:443", "app.example:443"),
         ] {
             assert!(
-                validate_origin(&headers(Some(o), Some(host)), &p).is_ok(),
-                "{o} vs Host {host} should pass"
+                validate_origin(&headers(Some(o), Some(host)), &p).is_err(),
+                "{o} vs matching Host {host} must be rejected — Host is attacker-controlled"
             );
         }
+    }
+
+    /// The supported way to serve a browser app from a non-loopback origin.
+    #[test]
+    fn same_origin_on_a_public_host_is_reachable_via_allowlist() {
+        let p = OriginPolicy::AllowList(vec!["https://app.example".into()]);
+        assert!(
+            validate_origin(
+                &headers(Some("https://app.example"), Some("app.example")),
+                &p
+            )
+            .is_ok()
+        );
+        assert!(
+            validate_origin(
+                &headers(Some("https://evil.example"), Some("evil.example")),
+                &p
+            )
+            .is_err()
+        );
     }
 
     #[test]

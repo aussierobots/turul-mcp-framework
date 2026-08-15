@@ -105,10 +105,18 @@ async fn loopback_origin_is_allowed_by_default() {
     }
 }
 
+/// The server binds 127.0.0.1, so its own origin is a loopback origin and is
+/// admitted on that branch.
+///
+/// Named `same_host_origin_is_allowed_by_default` until 2026-08-15, which
+/// overstated it: no non-loopback host is reachable in this fixture, so the
+/// former `Host`-matching branch was never exercised here. That is why this
+/// suite stayed green through the DNS-rebinding bypass — see ADR-031
+/// (2026-08-15) and `origin.rs::matching_host_header_does_not_admit_a_foreign_origin`,
+/// which covers the case this one cannot.
 #[tokio::test]
-async fn same_host_origin_is_allowed_by_default() {
+async fn servers_own_loopback_origin_is_allowed_by_default() {
     let url = start_server(None).await;
-    // Origin matching the request Host authority exactly.
     let host = url
         .strip_prefix("http://")
         .unwrap()
