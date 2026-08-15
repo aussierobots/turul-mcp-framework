@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-08-15
+
+Two bug fixes found by running upstream's conformance suite, covering tool error
+handling and resource serving. `turul-mcp-derive` 0.4.0 → 0.4.1 and
+`turul-mcp-server` 0.4.1 → 0.4.2. No other crate is republished: the 0.4.x
+crates keep their current versions, the frozen trio stays at `0.3.47`, and the
+two extension crates stay at `0.1.0`.
+
+Release gate: `./scripts/ci-gates.sh all` → **77 gates, 3623 tests, 0 failures**.
+
+### A tool's own failure now returns `isError` instead of a JSON-RPC error
+
+The spec (schema.ts:1828) says errors that originate from the tool SHOULD be
+reported inside the result object with `isError` set to true, not as an MCP
+protocol-level error response. Otherwise, a model driving the tool could not
+see that an error occurred and self-correct. Both `#[mcp_tool]` and
+`#[derive(McpTool)]` were mapping a tool's `Err` onto a JSON-RPC error
+(`-32010`) instead.
+
+The fix is narrow: ONLY `ToolExecutionError` becomes `isError: true`. `impl
+From<&str>/From<String>` lands there, so the common `Err("...".into())` is
+covered. Everything else keeps flowing as a JSON-RPC error, and that set is
+load-bearing rather than cosmetic — a tool signals `input_required` by
+returning `Err(McpError::InputRequired {..})` (MRTR), and
+`MissingRequiredClientCapability` carries the spec's `-32021` gate. Both are
+control-flow signals, not failures. A first version converted every `Err` and
+broke MRTR completely; seven wire tests caught it. Both traps are written into
+the macro comments so the rule does not widen back.
+
+New test `macro_authored_tool_failure_is_also_is_error_not_a_json_rpc_error`
+pins the macro path specifically. The pre-existing test only ever covered a
+hand-written `McpTool`, so it proved the SERVER could carry `isError` while
+saying nothing about whether the two recommended authoring paths could reach
+it.
+
+Included `examples/conformance-fixture-server` with 11 fixtures required by
+upstream's suite. Measured against it, 14 of 15 runnable scenarios pass (43
+checks). The one failure is a separate defect tracked below — `resources/read`
+rejects a resource's own declared mimeType.
+
+### A resource's own declared MIME type is now accepted
+
+The resource-policy builder auto-derived allowed MIME types from file
+extensions found in registered URIs. A resource declared as `test://static-binary`
++ `image/png` was answered `-32602`, because no other resource's URI happened
+to end in `.png`. Whether a resource could be read depended on unrelated URIs'
+cosmetics, and the derived list was strictly narrower than
+`ResourceAccessControl`'s own default, which does include `image/png`. Non-file
+schemes (test://, config://, ui://) are ordinary in MCP, so this was reachable
+by normal configuration. There is no security value in validating a MIME type
+the server itself authored — whoever controls the declaration controls the
+content. The derivation and the now-dead `extensions_to_mime_types` /
+`extract_extension` helpers were removed. URI allow/block patterns, traversal
+blocking and size limits are untouched.
+
+### `serverInfo.description` and `websiteUrl` are now reachable
+
+The framework's `build()` method wired only `title` and `icons` to the
+`ServerInfo` builder, leaving `description` and `websiteUrl` modelled,
+serializable, and impossible to populate — with no error to notice. Two new
+builder setters, `.description(…)` and `.website_url(…)`, expose them. Reported by a downstream consumer; a peer (FastMCP) already exposed
+`website_url` while this framework silently dropped it.
+
+### Two tests were corrected
+
+`mcp_error_code_coverage::test_tool_execution_error` asserted the pre-fix
+behaviour — that a tool's own failure produces a JSON-RPC error. It passed for
+as long as the framework was wrong. A test that locks in a violation is worse
+than no test: it converts a defect into a defended invariant. Corrected to
+assert `isError: true`.
+
+`session_context_macro_tests` exposed a wider effect of the tool-failure fix.
+The macro previously wrapped every error variant in `McpError::tool_execution`,
+so a `SessionError` arrived relabelled. Removing the blanket conversion means
+it now reaches the caller as itself, which is the spec's split: `isError` is
+for errors that originate from the tool, while any other exceptional
+conditions stay on the JSON-RPC path. Corrected to expect `SessionError` as
+itself.
+
+Every corrected test was verified to FAIL without its fix, by reverting the fix
+and re-running.
+
+### FastMCP interop re-pinned and re-measured (4.0.0b2 → 4.0.0b3)
+
+The pin was two releases stale in `scripts/interop-fastmcp.sh`, and the same
+version was independently pinned in `scripts/interop-turul-client.sh` — one
+fact, two homes. Both now b3 and both re-run: peer → turul 9/9 over the
+stateless wire, turul → peer 9 driven / 8 answered (peer answers `-32601` for
+`completion/complete`; R→R control passes, so the gap is theirs).
+
 ## [0.4.1] - 2026-08-15
 
 Documentation only — no code, wire behaviour or API change. `turul-mcp-server`
@@ -2093,7 +2183,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.47...v0.4.0
 [0.3.47]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.46...v0.3.47
