@@ -23,6 +23,10 @@ use serde_json::Value;
 use sha2::Sha256;
 use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_protocol::McpError;
+use turul_mcp_protocol::completion::{
+    CompleteArgument, CompleteRequest, CompleteResult, CompletionReference, CompletionResult,
+    PromptReference,
+};
 use turul_mcp_protocol::content::ResourceContents;
 use turul_mcp_protocol::elicitation::{
     ElicitRequest, ElicitationSchema, PrimitiveSchemaDefinition,
@@ -40,7 +44,9 @@ use turul_mcp_protocol::roots::ListRootsRequest;
 use turul_mcp_protocol::sampling::{CreateMessageRequest, SamplingMessage};
 use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations, ToolResult, ToolSchema};
 use turul_mcp_server::prelude::*;
-use turul_mcp_server::{McpPrompt, McpResource, McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_server::{
+    McpCompletion, McpPrompt, McpResource, McpResult, McpServer, McpTool, SessionContext,
+};
 
 /// `tools-call-simple-text`: no arguments, fixed text content.
 #[mcp_tool(
@@ -1055,6 +1061,231 @@ impl McpPrompt for InputRequiredPrompt {
     }
 }
 
+/// `tools-call-with-progress`: emits 0/100, 50/100, 100/100 with ~50ms gaps
+/// when — and only when — the request declared `_meta.progressToken`.
+///
+/// Each notification echoes the token the CLIENT supplied;
+/// `notify_request_progress` reads it from the request rather than taking one,
+/// which is the whole point (a token a client cannot correlate is noise).
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_tool_with_progress",
+    description = "Reports progress while running",
+    output = String
+)]
+struct ToolWithProgressTool {}
+
+impl ToolWithProgressTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && session.progress_token().is_some()
+        {
+            for step in [0.0, 50.0, 100.0] {
+                session.notify_request_progress(step, Some(100.0)).await;
+                if step < 100.0 {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+            }
+        }
+        Ok("Progress complete".to_string())
+    }
+}
+
+/// `server-stateless` / `sep-2575-server-no-log-without-loglevel`: the harness
+/// calls this WITHOUT `_meta.logLevel` and fails the run if any
+/// `notifications/message` appears.
+///
+/// So the assertion is about restraint, not output. The tool logs
+/// unconditionally; the framework suppresses delivery unless the request opted
+/// in (`mcp:logLevel`), and that suppression is what is under test. A fixture
+/// that simply never logged would pass without exercising anything.
+///
+/// Logging is deprecated under SEP-2577 on 2026-07-28 — still specified, still
+/// required to behave correctly, which is why the scenario exists.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_logging_tool",
+    description = "Emits a log message, subject to per-request opt-in",
+    output = String
+)]
+struct LoggingTool {}
+
+impl LoggingTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session {
+            // Logging is deprecated under SEP-2577, but 2026-07-28 still
+            // specifies how it must behave; the scenario tests that behaviour.
+            #[allow(deprecated)]
+            session
+                .notify_log(
+                    turul_mcp_protocol::logging::LoggingLevel::Info,
+                    serde_json::json!("test_logging_tool executed"),
+                    Some("conformance-fixture".to_string()),
+                    None,
+                )
+                .await;
+        }
+        Ok("Logged".to_string())
+    }
+}
+
+/// `server-stateless` / `sep-2575-http-server-no-independent-requests-on-stream`:
+/// the response stream for a `tools/call` may carry only notifications and
+/// incomplete results — never an independent JSON-RPC *request*.
+///
+/// That is the structural difference between 2026-07-28 and 2025-11-25:
+/// pre-MRTR, a server asked for elicitation by sending `elicitation/create` as
+/// its own request on the stream. SEP-2322 replaced that with an
+/// `InputRequiredResult` the client answers by retrying. This fixture streams
+/// (progress frames) and then returns input-required, so the harness has real
+/// frames to inspect; a server that regressed to the old pattern would emit a
+/// bare `elicitation/create` here and fail.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_streaming_elicitation",
+    description = "Streams progress, then requires input",
+    output = String
+)]
+struct StreamingElicitationTool {}
+
+impl StreamingElicitationTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        if session.input_responses().is_some() {
+            return Ok("Streaming elicitation complete".to_string());
+        }
+        for step in [25.0, 75.0] {
+            session.notify_request_progress(step, Some(100.0)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(30)).await;
+        }
+        let schema = ElicitationSchema::new()
+            .with_property("answer".to_string(), PrimitiveSchemaDefinition::string());
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "user_name".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("What is your name?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("streaming-state-1".to_string()),
+        })
+    }
+}
+
+/// `completion-complete`: completes `arg1` of `test_prompt_with_arguments`.
+///
+/// `completion/complete` is NOT a default handler — the framework registers it
+/// only when a provider exists, because the spec says a server SHOULD answer
+/// `-32601` when completion is unsupported. Registering this is what turns
+/// that `-32601` into an answer.
+struct PromptArgumentCompleter;
+
+impl HasCompletionMetadata for PromptArgumentCompleter {
+    fn method(&self) -> &str {
+        "completion/complete"
+    }
+    fn reference(&self) -> &CompletionReference {
+        static REF: std::sync::OnceLock<CompletionReference> = std::sync::OnceLock::new();
+        REF.get_or_init(|| {
+            CompletionReference::Prompt(PromptReference::new("test_prompt_with_arguments"))
+        })
+    }
+}
+impl HasCompletionContext for PromptArgumentCompleter {
+    fn argument(&self) -> &CompleteArgument {
+        static ARG: std::sync::OnceLock<CompleteArgument> = std::sync::OnceLock::new();
+        ARG.get_or_init(|| CompleteArgument::new("arg1", ""))
+    }
+}
+impl HasCompletionHandling for PromptArgumentCompleter {}
+
+#[async_trait]
+impl McpCompletion for PromptArgumentCompleter {
+    async fn complete(&self, request: CompleteRequest) -> McpResult<CompleteResult> {
+        let prefix = request.params.argument.value.to_lowercase();
+        let values: Vec<String> = ["test-alpha", "test-beta", "production"]
+            .iter()
+            .filter(|v| v.starts_with(&prefix))
+            .map(|v| v.to_string())
+            .collect();
+        Ok(CompleteResult::new(CompletionResult::new(values)))
+    }
+}
+
+/// `resources-templates-read`: `test://template/{id}/data`, where the read must
+/// reflect the substituted `{id}` in the content.
+///
+/// The builder routes a URI containing `{...}` to the template table
+/// automatically, so declaring the template URI here is all that is needed —
+/// the concrete URI arrives in `read`'s params.
+struct TemplateDataResource;
+
+impl HasResourceMetadata for TemplateDataResource {
+    fn name(&self) -> &str {
+        "Template Data Resource"
+    }
+}
+impl HasResourceUri for TemplateDataResource {
+    fn uri(&self) -> &str {
+        "test://template/{id}/data"
+    }
+}
+impl HasResourceDescription for TemplateDataResource {
+    fn description(&self) -> Option<&str> {
+        Some("A templated resource that substitutes {id}")
+    }
+}
+impl HasResourceMimeType for TemplateDataResource {
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
+}
+impl HasResourceSize for TemplateDataResource {}
+impl HasResourceAnnotations for TemplateDataResource {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+        None
+    }
+}
+impl HasResourceMeta for TemplateDataResource {}
+impl HasIcons for TemplateDataResource {}
+
+#[async_trait]
+impl McpResource for TemplateDataResource {
+    async fn read(
+        &self,
+        params: Option<serde_json::Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
+        // The concrete URI the client asked for, and the extracted {id}.
+        let uri = params
+            .as_ref()
+            .and_then(|p| p.get("uri"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("test://template/unknown/data")
+            .to_string();
+        let id = params
+            .as_ref()
+            .and_then(|p| p.get("id"))
+            .and_then(|v| v.as_str())
+            .map(String::from)
+            .unwrap_or_else(|| {
+                // Fall back to parsing the concrete URI: test://template/<id>/data
+                uri.strip_prefix("test://template/")
+                    .and_then(|rest| rest.strip_suffix("/data"))
+                    .unwrap_or("unknown")
+                    .to_string()
+            });
+        let body = serde_json::json!({
+            "id": id,
+            "templateTest": true,
+            "data": format!("Data for ID: {id}"),
+        });
+        Ok(vec![
+            ResourceContent::text(&uri, body.to_string()).with_mime_type("application/json"),
+        ])
+    }
+}
+
 /// `resources-read-text`: resource at test://static-text that returns plain text content.
 struct StaticTextResource;
 
@@ -1193,6 +1424,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(InputRequiredCapabilitiesTool::default())
         .tool(InputRequiredMultiRoundTool::default())
         .tool(InputRequiredTamperedStateTool::default())
+        .tool(ToolWithProgressTool::default())
+        .tool(LoggingTool::default())
+        .tool(StreamingElicitationTool::default())
+        .completion_provider(PromptArgumentCompleter)
+        .resource(TemplateDataResource)
         .prompt(InputRequiredPrompt)
         .prompt(SimplePrompt)
         .prompt(PromptWithArguments)
