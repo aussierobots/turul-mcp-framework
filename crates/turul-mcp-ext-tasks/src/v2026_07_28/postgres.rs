@@ -329,9 +329,16 @@ mod conformance {
     /// because the role cannot be inferred: sqlx falls back to "anonymous"
     /// when `$USER` is absent, which is exactly how these tests silently
     /// skipped the first time they were run.
+    /// No fallback on purpose. The previous default hardcoded one developer's
+    /// unix username, so it connected on exactly one machine and failed
+    /// everywhere else, CI included. The URL is derived once, by
+    /// `scripts/ext-tasks-backends.sh`, which is also what starts the server —
+    /// deriving it a second time here is how the two drift apart.
     fn base_url() -> String {
-        std::env::var("TURUL_TEST_PG_URL")
-            .unwrap_or_else(|_| "postgres://nick@%2Fvar%2Frun%2Fpostgresql".to_string())
+        std::env::var("TURUL_TEST_PG_URL").expect(
+            "TURUL_TEST_PG_URL is unset — run this suite via scripts/ext-tasks-backends.sh, \
+             which provisions Postgres and exports the URL",
+        )
     }
 
     fn admin_url() -> String {

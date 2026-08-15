@@ -99,6 +99,9 @@ members = [
 
   # Tests
   "tests",
+  # 2026-07-28 only, so it cannot live in `tests` (pinned to the 2025-11-25
+  # opt-in lane throughout, and the two protocol features are exclusive).
+  "tests-ext-tasks",
   "tests/resources",
   "tests/prompts",
   "tests/tools",

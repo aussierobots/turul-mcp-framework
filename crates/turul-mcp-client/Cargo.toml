@@ -82,15 +82,12 @@ wiremock.workspace = true
 # Default features (http, sse -> protocol-2026-07-28); no alias-mutex conflict
 # because this crate links the versioned protocol crates directly, not the alias.
 turul-mcp-server = { path = "../turul-mcp-server", version = "0.4", features = ["ext-tasks"] }
-# Backends, so the client e2e is driven against durable stores rather than
-# only in-memory — a client that works against a HashMap and not against SQL
-# is a client nobody can deploy.
-turul-mcp-ext-tasks = { path = "../turul-mcp-ext-tasks", version = "0.1", features = ["sqlite", "postgres", "dynamodb"] }
-# Dev-only: the e2e provisions a scratch Postgres database and a DynamoDB
-# Local table directly. Not part of the client's shipped dependency set.
-sqlx.workspace = true
-aws-config.workspace = true
-aws-sdk-dynamodb.workspace = true
+# NOTE: the four-backend Tasks e2e deliberately does NOT live here. It links
+# sqlx and aws-sdk-dynamodb, and an MCP *client* library has no business
+# dev-depending on Postgres and DynamoDB drivers — it also coupled
+# `cargo publish -p turul-mcp-client` to `turul-mcp-ext-tasks` having already
+# published its storage features, which is how the 0.4.1 dry-run failed. The
+# suite is in the publish=false crate `tests-ext-tasks/` instead.
 turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4" }
 # The derive macros expand to `turul_mcp_protocol::` / `turul_mcp_builders::`
 # paths, so the e2e test target needs both (2026 default, matching the dev

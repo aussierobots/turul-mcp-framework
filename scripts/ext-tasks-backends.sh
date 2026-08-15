@@ -101,8 +101,11 @@ run() {
 
 run "parity contract × 4 backends" \
     cargo test -p turul-mcp-ext-tasks --features sqlite,postgres,dynamodb
+# Lives in the publish=false crate `tests-ext-tasks/`, not in turul-mcp-client:
+# it links sqlx and aws-sdk-dynamodb, which have no place in a client library's
+# dependency graph.
 run "client e2e × 4 backends" \
-    cargo test -p turul-mcp-client --features ext-tasks --test ext_tasks_e2e_2026
+    cargo test -p turul-ext-tasks-backend-e2e
 run "server wire suite (ext-tasks)" \
     cargo test -p turul-mcp-server --features ext-tasks --test ext_tasks_2026
 

@@ -135,8 +135,35 @@ jobs:
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-tasks --test ext_tasks_2026
       - name: Extension crates standalone
         run: cargo test -p turul-mcp-ext-tasks -p turul-mcp-ext-apps
-      - name: Tasks extension client e2e
-        run: cargo test -p turul-mcp-client --features ext-tasks --test ext_tasks_e2e_2026
+      # Postgres and DynamoDB Local, provisioned WITHOUT docker so CI and the
+      # local gate (scripts/ext-tasks-backends.sh) set the services up the same
+      # way. ubuntu-latest ships PostgreSQL but does not start it, and DynamoDB
+      # Local is a plain jar.
+      #
+      # The suite PANICS rather than skips when a backend is unreachable, so
+      # this step is what makes the four-backend claim true on every push — an
+      # earlier version of it ran with neither service present and failed, which
+      # is the correct behaviour and how this gap was found.
+      - name: Start task-storage backends (Postgres, DynamoDB Local)
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "CREATE ROLE $(id -un) LOGIN SUPERUSER"
+          sudo -u postgres psql -c "CREATE DATABASE $(id -un) OWNER $(id -un)"
+          pg_isready
+          mkdir -p ~/.cache/turul/dynamodb-local
+          curl -sSL --max-time 180 https://s3.us-west-2.amazonaws.com/dynamodb-local/dynamodb_local_latest.tar.gz \
+            | tar xz -C ~/.cache/turul/dynamodb-local
+          cd ~/.cache/turul/dynamodb-local
+          java -Djava.library.path=./DynamoDBLocal_lib -jar DynamoDBLocal.jar -inMemory -port 8123 &
+          for _ in $(seq 1 40); do curl -sS -o /dev/null http://127.0.0.1:8123/ && break; sleep 0.25; done
+          curl -sS -o /dev/null http://127.0.0.1:8123/
+      # The suite has no built-in URL default — see postgres.rs::base_url. It is
+      # derived here and by scripts/ext-tasks-backends.sh, and nowhere else.
+      - name: Tasks extension e2e × 4 storage backends
+        run: |
+          export TURUL_TEST_PG_URL="postgres://$(id -un)@%2Fvar%2Frun%2Fpostgresql"
+          export TURUL_TEST_DDB_URL="http://127.0.0.1:8123"
+          cargo test -p turul-ext-tasks-backend-e2e
 
   opt-in-2025:
     name: Opt-in lane (2025-11-25)
