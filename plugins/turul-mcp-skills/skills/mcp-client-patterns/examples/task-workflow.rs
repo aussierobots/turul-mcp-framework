@@ -1,4 +1,4 @@
-// turul-mcp-client v0.3
+// turul-mcp-client v0.4
 // Task workflow: call_tool_with_task, poll status, handle all TaskStatus variants.
 
 use serde_json::json;

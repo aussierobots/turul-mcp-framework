@@ -1,13 +1,32 @@
 # JwtValidator API Reference
 
-API reference for `turul_mcp_oauth::JwtValidator`. The public API (construction, builder methods, `validate()`) is stable. Internal behaviors like caching strategy, refresh rate limiting, and key type support reflect the current implementation and may evolve.
+API reference for `turul_mcp_oauth::JwtValidator`.
+
+**Since v0.4, the type is owned by the [`turul-jwt-validator`](https://crates.io/crates/turul-jwt-validator) crate and re-exported** (ADR-032). Two consequences for callers:
+
+- `validate()` returns `Result<TokenClaims, JwtValidationError>` — **not** `OAuthError`, as it did in 0.3.
+- To name algorithms for `.with_algorithms()`, import `turul_mcp_oauth::Algorithm` rather than adding your own `jsonwebtoken` dependency.
+
+Internal behaviors like caching strategy, refresh rate limiting, and key type support reflect the current implementation and may evolve.
 
 ## Construction
+
+**Prefer `hardened_validator`.** `JwtValidator::new` leaves the key max-age, stale window and fetch retry disabled, so a cached signing key is served for the process lifetime and a revoked key stays usable.
+
+```rust
+use turul_mcp_oauth::hardened_validator;
+
+// Applies max_age 15m / stale_window 5m / retry 3x100ms, and rejects a
+// non-loopback plaintext jwks_uri.
+let validator = hardened_validator(jwks_uri, audience)?;
+```
+
+The raw constructor remains available when you want to set every knob yourself:
 
 ```rust
 use turul_mcp_oauth::JwtValidator;
 
-let validator = JwtValidator::new(jwks_uri, audience);
+let validator = JwtValidator::new(jwks_uri, audience);  // no hardening applied
 ```
 
 **Required parameters:**
@@ -21,6 +40,9 @@ let validator = JwtValidator::new(jwks_uri, audience);
 | `.with_issuer()` | `fn with_issuer(self, issuer: &str) -> Self` | None | When set, `iss` claim is validated against this value. |
 | `.with_algorithms()` | `fn with_algorithms(self, algs: Vec<Algorithm>) -> Self` | `[RS256, ES256]` | Allowed JWT signing algorithms. |
 | `.with_refresh_interval()` | `fn with_refresh_interval(self, interval: Duration) -> Self` | 60 seconds | Minimum time between JWKS endpoint refreshes. |
+| `.with_max_age()` | `fn with_max_age(self, max_age: Duration) -> Self` | **unset** (15 min via `hardened_validator`) | On a `kid` **hit**, a key older than this is re-fetched anyway — bounds how long a revoked key stays usable. |
+| `.with_stale_window()` | `fn with_stale_window(self, window: Duration) -> Self` | **unset** (5 min via `hardened_validator`) | Serve cached keys this long past a failed refresh, so a brief JWKS outage does not reject every request. |
+| `.with_retry()` | `fn with_retry(self, attempts: usize, base_delay: Duration) -> Self` | **unset** (3 x 100 ms via `hardened_validator`) | Bounded exponential backoff on JWKS fetch. |
 
 ## Validation
 

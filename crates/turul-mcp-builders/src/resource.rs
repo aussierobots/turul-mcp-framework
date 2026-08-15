@@ -137,10 +137,29 @@ impl ResourceBuilder {
         self
     }
 
-    /// Add annotation audience
-    pub fn annotation_audience(mut self, audience: Vec<String>) -> Self {
+    /// Add annotation audience (`Role` per the schema's closed
+    /// `audience?: Role[]` union).
+    pub fn annotation_audience(mut self, audience: Vec<turul_mcp_protocol::prompts::Role>) -> Self {
         let mut annotations = self.annotations.unwrap_or_default();
-        annotations = annotations.with_audience(audience);
+        // 2026 binds audience as Role[]; the frozen 2025 crate kept Vec<String>.
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            annotations = annotations.with_audience(audience);
+        }
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            annotations = annotations.with_audience(
+                audience
+                    .iter()
+                    .map(|r| {
+                        serde_json::to_value(r)
+                            .ok()
+                            .and_then(|v| v.as_str().map(String::from))
+                            .unwrap_or_default()
+                    })
+                    .collect(),
+            );
+        }
         self.annotations = Some(annotations);
         self
     }
@@ -366,12 +385,18 @@ mod tests {
     fn test_resource_builder_annotations() {
         let resource = ResourceBuilder::new("file:///important.txt")
             .description("Important resource")
-            .annotation_audience(vec!["user".to_string()])
+            .annotation_audience(vec![turul_mcp_protocol::prompts::Role::User])
             .annotation_priority(0.8)
             .build()
             .expect("Failed to build resource");
 
         let annotations = resource.annotations().expect("Expected annotations");
+        #[cfg(feature = "protocol-2026-07-28")]
+        assert_eq!(
+            annotations.audience,
+            Some(vec![turul_mcp_protocol::prompts::Role::User])
+        );
+        #[cfg(feature = "protocol-2025-11-25")]
         assert_eq!(annotations.audience, Some(vec!["user".to_string()]));
         assert_eq!(annotations.priority, Some(0.8));
     }

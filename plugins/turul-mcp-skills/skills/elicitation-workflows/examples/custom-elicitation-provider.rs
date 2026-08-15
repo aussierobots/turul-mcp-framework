@@ -1,5 +1,7 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Implementing a custom ElicitationProvider for real UI integration
+// Spec lane: 2025-11-25 synchronous elicitation only (--no-default-features --features protocol-2025-11-25).
+// For 2026-07-28 MRTR, see ../SKILL.md.
 
 use async_trait::async_trait;
 use std::collections::HashMap;

@@ -141,7 +141,7 @@ impl PostgresServerStateStorage {
             "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_server_entity_state_type_active ON server_entity_state (entity_type) WHERE active = true",
         ];
 
-        for index_sql in indexes.iter() {
+        for index_sql in indexes {
             if let Err(e) = sqlx::query(index_sql).execute(&self.pool).await {
                 debug!("Index creation note: {}", e);
             }

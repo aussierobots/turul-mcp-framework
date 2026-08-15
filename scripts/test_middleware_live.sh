@@ -1,7 +1,17 @@
 #!/bin/bash
 # Live test for middleware examples using different ports
+#
+# All three examples build against the default (2026-07-28 stateless)
+# feature set: no initialize handshake, no Mcp-Session-Id. See
+# scripts/lib/mcp2026.sh.
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
+
+source "$SCRIPT_DIR/lib/mcp2026.sh"
 
 echo "🧪 Testing Middleware Examples (Live)"
 echo "======================================"
@@ -10,16 +20,19 @@ echo ""
 # Test 1: Logging Server
 echo "📝 Test 1: middleware-logging-server (port 8670)"
 echo "------------------------------------------------"
-RUST_LOG=error cargo run --package middleware-logging-server -- --port 8670 &
+cargo build -p middleware-logging-server > /dev/null 2>&1
+RUST_LOG=error ./target/debug/middleware-logging-server --port 8670 > /tmp/middleware_logging.log 2>&1 &
 SERVER_PID=$!
-sleep 4
 
-RESPONSE=$(curl -s -X POST http://localhost:8670/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}')
+if ! mcp2026_wait_for_server 8670; then
+    echo "❌ Logging server did not answer server/discover"
+    tail -20 /tmp/middleware_logging.log
+    kill $SERVER_PID 2>/dev/null
+    exit 1
+fi
 
-SERVER_NAME=$(echo "$RESPONSE" | jq -r '.result.serverInfo.name // "ERROR"')
+RESPONSE=$(mcp2026_request "http://127.0.0.1:8670/mcp" "server/discover" "" '{}')
+SERVER_NAME=$(echo "$RESPONSE" | jq -r '.result._meta."io.modelcontextprotocol/serverInfo".name // "ERROR"')
 if [ "$SERVER_NAME" = "middleware-logging-server" ]; then
     echo "✅ Logging server initialized successfully"
 else
@@ -36,42 +49,36 @@ echo ""
 # Test 2: Rate Limit Server
 echo "🚦 Test 2: middleware-rate-limit-server (port 8671)"
 echo "---------------------------------------------------"
-RUST_LOG=error cargo run --package middleware-rate-limit-server -- --port 8671 &
+cargo build -p middleware-rate-limit-server > /dev/null 2>&1
+RUST_LOG=error ./target/debug/middleware-rate-limit-server --port 8671 > /tmp/middleware_ratelimit.log 2>&1 &
 SERVER_PID=$!
-sleep 4
 
-INIT_RESPONSE=$(curl -si -X POST http://localhost:8671/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}')
+# Plain TCP-open readiness check, not server/discover: the rate limiter runs
+# pre-session on every dispatch, so probing with an MCP request would
+# consume the quota this test counts.
+ready=0
+for _ in $(seq 1 50); do
+    if (exec 3<>"/dev/tcp/127.0.0.1/8671") 2>/dev/null; then
+        exec 3<&- 3>&-
+        ready=1
+        break
+    fi
+    sleep 0.3
+done
+if [ "$ready" -ne 1 ]; then
+    echo "❌ Rate limit server did not open its port"
+    tail -20 /tmp/middleware_ratelimit.log
+    kill $SERVER_PID 2>/dev/null
+    exit 1
+fi
 
-SESSION_ID=$(echo "$INIT_RESPONSE" | grep -i "mcp-session-id:" | awk '{print $2}' | tr -d '\r')
-echo "Session ID: $SESSION_ID"
-
-# Send initialized notification
-curl -s -X POST http://localhost:8671/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -H "Mcp-Session-Id: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' > /dev/null
-
-# Send 5 requests
 echo "Sending 5 requests..."
-for i in {1..5}; do
-    curl -s -X POST http://localhost:8671/mcp \
-      -H "Content-Type: application/json" \
-      -H "Accept: application/json" \
-      -H "Mcp-Session-Id: $SESSION_ID" \
-      -d "{\"jsonrpc\":\"2.0\",\"id\":$((i+1)),\"method\":\"tools/list\",\"params\":{}}" > /dev/null
+for i in 1 2 3 4 5; do
+    mcp2026_request "http://127.0.0.1:8671/mcp" "tools/list" "" '{}' > /dev/null
 done
 
 # 6th request should hit rate limit
-RATE_LIMIT_RESPONSE=$(curl -s -X POST http://localhost:8671/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -H "Mcp-Session-Id: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":7,"method":"tools/list","params":{}}')
-
+RATE_LIMIT_RESPONSE=$(mcp2026_request "http://127.0.0.1:8671/mcp" "tools/list" "" '{}')
 ERROR_CODE=$(echo "$RATE_LIMIT_RESPONSE" | jq -r '.error.code // empty')
 if [ "$ERROR_CODE" = "-32003" ]; then
     echo "✅ Rate limit enforced correctly (error code: $ERROR_CODE)"
@@ -88,36 +95,40 @@ echo ""
 # Test 3: Auth Server
 echo "🔐 Test 3: middleware-auth-server (port 8672)"
 echo "---------------------------------------------"
-RUST_LOG=error cargo run --package middleware-auth-server -- --port 8672 &
+cargo build -p middleware-auth-server > /dev/null 2>&1
+RUST_LOG=error ./target/debug/middleware-auth-server --port 8672 > /tmp/middleware_auth.log 2>&1 &
 SERVER_PID=$!
-sleep 4
+
+if ! mcp2026_wait_for_server 8672; then
+    echo "❌ Auth server did not answer server/discover"
+    tail -20 /tmp/middleware_auth.log
+    kill $SERVER_PID 2>/dev/null
+    exit 1
+fi
+
+# Test without API key (should be rejected before it ever reaches the tool)
+UNAUTH_RESPONSE=$(mcp2026_request "http://127.0.0.1:8672/mcp" "tools/call" "whoami" '{"name":"whoami","arguments":{}}')
+UNAUTH_ERROR=$(echo "$UNAUTH_RESPONSE" | jq -r '.error.code // empty')
+if [ "$UNAUTH_ERROR" = "-32001" ]; then
+    echo "✅ Unauthenticated request blocked (error code: $UNAUTH_ERROR)"
+else
+    echo "❌ Expected auth error -32001, got: $UNAUTH_ERROR"
+    echo "Response: $UNAUTH_RESPONSE"
+    kill $SERVER_PID 2>/dev/null
+    exit 1
+fi
 
 # Test with valid API key
-INIT_RESPONSE=$(curl -si -X POST http://localhost:8672/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -H "X-API-Key: secret-key-123" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}')
+echo "Testing with valid API key..."
+body=$(jq -n --argjson meta "$(mcp2026_meta)" \
+    '{jsonrpc:"2.0", id:1, method:"tools/call", params:{name:"whoami", arguments:{}, _meta:$meta}}')
+AUTH_RESPONSE=$(curl -s -X POST "http://127.0.0.1:8672/mcp" \
+    -H "Content-Type: application/json" -H "Accept: application/json" \
+    -H "MCP-Protocol-Version: 2026-07-28" -H "Mcp-Method: tools/call" -H "Mcp-Name: whoami" \
+    -H "X-API-Key: secret-key-123" \
+    -d "$body")
 
-SESSION_ID=$(echo "$INIT_RESPONSE" | grep -i "mcp-session-id:" | awk '{print $2}' | tr -d '\r')
-
-# Send initialized with API key
-curl -s -X POST http://localhost:8672/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -H "Mcp-Session-Id: $SESSION_ID" \
-  -H "X-API-Key: secret-key-123" \
-  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' > /dev/null
-
-# Call whoami tool
-AUTH_RESPONSE=$(curl -s -X POST http://localhost:8672/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -H "Mcp-Session-Id: $SESSION_ID" \
-  -H "X-API-Key: secret-key-123" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"whoami","arguments":{}}}')
-
-USER_ID=$(echo "$AUTH_RESPONSE" | jq -r '.result.content[0].text // empty' | jq -r '.user_id // empty')
+USER_ID=$(echo "$AUTH_RESPONSE" | jq -r '.result.content[0].text // empty' | jq -r '.output.user_id // .user_id // empty')
 if [ "$USER_ID" = "user-alice" ]; then
     echo "✅ Authentication successful (user: $USER_ID)"
 else

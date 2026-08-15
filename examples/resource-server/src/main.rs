@@ -16,11 +16,10 @@ use turul_mcp_server::{McpResource, McpResult, McpServer, SessionContext};
 #[resource(
     name = "config",
     uri = "file:///tmp/config.json",
-    description = "Main application configuration file"
+    description = "Main application configuration file",
+    mime_type = "application/json"
 )]
 struct ConfigResource {
-    #[content]
-    #[content_type = "application/json"]
     pub config_data: String,
 }
 
@@ -46,10 +45,9 @@ impl McpResource for ConfigResource {
         _params: Option<Value>,
         _session: Option<&SessionContext>,
     ) -> McpResult<Vec<ResourceContent>> {
-        Ok(vec![ResourceContent::blob(
+        Ok(vec![ResourceContent::json(
             self.uri().to_string(),
             self.config_data.clone(),
-            "application/json".to_string(),
         )])
     }
 }
@@ -59,7 +57,8 @@ impl McpResource for ConfigResource {
 #[resource(
     name = "system_status",
     uri = "system://status",
-    description = "Current system status and health information"
+    description = "Current system status and health information",
+    mime_type = "application/json"
 )]
 struct SystemStatusResource;
 
@@ -80,10 +79,9 @@ impl McpResource for SystemStatusResource {
             "last_restart": "2023-12-01T10:30:00Z"
         });
 
-        Ok(vec![ResourceContent::blob(
+        Ok(vec![ResourceContent::json(
             self.uri().to_string(),
             serde_json::to_string_pretty(&status).unwrap(),
-            "application/json".to_string(),
         )])
     }
 }
@@ -93,18 +91,13 @@ impl McpResource for SystemStatusResource {
 #[resource(
     name = "user_profile",
     uri = "data://user-profile",
-    description = "User profile data with multiple content sections"
+    description = "User profile data with multiple content sections",
+    mime_type = "application/json"
 )]
 struct UserProfileResource {
-    #[content]
-    #[content_type = "application/json"]
     pub profile_data: String,
-
-    #[content]
-    #[content_type = "text/plain"]
     pub bio: String,
-
-    pub internal_id: u64, // This won't be included as content
+    pub internal_id: u64,
 }
 
 impl UserProfileResource {
@@ -135,11 +128,7 @@ impl McpResource for UserProfileResource {
         _session: Option<&SessionContext>,
     ) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![
-            ResourceContent::blob(
-                format!("{}/profile", self.uri()),
-                self.profile_data.clone(),
-                "application/json".to_string(),
-            ),
+            ResourceContent::json(format!("{}/profile", self.uri()), self.profile_data.clone()),
             ResourceContent::text(format!("{}/bio", self.uri()), &self.bio),
         ])
     }
@@ -150,7 +139,8 @@ impl McpResource for UserProfileResource {
 #[resource(
     name = "app_log",
     uri = "file:///tmp/app.log",
-    description = "Current application log entries"
+    description = "Current application log entries",
+    mime_type = "text/plain"
 )]
 struct LogFileResource(String);
 
@@ -197,7 +187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("resource-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Resource Server Example")
         .instructions("This server demonstrates the #[derive(McpResource, Clone)] macro with various resource types.")
         .resource(config_resource)
@@ -210,7 +200,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Resource server running at: http://127.0.0.1:8007/mcp");
     println!("\nResource examples implemented:");
-    println!("  1. ConfigResource - JSON configuration with #[content] field");
+    println!("  1. ConfigResource - JSON configuration from a struct field");
     println!("  2. SystemStatusResource - Unit struct with default implementation");
     println!("  3. UserProfileResource - Multiple content fields with different types");
     println!("  4. LogFileResource - Tuple struct with single content field");

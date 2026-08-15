@@ -1,31 +1,40 @@
 [package]
 name = "turul-mcp-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "High-level framework for building Model Context Protocol (MCP) servers"
+readme = "README.md"
 
 [features]
-default = ["http", "sse"]
+default = ["http", "sse", "protocol-2026-07-28"]
+protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25", "dep:turul-mcp-task-storage", "turul-mcp-task-storage/protocol-2025-11-25", "turul-http-mcp-server?/protocol-2025-11-25", "turul-mcp-session-storage/in-memory", "turul-mcp-task-storage/in-memory"]
+protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-http-mcp-server?/protocol-2026-07-28", "turul-mcp-session-storage/in-memory"]
 http = ["turul-http-mcp-server"]
 sse = ["turul-http-mcp-server/sse"]
-sqlite = ["turul-mcp-session-storage/sqlite", "turul-mcp-task-storage/sqlite", "turul-mcp-server-state-storage?/sqlite"]
-postgres = ["turul-mcp-session-storage/postgres", "turul-mcp-task-storage/postgres", "turul-mcp-server-state-storage?/postgres"]
-dynamodb = ["turul-mcp-session-storage/dynamodb", "turul-mcp-task-storage/dynamodb", "turul-mcp-server-state-storage?/dynamodb"]
+sqlite = ["turul-mcp-session-storage/sqlite", "turul-mcp-task-storage?/sqlite", "turul-mcp-server-state-storage?/sqlite"]
+postgres = ["turul-mcp-session-storage/postgres", "turul-mcp-task-storage?/postgres", "turul-mcp-server-state-storage?/postgres"]
+dynamodb = ["turul-mcp-session-storage/dynamodb", "turul-mcp-task-storage?/dynamodb", "turul-mcp-server-state-storage?/dynamodb"]
 dynamic-tools = ["turul-mcp-server-state-storage"]
+# Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) on the 2026 lane.
+# Off by default: SEP-2133 requires extensions disabled unless opted into.
+ext-tasks = ["protocol-2026-07-28", "dep:turul-mcp-ext-tasks"]
 test-utils = []
 
 [dependencies]
+turul-mcp-ext-tasks = { workspace = true, optional = true }
 # Framework dependencies
-turul-mcp-json-rpc-server.workspace = true
-turul-mcp-protocol.workspace = true
-turul-mcp-session-storage.workspace = true
-turul-mcp-builders.workspace = true
-turul-mcp-task-storage.workspace = true
-turul-http-mcp-server = {workspace = true, optional = true}
+turul-rpc = { workspace = true, features = ["async"] }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4", default-features = false }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
+turul-mcp-schema-validation = { workspace = true }
+turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4", default-features = false }
+turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4", default-features = false, optional = true }
+turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4", default-features = false, optional = true }
 turul-mcp-server-state-storage = {workspace = true, optional = true}
 
 # Runtime utilities for task cancellation
@@ -35,6 +44,7 @@ tokio-util = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
+base64.workspace = true
 thiserror.workspace = true
 futures.workspace = true
 tracing.workspace = true
@@ -46,5 +56,11 @@ once_cell.workspace = true
 urlencoding.workspace = true
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
-turul-mcp-builders.workspace = true
+tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
+# Protocol feature comes from the server's own normal-dep forwarding; the dev-dep
+# must not also pull a default (protocol-2025-11-25), or the alias sees both specs.
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
+turul-mcp-derive = { path = "../turul-mcp-derive" }
+reqwest = { workspace = true, features = ["stream"] }
+bytes.workspace = true
+serde_json.workspace = true

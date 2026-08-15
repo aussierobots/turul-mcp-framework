@@ -1,9 +1,12 @@
 [package]
 name = "simple-sqlite-session"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
+# Three binaries (server + setup + teardown); name the server so
+# `cargo run -p simple-sqlite-session` is unambiguous.
+default-run = "simple-sqlite-session"
 
 [[bin]]
 test = false
@@ -36,7 +39,7 @@ chrono.workspace = true
 async-trait.workspace = true
 
 # Use sqlx instead of rusqlite to avoid conflicts
-sqlx = { workspace = true, features = ["sqlite", "runtime-tokio-rustls"] }
+sqlx = { workspace = true, features = ["sqlite", "runtime-tokio"] }
 
 [features]
 default = []

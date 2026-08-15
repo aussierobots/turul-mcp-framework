@@ -415,3 +415,110 @@ When writing about streaming in this framework, always specify:
 This compatibility architecture ensures the turul-mcp-framework works seamlessly with the current MCP client ecosystem while maintaining full specification compliance. The solution prioritizes developer experience and real-world usability over strict specification enforcement, with clear paths forward as the ecosystem matures.
 
 The architecture successfully resolves the MCP Inspector timeout issues while preserving all advanced MCP 2025-06-18 Streamable HTTP capabilities for compliant clients.
+## DRAFT-2026-v1: Stateless variant; GET SSE is 2025-only
+
+**Status: Added 2026-05-31. Relevant when the server runs with default (DRAFT-2026-v1) protocol per ADR-027. The behavior described above for 2025-11-25 still applies under `--features protocol-2025-11-25`.**
+
+### What changes in DRAFT-2026-v1
+
+The 2026-07-28 RC schema removes the stateful session handshake from the core protocol:
+
+- **No `initialize` request.** Discovery is via `server/discover` (a new method, returns server capabilities + extension declarations).
+- **No `notifications/initialized` notification.** Servers are ready immediately.
+- **No `Mcp-Session-Id` header.** Per-request `_meta` carries the protocol version, client info, client capabilities, and optional progress token on every request.
+- **No session lifecycle on the server.** Each POST is independent. Sessions are not a wire concept — they are an opt-in extension or an upper-layer concern.
+
+### POST behavior (request-response and POST streaming)
+
+Unchanged in shape. The Accept-header compatibility matrix and method-level Content-Type negotiation policy (above) still apply. The transport carries JSON-RPC frames either as `application/json` or as `text/event-stream` chunks. The discriminator is the method, not the spec version:
+
+- `tools/call` under `Accept: application/json, text/event-stream` → SSE-framed chunked response (progress notifications + final result).
+- All other methods → `application/json`.
+
+**What is removed in DRAFT-2026-v1 mode:**
+
+- The pre-flight `validate_session_exists()` check on every POST. There is no session to validate.
+- The 404 response for missing/terminated `Mcp-Session-Id`. There is no `Mcp-Session-Id` header.
+- The `validate_session_exists()`-driven fingerprint comparison (per ADR-023). In stateless mode, fingerprint persistence is per-request rather than per-session — see ADR-023 amendment.
+- The `notifications/initialized` 202 response.
+
+**What is added in DRAFT-2026-v1 mode:**
+
+- Required `_meta` carrier on every request payload (`RequestMetaObject` with `io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`).
+- `server/discover` request as the analogue of `initialize`.
+- Per-request capability/version routing: the dispatcher routes by method, optionally tightened by the declared client capabilities in the request's `_meta`.
+
+### GET SSE is 2025-only
+
+**GET SSE (the long-lived `GET /mcp` with `Accept: text/event-stream` for server-initiated notifications) requires a `Mcp-Session-Id` header to attach the connection to a server-known session.** That header does not exist in DRAFT-2026-v1.
+
+In DRAFT-2026-v1 mode, the framework:
+
+- **Does NOT serve `GET /mcp` for SSE.** A GET to `/mcp` returns HTTP 405 Method Not Allowed (or 404 if the route is unmounted) — there is no notion of "attach to my session" without a session identifier.
+- **Does NOT broadcast server-initiated notifications** through the dual-path delivery model described above for 2025-11-25. The fan-out targets (per-session subscribers) are not a 2026 concept.
+- **Still supports POST streaming chunked responses** for tool execution that emits `notifications/progress` mid-stream. That delivery model is per-POST and does not require a session.
+
+### When server-initiated notifications matter under DRAFT-2026-v1
+
+**`subscriptions/listen` is the transport vehicle for out-of-band server→client notifications in the 2026-07-28 core.** It is a released, implemented method — the long-lived POST SSE stream opened by `handle_subscriptions_listen()` in `crates/turul-http-mcp-server/src/streamable_http.rs` — and it is the sole delivery path for `notifications/tools/list_changed` (and the other list-changed notifications) under the stateless core, since GET SSE is 2025-only (above). Server→client notifications not tied to a specific in-flight tool call are delivered over this stream rather than over GET SSE.
+
+### Routing summary (updated)
+
+Updated routing table for the framework's `McpRequestHandler` (see ADR-009 amendment for the per-protocol selection logic):
+
+| Spec mode | POST request-response | POST streaming | GET SSE |
+|---|---|---|---|
+| 2025-11-25 (`protocol-2025-11-25` feature) | Yes | Yes (under combined Accept) | Yes (with `Mcp-Session-Id`) |
+| DRAFT-2026-v1 (default in 0.4.0) | Yes | Yes (under combined Accept) | **No** (no session header) |
+
+### Lambda compatibility under DRAFT-2026-v1
+
+The Lambda streaming limitation documented above (server-initiated notifications fail because spawned tokio tasks are torn down at invocation completion) is **moot under DRAFT-2026-v1 + Lambda**. GET SSE is not served. POST streaming for tool progress still works (the streaming response completes within the invocation lifetime). The asymmetry between Lambda and long-running HTTP servers for SSE delivery disappears in the stateless model.
+
+### References
+
+- ADR-009 §"DRAFT-2026-v1: McpProtocolVersion becomes feature-exclusive" — handler routing under the new default.
+- ADR-023 §"DRAFT-2026-v1: per-request fingerprint persistence" — tool-change semantics without per-session state.
+- ADR-027 §"Status update (2026-05-31)" — 0.4.0 ships DRAFT-2026-v1 as default.
+
+## Revision 2026-07-29 — response framing chosen per request, not per method
+
+The 2026-07-28 Streamable HTTP section states that for a JSON-RPC request the
+server "**MUST** return either `Content-Type: application/json` (a single JSON
+object) or `Content-Type: text/event-stream` (an SSE response stream)" and that
+"the client **MUST** support both". Either answer conforms; the choice is ours.
+
+This framework previously chose by method name: under a combined `Accept`, every
+`tools/call`, `sampling/createMessage` and `elicitation/create` received an SSE
+stream on the assumption any of them *might* emit mid-stream events. The cost was
+paid by every simple call, and SSE is the less exercised branch in client
+implementations.
+
+The choice is now made per request, from the request itself: SSE when the caller
+opted into request-scoped notifications with `_meta.progressToken` or
+`_meta."io.modelcontextprotocol/logLevel"`, and a single JSON object otherwise.
+Those two keys are the only per-request opt-ins for server→client notifications
+on a response stream, and both are gated on the request having asked —
+`ProgressNotificationParams.progressToken` is required and must be the token
+given in the originating request, and a server must not emit
+`notifications/message` for a request that declared no level. A request carrying
+neither cannot legally be sent either notification, so stream framing buys it
+nothing.
+
+Two consequences worth recording. Plain JSON is the only path that can carry the
+`-32020`/`-32021` header and capability errors on HTTP 400 as their schemas
+require, because the chunked SSE path commits `200 OK` before dispatch — routing
+more non-streaming requests through JSON therefore improves status-code fidelity.
+And `subscriptions/listen` is untouched: it is served on its own path, which
+independently requires `Accept: text/event-stream`.
+
+**Scope: 2026-07-28 only.** The 2025-11-25 lane keeps its historical method-name
+heuristic. That lane is a frozen spec snapshot whose clients were built against an
+always-SSE `tools/call`, and the motivation for the new rule — interoperating with
+2026 clients — does not apply there. Changing it would alter observable behaviour
+of a frozen spec for no benefit; its own integration suite asserts the old shape and
+correctly still does.
+
+Verified against a third-party client: FastMCP 4.0.0b1 completes
+`server/discover` → `tools/list` → `tools/call` against a 2026-07-28 build
+(`scripts/interop-fastmcp.sh`).

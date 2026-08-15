@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Level 3: Builder Pattern (ToolBuilder) — runtime flexibility
 //
 // Source: examples/calculator-add-builder-server/src/main.rs

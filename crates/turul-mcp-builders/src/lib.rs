@@ -24,7 +24,11 @@
 //! - Logging message construction with `LoggingBuilder`
 //!
 //! # Example
-//! ```rust
+// The example uses ToolBuilder, MessageBuilder, CompletionBuilder, RootBuilder, and
+// LoggingBuilder, which are gated out of the stateless 2026-07-28 core; run it only
+// under 2025-11-25.
+#![cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#![cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 //! use turul_mcp_builders::{
 //!     ToolBuilder, ResourceBuilder, PromptBuilder, MessageBuilder,
 //!     CompletionBuilder, RootBuilder, ElicitationBuilder,
@@ -132,9 +136,12 @@ pub mod prelude;
 pub mod protocol_impls;
 pub mod traits;
 
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod completion;
 pub mod elicitation;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod logging;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod message;
 pub mod notification;
 pub mod prompt;
@@ -146,6 +153,7 @@ pub mod tool;
 pub mod schemars_helpers;
 pub use schemars_helpers::{
     ToolSchemaExt, convert_value_to_json_schema, convert_value_to_json_schema_with_defs,
+    resolve_local_refs, schemars_param_schema,
 };
 
 // Schema provider with automatic JsonSchema detection
@@ -161,12 +169,17 @@ pub use traits::*;
 
 // Re-export all builders for convenience
 /// Builder for completion provider configuration with sampling parameters
+#[cfg(feature = "protocol-2025-11-25")]
 pub use completion::CompletionBuilder;
+#[cfg(feature = "protocol-2026-07-28")]
+pub use elicitation::validate_elicit_content;
 /// Builders for interactive data collection and result formatting
 pub use elicitation::{ElicitResultBuilder, ElicitationBuilder};
 /// Builders for structured logging messages and level configuration
+#[cfg(feature = "protocol-2025-11-25")]
 pub use logging::{LoggingBuilder, SetLevelBuilder};
 /// Builder for constructing prompt messages with role and content
+#[cfg(feature = "protocol-2025-11-25")]
 pub use message::MessageBuilder;
 /// Builders for various MCP notification types (progress, cancellation, resource updates)
 pub use notification::{
@@ -178,7 +191,9 @@ pub use prompt::PromptBuilder;
 /// Builder for resource definitions with content and metadata
 pub use resource::ResourceBuilder;
 /// Builders for root directory listings and workspace notifications
-pub use root::{ListRootsRequestBuilder, RootBuilder, RootsNotificationBuilder};
+pub use root::RootBuilder;
+#[cfg(feature = "protocol-2025-11-25")]
+pub use root::{ListRootsRequestBuilder, RootsNotificationBuilder};
 /// Builder for executable tool definitions with parameters and handlers
 pub use tool::ToolBuilder;
 
@@ -187,3 +202,47 @@ pub use tool::ToolBuilder;
 pub use serde_json::{Value, json};
 /// Hash map type for parameter collections and metadata
 pub use std::collections::HashMap;
+
+/// Adapts a property map (`name -> structured JsonSchema`) to the value type
+/// `ToolSchema::with_properties` accepts for the active spec: the structured
+/// `JsonSchema` under 2025-11-25, or its JSON projection under 2026-07-28,
+/// whose properties hold arbitrary JSON Schema 2020-12 values.
+#[cfg(feature = "protocol-2025-11-25")]
+pub fn tool_props(
+    p: std::collections::HashMap<String, turul_mcp_protocol::schema::JsonSchema>,
+) -> std::collections::HashMap<String, turul_mcp_protocol::schema::JsonSchema> {
+    p
+}
+
+/// Adapts a property map (`name -> structured JsonSchema`) to the value type
+/// `ToolSchema::with_properties` accepts for the active spec: the structured
+/// `JsonSchema` under 2025-11-25, or its JSON projection under 2026-07-28,
+/// whose properties hold arbitrary JSON Schema 2020-12 values.
+#[cfg(feature = "protocol-2026-07-28")]
+pub fn tool_props(
+    p: std::collections::HashMap<String, turul_mcp_protocol::schema::JsonSchema>,
+) -> std::collections::HashMap<String, serde_json::Value> {
+    p.into_iter()
+        .map(|(k, v)| {
+            (
+                k,
+                serde_json::to_value(v).unwrap_or(serde_json::Value::Null),
+            )
+        })
+        .collect()
+}
+
+/// Reports whether a `ToolSchema` property value denotes an object-typed schema.
+/// Accepts either form a property map holds across specs — a structured
+/// `JsonSchema` (2025-11-25) or an arbitrary JSON Schema value (2026-07-28) —
+/// by inspecting the serialized `"type"` field.
+pub fn tool_prop_is_object<T: serde::Serialize>(prop: &T) -> bool {
+    serde_json::to_value(prop)
+        .ok()
+        .and_then(|v| {
+            v.get("type")
+                .and_then(|t| t.as_str())
+                .map(|s| s == "object")
+        })
+        .unwrap_or(false)
+}

@@ -1,5 +1,7 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Multi-step elicitation workflow using session state to track progress
+// Spec lane: 2025-11-25 synchronous elicitation only (--no-default-features --features protocol-2025-11-25).
+// For 2026-07-28 MRTR, see ../SKILL.md.
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;

@@ -2,6 +2,15 @@
 
 You are the system architect for the Turul MCP Framework. You own protocol type design, storage/runtime architecture, and framework integration across crates.
 
+> **Spec lane.** The default build targets **MCP 2026-07-28** (stateless: no `initialize` /
+> `notifications/initialized` handshake, no `Mcp-Session-Id`, no `ping`, no `logging/setLevel`,
+> no `resources/subscribe`, no GET-SSE endpoint, no `Last-Event-ID` resumability; Tasks moved to
+> the `turul-mcp-ext-tasks` extension with no `tasks/list`; server-initiated `roots/list` /
+> `sampling/createMessage` / `elicitation/create` replaced by MRTR `InputRequiredResult`).
+> **MCP 2025-11-25 remains available as an opt-in build** (`--no-default-features --features
+> protocol-2025-11-25`). Any section below describing the handshake, session header, or
+> `tasks/list` applies to that opt-in lane ONLY — do not treat it as the current contract.
+
 ## Your Scope
 
 You design and review changes across the full crate hierarchy: protocol types, storage layers, server runtime, builders, derive macros, and transport crates.
@@ -11,7 +20,8 @@ You design and review changes across the full crate hierarchy: protocol types, s
 ### Core Crates
 | Crate | Responsibility | Key Rule |
 |---|---|---|
-| `turul-mcp-protocol-2025-11-25` | MCP spec types only | NEVER add framework features |
+| `turul-mcp-protocol-2026-07-28` | MCP spec types only (current spec) | NEVER add framework features |
+| `turul-mcp-protocol-2025-11-25`, `turul-mcp-protocol-2025-06-18` | Historical spec snapshots | **FROZEN at 0.3.47 — do not edit: no code, no version bumps, no doc updates** |
 | `turul-mcp-protocol` | Re-export alias | Always use this, never reference versioned crate directly |
 | `turul-mcp-builders` | Framework traits (`Has*`), runtime builders | Traits go here, not in protocol |
 | `turul-mcp-derive` | Proc macros (McpTool, McpResource, McpPrompt) | Generates trait impls |
@@ -108,7 +118,7 @@ Valid transitions:
 
 ## TS → Rust Conversion Rules
 
-The TypeScript schema at https://modelcontextprotocol.io/specification/2025-11-25 is the **source of truth**. Apply these conversion rules:
+The TypeScript schema at https://modelcontextprotocol.io/specification/2026-07-28 is the **source of truth**. Apply these conversion rules:
 
 | TypeScript | Rust |
 |---|---|
@@ -140,7 +150,7 @@ Every new entity field potentially needs a corresponding `Has*` trait in `turul-
 
 **Always provide `default { None }` impl on new traits** for backward compat. Before adding a supertrait, count the cascade impact — consider keeping it optional instead.
 
-## MCP 2025-11-25 Type Reference
+## MCP 2026-07-28 Type Reference
 
 ### Icons
 - `Icon` struct with `src: String`, `mime_type: Option<String>`, `sizes: Option<Vec<String>>`, `theme: Option<IconTheme>`
@@ -200,7 +210,7 @@ icons.rs       notifications.rs  roots.rs     sampling.rs
 ```
 
 ### Protocol Crate Purity
-**NEVER add framework features to `turul-mcp-protocol-2025-11-25`.** This crate MUST remain a clean mirror of the MCP spec.
+**NEVER add framework features to `turul-mcp-protocol-2026-07-28`.** This crate MUST remain a clean mirror of the MCP spec.
 
 Framework traits belong in `turul-mcp-builders/src/traits/`.
 
@@ -208,7 +218,7 @@ Framework traits belong in `turul-mcp-builders/src/traits/`.
 **`turul-mcp-task-storage` has zero Tokio types in its public API.** The `TaskStorage` trait, `TaskRecord`, `TaskOutcome`, `TaskListPage`, `TaskStorageError` are all runtime-agnostic. Tokio is only an optional dependency for the `InMemoryTaskStorage` backend.
 
 ### JSON Naming: camelCase ONLY
-All JSON fields MUST use camelCase per MCP 2025-11-25.
+All JSON fields MUST use camelCase per MCP 2026-07-28.
 
 ### Error Handling
 - Handlers return `Result<Value, McpError>` ONLY
@@ -227,8 +237,8 @@ use turul_mcp_server::prelude::*;      // Gets everything
 ## Working Style
 
 - Read existing code before modifying — understand the patterns in use
-- Run `cargo check --package turul-mcp-protocol-2025-11-25` after every change
-- Run `cargo test --package turul-mcp-protocol-2025-11-25` for the specific crate
+- Run `cargo check --package turul-mcp-protocol-2026-07-28` after every change
+- Run `cargo test --package turul-mcp-protocol-2026-07-28` for the specific crate
 - Keep changes minimal and focused — don't refactor surrounding code
 - Follow exact patterns of existing types in the same module
 - All new public types need `Debug, Clone, Serialize, Deserialize` derives

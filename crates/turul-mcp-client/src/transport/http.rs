@@ -49,6 +49,12 @@ pub struct HttpTransport {
     /// via `RequestBuilder::header(…)`, which overrides any same-named entry in
     /// `default_headers`. Shared with the SSE GET listener task.
     auth_override: Arc<parking_lot::RwLock<Option<String>>>,
+    /// Negotiated MCP spec version, sent as the `MCP-Protocol-Version` header.
+    /// Defaults to 2025-11-25; the client sets it after negotiation so a 2026-07-28
+    /// connection advertises 2026-07-28 (the schema requires the header to match the
+    /// per-request `_meta` protocolVersion). A 2026-07-28 (stateless) connection also
+    /// stops sending the removed `Mcp-Session-Id` header.
+    protocol_version: Arc<parking_lot::RwLock<String>>,
 }
 
 impl HttpTransport {
@@ -87,6 +93,7 @@ impl HttpTransport {
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
+            protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
         })
     }
 
@@ -154,6 +161,7 @@ impl HttpTransport {
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
+            protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
         })
     }
 
@@ -172,6 +180,7 @@ impl HttpTransport {
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
+            protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
         })
     }
 
@@ -179,6 +188,23 @@ impl HttpTransport {
     pub fn set_session_id(&self, session_id: String) {
         debug!("Setting session ID: {}", session_id);
         *self.session_id.lock() = Some(session_id);
+    }
+
+    /// Set the negotiated MCP spec version, advertised on the `MCP-Protocol-Version`
+    /// header. A stateless version (2026-07-28) also drops any captured session id —
+    /// the stateless core has no `Mcp-Session-Id`.
+    pub fn set_protocol_version(&self, version: &str) {
+        *self.protocol_version.write() = version.to_string();
+        if version == "2026-07-28" {
+            *self.session_id.lock() = None;
+        }
+    }
+
+    /// Whether this connection carries `Mcp-Session-Id`. The 2026-07-28
+    /// stateless core removed the header, so its absence is not worth a warning
+    /// there.
+    fn uses_session_header(&self) -> bool {
+        *self.protocol_version.read() != "2026-07-28"
     }
 
     /// Clear the session ID (used during 404 re-initialization)
@@ -191,6 +217,48 @@ impl HttpTransport {
     fn next_request_id(&self) -> String {
         let counter = self.request_counter.fetch_add(1, Ordering::SeqCst);
         format!("req_{}", counter)
+    }
+
+    /// SEP-2243 request-metadata headers, emitted on 2026-07-28 connections:
+    /// mirror the body's `method` into `Mcp-Method` (all requests and
+    /// notifications) and `params.name` / `params.uri` into `Mcp-Name` for
+    /// `tools/call`, `prompts/get`, and `resources/read`. 2025-11-25
+    /// connections keep their original wire shape (no extra headers).
+    fn apply_request_metadata_headers(
+        &self,
+        mut builder: reqwest::RequestBuilder,
+        message: &Value,
+    ) -> reqwest::RequestBuilder {
+        if *self.protocol_version.read() != "2026-07-28" {
+            return builder;
+        }
+        if let Some(method) = message.get("method").and_then(|m| m.as_str()) {
+            builder = builder.header("Mcp-Method", method);
+            let name = match method {
+                "tools/call" | "prompts/get" => {
+                    message.pointer("/params/name").and_then(|v| v.as_str())
+                }
+                "resources/read" => message.pointer("/params/uri").and_then(|v| v.as_str()),
+                _ => None,
+            };
+            if let Some(name) = name {
+                // SEP-2243 §Value Encoding: an `Mcp-Name` value that cannot
+                // ride as a plain ASCII header value MUST be Base64-sentinel
+                // encoded; plain values pass through verbatim.
+                #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+                let header_value = turul_mcp_protocol_2026_07_28::headers::encode_param_value(
+                    &Value::String(name.to_string()),
+                )
+                .unwrap_or_else(|| name.to_string());
+                // A 2025-11-25-only build never reaches this 2026 header path
+                // at runtime (the protocol-version gate above), so the raw
+                // value stands in where the 2026 crate is not linked.
+                #[cfg(not(any(feature = "client-bilingual", feature = "client-2026-07-28-only")))]
+                let header_value = name.to_string();
+                builder = builder.header("Mcp-Name", header_value);
+            }
+        }
+        builder
     }
 
     /// Apply the live `Authorization` override (if any) to a `RequestBuilder`.
@@ -280,6 +348,52 @@ impl HttpTransport {
         .await
     }
 
+    /// Streamable HTTP servers answer protocol-level rejections with
+    /// `400 Bad Request` and a JSON-RPC error body (UnsupportedProtocolVersion,
+    /// HeaderMismatch, MissingRequiredClientCapability). Surface that envelope
+    /// to the caller's normal JSON-RPC error classification instead of a
+    /// transport failure. Only status 400 with a parseable `error.code`
+    /// envelope is rescued — every other status (404 session recovery,
+    /// 401/403 auth) keeps transport-error semantics.
+    fn rescue_400_jsonrpc_envelope(result: McpClientResult<Value>) -> McpClientResult<Value> {
+        match result {
+            Err(crate::error::McpClientError::Transport(TransportError::HttpStatus {
+                status: 400,
+                message,
+            })) => match serde_json::from_str::<Value>(&message) {
+                Ok(body) if body.pointer("/error/code").is_some() => Ok(body),
+                _ => Err(TransportError::HttpStatus {
+                    status: 400,
+                    message,
+                }
+                .into()),
+            },
+            other => other,
+        }
+    }
+
+    /// Map a non-2xx `(status, body)` to a client error, applying the same
+    /// 400-envelope rescue as [`rescue_400_jsonrpc_envelope`] but for callers
+    /// (e.g. the streaming path) that return an error directly rather than a
+    /// `Value`. A status-400 body carrying a JSON-RPC `error.code` becomes a
+    /// `ServerError` so the code reaches normal classification; every other
+    /// status stays a transport `HttpStatus` error.
+    fn classify_non_2xx(status: u16, message: String) -> crate::error::McpClientError {
+        if status == 400
+            && let Ok(body) = serde_json::from_str::<Value>(&message)
+            && let Some(code) = body.pointer("/error/code").and_then(|c| c.as_i64())
+        {
+            let msg = body
+                .pointer("/error/message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("server error")
+                .to_string();
+            let data = body.pointer("/error/data").cloned();
+            return crate::error::McpClientError::server_error(code as i32, msg, data);
+        }
+        TransportError::HttpStatus { status, message }.into()
+    }
+
     /// Handle HTTP response
     async fn handle_response(&self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
@@ -303,7 +417,8 @@ impl HttpTransport {
         }
 
         // Capture session ID from response headers if present
-        if let Some(session_header) = response.headers().get("mcp-session-id")
+        if *self.protocol_version.read() != "2026-07-28"
+            && let Some(session_header) = response.headers().get("mcp-session-id")
             && let Ok(session_str) = session_header.to_str()
         {
             debug!("Captured session ID from response: {}", session_str);
@@ -599,18 +714,17 @@ impl Transport for HttpTransport {
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", MCP_POST_ACCEPT)
-            .header("MCP-Protocol-Version", "2025-11-25");
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
+        req_builder = self.apply_request_metadata_headers(req_builder, &request);
         req_builder = self.apply_auth_override(req_builder);
 
         // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP request using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
-        } else {
-            warn!(
-                "HTTP request attempted without session ID - server may reject for non-initialize methods"
-            );
+        } else if self.uses_session_header() {
+            warn!("HTTP request attempted without session ID - server may reject");
         }
 
         let response = req_builder
@@ -619,7 +733,7 @@ impl Transport for HttpTransport {
             .await
             .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
 
-        let result = self.handle_response(response).await?;
+        let result = Self::rescue_400_jsonrpc_envelope(self.handle_response(response).await)?;
 
         let elapsed = start_time.elapsed();
         self.update_stats(|stats| {
@@ -636,6 +750,101 @@ impl Transport for HttpTransport {
         debug!(elapsed_ms = elapsed.as_millis(), "HTTP request completed");
 
         Ok(result)
+    }
+
+    async fn send_request_streaming(
+        &self,
+        request: Value,
+    ) -> McpClientResult<tokio::sync::mpsc::UnboundedReceiver<Value>> {
+        if !self.is_connected() {
+            return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
+        }
+        let mut request = request;
+        if request.get("id").is_none() {
+            request["id"] = Value::String(self.next_request_id());
+        }
+        let mut req_builder = self
+            .client
+            .post(self.endpoint.clone())
+            .header("Content-Type", "application/json")
+            // Every POST to the MCP endpoint MUST advertise both content types,
+            // even when the client expects the SSE stream back.
+            .header("Accept", MCP_POST_ACCEPT)
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
+        req_builder = self.apply_request_metadata_headers(req_builder, &request);
+        req_builder = self.apply_auth_override(req_builder);
+
+        let response = req_builder
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let message = response.text().await.unwrap_or_default();
+            return Err(Self::classify_non_2xx(status, message));
+        }
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            let mut stream = response.bytes_stream();
+            let mut buffer = String::new();
+            while let Some(chunk) = stream.next().await {
+                let Ok(chunk) = chunk else { break };
+                buffer.push_str(&String::from_utf8_lossy(&chunk));
+                while let Some(pos) = buffer.find("\n\n") {
+                    let event: String = buffer.drain(..pos + 2).collect();
+                    for line in event.lines() {
+                        if let Some(data) = line.strip_prefix("data: ")
+                            && let Ok(json) = serde_json::from_str::<Value>(data)
+                            && tx.send(json).is_err()
+                        {
+                            // Receiver dropped: the subscription is cancelled.
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        Ok(rx)
+    }
+
+    async fn send_request_with_extra_headers(
+        &self,
+        request: Value,
+        extra_headers: &[(String, String)],
+    ) -> McpClientResult<Value> {
+        if !self.is_connected() {
+            return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
+        }
+        let mut request = request;
+        if request.get("id").is_none() {
+            request["id"] = Value::String(self.next_request_id());
+        }
+        self.update_stats(|stats| stats.requests_sent += 1);
+
+        let mut req_builder = self
+            .client
+            .post(self.endpoint.clone())
+            .header("Content-Type", "application/json")
+            .header("Accept", MCP_POST_ACCEPT)
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
+        req_builder = self.apply_request_metadata_headers(req_builder, &request);
+        for (name, value) in extra_headers {
+            req_builder = req_builder.header(name, value);
+        }
+        req_builder = self.apply_auth_override(req_builder);
+        if let Some(ref session_id) = *self.session_id.lock() {
+            req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = req_builder
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        Self::rescue_400_jsonrpc_envelope(self.handle_response(response).await)
     }
 
     async fn send_request_with_headers(
@@ -667,8 +876,9 @@ impl Transport for HttpTransport {
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", MCP_POST_ACCEPT)
-            .header("MCP-Protocol-Version", "2025-11-25");
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
+        req_builder = self.apply_request_metadata_headers(req_builder, &request);
         req_builder = self.apply_auth_override(req_builder);
 
         // Include session ID if we have one
@@ -724,15 +934,16 @@ impl Transport for HttpTransport {
             .post(self.endpoint.clone())
             .header("Accept", MCP_POST_ACCEPT)
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-11-25");
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone());
 
+        req_builder = self.apply_request_metadata_headers(req_builder, &notification);
         req_builder = self.apply_auth_override(req_builder);
 
         // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP notification using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
-        } else {
+        } else if self.uses_session_header() {
             warn!("HTTP notification attempted without session ID - server may reject");
         }
 
@@ -778,7 +989,7 @@ impl Transport for HttpTransport {
             .client
             .delete(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-11-25")
+            .header("MCP-Protocol-Version", self.protocol_version.read().clone())
             .header("Mcp-Session-Id", session_id);
 
         // Apply live bearer override so callers that rotated the M2M token
@@ -860,11 +1071,20 @@ impl Transport for HttpTransport {
             return Ok(rx);
         }
 
+        // 2026-07-28 deleted the GET SSE stream from Streamable HTTP: a
+        // conformant server answers the GET with 405. Server-initiated messages
+        // arrive on the POST response stream and on `subscriptions/listen`.
+        if !self.uses_session_header() {
+            debug!("GET SSE listener not started: 2026-07-28 has no GET stream");
+            return Ok(rx);
+        }
+
         // Start SSE connection task for GET requests
         let client = self.client.clone();
         let url = self.endpoint.clone();
         let session_id = self.session_id.clone();
         let auth_override = self.auth_override.clone();
+        let protocol_version = self.protocol_version.clone();
 
         info!("Starting SSE event listener for GET requests at: {}", url);
 
@@ -874,7 +1094,7 @@ impl Transport for HttpTransport {
                 let mut request_builder = client
                     .get(url.as_str())
                     .header("Accept", "text/event-stream")
-                    .header("MCP-Protocol-Version", "2025-11-25");
+                    .header("MCP-Protocol-Version", protocol_version.read().clone());
 
                 // Apply the live bearer override (if any) so token rotation
                 // also reaches the SSE GET. Per-request header overrides
@@ -886,10 +1106,9 @@ impl Transport for HttpTransport {
                 // Snapshot the session ID at request-build time. We need the
                 // snapshot (not just the cached value at response time) so the
                 // 4xx terminal handler below can compare-and-swap: only clear
-                // the cache if it still matches what we sent. If `connect()` ran
-                // `initialize_session()` after we built this GET (a real race —
-                // `client.rs:135-229` spawns the listener before initialize),
-                // a fresher session ID must not be clobbered.
+                // the cache if it still matches what we sent. A re-initialize
+                // running concurrently with an in-flight GET must not have its
+                // fresher session ID clobbered.
                 let sent_session_id: Option<String> = session_id.lock().clone();
                 if let Some(ref current_session_id) = sent_session_id {
                     debug!("SSE request using session ID: {}", current_session_id);
@@ -926,11 +1145,10 @@ impl Transport for HttpTransport {
                         // session header — but only if it still matches what we sent —
                         // so the caller's next initialize POST is sent without a stale
                         // Mcp-Session-Id (mirrors the POST 404 recovery path in
-                        // McpClient::send_request_raw). If `initialize_session()`
-                        // wrote a fresher session ID into the cache while our GET was
-                        // in flight (which happens because `client.rs:connect()`
-                        // spawns the listener before initialize), leave the new value
-                        // alone. Then emit the error and exit; the caller drives
+                        // McpClient::send_request_raw). If a re-initialize wrote a
+                        // fresher session ID into the cache while our GET was in
+                        // flight, leave the new value alone. Then emit the error and
+                        // exit; the caller drives
                         // recovery by re-running initialize and restarting the listener.
                         if status.is_client_error() {
                             let mut guard = session_id.lock();
@@ -1132,6 +1350,10 @@ impl Transport for HttpTransport {
         // common and held only for the duration of building one RequestBuilder.
         *self.auth_override.write() = value;
         debug!("HttpTransport: Authorization override updated");
+    }
+
+    fn set_protocol_version(&self, version: &str) {
+        HttpTransport::set_protocol_version(self, version);
     }
 
     fn statistics(&self) -> TransportStatistics {
@@ -1633,6 +1855,46 @@ mod tests {
             "SSE data field without space should be parseable: {:?}",
             result.err()
         );
+    }
+
+    /// "Per the SSE specification, any line beginning with a colon is a
+    /// comment that carries no event data; clients must ignore such lines and
+    /// must not treat them as malformed input" (basic/transports/streamable-http).
+    /// A `:`-prefixed line matches neither the `data:` nor `data: ` prefix
+    /// `parse_sse_lines` checks for, so it falls into the `continue` branch —
+    /// this proves a comment line surrounded by real frames neither breaks
+    /// parsing nor is misrouted as a notification/response.
+    #[tokio::test]
+    async fn test_sse_colon_comment_line_is_ignored() {
+        let sse_data = b": this is a comment, ignore me\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progress\":50}}\n: another comment\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_data.to_vec())]);
+
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+
+        assert!(
+            result.is_ok(),
+            "comment lines must not be treated as malformed input: {:?}",
+            result.err()
+        );
+        assert_eq!(
+            result.unwrap()["id"],
+            "req_0",
+            "final result frame must still be parsed past the comment lines"
+        );
+
+        let events = transport.queued_events.lock();
+        assert_eq!(
+            events.len(),
+            1,
+            "exactly one notification event, comment lines produce none"
+        );
+        match &events[0] {
+            ServerEvent::Notification(val) => {
+                assert_eq!(val["method"], "notifications/progress");
+            }
+            other => panic!("Expected ServerEvent::Notification, got {:?}", other),
+        }
     }
 
     #[tokio::test]

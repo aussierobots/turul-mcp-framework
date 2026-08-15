@@ -11,7 +11,7 @@
 //!
 //! The introspection approach works for:
 //! - Tools that return Self (the struct being derived)
-//! - Simple field types: String, numbers, bool, Option<T>
+//! - Simple field types: String, numbers, bool, `Option<T>`
 //! - NO schemars dependency needed!
 
 use serde::{Deserialize, Serialize};
@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create server with tools using struct introspection
     let server = McpServer::builder()
         .name("tool-output-introspection-server")
-        .version("0.3.47")
+        .version(env!("CARGO_PKG_VERSION"))
         .tool(Calculator::default())
         .tool(TempConverter::default())
         .build()?;

@@ -135,7 +135,7 @@ field for classification.
 - **Wire-format coverage gap**: Current tests validate the pipeline with in-process
   channels and a mock transport, not over live HTTP/SSE. A regression in HTTP
   framing or content-type negotiation specific to response forwarding would not be
-  caught. Tracked as P2 in TODO_TRACKER.md for future live integration test.
+  caught. Was tracked as P2 in the 0.3-era TODO_TRACKER.md (deleted in the 0.4 docs purge).
 
 ## Implementation
 
@@ -168,5 +168,9 @@ field for classification.
 
 ## See Also
 
-- [ADR-005: MCP Message Notifications Architecture](./005-mcp-message-notifications-architecture.md) — SSE notification delivery
+- [ADR-005: MCP Message Notifications Architecture](./005-mcp-message-notifications-architecture.md) — SSE notification delivery (superseded by ADR-023/ADR-006 — see ADR-005's Status)
 - [ADR-006: Streamable HTTP Compatibility](./006-streamable-http-compatibility.md) — SSE streaming and chunked transfer
+
+## Revision log
+
+- **2026-07-29 (2026-07-28 finalization)** — MCP 2026-07-28 has finalized and is now the released current specification (see ADR-027's revision log for the regeneration/re-pin history). This ADR's response-forwarding architecture is transport-layer and version-agnostic; no technical claim here changes as a result of finalization.

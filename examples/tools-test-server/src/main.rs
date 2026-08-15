@@ -45,11 +45,8 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use tokio::time::sleep;
 use tracing::info;
-use uuid::Uuid;
 
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::schema::{JsonSchema, JsonSchemaGenerator};
-use turul_mcp_protocol::tools::ToolSchema;
 // Server prelude re-exports builders prelude + protocol types
 use turul_mcp_server::prelude::*;
 
@@ -62,24 +59,6 @@ struct CalculatorResult {
     operation: String,
     a: f64,
     b: f64,
-}
-
-impl JsonSchemaGenerator for CalculatorResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("result".to_string(), JsonSchema::number()),
-                ("operation".to_string(), JsonSchema::string()),
-                ("a".to_string(), JsonSchema::number()),
-                ("b".to_string(), JsonSchema::number()),
-            ]))
-            .with_required(vec![
-                "result".to_string(),
-                "operation".to_string(),
-                "a".to_string(),
-                "b".to_string(),
-            ])
-    }
 }
 
 /// Basic calculator tool for testing arithmetic operations with parameter validation
@@ -141,23 +120,6 @@ struct StringResult {
     metadata: HashMap<String, serde_json::Value>,
 }
 
-impl JsonSchemaGenerator for StringResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("result".to_string(), JsonSchema::string()),
-                ("operation".to_string(), JsonSchema::string()),
-                ("original".to_string(), JsonSchema::string()),
-                ("metadata".to_string(), JsonSchema::object()),
-            ]))
-            .with_required(vec![
-                "result".to_string(),
-                "operation".to_string(),
-                "original".to_string(),
-            ])
-    }
-}
-
 /// String processing tool for text manipulation operations
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
@@ -215,23 +177,6 @@ struct DataResult {
     operation: String,
     input_type: String,
     metadata: HashMap<String, serde_json::Value>,
-}
-
-impl JsonSchemaGenerator for DataResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("result".to_string(), JsonSchema::object()),
-                ("operation".to_string(), JsonSchema::string()),
-                ("input_type".to_string(), JsonSchema::string()),
-                ("metadata".to_string(), JsonSchema::object()),
-            ]))
-            .with_required(vec![
-                "result".to_string(),
-                "operation".to_string(),
-                "input_type".to_string(),
-            ])
-    }
 }
 
 /// Data transformation tool for JSON operations
@@ -325,24 +270,6 @@ struct CounterResult {
     total_sessions: usize,
 }
 
-impl JsonSchemaGenerator for CounterResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("session_id".to_string(), JsonSchema::string()),
-                ("operation".to_string(), JsonSchema::string()),
-                ("current_value".to_string(), JsonSchema::integer()),
-                ("amount".to_string(), JsonSchema::integer()),
-                ("total_sessions".to_string(), JsonSchema::integer()),
-            ]))
-            .with_required(vec![
-                "session_id".to_string(),
-                "operation".to_string(),
-                "current_value".to_string(),
-            ])
-    }
-}
-
 /// Session-aware counter tool that maintains state per session using proper SessionStorage integration
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
@@ -424,26 +351,6 @@ struct ProgressResult {
     completed_at: String,
 }
 
-impl JsonSchemaGenerator for ProgressResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("operation".to_string(), JsonSchema::string()),
-                ("duration".to_string(), JsonSchema::number()),
-                ("steps".to_string(), JsonSchema::integer()),
-                ("progress_token".to_string(), JsonSchema::string()),
-                ("status".to_string(), JsonSchema::string()),
-                ("completed_at".to_string(), JsonSchema::string()),
-            ]))
-            .with_required(vec![
-                "operation".to_string(),
-                "duration".to_string(),
-                "steps".to_string(),
-                "status".to_string(),
-            ])
-    }
-}
-
 /// Progress tracking tool for long-running operations with progress notifications
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
@@ -465,39 +372,52 @@ impl ProgressTrackerTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<ProgressResult> {
         let steps = self.steps.unwrap_or(5).max(1);
         let step_duration = Duration::from_secs_f64(self.duration / steps as f64);
-        let progress_token = Uuid::now_v7().as_simple().to_string();
+
+        // A token minted here would be uncorrelatable: the client can only match
+        // an update to its request via the token IT supplied in
+        // `params._meta.progressToken`. Absent one, the caller did not opt in and
+        // the work proceeds without notifications.
+        // `as_str()` returns `&str` here, not `Option<&str>`: this example pins
+        // 2025-11-25, whose frozen `ProgressToken` is a newtype over `String`
+        // rather than the string-or-number enum the 2026 binding uses.
+        let requested_token = session
+            .as_ref()
+            .and_then(|s| s.progress_token())
+            .map(|t| t.as_str().to_string());
 
         info!(
             "Starting progress tracking operation: {} seconds, {} steps",
             self.duration, steps
         );
 
-        // Send initial progress notification
         if let Some(session_context) = &session {
-            session_context.notify_progress(&progress_token, 0).await;
-            info!(
-                "Starting progress tracking operation: {} seconds, {} steps",
-                self.duration, steps
-            );
+            if !session_context
+                .notify_request_progress(0.0, Some(100.0))
+                .await
+            {
+                info!("Caller declared no progressToken — running without progress");
+            }
         }
 
         // Simulate work with progress updates
         for step in 1..=steps {
             sleep(step_duration).await;
 
+            let progress = step as f64 / steps as f64 * 100.0;
             if let Some(session_context) = &session {
-                let progress = (step as f64 / steps as f64 * 100.0) as u64;
                 session_context
-                    .notify_progress(&progress_token, progress)
+                    .notify_request_progress(progress, Some(100.0))
                     .await;
-                info!(
-                    "Progress: {}/{} steps completed ({}%)",
-                    step, steps, progress
-                );
-            } else {
-                info!("Progress: {}/{} steps completed (no session)", step, steps);
             }
+            info!(
+                "Progress: {}/{} steps completed ({}%)",
+                step, steps, progress
+            );
         }
+
+        // Echoing the caller's token back in the result lets a client verify the
+        // notifications and the response belong to the same request.
+        let progress_token = requested_token.unwrap_or_default();
 
         Ok(ProgressResult {
             operation: "progress_tracker".to_string(),
@@ -514,17 +434,6 @@ impl ProgressTrackerTool {
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct ErrorResult {
     message: String,
-}
-
-impl JsonSchemaGenerator for ErrorResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([(
-                "message".to_string(),
-                JsonSchema::string(),
-            )]))
-            .with_required(vec!["message".to_string()])
-    }
 }
 
 /// Error generator tool for testing error handling
@@ -579,28 +488,6 @@ struct ValidationResult {
     config_keys: Vec<String>,
     tag_count: usize,
     validated_at: String,
-}
-
-impl JsonSchemaGenerator for ValidationResult {
-    fn json_schema() -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("validation_result".to_string(), JsonSchema::string()),
-                ("email".to_string(), JsonSchema::string()),
-                ("age".to_string(), JsonSchema::integer()),
-                (
-                    "config_keys".to_string(),
-                    JsonSchema::array(JsonSchema::string()),
-                ),
-                ("tag_count".to_string(), JsonSchema::integer()),
-                ("validated_at".to_string(), JsonSchema::string()),
-            ]))
-            .with_required(vec![
-                "validation_result".to_string(),
-                "email".to_string(),
-                "age".to_string(),
-            ])
-    }
 }
 
 /// Parameter validator tool for complex schema validation
@@ -695,7 +582,7 @@ impl LegacyCalculatorTool {
                 "deprecated": true,
                 "since": "0.1.0",
                 "replacement": "calculator",
-                "removal_date": "2025-12-31"
+                "removal_date": "2027-12-31"
             }
         }))
     }
@@ -762,13 +649,13 @@ struct CountAnnouncementsResult {
     pub count: u32,
 }
 
-/// Test tool that reproduces the output_field schema bug
+/// Test tool exercising a custom structuredContent field name via output_field
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "count_announcements_struct",
     description = "Count announcements using struct macro with custom output field",
     output = CountAnnouncementsResult,
-    output_field = "countResult"  // This should show up in schema, but doesn't
+    output_field = "countResult"
 )]
 pub struct CountAnnouncementsTool {
     #[param(description = "Text to analyze")]
@@ -855,7 +742,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create server with comprehensive tool collection (with strict lifecycle for testing)
     let server = McpServer::builder()
         .name("tools-test-server")
-        .version("0.3.47")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("MCP Tools Test Server")
         .instructions("Comprehensive test tools for E2E validation")
         .with_strict_lifecycle() // Enable strict lifecycle enforcement for E2E testing

@@ -1,0 +1,50 @@
+[package]
+name = "turul-mcp-protocol-2026-07-28"
+# Independently versioned per workspace policy: this crate begins life at 0.4.0
+# (first release of the MCP 2026-07-28 spec line). Workspace stays at 0.3.47
+# until cutover. After 0.4.0, individual crates may continue to drift.
+version = "0.4.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Model Context Protocol (MCP) specification implementation - 2026-07-28 version"
+readme = "README.md"
+
+[features]
+default = []
+server = []  # Server-side features
+client = []  # Client-side features
+# Bidirectional wire-format compliance against upstream `schema/2026-07-28/examples`
+# (modelcontextprotocol/modelcontextprotocol). Default-off — adds no runtime
+# code to the published library surface; only needed for the `mcp-compliance`
+# binary + `tests/upstream_fixtures.rs` harness. Requires `git` on PATH.
+compliance = []
+
+[dependencies]
+base64.workspace = true
+# Wire-level JSON-RPC types come from turul-rpc directly (not via the
+# turul-mcp-json-rpc-server shim), on the workspace `turul-rpc` 0.2 pin.
+turul-rpc = { workspace = true, features = ["async"] }
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+
+[[bin]]
+name = "mcp-compliance-2026-07-28"
+path = "src/bin/compliance.rs"
+required-features = ["compliance"]
+
+[[test]]
+name = "upstream_fixtures"
+path = "tests/upstream_fixtures.rs"
+required-features = ["compliance"]
+
+[[test]]
+name = "compliance"
+path = "tests/compliance.rs"

@@ -1,5 +1,8 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // A tool that uses ElicitationBuilder to collect user input before processing
+// Spec lane: 2025-11-25 synchronous elicitation only (--no-default-features --features protocol-2025-11-25) —
+// uses .build() (-> ElicitCreateRequest) and .with_elicitation(), both 2025-11-25-only.
+// For 2026-07-28 MRTR, see ../SKILL.md.
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;

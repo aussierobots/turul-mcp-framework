@@ -9,17 +9,21 @@
 //! Without this bridge: Tools send notifications → NotificationBroadcaster → VOID
 //! With this bridge: Tools send notifications → NotificationBroadcaster → StreamManager → SSE clients ✅
 
+// `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); this bridge
+// still carries logging notifications over SSE, which remains a valid feature.
+#![allow(deprecated)]
+
 use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
 use crate::StreamManager;
-use turul_mcp_json_rpc_server::JsonRpcNotification;
 use turul_mcp_protocol::notifications::{
     CancelledNotification, LoggingMessageNotification, ProgressNotification,
     PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
     ToolListChangedNotification,
 };
+use turul_rpc::JsonRpcNotification;
 
 /// MCP-compliant notification broadcaster trait for sending ALL notification types over SSE
 ///

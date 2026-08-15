@@ -1,10 +1,10 @@
-# Session and Lifecycle Guide
+# Connection Negotiation and Lifecycle Guide
 
-Deep-dive reference for MCP client session management and connection lifecycle.
+Deep-dive reference for MCP client connection negotiation and lifecycle. `turul-mcp-client` is bilingual by default (`client-bilingual` feature): it negotiates the wire spec **per connection**, at `connect()` time, rather than being built for one spec. `--no-default-features --features client-2025-11-25-only` / `client-2026-07-28-only` narrow a build to exactly one lane.
 
-## Session States
+## Connection States
 
-The `SessionState` enum tracks the client's lifecycle:
+The `SessionState` enum tracks the client's local connection lifecycle — it exists on both spec lanes, even though 2026-07-28 has no server-side session:
 
 ```
 Uninitialized ──→ Initializing ──→ Active ──→ Terminated
@@ -15,8 +15,8 @@ Uninitialized ──→ Initializing ──→ Active ──→ Terminated
 | State | Meaning |
 |---|---|
 | `Uninitialized` | Fresh client, not yet connected |
-| `Initializing` | `connect()` called, performing MCP handshake |
-| `Active` | Handshake complete, ready for operations |
+| `Initializing` | `connect()` called, negotiation in progress |
+| `Active` | Negotiation complete, ready for operations |
 | `Reconnecting` | Connection lost, attempting recovery |
 | `Terminated` | `disconnect()` called or fatal error |
 | `Error(String)` | Non-fatal error with description |
@@ -27,24 +27,27 @@ Uninitialized ──→ Initializing ──→ Active ──→ Terminated
 
 `client.connect().await?` performs these steps:
 
-1. **Transport connect** — `transport.connect()` marks the transport as logically ready (no network I/O); first real network validation occurs at step 3
-2. **Mark initializing** — session state transitions to `Initializing`
-3. **Send `initialize`** — sends the MCP `initialize` request with client capabilities and info
-4. **Capture server response** — stores `ServerCapabilities`, `protocolVersion`, and `Mcp-Session-Id`
-5. **Send `notifications/initialized`** — tells the server the client is ready
-6. **Mark active** — session state transitions to `Active`
+1. **Transport connect** — `transport.connect()` marks the transport as logically ready (no network I/O); first real network validation occurs at step 2
+2. **Negotiate the wire spec** (`negotiate_protocol()`):
+   - If `ClientConfig::mcp_protocol_version` names an explicit version, skip probing and use it directly.
+   - Otherwise, probe with `server/discover` (a 2026-07-28-shaped request, `_meta` advertising `2026-07-28`). A server that answers is treated as 2026-07-28 — no further handshake; the client marks the session `Active` immediately (there is nothing else to negotiate on a stateless core).
+   - A server that rejects the probe (JSON-RPC method-not-found, or an HTTP status indicating an older server) falls back to the 2025-11-25 path: the client restores the `MCP-Protocol-Version` header to `2025-11-25` and runs the legacy `initialize` → capture `Mcp-Session-Id` → `notifications/initialized` handshake.
+   - `client-2025-11-25-only` / `client-2026-07-28-only` builds skip the probe and run only their one path (the narrowed build errors out if the server doesn't speak that exact lane).
+3. **Mark active** — session state transitions to `Active` once negotiation succeeds
 
-After `connect()` returns `Ok(())`, the client is ready for tool calls, resource reads, and prompt operations.
+After `connect()` returns `Ok(())`, the client is ready for tool calls, resource reads, and prompt operations — the call surface (`list_tools`, `call_tool`, etc.) is identical regardless of which spec was negotiated.
+
+**There is no `initialize` step on a 2026-07-28 connection.** The framework injects `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` headers automatically on every request via the transport (`apply_request_metadata_headers`); you never construct these by hand.
 
 ### disconnect()
 
 `client.disconnect().await?` performs:
 
-1. **Send DELETE** — sends HTTP DELETE with `Mcp-Session-Id` to clean up the server session
-2. **Transport disconnect** — tears down the underlying connection
+1. **Send DELETE** — only if a session ID was captured (2025-11-25 fallback connections); no wire effect on a 2026-07-28 stateless connection, since there is no session to clean up
+2. **Transport disconnect** — tears down the underlying connection (event listener task, connection pool)
 3. **Mark terminated** — session state transitions to `Terminated`
 
-**Note:** `McpClient` implements `Drop`, which spawns a best-effort background cleanup task. Always prefer explicit `disconnect()` for reliable cleanup.
+**Note:** `McpClient` implements `Drop`, which spawns a best-effort background cleanup task. Always prefer explicit `disconnect()` for reliable cleanup. `disconnect()` is idempotent — safe to call multiple times, and the implicit `Drop` cleanup becomes a no-op after an explicit call.
 
 ### is_ready()
 
@@ -64,56 +67,27 @@ ConnectionStatus {
     session_state: SessionState,
     transport_type: TransportType,
     endpoint: String,
-    session_id: Option<String>,
-    protocol_version: Option<String>,
+    session_id: Option<String>,      // None on a negotiated 2026-07-28 connection
+    protocol_version: Option<String>, // "2026-07-28" or "2025-11-25"
 }
 ```
 
 Useful for diagnostics and health checks. `status.summary()` returns a human-readable string.
 
-## SessionManager
+## negotiated_version()
 
-The `SessionManager` is an internal component (not directly accessed by users) that:
+`client.negotiated_version().await` returns `Option<McpVersion>` — `None` before `connect()`, then whichever version negotiation settled on. Use this when application code needs to branch on which lane a connection landed on (e.g. deciding whether `subscriptions/listen` is available).
 
-- Manages `SessionInfo` behind an `Arc<RwLock<...>>`
-- Creates the `initialize` request with client capabilities
-- Validates server capabilities during handshake
-- Tracks session metadata: `session_id`, `created_at`, `last_activity`, `connection_attempts`
+## 404 Recovery (2025-11-25 fallback connections only)
 
-### SessionInfo
-
-```rust
-SessionInfo {
-    session_id: Option<String>,
-    state: SessionState,
-    client_capabilities: Option<ClientCapabilities>,
-    server_capabilities: Option<ServerCapabilities>,
-    protocol_version: Option<String>,
-    created_at: Instant,
-    last_activity: Instant,
-    connection_attempts: u32,
-    metadata: Value,
-}
-```
-
-Access via `client.session_info().await`.
-
-**Useful methods:**
-- `info.is_active()` — state is `Active`
-- `info.is_ready()` — state is `Active` (same as `is_active`)
-- `info.duration()` — time since session creation
-- `info.idle_time()` — time since last activity
-- `info.needs_initialization()` — state is `Uninitialized`
+A negotiated 2025-11-25 connection can hit HTTP 404 mid-session if the server's session storage evicted it. `McpClient` recovers automatically: `McpClientError::is_session_expired()` (true on HTTP 404) triggers `session.reset()`, clears the stale `Mcp-Session-Id` from the transport, re-runs `initialize`, and retries the original request once. This entire path is unreachable on a 2026-07-28 connection — there is no session to expire.
 
 ## Capability Negotiation
 
-During `connect()`, the client advertises its capabilities and receives the server's:
+- **2025-11-25 fallback**: client capabilities are sent in the `initialize` request and the server's `ServerCapabilities` are captured from the `initialize` response, validated via `validate_server_capabilities()`.
+- **2026-07-28**: capabilities travel in `_meta` on every request rather than being negotiated once at handshake time; the `server/discover` probe response carries the server's declared capabilities and `instructions`, retained on the client for priming an agent's system prompt.
 
-- **Client capabilities**: Created via `SessionManager::create_client_capabilities()`, includes roots and sampling support
-- **Server capabilities**: Received in the `initialize` response, validated via `validate_server_capabilities()`
-- **Protocol version**: Negotiated during handshake, stored in `SessionInfo.protocol_version`
-
-Access server capabilities post-connect:
+Access post-connect (2025-11-25 fallback):
 
 ```rust
 let info = client.session_info().await;

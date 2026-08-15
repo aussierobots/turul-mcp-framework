@@ -12,8 +12,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-http-mcp-server = "0.3"
-//! turul-mcp-server = "0.3"
+//! turul-http-mcp-server = "0.4"
+//! turul-mcp-server = "0.4"
 //! ```
 //!
 //! ## Supported Transports
@@ -52,6 +52,7 @@ pub mod json_rpc_responses;
 pub mod mcp_session;
 pub mod middleware;
 pub mod notification_bridge;
+pub mod origin;
 pub mod prelude;
 pub mod protocol;
 pub mod routes;
@@ -71,6 +72,7 @@ pub use notification_bridge::{
     BroadcastError, NotificationBroadcaster, SharedNotificationBroadcaster,
     StreamManagerNotificationBroadcaster,
 };
+pub use origin::OriginPolicy;
 pub use protocol::{
     McpProtocolVersion, extract_last_event_id, extract_protocol_version, extract_session_id,
 };
@@ -93,10 +95,10 @@ pub trait ToolChangeNotifier: Send + Sync {
 }
 
 // Re-export foundational types
-/// JSON-RPC 2.0 dispatcher and handler trait for protocol operations
-pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 /// Core MCP protocol types and error handling
 pub use turul_mcp_protocol::*;
+/// JSON-RPC 2.0 dispatcher and handler trait for protocol operations
+pub use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 
 /// Result type for HTTP MCP operations
 pub type Result<T> = std::result::Result<T, HttpMcpError>;
@@ -108,7 +110,7 @@ pub enum HttpMcpError {
     Http(#[from] hyper::Error),
 
     #[error("JSON-RPC error: {0}")]
-    JsonRpc(#[from] turul_mcp_json_rpc_server::JsonRpcError),
+    JsonRpc(#[from] turul_rpc::JsonRpcError),
 
     #[error("MCP protocol error: {0}")]
     Mcp(#[from] turul_mcp_protocol::McpError),

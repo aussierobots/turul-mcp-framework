@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("function-macro-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Function Macro Example Server")
         .instructions("This server demonstrates the #[mcp_tool] function attribute macro for creating MCP tools from regular async functions with parameter attributes.")
         .tool(AddNumbersToolImpl)

@@ -44,7 +44,7 @@ impl TestDeriveWithSession {
 
         // Test progress notifications
         session
-            .notify_progress("processing", new_count as u64)
+            .notify_request_progress(new_count as f64, None)
             .await;
 
         Ok(json!({
@@ -97,7 +97,7 @@ async fn test_function_with_session(
     session.set_typed_state("last_input", &input).await.unwrap();
 
     // Test progress notification
-    session.notify_progress("function_processing", 1).await;
+    session.notify_request_progress(1.0, None).await;
 
     Ok(format!("{}: {}", prefix, input))
 }

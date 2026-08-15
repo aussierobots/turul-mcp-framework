@@ -1,0 +1,261 @@
+name: CI
+
+# Dual-spec feature matrix for the 2026-07-28 cutover branch:
+#   - default lane is MCP 2026-07-28 (stateless core)
+#   - 2025-11-25 is the opt-in legacy lane
+# Gates derived from docs/plans/2026-07-28-final-readiness-audit.md §7.
+# All jobs use standard ubuntu-latest runners (free on public repos).
+#
+# Relationship to scripts/ci-gates.sh: hosted CI covers every lane gate, and
+# omits only the two that need a toolchain or wall clock a runner should not
+# spend. Measured 2026-08-02, counting commands (local -> hosted):
+#   fmt          1  -> 1   parity
+#   default-2026 28 -> 28  parity
+#   opt-in-2025  35 -> 35  parity
+#   mutex/docs         parity
+#   lambda       3  -> 0   no hosted job: needs the cargo-lambda + Zig
+#                          cross-compilation toolchain
+#   examples     5  -> 0   no hosted job: boots real servers over six phases
+#                          (minutes of wall clock), and one leg wants DynamoDB
+#
+# So a green CI run is necessary but NOT sufficient for release. Run
+# `./scripts/ci-gates.sh` (all) before tagging — that is the release gate;
+# this workflow is the fast per-push subset. Do not re-describe these as "the
+# same gates" without first closing the counts above.
+#
+# Count by cargo invocation, not by `- name:` step: several steps here run a
+# dozen commands under one name, and comparing step names against the script's
+# `run` lines understates hosted coverage badly.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+# Warnings are denied via the explicit `cargo clippy -- -D warnings` step and the
+# test-build warning sweep, not a global RUSTFLAGS (which would also fail on any
+# transient workspace-crate warning outside the audited gates).
+
+jobs:
+  # Lane-neutral and cheap: rustfmt ignores cargo features, so this needs no
+  # toolchain matrix, no build cache and no disk cleanup. Kept as its own job so
+  # a formatting failure is reported in seconds rather than behind a full build.
+  # Mirrors `scripts/ci-gates.sh fmt`.
+  fmt:
+    name: rustfmt (--check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+  default-2026:
+    name: Default lane (2026-07-28)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The full workspace debug build (all test binaries) overflows the
+      # default runner disk — three runs died on "No space left on device"
+      # with lld Bus errors. Drop the preinstalled SDKs we never use.
+      - name: Free runner disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Build (default = protocol-2026-07-28)
+        run: cargo build
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Test
+        run: cargo test
+      - name: Warning sweep on the test build
+        run: |
+          n=$(cargo test --no-run 2>&1 | grep -c 'warning:' || true)
+          echo "test-build warnings: $n"
+          test "$n" = "0"
+      - name: 2026 stateless acceptance (real HTTP)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test discover_stateless_2026
+      - name: 2026 HTTP surface (GET/DELETE 405, session-id ignored)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test stateless_2026_http_surface
+      - name: 2026 subscriptions/listen (ack-first, filtered delivery)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test subscriptions_listen_2026
+      - name: 2026 request-metadata headers (Mcp-Method/Mcp-Name, -32020/-32022)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_headers_2026
+      - name: 2026 unknown-method mapping (404 + -32601)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test error_mapping_2026
+      - name: 2026 MRTR (input_required round trip, -32021 capability gate)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mrtr_2026
+      - name: 2026 Mcp-Param-* mirroring (x-mcp-header validation)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test mcp_param_2026
+      - name: 2026 per-request log gating (logLevel opt-in)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test log_gating_2026
+      - name: 2026 schema fidelity (derive/builders pipeline to the wire)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test schema_fidelity_2026
+      - name: 2026 streaming wire grammar (SSE framing, ordering, JSON counterpart)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test streaming_e2e_2026
+      - name: 2026 list pagination (cursor walks, invalid-cursor rejection)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test list_pagination_2026
+      - name: 2026 macro-authored tool icons reach tools/list
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test tool_icons_2026
+      - name: 2026 resource mimeType agreement (list vs read)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test resource_mime_type_2026
+      # Spec-neutral test infrastructure: closes the reserve->bind window that
+      # let two suites be handed the same ephemeral port under parallel runs.
+      - name: Test port handoff (no reservation overlap)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test port_handoff
+      # Offline. The compliance suite validates Rust types against whatever bytes
+      # are on disk, so it stays green under a tampered schema or a half-applied
+      # re-pin; this is the only check that notices.
+      - name: Schema pin integrity (checksum + pin parity + dated subpath)
+        run: ./scripts/check-schema-pin.sh
+      # Offline grep guard: keeps framework machinery out of the protocol crates.
+      - name: Protocol crate purity
+        run: ./scripts/check-protocol-purity.sh
+      - name: protocol-2026 compliance + upstream wire fixtures
+        run: cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
+      - name: Shipped crate docs agree with the artifacts they describe
+        run: cargo test -p turul-mcp-protocol-2026-07-28 --features compliance --test docs_consistency
+      - name: Bilingual client (not in default-members)
+        run: cargo test -p turul-mcp-client
+      - name: 2026 client 404 is method-not-found, not session recovery
+        run: cargo test -p turul-mcp-client --test unknown_method_404_is_not_session_recovery
+      - name: 2026 client example (pairs with minimal-server)
+        run: cargo build -p streamable-http-client
+      - name: Client-using examples (not in default-members)
+        run: cargo build -p mrtr-elicitation-server -p bilingual-fleet-client -p ext-tasks-server --bins
+      - name: Tasks extension (SEP-2663, opt-in feature)
+        run: cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-tasks --test ext_tasks_2026
+      - name: Extension crates standalone
+        run: cargo test -p turul-mcp-ext-tasks -p turul-mcp-ext-apps
+      - name: Tasks extension client e2e
+        run: cargo test -p turul-mcp-client --features ext-tasks --test ext_tasks_e2e_2026
+
+  opt-in-2025:
+    name: Opt-in lane (2025-11-25)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Per-crate 2025-11-25 build matrix
+        run: |
+          set -euxo pipefail
+          cargo test   -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25
+          cargo clippy -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25 -- -D warnings
+          cargo test   -p turul-mcp-builders    --no-default-features --features protocol-2025-11-25
+          cargo test   -p turul-http-mcp-server --no-default-features --features sse,protocol-2025-11-25
+          # build-only: derive dev-depends on turul-mcp-server (2026 default), which
+          # unifies both protocol features and trips the alias mutex under cargo test.
+          cargo build  -p turul-mcp-derive      --no-default-features --features protocol-2025-11-25
+          cargo test   -p turul-mcp-aws-lambda  --no-default-features --features cors,sse,protocol-2025-11-25
+          # Without `cors` too: the cors-enabled run above masked a `cors_config`
+          # reference in a non-cfg-gated build() branch, so the crate did not
+          # compile at all for anyone opting out of cors.
+          cargo clippy -p turul-mcp-aws-lambda  --no-default-features --features protocol-2025-11-25 --all-targets -- -D warnings
+          # Tests, not builds. These two feature sets select different #[cfg]
+          # dispatch arms from the bilingual default, so compiling them proves
+          # nothing about the code a single-spec consumer actually runs.
+          cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
+          cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
+          cargo build  -p client-initialise-server --no-default-features
+          # Every example whose manifest pins protocol-2025-11-25. They cannot
+          # join [default-members] — unifying their features with the 2026
+          # default trips the spec mutex — so this is the only thing that
+          # compiles them.
+          cargo build --bins \
+            -p dynamic-tools-server -p elicitation-server -p lambda-turul-mcp-server \
+            -p logging-test-client -p logging-test-server -p prompts-test-server \
+            -p resource-test-server -p roots-server -p sampling-server \
+            -p session-aware-resource-server \
+            -p stateful-server -p tasks-e2e-inmemory-client -p tasks-e2e-inmemory-server \
+            -p tools-test-server
+      - name: 2025-11-25 regression E2E (real servers)
+        run: |
+          set -euxo pipefail
+          cargo test -p mcp-tools-tests
+          cargo test -p mcp-resources-tests
+          cargo test -p mcp-prompts-tests
+          cargo test -p mcp-roots-tests
+          cargo test -p mcp-sampling-tests
+          cargo test -p mcp-elicitation-tests
+          cargo test -p turul-mcp-framework-integration-tests --test tasks_e2e_inmemory
+          cargo test -p turul-mcp-framework-integration-tests --test ping_auth_2025
+
+      # The integration suite spawns example server binaries out of target/debug.
+      # This job only ever builds the 2025-11-25 lane, so those binaries do not
+      # otherwise exist here — unlike a local `ci-gates.sh all`, where
+      # gate_default's `cargo build` has already produced them. Mirrors the
+      # matching line in gate_opt_in_2025.
+      - name: Example binaries the integration suite spawns
+        run: cargo build
+
+      # Every [[test]] target declared in tests/Cargo.toml must be invoked here.
+      # Adding a target without a line below silently drops it from CI — the
+      # defect that let `example_validation` stop compiling unnoticed.
+      - name: Integration-test crate (all remaining targets)
+        run: |
+          set -euxo pipefail
+          cargo test -p turul-mcp-framework-integration-tests --test compliance
+          cargo test -p turul-mcp-framework-integration-tests --test schema_tests
+          cargo test -p turul-mcp-framework-integration-tests --test example_validation
+          cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
+          cargo test -p turul-mcp-framework-integration-tests --test feature_tests
+          cargo test -p turul-mcp-framework-integration-tests --test session_context_macro_tests
+          cargo test -p turul-mcp-framework-integration-tests --test derive_comprehensive_tool_tests
+          cargo test -p turul-mcp-framework-integration-tests --test derive_schemars_integration_test
+          cargo test -p turul-mcp-framework-integration-tests --test derive_zero_config_output_schema_test
+          cargo test -p turul-mcp-framework-integration-tests --test dynamic_tools_e2e
+          cargo test -p turul-mcp-framework-integration-tests --test event_dispatcher_persistence
+          cargo test -p turul-mcp-framework-integration-tests --test client_integration_test
+          cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capabilities_validation
+          cargo test -p turul-mcp-framework-integration-tests --test streamable_http_behavior_regression
+          # The two guards that catch "present in the tree, absent from CI" rot.
+          # They were themselves absent from CI until 2026-08-02.
+          cargo test -p turul-mcp-framework-integration-tests --test examples_guard
+          cargo test -p turul-mcp-framework-integration-tests --test reachability_guard
+
+  spec-mutex:
+    name: Spec mutex (both features must not compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Enabling both protocol features must be a compile_error
+        run: |
+          if cargo build -p turul-mcp-protocol --features protocol-2025-11-25,protocol-2026-07-28 2>/dev/null; then
+            echo "ERROR: the spec mutex did not fire — both protocol features compiled together"
+            exit 1
+          fi
+          echo "OK: spec mutex fired as expected"
+
+  docs:
+    name: Rustdoc (deny warnings)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # turul-mcp-derive carries doctests that are `rust,ignore` under the
+      # 2026-07-28 default and only compile on the opt-in lane, so the default
+      # `cargo doc` below never type-checks them. `--doc` cannot be used here:
+      # doctests build the dev-dependency graph, which pulls in the 2026-default
+      # turul-mcp-server and trips the protocol-alias mutex.
+      - name: Rustdoc for the 2025-11-25 lane's derive examples
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc -p turul-mcp-derive --no-deps --no-default-features --features protocol-2025-11-25
+      - name: cargo doc (deny rustdoc warnings)
+        env:
+          RUSTDOCFLAGS: "-D warnings"
+        run: cargo doc --no-deps

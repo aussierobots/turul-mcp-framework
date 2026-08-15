@@ -17,11 +17,13 @@
 //!
 //! # Transport: Streamable HTTP (REST API V1)
 //!
-//! This example uses the MCP 2025-11-25 Streamable HTTP transport via REST API (V1).
+//! This example uses the MCP 2026-07-28 Streamable HTTP transport via REST API (V1).
 //! REST API supports standard HTTP POST with full request/response control, making it
 //! compatible with Streamable HTTP. The Lambda adapter converts the API Gateway event
 //! into a standard `hyper::Request`, which the framework's `StreamableHttpHandler`
-//! processes normally.
+//! processes normally. The 2026 core is stateless: there is no `initialize`/
+//! `notifications/initialized` handshake and no `Mcp-Session-Id` — every request
+//! carries its own `_meta` (protocolVersion, clientInfo, clientCapabilities).
 //!
 //! **Note**: HTTP API (V2) authorizer context extraction is fully supported, but
 //! Streamable HTTP transport requires REST API (V1).
@@ -91,18 +93,21 @@
 //! # Usage
 //!
 //! ```bash
-//! # With valid API key
+//! # With valid API key (2026-07-28 stateless: no session handshake;
+//! # each request carries its own `_meta`)
 //! curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
 //!   -H "Content-Type: application/json" \
 //!   -H "Accept: application/json" \
+//!   -H "MCP-Protocol-Version: 2026-07-28" \
 //!   -H "X-API-Key: secret-key-123" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
 //!
-//! # Without API key (should fail)
+//! # Without API key (should fail at the auth layer)
 //! curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
 //!   -H "Content-Type: application/json" \
 //!   -H "Accept: application/json" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+//!   -H "MCP-Protocol-Version: 2026-07-28" \
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
 //! ```
 
 use async_trait::async_trait;
@@ -141,12 +146,6 @@ impl McpMiddleware for AuthMiddleware {
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip authentication for initialize (session creation) and ping (pre-init health check)
-        if ctx.method() == "initialize" || ctx.method() == "ping" {
-            debug!("Skipping auth for {} method", ctx.method());
-            return Ok(());
-        }
-
         // Extract X-API-Key from request metadata
         let api_key = ctx.metadata().get("x-api-key").and_then(|v| v.as_str());
 
@@ -248,14 +247,17 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
 
     info!("🔧 Creating Lambda MCP handler with auth middleware");
 
-    // Create DynamoDB session storage
+    // DynamoDB backs the framework's internal per-request contexts and event
+    // streams on the 2026 stateless lane — there is no client-visible session.
+    // Each request writes an ephemeral row; for auth-only deployments the
+    // in-memory default avoids that per-request DynamoDB cost.
     let storage = Arc::new(
         DynamoDbSessionStorage::new()
             .await
             .map_err(|e| Error::from(format!("Failed to create DynamoDB storage: {}", e)))?,
     );
 
-    info!("💾 DynamoDB session storage initialized");
+    info!("💾 DynamoDB storage initialized (per-request internal contexts)");
 
     // Create authentication middleware
     let auth_middleware = Arc::new(AuthMiddleware::new());
@@ -268,7 +270,7 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
     // Build server with middleware using builder pattern
     let server = turul_mcp_aws_lambda::LambdaMcpServerBuilder::new()
         .name("middleware-auth-lambda")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .middleware(auth_middleware)
         .storage(storage)
         .cors_allow_all_origins()
@@ -291,11 +293,11 @@ async fn main() -> Result<(), Error> {
     init_logging();
 
     info!("🚀 Starting AWS Lambda MCP Server with Authentication Middleware");
-    info!("Architecture: MCP 2025-11-25 with middleware auth layer");
+    info!("Architecture: MCP 2026-07-28 (stateless) with middleware auth layer");
     info!("  - X-API-Key header validation");
     info!("  - Lambda authorizer context extraction");
     info!("  - User context injection");
-    info!("  - DynamoDB session storage");
+    info!("  - DynamoDB-backed per-request contexts (no client sessions on 2026)");
     info!("  - CORS support");
 
     info!("📋 Environment variables:");
@@ -314,7 +316,7 @@ async fn main() -> Result<(), Error> {
 
     // Build the handler eagerly in main() so DDB session storage init,
     // server build, and tool registration land in Lambda's Init Duration
-    // — not inside the first invocation's handler_total. See ADR-024.
+    // — not inside the first invocation's handler_total.
     let handler = create_lambda_mcp_handler().await?;
     info!("🎯 Lambda handler ready with auth middleware");
 

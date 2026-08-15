@@ -7,14 +7,20 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 // Import protocol types
-use turul_mcp_json_rpc_server::types::RequestId;
+#[allow(deprecated)] // SEP-2577 migration window
 use turul_mcp_protocol::logging::LoggingLevel;
+use turul_rpc::types::RequestId;
+// `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
+// remains a valid feature the framework supports.
+#[allow(deprecated)]
 use turul_mcp_protocol::notifications::{
-    CancelledNotification, InitializedNotification, LoggingMessageNotification, Notification,
-    NotificationParams, ProgressNotification, PromptListChangedNotification,
-    ResourceListChangedNotification, ResourceUpdatedNotification, RootsListChangedNotification,
-    ToolListChangedNotification,
+    CancelledNotification, LoggingMessageNotification, Notification, NotificationParams,
+    ProgressNotification, PromptListChangedNotification, ResourceListChangedNotification,
+    ResourceUpdatedNotification, ToolListChangedNotification,
 };
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::notifications::{InitializedNotification, RootsListChangedNotification};
 
 // Import framework traits from local crate
 use crate::traits::{HasNotificationMetadata, HasNotificationPayload, HasNotificationRules};
@@ -336,11 +342,13 @@ impl NotificationBuilder {
     }
 
     /// Create a roots list changed notification
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn roots_list_changed() -> RootsListChangedNotification {
         RootsListChangedNotification::new()
     }
 
     /// Create an initialized notification
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn initialized() -> InitializedNotification {
         InitializedNotification::new()
     }
@@ -364,6 +372,7 @@ impl NotificationBuilder {
     }
 
     /// Create a logging message notification builder
+    #[allow(deprecated)]
     pub fn logging_message(level: LoggingLevel, data: Value) -> LoggingMessageNotification {
         LoggingMessageNotification::new(level, data)
     }
@@ -489,6 +498,9 @@ mod tests {
             .build();
 
         assert_eq!(notification.method, "notifications/cancelled");
+        // CancelledNotificationParams.request_id is a required bare RequestId
+        // on both lanes (the 2026-07-02 re-pin reverted the 2026-05-31
+        // Option<RequestId> relaxation on the 2026-07-28 lane).
         assert_eq!(notification.params.request_id, RequestId::Number(123));
         assert_eq!(
             notification.params.reason,
@@ -502,6 +514,9 @@ mod tests {
         );
     }
 
+    // Exercises the logging-message builder, whose LoggingMessageNotification fields
+    // are deprecated-but-present in 2026-07-28 (SEP-2577).
+    #[allow(deprecated)]
     #[test]
     fn test_convenience_methods() {
         // Test standard list changed notifications
@@ -514,11 +529,16 @@ mod tests {
         let prompt_list = NotificationBuilder::prompt_list_changed();
         assert_eq!(prompt_list.method, "notifications/prompts/list_changed");
 
-        let roots_list = NotificationBuilder::roots_list_changed();
-        assert_eq!(roots_list.method, "notifications/roots/list_changed");
+        // Roots and the initialize handshake are gone from the stateless 2026-07-28 core,
+        // so these convenience constructors are 2025-11-25 only.
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            let roots_list = NotificationBuilder::roots_list_changed();
+            assert_eq!(roots_list.method, "notifications/roots/list_changed");
 
-        let initialized = NotificationBuilder::initialized();
-        assert_eq!(initialized.method, "notifications/initialized");
+            let initialized = NotificationBuilder::initialized();
+            assert_eq!(initialized.method, "notifications/initialized");
+        }
 
         // Test logging message
         let logging = NotificationBuilder::logging_message(

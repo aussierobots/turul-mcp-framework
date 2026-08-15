@@ -498,13 +498,19 @@ async fn test_post_streaming_delivers_progress_before_result() {
         .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header("Accept", "text/event-stream, application/json") // Request SSE streaming with JSON fallback
+        // `progressToken` is what opts a request into request-scoped
+        // notifications, and therefore into stream framing: progress
+        // notifications must carry the token given in the originating request,
+        // so a request without one can never be sent the progress this test
+        // is named for.
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "tools/call",
             "id": 42,
             "params": {
                 "name": "test_add",
-                "arguments": {"a": 5, "b": 3}
+                "arguments": {"a": 5, "b": 3},
+                "_meta": { "progressToken": "progress-before-result" }
             }
         }))
         .send()
@@ -1339,9 +1345,16 @@ async fn test_legacy_handler_get_sse_without_session_returns_400() {
         body["error"].is_object(),
         "envelope MUST have an `error` object"
     );
+    // -32001 (UNAUTHENTICATED), not -32002. Three reasons, none of them
+    // "the code changed": -32002 means resource-not-found, which a missing
+    // header is not; `streamable_http.rs` already answered -32001 for this
+    // same condition, so the legacy path was inconsistent with its sibling;
+    // and `session_handler.rs` carries no cfg gate, so on a 2026-07-28 build
+    // -32002 here would be a code that revision forbids emitting at all.
     assert_eq!(
-        body["error"]["code"], -32002,
-        "error.code locked at -32002 for missing-session on the legacy path"
+        body["error"]["code"], -32001,
+        "missing-session on the legacy path is an authentication condition, \
+         not resource-not-found"
     );
     let msg = body["error"]["message"].as_str().unwrap_or("");
     assert!(
@@ -2020,8 +2033,11 @@ async fn test_after_dispatch_error_propagation_streamable() {
     );
     assert_eq!(
         body["error"]["code"].as_i64().unwrap(),
-        -32002,
-        "Unauthorized MiddlewareError should produce -32002 error code"
+        -32005,
+        "Unauthorized MiddlewareError should produce -32005; it was -32002 until \
+         2026-07-29, which means resource-not-found on this spec revision and is \
+         forbidden outright on 2026-07-28. The value is pinned by \
+         error.rs::middleware_codes_are_frozen_legacy_allocations."
     );
     assert!(
         body["error"]["message"]
@@ -2065,8 +2081,11 @@ async fn test_after_dispatch_error_propagation_legacy() {
     );
     assert_eq!(
         body["error"]["code"].as_i64().unwrap(),
-        -32002,
-        "Unauthorized MiddlewareError should produce -32002 error code"
+        -32005,
+        "Unauthorized MiddlewareError should produce -32005; it was -32002 until \
+         2026-07-29, which means resource-not-found on this spec revision and is \
+         forbidden outright on 2026-07-28. The value is pinned by \
+         error.rs::middleware_codes_are_frozen_legacy_allocations."
     );
     assert!(
         body["error"]["message"]

@@ -69,9 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Features
 
-- ✅ **MCP 2025-11-25 Streamable HTTP** - Full protocol compliance with SSE streaming
-- ✅ **Session Management** - UUID v7 session IDs with automatic cleanup
-- ✅ **SSE Resumability** - Last-Event-ID support with event replay
+- ✅ **MCP 2026-07-28 Streamable HTTP (default)** - Stateless core (`server/discover`, per-request `_meta`, no `Mcp-Session-Id`) with SSE streaming; 2025-11-25 sessionful handshake is opt-in
+- ✅ **Session Management** *(2025-11-25 opt-in lane)* - UUID v7 session IDs with automatic cleanup
+- ✅ **SSE Resumability** *(2025-11-25 opt-in lane)* - `Last-Event-ID` event replay on GET SSE; the 2026 default is POST-only and not resumable
 - ✅ **CORS Support** - Browser client compatibility with configurable origins
 - ✅ **Protocol Version Detection** - Automatic feature flags based on client capabilities
 - ✅ **JSON-RPC Dispatch** - Efficient method routing and error handling
@@ -334,7 +334,10 @@ let progress_notification = ProgressNotification {
 broadcaster.send_progress_notification("session-123", progress_notification).await?;
 ```
 
-### Event Replay and Resumability
+### Event Replay and Resumability (2025-11-25 opt-in lane)
+
+The 2026-07-28 default endpoint is POST-only and streams are not resumable;
+this machinery serves the sessionful 2025-11-25 opt-in lane.
 
 ```rust
 use turul_http_mcp_server::{extract_last_event_id, StreamManager};
@@ -356,8 +359,10 @@ let stream = stream_manager.create_stream(
 The transport layer automatically handles MCP-specific headers:
 
 ```rust
-// Client sends: MCP-Protocol-Version: 2025-11-25
-// Server returns: mcp-session-id: <uuid-v7>
+// On a 2026-07-28 (default) connection, requests are stateless: no session id.
+// On a 2025-11-25 opt-in connection:
+//   Client sends: MCP-Protocol-Version: 2025-11-25
+//   Server returns: mcp-session-id: <uuid-v7>
 
 // The transport layer extracts and processes these headers automatically
 use turul_http_mcp_server::{extract_protocol_version, extract_session_id};
@@ -424,19 +429,20 @@ use turul_http_mcp_server::{ServerStats, StreamStats};
 ### Manual HTTP Testing
 
 ```bash
-# Test session creation
+# Test session creation — 2025-11-25 opt-in lane only
+# (the default 2026-07-28 build is stateless: POST server/discover, no initialize, no Mcp-Session-Id)
 curl -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2025-11-25" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
   -v  # Note the Mcp-Session-Id header in response
 
-# Test SSE streaming
+# Test GET SSE streaming — 2025-11-25 opt-in lane (the 2026 default answers GET with 405)
 curl -N -H "Accept: text/event-stream" \
   -H "Mcp-Session-Id: <session-id>" \
   http://localhost:3000/mcp
 
-# Test event resumability
+# Test event resumability — 2025-11-25 opt-in lane
 curl -N -H "Accept: text/event-stream" \
   -H "Last-Event-ID: event-123" \
   -H "Mcp-Session-Id: <session-id>" \
@@ -502,7 +508,7 @@ let transport = HttpMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-http-mcp-server = { version = "0.3", features = ["sse"] }
+turul-http-mcp-server = { version = "0.4", features = ["sse"] }
 ```
 
 Available features:

@@ -181,3 +181,54 @@ pub struct LambdaMcpServerBuilder {
 This ADR resolves the circular development issues we encountered during lambda-mcp-server development. The architectural discovery documented here prevents future confusion about framework integration patterns.
 
 The solution enables Lambda deployment while maintaining the framework's design principles and zero-configuration approach.
+## DRAFT-2026-v1: stateless mode
+
+**Status: Added 2026-05-31. Relevant when the Lambda binary is built with default (DRAFT-2026-v1) protocol per ADR-027.**
+
+### What stays the same
+
+- **Type conversion layer** (`lambda_http::Request` ↔ `hyper::Request<Incoming>`) is unchanged. Lambda's HTTP envelope is independent of the MCP protocol version.
+- **CORS middleware** (`inject_cors_headers`) is unchanged. CORS lives at the HTTP boundary, not the MCP boundary.
+- **Streaming response wrapper** (`into_lambda_stream_response`, `EnsureOneFrame` per ADR-026) is unchanged. The streaming envelope is the AWS Runtime API contract, not an MCP concept.
+- **Builder API** (`LambdaMcpServerBuilder`) is unchanged in shape; tools/resources/prompts registration is identical.
+
+### What changes
+
+- **No session restore on cold start.** The 2025-11-25 cold-start path reads any in-flight session record from DynamoDB to attach the incoming request to its persisted state. DRAFT-2026-v1 has no session record to restore — every invocation is independent. Cold starts become cheaper: no `get_session` DynamoDB read on the request path, no `mcp:tool_fingerprint` read-before-write, no `notifications/initialized` 202 short-circuit.
+- **No session storage backend required.** The `with_session_storage(DynamoDbSessionStorage::new(...))` builder call is a 2025-only configuration. In default 0.4.0 (DRAFT-2026-v1), session storage is unused; the builder method either compile-gates behind `protocol-2025-11-25` or accepts the configuration silently as a no-op.
+- **Task storage is decoupled from session storage.** Tasks in DRAFT-2026-v1 are an SEP-2663 extension (see ADR-028). `turul-mcp-ext-tasks` carries its own storage abstraction; the existing `turul-mcp-task-storage` crate continues to provide the durable backend implementations but its API surface integrates with the extension crate rather than with the session lifecycle.
+- **`server/discover` instead of `initialize`.** The dispatcher routes `server/discover` to a per-request capability synthesis instead of a session-creating handler. No state is mutated; the response is computed from the current `LambdaMcpServerBuilder` registration.
+- **No `notifications/initialized` 202 response.** The dispatcher rejects this notification with `-32601 Method Not Found` (it's not a 2026 method).
+- **No GET SSE handler.** Per ADR-006 amendment, GET SSE is 2025-only. In 2026 mode, GET `/mcp` returns 405. The existing Lambda streaming limitation for server-initiated notifications (background `tokio::spawn` killed at invocation completion) is moot — those notifications don't exist in the 2026 wire model.
+
+### Cold-start sequencing (DRAFT-2026-v1)
+
+With session restore removed, the cold-start request path is:
+
+1. **`lambda_runtime::handler` entry** — type conversion: `lambda_http::Request` → `hyper::Request<Incoming>`.
+2. **CORS check** — middleware as before.
+3. **OAuth check** (if configured) — middleware as before.
+4. **Dispatcher** — method dispatch directly into the registered tool/resource/prompt handlers. No session lookup, no fingerprint check, no `initialize` short-circuit.
+5. **Tool change detection** (if `Dynamic` mode + `ServerStateStorage` configured) — per ADR-023 amendment, request-time `check_for_changes()` with TTL gating against the server-global fingerprint in `ServerStateStorage`. Notification, if any, is included in the response `_meta` rather than persisted to a per-session event log.
+6. **Response** — buffered (200/204) or streamed (tool call with progress).
+
+This is simpler than the 2025-11-25 sequence (which carries `validate_session_exists()`, fingerprint compare against per-session state, `notifications/tools/list_changed` persistence) and faster on cold start (one fewer DynamoDB read per invocation).
+
+### What downstream consumers need to change
+
+- Drop the `DynamoDbSessionStorage` configuration step from the builder if running in default 0.4.0 (DRAFT-2026-v1). It is unused. Keep it if running under `--features protocol-2025-11-25`.
+- Drop any reliance on persisted session state across invocations. If session-equivalent state is needed (e.g., conversational memory, per-user history), it must be re-architected as either (a) an extension under SEP-2133, (b) explicit per-request `_meta` carriage, or (c) external state outside the MCP envelope.
+- Plan for the `turul-mcp-ext-tasks` extension crate (per ADR-028) for any tasks-based workflow. The current `turul-mcp-task-storage` backends (SQLite, PostgreSQL, DynamoDB) remain — they will be the storage layer behind the extension crate's API.
+
+### References
+
+- ADR-006 §"DRAFT-2026-v1: Stateless variant; GET SSE is 2025-only" — transport behavior.
+- ADR-023 §"DRAFT-2026-v1: per-request fingerprint persistence" — tool change detection.
+- ADR-027 §"Status update (2026-05-31)" — feature flag mechanics, publication gate.
+- ADR-028 — tasks/apps as separate extension crates.
+
+## Revision log
+
+- **2026-07-13 (Lambda registration-parity sync)** — Synced `turul-mcp-aws-lambda`'s dispatcher method-registration table to the non-Lambda `McpServerBuilder` authority (`crates/turul-mcp-server/src/builder.rs`, `server.rs`), per feature lane. The modern-only, single-spec-per-build posture (ADR-029) is unchanged — this is a registration-set correction, not an architecture change. Added: `server/discover` (`protocol-2026-07-28` lane) and `notifications/cancelled` (both lanes, accept-and-ignore parity). Gated to `protocol-2025-11-25` only: `ping`, `roots/list`, `notifications/message`, `notifications/progress`, `notifications/roots/list_changed` (+ legacy `notifications/roots/listChanged`), and the `notifications/initialized` dispatcher registration. Removed the unconditional `completion/complete` mock registered in `new()` — an unconfigured server now answers `-32601`, matching the build()-time provider-backed registration and the non-Lambda contract. Added a crate-private `registered_methods()` parity probe plus wire tests asserting the registered method set against an explicit spec-derived expectation per lane.
+
+- **2026-07-29 (2026-07-28 finalization)** — MCP 2026-07-28 has finalized and is now the released current specification (wire string `"2026-07-28"`; see ADR-027's revision log for the regeneration/re-pin history). This ADR's DRAFT-2026-v1 section already describes the finalized stateless-core behavior; no technical claim here changes as a result of finalization.

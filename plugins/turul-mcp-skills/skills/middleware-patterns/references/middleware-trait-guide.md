@@ -41,7 +41,7 @@ pub trait McpMiddleware: Send + Sync {
 | Parameter | Type | Description |
 |---|---|---|
 | `ctx` | `&mut RequestContext<'_>` | Mutable request context: method, params, metadata |
-| `session` | `Option<&dyn SessionView>` | Read-only session view. `None` for `initialize` (session not created yet). `Some` for all other methods. |
+| `session` | `Option<&dyn SessionView>` | Read-only session view. On 2026-07-28, always `Some` — a fresh, throwaway ephemeral session minted per request (there is no `Mcp-Session-Id` handshake, so nothing persists across requests). On a 2025-11-25 build, `None` during `initialize` (session not created yet), `Some` for all other methods. |
 | `injection` | `&mut SessionInjection` | Write-only mechanism to inject state/metadata into the session |
 
 ### `after_dispatch` Parameters
@@ -67,7 +67,7 @@ pub struct RequestContext<'a> {
 
 | Method | Return | Description |
 |---|---|---|
-| `method()` | `&str` | MCP method name (e.g., `"tools/call"`, `"initialize"`) |
+| `method()` | `&str` | MCP method name (e.g., `"tools/call"`, `"resources/read"`) |
 | `params()` | `Option<&Value>` | Request parameters (JSON-RPC params field) |
 | `params_mut()` | `Option<&mut Value>` | Mutable access to request parameters |
 | `metadata()` | `&Map<String, Value>` | Transport metadata (HTTP headers, Lambda event fields) |
@@ -146,6 +146,8 @@ Provided by `turul_mcp_session_storage::SessionView`. Key methods:
 | Method | Return | Description |
 |---|---|---|
 | `session_id()` | `Option<&str>` | The session's unique ID |
+
+On 2026-07-28, `session_id()` returns an id that is unique **per request**, not per caller — the stateless core mints a throwaway session internally and never reads or echoes a client-supplied id. Don't use it as a correlation key across requests.
 
 ## Registration
 

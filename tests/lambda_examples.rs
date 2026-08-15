@@ -184,7 +184,7 @@ fn test_lambda_sse_streaming() {
                 for i in 1..=3 {
                     // Limit for testing
                     // Send progress notification via SSE
-                    session.notify_progress("long-task", i as u64).await;
+                    session.notify_request_progress(i as f64, Some(3.0)).await;
 
                     // Don't actually sleep in tests
                     // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -318,9 +318,9 @@ async fn test_lambda_streaming_feature_e2e() {
         async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
             if let Some(session) = session {
                 // Send progress notifications that would be streamed
-                session.notify_progress("stream-test", 1).await;
-                session.notify_progress("stream-test", 2).await;
-                session.notify_progress("stream-test", 3).await;
+                session.notify_request_progress(1.0, Some(3.0)).await;
+                session.notify_request_progress(2.0, Some(3.0)).await;
+                session.notify_request_progress(3.0, Some(3.0)).await;
             }
             Ok(format!("Streamed: {}", self.message))
         }

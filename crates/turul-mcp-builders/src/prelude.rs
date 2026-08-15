@@ -16,14 +16,18 @@
 pub use crate::traits::*;
 
 // Re-export all builders
+#[cfg(feature = "protocol-2025-11-25")]
 pub use crate::completion::CompletionBuilder;
-pub use crate::elicitation::ElicitationBuilder;
+pub use crate::elicitation::{ElicitResultBuilder, ElicitationBuilder};
+#[cfg(feature = "protocol-2025-11-25")]
 pub use crate::logging::LoggingBuilder;
+#[cfg(feature = "protocol-2025-11-25")]
 pub use crate::message::MessageBuilder;
 pub use crate::notification::NotificationBuilder;
 pub use crate::prompt::PromptBuilder;
 pub use crate::resource::ResourceBuilder;
 pub use crate::root::RootBuilder;
+#[cfg(feature = "protocol-2025-11-25")]
 pub use crate::tool::{DynamicToolFn, ToolBuilder};
 
 // Re-export commonly used protocol types for convenience

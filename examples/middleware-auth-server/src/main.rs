@@ -13,12 +13,14 @@
 //! # Start server
 //! cargo run --bin middleware-auth-server
 //!
-//! # Valid request with API key
+//! # Valid request with API key (2026-07-28 stateless: no session handshake;
+//! # each request carries its own `_meta`)
 //! curl -X POST http://localhost:8080/mcp \
 //!   -H "Content-Type: application/json" \
 //!   -H "Accept: application/json" \
+//!   -H "MCP-Protocol-Version: 2026-07-28" \
 //!   -H "X-API-Key: secret-key-123" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"test","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}}}'
 //! ```
 
 use async_trait::async_trait;
@@ -61,12 +63,6 @@ impl McpMiddleware for AuthMiddleware {
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip authentication for initialize (session creation) and ping (pre-init health check)
-        if ctx.method() == "initialize" || ctx.method() == "ping" {
-            tracing::debug!("Skipping auth for {} method", ctx.method());
-            return Ok(());
-        }
-
         // Extract X-API-Key from request metadata (HTTP headers are stored here)
         let api_key = ctx.metadata().get("x-api-key").and_then(|v| v.as_str());
 
@@ -164,7 +160,7 @@ async fn main() -> McpResult<()> {
 
     let server = McpServer::builder()
         .name("middleware-auth-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Authentication Middleware Example")
         .instructions(
             "This server demonstrates middleware-based authentication. \
@@ -184,9 +180,10 @@ async fn main() -> McpResult<()> {
     tracing::info!("  curl -X POST http://localhost:{}/mcp \\", args.port);
     tracing::info!("    -H 'Content-Type: application/json' \\");
     tracing::info!("    -H 'Accept: application/json' \\");
+    tracing::info!("    -H 'MCP-Protocol-Version: 2026-07-28' \\");
     tracing::info!("    -H 'X-API-Key: secret-key-123' \\");
     tracing::info!(
-        "    -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'"
+        "    -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\",\"params\":{{\"_meta\":{{\"io.modelcontextprotocol/protocolVersion\":\"2026-07-28\",\"io.modelcontextprotocol/clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}},\"io.modelcontextprotocol/clientCapabilities\":{{}}}}}}}}'"
     );
 
     server.run().await

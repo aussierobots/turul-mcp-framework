@@ -26,7 +26,7 @@ fn infallible_to_hyper_error(never: std::convert::Infallible) -> hyper::Error {
 type MappedFullBody =
     http_body_util::combinators::MapErr<Full<Bytes>, fn(std::convert::Infallible) -> hyper::Error>;
 
-/// Convert lambda_http::Request to hyper::Request<MappedFullBody>
+/// Convert `lambda_http::Request` to `hyper::Request<MappedFullBody>`
 ///
 /// This enables delegation to SessionMcpHandler by converting Lambda's request format
 /// to the hyper format expected by the framework. All headers are preserved, and Lambda
@@ -102,7 +102,7 @@ pub fn lambda_to_hyper_request(
     Ok(hyper_req)
 }
 
-/// Convert hyper::Response<UnifiedMcpBody> to lambda_http::Response<LambdaBody>
+/// Convert `hyper::Response<UnifiedMcpBody>` to `lambda_http::Response<LambdaBody>`
 ///
 /// This collects the streaming body into a LambdaBody for non-streaming responses.
 /// Used by the handle() method which returns snapshot responses.
@@ -144,7 +144,7 @@ pub async fn hyper_to_lambda_response(
     Ok(lambda_resp)
 }
 
-/// Convert hyper::Response<UnifiedMcpBody> to lambda_http streaming response
+/// Convert `hyper::Response<UnifiedMcpBody>` to lambda_http streaming response
 ///
 /// This preserves the streaming body for real-time SSE responses.
 /// Used by the handle_streaming() method for true streaming.

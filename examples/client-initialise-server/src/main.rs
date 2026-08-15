@@ -8,14 +8,14 @@
 //!
 //! ## Usage
 //! ```bash
-//! # Start server on default port (8641)
+//! # Start server on default port (52950)
 //! cargo run --package client-initialise-server
 //! ```
 //!
 //! ## Test with Client
 //! ```bash
 //! # In another terminal:
-//! cargo run --package client-initialise-report -- --url http://127.0.0.1:8641/mcp
+//! cargo run --package client-initialise-report -- --url http://127.0.0.1:52950/mcp
 //! ```
 
 use anyhow::Result;
@@ -39,6 +39,17 @@ use turul_mcp_session_storage::{SqliteConfig, SqliteSessionStorage};
 static SESSION_STORAGE: OnceLock<Arc<turul_mcp_session_storage::BoxedSessionStorage>> =
     OnceLock::new();
 
+/// The backend actually selected by `--storage-backend` at startup. The
+/// inspection tools report this rather than a `cfg!(feature = ...)` guess:
+/// this package compiles every backend by default, so a compile-time check
+/// names whichever feature happens to be listed first regardless of what is
+/// running.
+static STORAGE_BACKEND: OnceLock<&'static str> = OnceLock::new();
+
+fn storage_type() -> &'static str {
+    STORAGE_BACKEND.get().copied().unwrap_or("InMemory")
+}
+
 /// Echo SSE tool that demonstrates MCP notifications via SessionContext
 #[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
@@ -55,10 +66,20 @@ impl EchoSseTool {
         // Log the call on the server side
         info!("echo_sse called with text: '{}'", self.text);
 
-        // Send a progress notification if we have a session
+        // Progress must reference the token the CALLER supplied in
+        // `params._meta.progressToken`; a token of the tool's own choosing is
+        // noise the client cannot match to its request. `notify_request_progress`
+        // returns false when the caller declared none — which means progress was
+        // never opted into, so the correct response is to send nothing.
         if let Some(session_context) = &session {
-            info!("Sending progress notification via SessionContext");
-            session_context.notify_progress("echo_processing", 50).await;
+            if session_context
+                .notify_request_progress(50.0, Some(100.0))
+                .await
+            {
+                info!("Sent 50/100 against the request's own progressToken");
+            } else {
+                info!("Caller declared no progressToken — no progress to send");
+            }
 
             // Also send a log message notification
             session_context
@@ -80,7 +101,7 @@ impl EchoSseTool {
         // Send completion notification
         if let Some(session_context) = &session {
             session_context
-                .notify_progress("echo_processing", 100)
+                .notify_request_progress(100.0, Some(100.0))
                 .await;
             session_context
                 .notify_log(
@@ -116,16 +137,7 @@ impl GetSessionDataTool {
             // Get session info from storage
             match storage.get_session(&session_ctx.session_id).await {
                 Ok(Some(session_info)) => {
-                    // Determine data source (direct from storage backend)
-                    let storage_type = if cfg!(feature = "dynamodb") {
-                        "DynamoDB"
-                    } else if cfg!(feature = "postgres") {
-                        "PostgreSQL"
-                    } else if cfg!(feature = "sqlite") {
-                        "SQLite"
-                    } else {
-                        "InMemory"
-                    };
+                    let storage_type = storage_type();
 
                     let session_data = json!({
                         "session_id": session_info.session_id,
@@ -216,16 +228,7 @@ impl GetSessionEventsTool {
                         })
                         .collect();
 
-                    // Determine data source (direct from storage backend)
-                    let storage_type = if cfg!(feature = "dynamodb") {
-                        "DynamoDB"
-                    } else if cfg!(feature = "postgres") {
-                        "PostgreSQL"
-                    } else if cfg!(feature = "sqlite") {
-                        "SQLite"
-                    } else {
-                        "InMemory"
-                    };
+                    let storage_type = storage_type();
 
                     let response = json!({
                         "session_id": session_ctx.session_id,
@@ -285,17 +288,7 @@ impl GetTableInfoTool {
 
         debug!("Using session storage for table info: {:p}", storage);
 
-        // Determine storage backend type and table information
-        let storage_type = if cfg!(feature = "dynamodb") {
-            "DynamoDB"
-        } else if cfg!(feature = "postgres") {
-            "PostgreSQL"
-        } else if cfg!(feature = "sqlite") {
-            "SQLite"
-        } else {
-            "InMemory"
-        };
-
+        let storage_type = storage_type();
         let table_info = json!({
             "storage_backend": storage_type,
             "session_table": {
@@ -365,7 +358,7 @@ async fn main() -> Result<()> {
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
-    let mut port = 8641;
+    let mut port = 52950;
     let mut storage_backend = "inmemory".to_string(); // Default to InMemory storage
     let mut create_tables = false; // Default to not creating tables
 
@@ -374,7 +367,7 @@ async fn main() -> Result<()> {
         match args[i].as_str() {
             "--port" => {
                 if i + 1 < args.len() {
-                    port = args[i + 1].parse().unwrap_or(8641);
+                    port = args[i + 1].parse().unwrap_or(52950);
                     i += 2;
                 } else {
                     i += 1;
@@ -398,6 +391,15 @@ async fn main() -> Result<()> {
 
     let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
     info!("   Binding to: http://{}/mcp", bind_address);
+
+    STORAGE_BACKEND
+        .set(match storage_backend.as_str() {
+            "sqlite" => "SQLite",
+            "postgres" => "PostgreSQL",
+            "dynamodb" => "DynamoDB",
+            _ => "InMemory",
+        })
+        .ok();
 
     // Build server using builder pattern with appropriate storage backend
     let server = match storage_backend.as_str() {
@@ -440,7 +442,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("1.0.0")
+                    .version(env!("CARGO_PKG_VERSION"))
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -473,7 +475,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("1.0.0")
+                    .version(env!("CARGO_PKG_VERSION"))
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -515,7 +517,7 @@ async fn main() -> Result<()> {
 
                 McpServer::builder()
                     .name("client-initialise-server")
-                    .version("1.0.0")
+                    .version(env!("CARGO_PKG_VERSION"))
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
@@ -543,7 +545,7 @@ async fn main() -> Result<()> {
 
             McpServer::builder()
                 .name("client-initialise-server")
-                .version("1.0.0")
+                .version(env!("CARGO_PKG_VERSION"))
                 .title("MCP Initialize Test Server")
                 .bind_address(bind_address)
                 .with_session_storage(storage_arc)

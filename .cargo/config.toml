@@ -20,7 +20,9 @@
 
 # Profile configurations for testing
 [profile.test]
-# Enable debug info for better backtraces in test failures
-debug = true
+# Line tables only: panic messages and file:line in backtraces are preserved
+# (panic locations come from #[track_caller], not debuginfo), while the full
+# type debuginfo that dominated target/debug/deps is dropped.
+debug = "line-tables-only"
 # Keep optimization low for faster test compilation
 opt-level = 0

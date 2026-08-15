@@ -1,378 +1,107 @@
 # Development Team Resource Server
 
-A **real-world MCP resources server** that provides centralized access to development team resources including project documentation, API specifications, configuration files, database schemas, and system status monitoring. This example demonstrates how teams can use MCP to create a unified resource hub that loads data from external files.
+Five hand-written `McpResource` implementations that load their bodies from
+external files under `data/`, showing the pattern a team resource hub uses:
+content lives in markdown/JSON/SQL files that non-Rust contributors can edit,
+and the resource is a thin loader with a fallback when the file is missing.
 
-## Real-World Use Case
+Spec lane: **2026-07-28** (workspace default). Stateless — no
+`initialize`/`notifications/initialized`, no `Mcp-Session-Id`. Every request
+carries its own `_meta` plus the `MCP-Protocol-Version` header, and
+`resources/read` also requires `Mcp-Name` set to the URI being read.
 
-This server simulates a **development team's resource portal** that provides:
+## Resources (as registered by `src/main.rs`)
 
-- **📚 Project Documentation**: Centralized access to project docs and architecture
-- **🔗 API Documentation**: Complete API specs loaded from external markdown files
-- **⚙️ Configuration Management**: Production config files with security best practices
-- **🗄️ Database Schema**: Version-controlled schema documentation and migration guides
-- **📊 System Monitoring**: Real-time system health and performance metrics
+| URI | `mimeType` | Source |
+|---|---|---|
+| `file:///docs/project.md` | `text/markdown` | workspace `README.md` + inline overview |
+| `file:///docs/api.md` | `text/markdown` | `data/api_docs.md` |
+| `file:///config/app.json` | `application/json` | `data/app_config.json` |
+| `file:///schema/database.sql` | `text/plain` | `data/database_schema.sql` |
+| `file:///status/system.json` | `application/json` | generated at read time |
 
-### Why External Data Files?
+Several resources return **more than one `contents[]` entry** for the same URI
+— e.g. the config resource returns the JSON document plus a markdown
+environment-variable guide. Each entry declares its own `mimeType`, which is
+why the guide comes back as `text/markdown` even though the resource's
+`resources/list` entry says `application/json`.
 
-Unlike hardcoded resource content, this server loads information from **external files** demonstrating:
-- **Maintainability**: Update documentation without code changes
-- **Collaboration**: Teams can maintain docs using standard tools (markdown, JSON, SQL)
-- **Version Control**: Track changes to resources alongside code
-- **Real-world pattern**: How production systems manage documentation and configuration
+## Run
 
-## Architecture
-
-```
-resources-server/
-├── src/main.rs                 # Server implementation
-├── data/                       # External resource files
-│   ├── api_docs.md             # API documentation (markdown)
-│   ├── app_config.json         # Application configuration
-│   └── database_schema.sql     # Database schema with migrations
-└── README.md
-```
-
-## Features
-
-### 🎯 **Production Resource Patterns**
-- **External file loading** with graceful fallbacks
-- **Multiple content formats** (markdown, JSON, SQL)
-- **Security-aware configuration** with environment variable patterns
-- **Real-time status monitoring** with system metrics
-
-### 📊 **Team Collaboration**
-- **Centralized documentation** accessible via MCP protocol
-- **Configuration transparency** for all team members
-- **Schema documentation** for database changes
-- **System visibility** for operations and debugging
-
-### ⚡ **Production Ready**
-- **Error handling** for missing or corrupted files
-- **Structured content** with proper formatting
-- **Performance monitoring** and health checks
-
-## Running the Server
-
-### Quick Start
 ```bash
-# Ensure you're in the resources-server directory for data/ access
+# data/ is resolved relative to the working directory
 cd examples/resources-server
-
-# Run the development resource server (default: 127.0.0.1:8041)
 cargo run -p resources-server
-
-# Expected output:
-# INFO resources_server: 🚀 Starting Development Resources Server on port 8041
-# INFO turul_mcp_server::builder: 🔧 Auto-configured server capabilities:
-# INFO turul_mcp_server::builder:    - Resources: true
-# INFO turul_mcp_server::server: ✅ Server started successfully on http://127.0.0.1:8041/mcp
+# → http://127.0.0.1:8041/mcp
 ```
 
-### Verify Server is Working
+## Try it
+
 ```bash
-# Initialize connection (in another terminal)
-curl -X POST http://127.0.0.1:8041/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "initialize",
-    "params": {
-      "protocolVersion": "2025-11-25",
-      "capabilities": {},
-      "clientInfo": {"name": "test", "version": "1.0"}
-    },
-    "id": 1
-  }' | jq
+META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
 
-# List available resources
-curl -X POST http://127.0.0.1:8041/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "resources/list",
-    "params": {},
-    "id": 2
-  }' | jq
+# What the server offers
+curl -s -X POST http://127.0.0.1:8041/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: server/discover' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"server/discover\",\"params\":{$META}}" | jq
 
-# Should show 5 available resources:
-# - docs://project, docs://api, config://app, schema://database, status://system
+# List the five resources
+curl -s -X POST http://127.0.0.1:8041/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: resources/list' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"resources/list\",\"params\":{$META}}" \
+  | jq '.result.resources[] | {uri, mimeType}'
+
+# Read one — note Mcp-Name must carry the URI
+curl -s -X POST http://127.0.0.1:8041/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: resources/read' \
+  -H 'Mcp-Name: file:///config/app.json' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/read\",\"params\":{$META,\"uri\":\"file:///config/app.json\"}}" \
+  | jq '.result.contents[] | {uri, mimeType}'
+
+# No templates are registered → empty list, not an error
+curl -s -X POST http://127.0.0.1:8041/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: resources/templates/list' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"resources/templates/list\",\"params\":{$META}}" \
+  | jq '.result.resourceTemplates'
+
+# Unknown URI → -32602
+curl -s -X POST http://127.0.0.1:8041/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: resources/read' \
+  -H 'Mcp-Name: docs://project' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"resources/read\",\"params\":{$META,\"uri\":\"docs://project\"}}" \
+  | jq '.error'
 ```
 
-## Available Resources
+## Declaring content types
 
-### 1. Project Documentation (`docs://project`)
+`ResourceContent::text()` hardcodes `text/plain` and `ResourceContent::json()`
+hardcodes `application/json`. Anything else — markdown here — must say so
+explicitly, or `resources/read` contradicts the `mimeType` that
+`resources/list` advertises for the same URI:
 
-**Purpose**: Comprehensive project documentation and architecture guides  
-**Source**: Loads from actual project README and provides framework overview
-
-**Example Request:**
-```bash
-curl -X POST http://127.0.0.1:8041/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "resources/read",
-    "params": {"uri": "docs://project"},
-    "id": 1
-  }'
-```
-
-**Content Includes:**
-- Main project README (loaded from `../../README.md`)
-- MCP Framework project structure and architecture
-- Development workflow and best practices
-- Core crates and example applications overview
-
-### 2. API Documentation (`docs://api`)
-
-**Purpose**: Complete API documentation loaded from external markdown  
-**Source**: `data/api_docs.md` (comprehensive API reference)
-
-**Example Request:**
-```bash
-curl -X POST http://127.0.0.1:8041/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "resources/read",
-    "params": {"uri": "docs://api"},
-    "id": 1
-  }'
-```
-
-**Content Includes:**
-- Authentication methods and API key usage
-- Complete endpoint documentation with examples
-- Request/response schemas and error handling
-- SDK examples for multiple languages (JavaScript, Python)
-- Rate limiting and best practices
-
-### 3. Application Configuration (`config://app`)
-
-**Purpose**: Production configuration management with security best practices  
-**Source**: `data/app_config.json` (comprehensive application settings)
-
-**Example Request:**
-```bash
-curl -X POST http://127.0.0.1:8041/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "resources/read",
-    "params": {"uri": "config://app"},
-    "id": 1
-  }'
-```
-
-**Content Includes:**
-- Server, database, and Redis configuration
-- Authentication and security settings
-- Storage providers (local and S3) configuration
-- Email, logging, and monitoring settings
-- Environment variable security guide
-- Feature flags and API configuration
-
-### 4. Database Schema (`schema://database`)
-
-**Purpose**: Database schema documentation and migration management  
-**Source**: `data/database_schema.sql` (production-ready schema)
-
-**Example Request:**
-```bash
-curl -X POST http://127.0.0.1:8041/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "resources/read",
-    "params": {"uri": "schema://database"},
-    "id": 1
-  }'
-```
-
-**Content Includes:**
-- Complete database schema with tables, indexes, and constraints
-- User management, content, and media tables
-- Audit logging and session management
-- Views for common queries and default data
-- Schema management best practices
-- Migration strategy and backup procedures
-
-### 5. System Status (`status://system`)
-
-**Purpose**: Real-time system monitoring and health metrics  
-**Source**: Generated dynamically with current timestamps
-
-**Example Request:**
-```bash
-curl -X POST http://127.0.0.1:8041/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "resources/read",
-    "params": {"uri": "status://system"},
-    "id": 1
-  }'
-```
-
-**Content Includes:**
-- Server status, version, and uptime information
-- Database connection metrics and performance
-- Redis cache statistics and memory usage
-- System resource utilization (CPU, memory, disk)
-- Application metrics (requests/minute, error rate)
-- Comprehensive health report with status indicators
-
-## External Data Files
-
-### API Documentation (`data/api_docs.md`)
-```markdown
-# API Documentation
-
-## Authentication
-All API requests require a valid API key...
-
-## Endpoints
-### GET /users
-Retrieve a list of users...
-```
-
-### Configuration (`data/app_config.json`)
-```json
-{
-  "application": {
-    "name": "Content Management System",
-    "version": "2.1.4",
-    "environment": "production"
-  },
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8080,
-    "workers": 4
-  },
-  "security": {
-    "jwt": {
-      "secret": "${JWT_SECRET}",
-      "expiration": 3600
-    }
-  }
-}
-```
-
-### Database Schema (`data/database_schema.sql`)
-```sql
--- Production Database Schema
-CREATE TABLE users (
-    id SERIAL PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    -- ... comprehensive schema
-);
-
--- Indexes and constraints
-CREATE INDEX idx_users_email ON users(email);
-```
-
-## Implementation Highlights
-
-### External File Loading
 ```rust
-impl ApiDocumentationResource {
-    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
-        let api_docs_path = Path::new("data/api_docs.md");
-        
-        match fs::read_to_string(api_docs_path) {
-            Ok(content) => Ok(vec![ResourceContent::text(content)]),
-            Err(_) => {
-                // Graceful fallback with explanation
-                Ok(vec![ResourceContent::text(fallback_content)])
-            }
-        }
-    }
-}
+ResourceContent::text("file:///docs/api.md", content)
+    .with_mime_type("text/markdown")
 ```
 
-### Configuration with Security
-```rust
-// Production configuration management
-match fs::read_to_string("data/app_config.json") {
-    Ok(config_content) => {
-        // Parse and validate JSON configuration
-        let config_json: serde_json::Value = serde_json::from_str(&config_content)?;
-        // Pretty-print for readability
-        ResourceContent::text(serde_json::to_string_pretty(&config_json)?)
-    }
-}
-```
+The server also enforces a MIME allowlist on `resources/read`, auto-derived
+from the file extensions of the registered resource URIs (`.md`, `.json`,
+`.txt`, `.csv`, `.html`, `.xml`, `.pdf`, `.png`, `.jpg`). A type outside that
+set — `application/sql`, say — is advertised by `resources/list` and then
+rejected by `resources/read` with `-32602`, which is why the schema resource
+here declares `text/plain`.
 
-### Dynamic Status Generation
-```rust
-// Real-time system status
-let now: DateTime<Utc> = Utc::now();
-let status = json!({
-    "timestamp": now.to_rfc3339(),
-    "server": {"status": "healthy", "version": "1.2.3"},
-    "metrics": {"requests_per_minute": 1247, "error_rate": 0.02}
-});
-```
+## See also
 
-## Real-World Applications
-
-### Development Teams
-- **Onboarding**: New team members access all project resources in one place
-- **Documentation**: Living documentation that stays up-to-date with code
-- **Configuration**: Transparent configuration management for all environments
-- **Debugging**: Quick access to schema and system status for troubleshooting
-
-### DevOps and Operations
-- **Monitoring**: System health and performance metrics via MCP
-- **Configuration Management**: Centralized access to all application settings
-- **Schema Management**: Database documentation and migration tracking
-- **Incident Response**: Quick access to system status and configuration
-
-### Integration Scenarios
-- **CI/CD Pipelines**: Access configuration and documentation during builds
-- **IDE Extensions**: Project resources accessible directly in development environments
-- **API Clients**: Documentation and configuration for API integration
-- **Monitoring Tools**: System metrics and health data via standardized protocol
-
-## Security Considerations
-
-### Configuration Security
-- **Environment Variables**: Sensitive values never stored in config files
-- **Access Control**: Resource access can be extended with authentication
-- **Audit Trails**: Changes to external files tracked via version control
-- **Separation of Concerns**: Public documentation vs sensitive configuration
-
-### Best Practices Demonstrated
-```bash
-# Secure environment variable patterns
-export JWT_SECRET="your-256-bit-secret"
-export DB_PASSWORD="your-database-password"
-
-# Configuration management
-- Development: .env files (never committed)
-- Staging: Environment-specific configs
-- Production: Secure secret management systems
-```
-
-## Extension Opportunities
-
-### Enhanced Data Sources
-- **Git Integration**: Load documentation from repository branches
-- **Database Connectivity**: Live schema introspection and table statistics
-- **Monitoring APIs**: Real metrics from Prometheus, Grafana, or DataDog
-- **Cloud Services**: Configuration from AWS Parameter Store or Kubernetes ConfigMaps
-
-### Advanced Features
-- **Authentication**: User-specific resource access with permissions
-- **Caching**: Performance optimization for expensive resource operations
-- **Versioning**: Historical versions of configuration and documentation
-- **Real-time Updates**: SSE notifications when external files change
-
-### Team Workflow Integration
-- **Pull Request Reviews**: Configuration and schema change validation
-- **Documentation Generation**: Auto-generated API docs from code annotations
-- **Environment Promotion**: Configuration comparison across environments
-- **Compliance Reporting**: Audit trails for configuration and schema changes
-
-This resources server demonstrates how external data files enable maintainable, collaborative resource management that scales with team growth and evolving documentation needs.
+- `resource-server` — the same surface via `#[derive(McpResource)]`
+- `function-resource-server` — `.resource_fn()` plus a URI template

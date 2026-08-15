@@ -1,3 +1,10 @@
+//! # 2025-11-25 Lifecycle Compliance Report (2025-ONLY by design)
+//!
+//! Raw-wire probe of the 2025-11-25 stateful lifecycle: `initialize` →
+//! `notifications/initialized` → `Mcp-Session-Id` on every request. Pairs
+//! with `client-initialise-server` (2025-pinned). The 2026-07-28 stateless
+//! pair is `streamable-http-client` + `minimal-server`.
+
 //! # MCP Initialize Session Report Client
 //!
 //! A comprehensive test client that validates MCP session management and SSE streaming.
@@ -1184,6 +1191,36 @@ async fn test_delete_request(
     Ok(())
 }
 
+/// The tool's own return value, unwrapped from the `CallToolResult` envelope.
+///
+/// `structuredContent` holds the machine-readable form, keyed by the tool's
+/// output field name (`output` for these inspection tools); `content[0].text`
+/// carries the same object as a JSON string. Prefer the structured form.
+fn tool_payload(response: &serde_json::Value) -> Option<serde_json::Value> {
+    let result = response.get("result")?;
+    let body = match result.get("structuredContent") {
+        Some(structured) => structured.clone(),
+        None => {
+            let text = result
+                .get("content")?
+                .as_array()?
+                .first()?
+                .get("text")?
+                .as_str()?;
+            serde_json::from_str::<serde_json::Value>(text).ok()?
+        }
+    };
+    // Strip the single-key wrapper named after the tool's output field.
+    if let Some(map) = body.as_object()
+        && map.len() == 1
+        && let Some(inner) = map.get("output").or_else(|| map.get("result"))
+        && inner.is_object()
+    {
+        return Some(inner.clone());
+    }
+    Some(body)
+}
+
 async fn verify_session_data_consistency(
     session_id: &str,
     client: &reqwest::Client,
@@ -1232,14 +1269,7 @@ async fn verify_session_data_consistency(
         serde_json::to_string_pretty(&session_data_response)?
     );
 
-    // Extract session data from tool response
-    let session_data = session_data_response
-        .get("result")
-        .and_then(|r| r.get("content"))
-        .and_then(|c| c.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|item| item.get("text"))
-        .and_then(|text| serde_json::from_str::<serde_json::Value>(text.as_str()?).ok())
+    let session_data = tool_payload(&session_data_response)
         .context("Failed to extract session data from tool response")?;
 
     info!("✅ Retrieved session data successfully");
@@ -1354,14 +1384,7 @@ async fn verify_session_data_consistency(
         serde_json::to_string_pretty(&events_response_json)?
     );
 
-    // Extract events data from tool response
-    let events_data = events_response_json
-        .get("result")
-        .and_then(|r| r.get("content"))
-        .and_then(|c| c.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|item| item.get("text"))
-        .and_then(|text| serde_json::from_str::<serde_json::Value>(text.as_str()?).ok())
+    let events_data = tool_payload(&events_response_json)
         .context("Failed to extract events data from tool response")?;
 
     let event_count = events_data
@@ -1689,16 +1712,17 @@ async fn print_final_report(
         }
     }
 
-    // Step 7: Test DELETE request for session cleanup
-    info!("");
-    info!("🗑️  Step 7: Testing DELETE Request (Session Cleanup)");
-    test_delete_request(client, base_url, session_id, timeout).await?;
-
-    // Session Data Verification using new inspection tools
+    // Session data verification reads the live session through the server's
+    // inspection tools, so it MUST run before the DELETE below terminates it.
     info!("");
     if let Err(e) = verify_session_data_consistency(session_id, client, base_url).await {
         warn!("⚠️  Session data verification failed: {}", e);
     }
+
+    // Step 7: Test DELETE request for session cleanup
+    info!("");
+    info!("🗑️  Step 7: Testing DELETE Request (Session Cleanup)");
+    test_delete_request(client, base_url, session_id, timeout).await?;
 
     info!("═══════════════════════════════════════");
 

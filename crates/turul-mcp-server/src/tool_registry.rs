@@ -193,7 +193,7 @@ impl ToolRegistry {
     /// Called AFTER the write lock is released.
     /// Returns `Err(NotificationFailed)` if mandatory persistence fails.
     async fn broadcast_notification(&self) -> Result<(), ToolRegistryError> {
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
         );
         let data = serde_json::to_value(&notification)
@@ -969,7 +969,7 @@ mod tests {
             Arc::new(SchemaTestTool {
                 tool_name: "complex",
                 schema: ToolSchema::object()
-                    .with_properties(props_a)
+                    .with_properties(turul_mcp_builders::tool_props(props_a))
                     .with_required(vec!["name".to_string()]),
             }),
         );
@@ -986,7 +986,7 @@ mod tests {
             Arc::new(SchemaTestTool {
                 tool_name: "complex",
                 schema: ToolSchema::object()
-                    .with_properties(props_b)
+                    .with_properties(turul_mcp_builders::tool_props(props_b))
                     .with_required(vec!["name".to_string()]),
             }),
         );

@@ -24,109 +24,7 @@ use tracing::{debug, error, info, warn};
 use turul_mcp_session_storage::SessionView;
 
 use crate::ServerConfig;
-use crate::protocol::normalize_header_value;
-
-/// MCP Protocol versions
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum McpProtocolVersion {
-    /// Original protocol without streamable HTTP (2024-11-05)
-    V2024_11_05,
-    /// Protocol including streamable HTTP (2025-03-26)
-    V2025_03_26,
-    /// Protocol with structured _meta, cursor, progressToken, and elicitation (2025-06-18)
-    V2025_06_18,
-    /// Protocol with tasks, icons, URL elicitation, and sampling tools (2025-11-25)
-    #[default]
-    V2025_11_25,
-}
-
-impl McpProtocolVersion {
-    /// Parse from header string
-    pub fn parse_version(s: &str) -> Option<Self> {
-        match s {
-            "2024-11-05" => Some(Self::V2024_11_05),
-            "2025-03-26" => Some(Self::V2025_03_26),
-            "2025-06-18" => Some(Self::V2025_06_18),
-            "2025-11-25" => Some(Self::V2025_11_25),
-            _ => None,
-        }
-    }
-
-    /// Convert to string representation
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::V2024_11_05 => "2024-11-05",
-            Self::V2025_03_26 => "2025-03-26",
-            Self::V2025_06_18 => "2025-06-18",
-            Self::V2025_11_25 => "2025-11-25",
-        }
-    }
-
-    /// Returns whether this version supports streamable HTTP
-    pub fn supports_streamable_http(&self) -> bool {
-        matches!(
-            self,
-            Self::V2025_03_26 | Self::V2025_06_18 | Self::V2025_11_25
-        )
-    }
-
-    /// Returns whether this version supports _meta fields
-    pub fn supports_meta_fields(&self) -> bool {
-        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
-    }
-
-    /// Returns whether this version supports cursor-based pagination
-    pub fn supports_cursors(&self) -> bool {
-        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
-    }
-
-    /// Returns whether this version supports progress tokens
-    pub fn supports_progress_tokens(&self) -> bool {
-        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
-    }
-
-    /// Returns whether this version supports elicitation
-    pub fn supports_elicitation(&self) -> bool {
-        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
-    }
-
-    /// Returns whether this version supports the task system (experimental)
-    pub fn supports_tasks(&self) -> bool {
-        matches!(self, Self::V2025_11_25)
-    }
-
-    /// Returns whether this version supports icons
-    pub fn supports_icons(&self) -> bool {
-        matches!(self, Self::V2025_11_25)
-    }
-
-    /// Get list of supported features for this version
-    pub fn supported_features(&self) -> Vec<&'static str> {
-        let mut features = vec![];
-        if self.supports_streamable_http() {
-            features.push("streamable-http");
-        }
-        if self.supports_meta_fields() {
-            features.push("_meta-fields");
-        }
-        if self.supports_cursors() {
-            features.push("cursor-pagination");
-        }
-        if self.supports_progress_tokens() {
-            features.push("progress-tokens");
-        }
-        if self.supports_elicitation() {
-            features.push("elicitation");
-        }
-        if self.supports_tasks() {
-            features.push("tasks");
-        }
-        if self.supports_icons() {
-            features.push("icons");
-        }
-        features
-    }
-}
+use crate::protocol::{McpProtocolVersion, normalize_header_value};
 
 /// Streamable HTTP request context
 #[derive(Debug, Clone)]
@@ -158,10 +56,17 @@ impl StreamableHttpContext {
             .unwrap_or_default();
 
         // Extract session ID from Mcp-Session-Id header (note capitalization)
+        #[cfg(feature = "protocol-2025-11-25")]
         let session_id = headers
             .get("Mcp-Session-Id")
             .and_then(|h| h.to_str().ok())
             .map(|s| s.to_string());
+
+        // 2026-07-28 stateless core: an `Mcp-Session-Id` header on a request is
+        // ignored — the server neither honors nor echoes session ids
+        // (streamable-http §Backward Compatibility).
+        #[cfg(feature = "protocol-2026-07-28")]
+        let session_id = None;
 
         // Check Accept header for streaming and JSON support
         let accept_header = headers
@@ -198,36 +103,65 @@ impl StreamableHttpContext {
         self.wants_sse_stream
     }
 
-    /// Conservative transport heuristic for SSE vs JSON response framing.
+    /// Choose SSE vs JSON response framing for a single request.
     ///
-    /// **Not a spec requirement** — the MCP spec allows either format when
-    /// the client accepts both. This is a compatibility-driven default:
+    /// The server may answer a request with either a single JSON object or an
+    /// SSE stream, and the client must support both — so this is a choice, not
+    /// a conformance requirement:
     ///
     /// - Client only accepts `text/event-stream` → SSE
     /// - Client only accepts `application/json` → JSON
-    /// - Client accepts both → SSE for `tools/call`, `sampling/createMessage`,
-    ///   `elicitation/create`; JSON for everything else
+    /// - Client accepts both → SSE only when the request opted into
+    ///   request-scoped notifications, via `_meta.progressToken` or
+    ///   `_meta."io.modelcontextprotocol/logLevel"`
     ///
-    /// **Limitation (architectural, not fundamental):** the heuristic operates
-    /// at method granularity, not per-tool. Every `tools/call` under combined
-    /// Accept gets SSE — even simple tools that never call `notify_progress()`.
-    /// The transport layer does not currently have per-tool progress metadata;
-    /// plumbing that information from the tool registry would allow a finer
-    /// decision but is not implemented. Non-streaming `tools/call` responses
-    /// pay the SSE framing cost and may hit client/proxy SSE quirks as a
-    /// result of this tradeoff.
-    pub fn should_use_sse(&self, method: &str) -> bool {
+    /// Those two keys are the only per-request opt-ins for server→client
+    /// notifications on a response stream, and both are gated on the request
+    /// having asked: `ProgressNotificationParams.progressToken` is required and
+    /// must be the token given in the originating request, and a server must not
+    /// emit `notifications/message` for a request that declared no log level. A
+    /// request carrying neither cannot legally be sent either notification, so
+    /// SSE framing would buy it nothing while costing interoperability — plain
+    /// JSON is the broader-support path, and it is the only path that can carry
+    /// the `-32020`/`-32021` header/capability errors on HTTP 400 as their
+    /// schemas require (chunked SSE commits 200 before dispatch).
+    ///
+    /// `subscriptions/listen` is unaffected: it is handled on its own path,
+    /// which independently requires `Accept: text/event-stream`.
+    pub fn should_use_sse(&self, request: &turul_rpc::JsonRpcRequest) -> bool {
         if !self.wants_sse_stream {
             return false;
         }
         if !self.accepts_json {
             return true;
         }
-        // Conservative: assume any tools/call may emit mid-stream events
-        matches!(
-            method,
+        // 2025-11-25 keeps its historical method-name heuristic: that lane is a
+        // frozen spec snapshot and its clients were built against always-SSE
+        // `tools/call`. The per-request rule below is a 2026-07-28 change.
+        #[cfg(not(feature = "protocol-2026-07-28"))]
+        return matches!(
+            request.method.as_str(),
             "tools/call" | "sampling/createMessage" | "elicitation/create"
-        )
+        );
+
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            let Some(meta) = request.get_param("_meta") else {
+                return false;
+            };
+            if meta.get("progressToken").is_some() {
+                return true;
+            }
+            // Per-request log level is a 2026-07-28 key; the 2025-11-25 lane sets
+            // levels with `logging/setLevel` instead, so there is nothing to opt in
+            // to here and the alias crate does not export the constant.
+            // The key is deprecated with the rest of the Logging surface, but a
+            // request that declares it must still be able to receive what it asked
+            // for while the feature remains in the spec.
+            #[allow(deprecated)]
+            let opted_in = meta.get(turul_mcp_protocol::META_KEY_LOG_LEVEL).is_some();
+            opted_in
+        }
     }
 
     /// Whether client wants streaming POST responses
@@ -414,19 +348,22 @@ impl StreamableResponse {
 #[derive(Clone)]
 pub struct StreamableHttpHandler {
     config: Arc<ServerConfig>,
-    dispatcher: Arc<turul_mcp_json_rpc_server::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
+    dispatcher: Arc<turul_rpc::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
     session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     stream_manager: Arc<crate::StreamManager>,
     server_capabilities: turul_mcp_protocol::ServerCapabilities,
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     tool_fingerprint: Option<String>,
     tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
+    /// Identity stamped into every successful result's
+    /// `_meta.io.modelcontextprotocol/serverInfo`. `None` leaves the key off.
+    server_info: Option<turul_mcp_protocol::Implementation>,
 }
 
 impl StreamableHttpHandler {
     pub fn new(
         config: Arc<ServerConfig>,
-        dispatcher: Arc<turul_mcp_json_rpc_server::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
+        dispatcher: Arc<turul_rpc::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_manager: Arc<crate::StreamManager>,
         server_capabilities: turul_mcp_protocol::ServerCapabilities,
@@ -442,10 +379,17 @@ impl StreamableHttpHandler {
             middleware_stack,
             tool_fingerprint,
             tool_notifier: None,
+            server_info: None,
         }
     }
 
     /// Set the tool change notifier for restart/redeploy fingerprint mismatch notifications.
+    /// Set the identity reported in each result's `_meta.serverInfo`.
+    pub fn with_server_info(mut self, info: turul_mcp_protocol::Implementation) -> Self {
+        self.server_info = Some(info);
+        self
+    }
+
     pub fn with_tool_notifier(mut self, notifier: Arc<dyn crate::ToolChangeNotifier>) -> Self {
         self.tool_notifier = Some(notifier);
         self
@@ -483,6 +427,40 @@ impl StreamableHttpHandler {
         if *req.method() == Method::OPTIONS {
             return Response::builder()
                 .status(StatusCode::OK)
+                .body(Full::new(Bytes::new()))
+                .unwrap()
+                .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+        }
+
+        // DNS-rebinding protection (ADR-031): "If the `Origin` header is
+        // present and invalid, servers MUST respond with HTTP 403 Forbidden."
+        // OPTIONS preflight (handled above) is exempt; the actual request is
+        // gated here, ahead of validation, auth, and body parsing.
+        if let Err(origin) =
+            crate::origin::validate_origin(req.headers(), &self.config.origin_policy)
+        {
+            warn!("Rejecting request with disallowed Origin: {origin}");
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .header("Content-Type", "text/plain")
+                .body(Full::new(Bytes::from_static(
+                    b"Forbidden: Origin not allowed",
+                )))
+                .unwrap()
+                .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+        }
+
+        // 2026-07-28 stateless core: the MCP endpoint accepts POST only. Legacy-era
+        // GET (standalone SSE stream, optionally resumed via Last-Event-ID) and
+        // DELETE (session termination) get 405 Method Not Allowed
+        // (streamable-http §Backward Compatibility). Gated ahead of validate() so
+        // legacy-shaped requests get 405, not an Accept/session 400.
+        #[cfg(feature = "protocol-2026-07-28")]
+        if matches!(*req.method(), Method::GET | Method::DELETE) {
+            return Response::builder()
+                .status(StatusCode::METHOD_NOT_ALLOWED)
+                .header("Allow", "POST, OPTIONS")
+                .header("MCP-Protocol-Version", context.protocol_version.as_str())
                 .body(Full::new(Bytes::new()))
                 .unwrap()
                 .map(|body| body.map_err(|never| match never {}).boxed_unsync());
@@ -788,9 +766,7 @@ impl StreamableHttpHandler {
         debug!("Received legacy POST JSON-RPC request: {}", body_str);
 
         // Parse JSON-RPC message
-        use turul_mcp_json_rpc_server::dispatch::{
-            JsonRpcMessage, JsonRpcMessageResult, parse_json_rpc_message,
-        };
+        use turul_rpc::dispatch::{JsonRpcMessage, JsonRpcMessageResult, parse_json_rpc_message};
 
         let message = match parse_json_rpc_message(body_str) {
             Ok(msg) => msg,
@@ -835,7 +811,7 @@ impl StreamableHttpHandler {
 
                             // Create session context for initialize response
                             use crate::notification_bridge::StreamManagerNotificationBroadcaster;
-                            use turul_mcp_json_rpc_server::r#async::SessionContext;
+                            use turul_rpc::r#async::SessionContext;
 
                             let broadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
                                 Arc::clone(&self.stream_manager),
@@ -858,8 +834,8 @@ impl StreamableHttpHandler {
                         Err(err) => {
                             error!("Failed to create session during legacy initialize: {}", err);
                             let error_msg = format!("Session creation failed: {}", err);
-                            turul_mcp_json_rpc_server::JsonRpcMessage::error(
-                                turul_mcp_json_rpc_server::JsonRpcError::internal_error(
+                            turul_rpc::JsonRpcResponse::error(
+                                turul_rpc::JsonRpcError::internal_error(
                                     Some(request.id),
                                     Some(error_msg),
                                 ),
@@ -871,14 +847,12 @@ impl StreamableHttpHandler {
                     self.dispatcher.handle_request(request).await
                 };
 
-                // Convert JsonRpcMessage to JsonRpcMessageResult
+                // Convert JsonRpcResponse to JsonRpcMessageResult
                 match response {
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                    turul_rpc::JsonRpcResponse::Success(resp) => {
                         JsonRpcMessageResult::Response(resp)
                     }
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
-                        JsonRpcMessageResult::Error(err)
-                    }
+                    turul_rpc::JsonRpcResponse::Error(err) => JsonRpcMessageResult::Error(err),
                 }
             }
             JsonRpcMessage::Notification(notification) => {
@@ -1100,6 +1074,9 @@ impl StreamableHttpHandler {
     async fn handle_post_streamable_http<T>(
         &self,
         req: Request<T>,
+        // Mutated only by the 2025-11-25 session lifecycle (initialize mints a
+        // session into the context); the 2026 stateless path never writes it.
+        #[cfg_attr(feature = "protocol-2026-07-28", allow(unused_mut))]
         mut context: StreamableHttpContext,
     ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
     where
@@ -1149,8 +1126,11 @@ impl StreamableHttpHandler {
         debug!("Streaming POST received JSON-RPC request: {}", body_str);
 
         // Parse JSON-RPC message
-        use turul_mcp_json_rpc_server::dispatch::{JsonRpcMessage, parse_json_rpc_message};
-        use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
+        use turul_rpc::dispatch::{JsonRpcMessage, parse_json_rpc_message};
+        // Feeds only the 2025-11-25 missing-session 400 path; the stateless 2026 core
+        // mints an ephemeral session instead, so the import is unused there.
+        #[cfg(feature = "protocol-2025-11-25")]
+        use turul_rpc::error::JsonRpcErrorObject;
 
         let message = match parse_json_rpc_message(body_str) {
             Ok(msg) => msg,
@@ -1159,9 +1139,14 @@ impl StreamableHttpHandler {
                 let error_json =
                     serde_json::to_string(&rpc_err).unwrap_or_else(|_| "{}".to_string());
 
-                // Return error with MCP headers (no session header for parse errors)
+                // Return error with MCP headers (no session header for parse errors).
+                // A body the transport cannot parse as a JSON-RPC message (malformed
+                // JSON, a batch array, or any other envelope violation) never reaches
+                // dispatch, so it takes the same pre-dispatch 400 as the null-id and
+                // header-validation checks below, not the 200 used for a well-formed
+                // request that fails inside a handler.
                 return Response::builder()
-                    .status(StatusCode::OK) // JSON-RPC parse errors still use 200 OK
+                    .status(StatusCode::BAD_REQUEST)
                     .header(CONTENT_TYPE, "application/json")
                     .header("MCP-Protocol-Version", context.protocol_version.as_str())
                     .body(
@@ -1173,22 +1158,131 @@ impl StreamableHttpHandler {
             }
         };
 
-        // Handle sessionless ping (pre-init ping support per MCP 2025-11-25)
+        // MCP forbids null request ids ("Unlike base JSON-RPC, the ID MUST
+        // NOT be null") — reject before any dispatch. turul-rpc's RequestId
+        // retains a Null variant for base-JSON-RPC compatibility, so the MCP
+        // transport enforces the stricter contract here.
+        if let JsonRpcMessage::Request(req) = &message
+            && matches!(req.id, turul_rpc::RequestId::Null)
+        {
+            let err = turul_rpc::JsonRpcError::new(
+                Some(req.id.clone()),
+                turul_rpc::error::JsonRpcErrorObject::invalid_request(Some(serde_json::json!(
+                    "request id MUST NOT be null (MCP basic §Requests)"
+                ))),
+            );
+            let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+            return Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header(CONTENT_TYPE, "application/json")
+                .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                .body(
+                    Full::new(Bytes::from(body))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap();
+        }
+
+        // --- Pre-session auth phase (D4) ---
+        // Extract Bearer token using hardened parser (D6). A present-but-
+        // unparseable Authorization header is flagged so auth middleware can
+        // answer 400 invalid_request (RFC 6750 §3.1) instead of 401.
+        let auth_header = context.headers.get("authorization");
+        let bearer_token = auth_header.and_then(|v| extract_bearer_token(v));
+        let authorization_malformed = auth_header.is_some() && bearer_token.is_none();
+
+        // Run pre-session middleware if any are registered
+        let pre_session_extensions = if self.middleware_stack.has_pre_session_middleware() {
+            let method_name = match &message {
+                JsonRpcMessage::Request(req) => req.method.as_str(),
+                JsonRpcMessage::Notification(notif) => notif.method.as_str(),
+            };
+            let mut pre_ctx = crate::middleware::RequestContext::new(method_name, None);
+            if let Some(ref token) = bearer_token {
+                pre_ctx.set_bearer_token(token.clone());
+            }
+            pre_ctx.set_authorization_malformed(authorization_malformed);
+            // Copy headers to metadata, excluding Bearer authorization (D5)
+            for (k, v) in &context.headers {
+                if k.eq_ignore_ascii_case("authorization") && is_bearer_scheme(v) {
+                    continue;
+                }
+                pre_ctx.add_metadata(k.clone(), serde_json::json!(v));
+            }
+            match self
+                .middleware_stack
+                .execute_before_session(&mut pre_ctx)
+                .await
+            {
+                Ok(()) => Some(pre_ctx.take_extensions()),
+                Err(crate::middleware::MiddlewareError::HttpChallenge {
+                    status,
+                    www_authenticate,
+                    body,
+                }) => {
+                    return build_http_challenge_response(
+                        status,
+                        &www_authenticate,
+                        body.as_deref(),
+                        &context,
+                    );
+                }
+                Err(other_err) => {
+                    // Non-challenge pre-session errors → JSON-RPC error
+                    if let JsonRpcMessage::Request(ref req) = message {
+                        let response = crate::middleware::error::map_middleware_error_to_jsonrpc(
+                            other_err,
+                            req.id.clone(),
+                        );
+                        let response_value =
+                            serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
+                        return StreamableResponse::Json(response_value)
+                            .into_boxed_response(&context);
+                    } else {
+                        // Notification — can't return JSON-RPC error, just reject
+                        return Response::builder()
+                            .status(StatusCode::FORBIDDEN)
+                            .body(
+                                Full::new(Bytes::from(other_err.to_string()))
+                                    .map_err(|never| match never {})
+                                    .boxed_unsync(),
+                            )
+                            .unwrap();
+                    }
+                }
+            }
+        } else {
+            None
+        };
+
+        // Handle sessionless ping (pre-init ping support per MCP 2025-11-25).
         // Clients are permitted to send pings before initialization completes.
-        // When allowed by config, dispatch through the shared middleware + dispatch pipeline
-        // with session=None, so rate-limiting middleware can still block abuse.
+        // The bypass waives the SESSION requirement only — it runs AFTER the
+        // pre-session auth phase above, so servers that implement
+        // authorization still verify pings ("MUST verify all inbound
+        // requests", security best practices). 2026-07-28 has no ping
+        // (absent from the schema): the bypass is 2025-only.
+        #[cfg(feature = "protocol-2025-11-25")]
         let is_sessionless_ping = match &message {
             JsonRpcMessage::Request(req) => req.method == "ping",
             JsonRpcMessage::Notification(notif) => notif.method == "ping",
         } && context.session_id.is_none()
             && self.config.allow_unauthenticated_ping;
+        #[cfg(feature = "protocol-2026-07-28")]
+        let is_sessionless_ping = false;
 
         if is_sessionless_ping {
             return match message {
                 JsonRpcMessage::Request(request) => {
                     // Sessionless ping request: shared dispatch path
                     let (response, _) = self
-                        .run_middleware_and_dispatch(request, context.headers.clone(), None, None)
+                        .run_middleware_and_dispatch(
+                            request,
+                            context.headers.clone(),
+                            None,
+                            pre_session_extensions.clone(),
+                        )
                         .await;
                     let response_value =
                         serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
@@ -1219,75 +1313,153 @@ impl StreamableHttpHandler {
             };
         }
 
-        // --- Pre-session auth phase (D4) ---
-        // Extract Bearer token using hardened parser (D6)
-        let bearer_token = context
-            .headers
-            .get("authorization")
-            .and_then(|v| extract_bearer_token(v));
-
-        // Run pre-session middleware if any are registered
-        let pre_session_extensions = if self.middleware_stack.has_pre_session_middleware() {
-            let method_name = match &message {
-                JsonRpcMessage::Request(req) => req.method.as_str(),
-                JsonRpcMessage::Notification(notif) => notif.method.as_str(),
+        // 2026-07-28 §Server Validation: required request-metadata headers. Runs
+        // AFTER the pre-session auth phase so authentication challenges (401)
+        // take precedence over header-validation failures (400).
+        // Every POST MUST carry MCP-Protocol-Version (this build supports no
+        // pre-2025-06-18 clients, so an absent header is rejected) and Mcp-Method
+        // matching the body method; tools/call, resources/read, and prompts/get
+        // additionally require Mcp-Name matching params.name / params.uri.
+        // Failures → HTTP 400 + JSON-RPC -32020 HeaderMismatch (id-less when the
+        // body is a notification). Header names compare case-insensitively
+        // (hyper lowercases them in `context.headers`); values are case-sensitive.
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            let body_method = match &message {
+                JsonRpcMessage::Request(r) => r.method.as_str(),
+                JsonRpcMessage::Notification(n) => n.method.as_str(),
             };
-            let mut pre_ctx = crate::middleware::RequestContext::new(method_name, None);
-            if let Some(ref token) = bearer_token {
-                pre_ctx.set_bearer_token(token.clone());
-            }
-            // Copy headers to metadata, excluding Bearer authorization (D5)
-            for (k, v) in &context.headers {
-                if k.eq_ignore_ascii_case("authorization") && is_bearer_scheme(v) {
-                    continue;
-                }
-                pre_ctx.add_metadata(k.clone(), serde_json::json!(v));
-            }
-            match self
-                .middleware_stack
-                .execute_before_session(&mut pre_ctx)
-                .await
+            let header = |name: &str| context.headers.get(name).map(String::as_str);
+            let mut failure: Option<String> = None;
+
+            // Version negotiation: a requested version this build does not
+            // implement (unknown or known-but-unsupported) → 400 +
+            // UnsupportedProtocolVersionError (-32022) listing the supported set.
+            if let Some(requested) = header("mcp-protocol-version")
+                && requested != turul_mcp_protocol::MCP_VERSION
             {
-                Ok(()) => Some(pre_ctx.take_extensions()),
-                Err(crate::middleware::MiddlewareError::HttpChallenge {
-                    status,
-                    www_authenticate,
-                    body,
-                }) => {
-                    return build_http_challenge_response(
-                        status,
-                        &www_authenticate,
-                        body.as_deref(),
-                        &context,
-                    );
+                warn!(
+                    "Rejecting 2026 request: unsupported MCP-Protocol-Version '{}'",
+                    requested
+                );
+                let id = match &message {
+                    JsonRpcMessage::Request(r) => Some(r.id.clone()),
+                    JsonRpcMessage::Notification(_) => None,
+                };
+                let err_obj = turul_mcp_protocol::McpError::UnsupportedProtocolVersion {
+                    supported: vec![turul_mcp_protocol::MCP_VERSION.to_string()],
+                    requested: requested.to_string(),
                 }
-                Err(other_err) => {
-                    // Non-challenge pre-session errors → JSON-RPC error
-                    if let JsonRpcMessage::Request(ref req) = message {
-                        let response =
-                            Self::map_middleware_error_to_jsonrpc(other_err, req.id.clone());
-                        let response_value =
-                            serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
-                        return StreamableResponse::Json(response_value)
-                            .into_boxed_response(&context);
-                    } else {
-                        // Notification — can't return JSON-RPC error, just reject
-                        return Response::builder()
-                            .status(StatusCode::FORBIDDEN)
-                            .body(
-                                Full::new(Bytes::from(other_err.to_string()))
-                                    .map_err(|never| match never {})
-                                    .boxed_unsync(),
-                            )
-                            .unwrap();
+                .to_error_object();
+                let err = turul_rpc::JsonRpcError::new(id, err_obj);
+                let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", turul_mcp_protocol::MCP_VERSION)
+                    .body(
+                        Full::new(Bytes::from(body))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap();
+            }
+
+            if header("mcp-protocol-version").is_none() {
+                failure = Some("missing required MCP-Protocol-Version header".to_string());
+            } else {
+                match header("mcp-method") {
+                    None => {
+                        failure = Some("missing required Mcp-Method header".to_string());
+                    }
+                    Some(method_header) if method_header != body_method => {
+                        failure = Some(format!(
+                            "Mcp-Method header value '{method_header}' does not match body method '{body_method}'"
+                        ));
+                    }
+                    Some(_) => {
+                        // Mcp-Name mirrors params.name (tools/call, prompts/get)
+                        // or params.uri (resources/read).
+                        let body_name = if let JsonRpcMessage::Request(r) = &message {
+                            let params =
+                                serde_json::to_value(&r.params).unwrap_or(serde_json::Value::Null);
+                            match body_method {
+                                "tools/call" | "prompts/get" => params
+                                    .get("name")
+                                    .and_then(|v| v.as_str())
+                                    .map(String::from),
+                                "resources/read" => {
+                                    params.get("uri").and_then(|v| v.as_str()).map(String::from)
+                                }
+                                _ => None,
+                            }
+                        } else {
+                            None
+                        };
+                        if let Some(expected) = body_name {
+                            match header("mcp-name") {
+                                None => {
+                                    failure = Some(format!(
+                                        "missing required Mcp-Name header for {body_method}"
+                                    ));
+                                }
+                                Some(name_header) => {
+                                    match turul_mcp_protocol::headers::decode_param_value(
+                                        name_header,
+                                    ) {
+                                        Err(e) => {
+                                            failure = Some(format!("Mcp-Name: {e}"));
+                                        }
+                                        Ok(decoded) if decoded != expected => {
+                                            failure = Some(format!(
+                                                "Mcp-Name header value '{decoded}' does not match body value '{expected}'"
+                                            ));
+                                        }
+                                        Ok(_) => {}
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
-        } else {
-            None
-        };
 
-        // Validate session requirements based on method
+            if let Some(reason) = failure {
+                warn!("Rejecting 2026 request (header validation): {}", reason);
+                let id = match &message {
+                    JsonRpcMessage::Request(r) => Some(r.id.clone()),
+                    JsonRpcMessage::Notification(_) => None,
+                };
+                // Versioning §Backward Compatibility: name the supported
+                // versions in any error returned to an initialize request —
+                // a true legacy client (no MCP-Protocol-Version header)
+                // lands here and this may be its only diagnostic.
+                let data = (body_method == "initialize")
+                    .then(|| serde_json::json!({ "supported": [turul_mcp_protocol::MCP_VERSION] }));
+                let err = turul_rpc::JsonRpcError::new(
+                    id,
+                    turul_rpc::error::JsonRpcErrorObject::server_error(
+                        turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
+                        &format!("Header mismatch: {reason}"),
+                        data,
+                    ),
+                );
+                let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(
+                        Full::new(Bytes::from(body))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap();
+            }
+        }
+
+        // Validate session requirements based on method (2025-11-25 stateful lifecycle).
+        #[cfg(feature = "protocol-2025-11-25")]
         let session_id = match &message {
             JsonRpcMessage::Request(req) if req.method == "initialize" => {
                 // Initialize can create session if none exists
@@ -1363,9 +1535,33 @@ impl StreamableHttpHandler {
                         JsonRpcMessage::Notification(_) => None,
                     };
 
+                    // A 2026-07-28 client probes `server/discover` to detect the spec;
+                    // this 2025-11-25 server has no such method. Answer with the trusted
+                    // JSON-RPC method-not-found (-32601) at HTTP 200 so the bilingual
+                    // client downgrades via its secure signal path — it deliberately does
+                    // not treat a bare 400 as a version cue (a downgrade-attack vector).
+                    if method_name == "server/discover" {
+                        let not_found = turul_rpc::JsonRpcError::new(
+                            request_id.clone(),
+                            JsonRpcErrorObject::method_not_found("server/discover"),
+                        );
+                        let body =
+                            serde_json::to_string(&not_found).unwrap_or_else(|_| "{}".to_string());
+                        return Response::builder()
+                            .status(StatusCode::OK)
+                            .header(CONTENT_TYPE, "application/json")
+                            .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                            .body(
+                                Full::new(Bytes::from(body))
+                                    .map_err(|never| match never {})
+                                    .boxed_unsync(),
+                            )
+                            .unwrap();
+                    }
+
                     warn!("Missing session ID for method: {}", method_name);
 
-                    let error_response = turul_mcp_json_rpc_server::JsonRpcError::new(
+                    let error_response = turul_rpc::JsonRpcError::new(
                         request_id,
                         JsonRpcErrorObject::server_error(
                             -32001,
@@ -1391,6 +1587,148 @@ impl StreamableHttpHandler {
             }
         };
 
+        // 2026-07-28: every request MUST carry a per-request `_meta`
+        // (RequestMetaObject) with protocolVersion and clientCapabilities
+        // (schema: RequestParams._meta is required). Missing/incomplete `_meta`
+        // → -32602 (HTTP 400); a `_meta` protocolVersion that disagrees with the
+        // (already validated) header is a header-validation failure → -32020
+        // HeaderMismatch (HTTP 400).
+        //
+        // `clientInfo` is deliberately NOT checked: the schema marks it optional
+        // and tells servers not to key behavior or security decisions on it, so a
+        // client configured not to report itself MUST still be served. A present
+        // but malformed value is rejected later, when the params deserialize.
+        #[cfg(feature = "protocol-2026-07-28")]
+        if let JsonRpcMessage::Request(req) = &message {
+            let v = serde_json::to_value(req).unwrap_or(serde_json::Value::Null);
+            let header_version = context.protocol_version.as_str();
+            // (reason, is_header_mismatch)
+            let reason = match v.get("params").and_then(|p| p.get("_meta")) {
+                Some(meta) if meta.is_object() => {
+                    let pv = meta
+                        .get("io.modelcontextprotocol/protocolVersion")
+                        .and_then(|x| x.as_str());
+                    if pv.is_none() {
+                        Some((
+                            "missing required _meta.io.modelcontextprotocol/protocolVersion"
+                                .to_string(),
+                            false,
+                        ))
+                    } else if meta
+                        .get("io.modelcontextprotocol/clientCapabilities")
+                        .is_none()
+                    {
+                        Some((
+                            "missing required _meta.io.modelcontextprotocol/clientCapabilities"
+                                .to_string(),
+                            false,
+                        ))
+                    } else if pv != Some(header_version) {
+                        Some((
+                            format!(
+                                "_meta protocolVersion '{}' does not match MCP-Protocol-Version header '{}'",
+                                pv.unwrap_or(""),
+                                header_version
+                            ),
+                            true,
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                _ => Some((
+                    "missing required params._meta (RequestMetaObject)".to_string(),
+                    false,
+                )),
+            };
+            if let Some((reason, is_header_mismatch)) = reason {
+                warn!("Rejecting 2026 request (method={}): {}", req.method, reason);
+                let err_obj = if is_header_mismatch {
+                    turul_rpc::error::JsonRpcErrorObject::server_error(
+                        turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
+                        &format!("Header mismatch: {reason}"),
+                        None::<serde_json::Value>,
+                    )
+                } else {
+                    turul_rpc::error::JsonRpcErrorObject::invalid_params(&reason)
+                };
+                let err = turul_rpc::JsonRpcError::new(Some(req.id.clone()), err_obj);
+                let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", header_version)
+                    .body(
+                        Full::new(Bytes::from(body))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap();
+            }
+        }
+
+        // 2026-07-28: a request for a method this server does not implement →
+        // HTTP 404 + JSON-RPC -32601 (the error body distinguishes this from a
+        // legacy HTTP+SSE server's 404). Methods absent from the 2026 schema
+        // (ping, initialize, tasks/*, logging/setLevel, resources/subscribe) are
+        // simply never registered on a 2026 build, so they land here too.
+        // subscriptions/listen is transport-handled below, not dispatcher-routed.
+        #[cfg(feature = "protocol-2026-07-28")]
+        if let JsonRpcMessage::Request(req) = &message
+            && req.method != turul_mcp_protocol::subscriptions::SUBSCRIPTIONS_LISTEN_METHOD
+            && !self.dispatcher.handlers.contains_key(&req.method)
+            && self.dispatcher.default_handler.is_none()
+        {
+            debug!("Unknown 2026 method '{}' → 404 + -32601", req.method);
+            // Versioning §Backward Compatibility: "A server that supports only
+            // modern versions SHOULD name the protocol versions it supports in
+            // any error it returns to an initialize request" — legacy clients
+            // have no fall-forward mechanism; this may be their only
+            // diagnostic.
+            let mut error_object =
+                turul_rpc::error::JsonRpcErrorObject::method_not_found(&req.method);
+            if req.method == "initialize" {
+                error_object.data = Some(serde_json::json!({
+                    "supported": [turul_mcp_protocol::MCP_VERSION]
+                }));
+            }
+            let err = turul_rpc::JsonRpcError::new(Some(req.id.clone()), error_object);
+            let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+            return Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .header(CONTENT_TYPE, "application/json")
+                .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                .body(
+                    Full::new(Bytes::from(body))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap();
+        }
+
+        // The stateless core has no Mcp-Session-Id handshake, so a request is never
+        // rejected for lacking a session. Mint an ephemeral per-request session so
+        // the dispatch pipeline (which carries a SessionContext) proceeds unchanged.
+        // The id is internal only: it is never read from the request (inbound
+        // Mcp-Session-Id is ignored at parse time) and never written to
+        // `context.session_id`, so no response ever echoes a session header.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let session_id = match self
+            .session_storage
+            .create_session(self.server_capabilities.clone())
+            .await
+        {
+            Ok(session_info) => session_info.session_id,
+            Err(err) => {
+                error!("Failed to create stateless session: {}", err);
+                return StreamableResponse::Error {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: "Failed to create session".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
+
         debug!("Processing streaming request with session: {}", session_id);
 
         // Create streaming response using hyper::Body::channel()
@@ -1400,6 +1738,18 @@ impl StreamableHttpHandler {
                     "Processing streaming JSON-RPC request: method={}",
                     request.method
                 );
+
+                // subscriptions/listen is a transport concern: its "response" is a
+                // long-lived SSE stream, not a JSON-RPC result, so it never enters
+                // the dispatcher.
+                #[cfg(feature = "protocol-2026-07-28")]
+                if request.method == turul_mcp_protocol::subscriptions::SUBSCRIPTIONS_LISTEN_METHOD
+                {
+                    return self
+                        .handle_subscriptions_listen(request, session_id, context)
+                        .await;
+                }
+
                 self.create_streaming_response(
                     request,
                     session_id,
@@ -1416,7 +1766,7 @@ impl StreamableHttpHandler {
 
                 // Create session context with notification broadcaster for notifications
                 use crate::notification_bridge::StreamManagerNotificationBroadcaster;
-                use turul_mcp_json_rpc_server::SessionContext;
+                use turul_rpc::SessionContext;
 
                 let broadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(
                     &self.stream_manager,
@@ -1435,16 +1785,27 @@ impl StreamableHttpHandler {
                 let dispatcher = Arc::clone(&self.dispatcher);
                 let notification_clone = notification.clone();
 
-                // notifications/initialized MUST be processed synchronously before
+                // `notifications/initialized` must be dispatched synchronously before
                 // returning 202 — otherwise the next request (tools/list) can race
                 // ahead of the is_initialized state write. Other notifications are
                 // fire-and-forget and can be processed asynchronously.
                 //
-                // Per MCP spec, notifications always return 202 even on failure.
-                // If processing fails, we log the error — the next request will
-                // fail with "session not initialized" which points operators to
-                // the initialization failure in logs.
-                if notification_clone.method == "notifications/initialized" {
+                // This ordering constraint belongs to the 2025-11-25 handshake only.
+                // 2026-07-28 removed `initialize`/`notifications/initialized`, so there
+                // is no initialization state to order against and every notification
+                // takes the asynchronous path.
+                //
+                // Notifications always return 202 even on failure. If processing
+                // fails, we log the error — the next request will fail with
+                // "session not initialized" which points operators to the
+                // initialization failure in logs.
+                #[cfg(feature = "protocol-2025-11-25")]
+                let dispatch_synchronously =
+                    notification_clone.method == "notifications/initialized";
+                #[cfg(not(feature = "protocol-2025-11-25"))]
+                let dispatch_synchronously = false;
+
+                if dispatch_synchronously {
                     if let Err(e) = dispatcher
                         .handle_notification_with_context(notification_clone, Some(session_context))
                         .await
@@ -1469,11 +1830,14 @@ impl StreamableHttpHandler {
                     });
                 }
 
-                // Return 202 Accepted with MCP headers
-                Response::builder()
+                // Return 202 Accepted with MCP headers. The stateless 2026 core
+                // never echoes session ids; the 2025 lane keeps the session header.
+                let builder = Response::builder()
                     .status(StatusCode::ACCEPTED)
-                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
-                    .header("Mcp-Session-Id", &session_id)
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str());
+                #[cfg(feature = "protocol-2025-11-25")]
+                let builder = builder.header("Mcp-Session-Id", &session_id);
+                builder
                     .body(
                         Full::new(Bytes::new())
                             .map_err(|never| match never {})
@@ -1484,11 +1848,270 @@ impl StreamableHttpHandler {
         }
     }
 
+    /// Open a long-lived `subscriptions/listen` SSE stream (2026-07-28).
+    ///
+    /// Subscriptions pattern contract:
+    /// - The acknowledgement (`notifications/subscriptions/acknowledged`) is the
+    ///   FIRST message on the stream and echoes the honored filter subset —
+    ///   requested types the server does not support are omitted.
+    /// - Only opted-in notification types are delivered; `resources/updated` is
+    ///   additionally filtered to the subscribed URIs.
+    /// - Every delivered notification carries
+    ///   `io.modelcontextprotocol/subscriptionId` in `_meta`, set to the JSON-RPC
+    ///   id of the listen request.
+    /// - Client-initiated cancellation (closing the stream) carries no JSON-RPC
+    ///   result. Schema also defines `SubscriptionsListenResult` for a
+    ///   server-initiated graceful teardown (e.g. shutdown) — this handler has
+    ///   no such teardown path yet, so that result is never emitted; see
+    ///   `turul_mcp_protocol::subscriptions::SubscriptionsListenResult`.
+    #[cfg(feature = "protocol-2026-07-28")]
+    async fn handle_subscriptions_listen(
+        &self,
+        request: turul_rpc::JsonRpcRequest,
+        session_id: String,
+        context: StreamableHttpContext,
+    ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
+        use http_body_util::StreamBody;
+        use tokio_stream::StreamExt;
+        use tokio_stream::wrappers::ReceiverStream;
+        use turul_mcp_protocol::meta::META_KEY_SUBSCRIPTION_ID;
+        use turul_mcp_protocol::subscriptions::{
+            SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, SubscriptionFilter, SubscriptionsListenRequestParams,
+        };
+        use turul_rpc::error::JsonRpcErrorObject;
+
+        let reject_400 = |id: turul_rpc::RequestId, err_obj: JsonRpcErrorObject, version: &str| {
+            let err = turul_rpc::JsonRpcError::new(Some(id), err_obj);
+            let body = serde_json::to_string(&err).unwrap_or_else(|_| "{}".to_string());
+            Response::builder()
+                .status(StatusCode::BAD_REQUEST)
+                .header(CONTENT_TYPE, "application/json")
+                .header("MCP-Protocol-Version", version)
+                .body(
+                    Full::new(Bytes::from(body))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap()
+        };
+
+        // The response IS an SSE stream — the client must be able to consume one.
+        if !context.wants_sse_stream {
+            return reject_400(
+                request.id.clone(),
+                JsonRpcErrorObject::invalid_request(Some(serde_json::json!(
+                    "subscriptions/listen requires Accept: text/event-stream"
+                ))),
+                context.protocol_version.as_str(),
+            );
+        }
+
+        // Typed params parse (the generic 2026 `_meta` gate already ran upstream).
+        let params_value = request
+            .params
+            .as_ref()
+            .map(|p| serde_json::to_value(p).unwrap_or(serde_json::Value::Null))
+            .unwrap_or(serde_json::Value::Null);
+        let parsed: SubscriptionsListenRequestParams = match serde_json::from_value(params_value) {
+            Ok(p) => p,
+            Err(e) => {
+                return reject_400(
+                    request.id.clone(),
+                    JsonRpcErrorObject::invalid_params(&format!(
+                        "invalid subscriptions/listen params: {e}"
+                    )),
+                    context.protocol_version.as_str(),
+                );
+            }
+        };
+
+        // Honored subset: keep a requested type only when the server actually has
+        // the corresponding feature surface (capability section present).
+        let caps = &self.server_capabilities;
+        let requested = parsed.notifications;
+        let honored = SubscriptionFilter {
+            tools_list_changed: requested
+                .tools_list_changed
+                .filter(|&v| v && caps.tools.is_some()),
+            prompts_list_changed: requested
+                .prompts_list_changed
+                .filter(|&v| v && caps.prompts.is_some()),
+            resources_list_changed: requested
+                .resources_list_changed
+                .filter(|&v| v && caps.resources.is_some()),
+            resource_subscriptions: requested
+                .resource_subscriptions
+                .filter(|uris| !uris.is_empty() && caps.resources.is_some()),
+        };
+
+        // Tasks-extension filter addition (SEP-2663 `taskIds`): rides the same
+        // `notifications` object but is not a core-schema field, so it is read
+        // from the raw params; honored only when the server advertises
+        // `io.modelcontextprotocol/tasks` in `capabilities.extensions`.
+        let tasks_extension_advertised = caps
+            .extensions
+            .as_ref()
+            .is_some_and(|m| m.contains_key("io.modelcontextprotocol/tasks"));
+        let honored_task_ids: Option<Vec<String>> = request
+            .params
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok())
+            .as_ref()
+            .and_then(|v| v.pointer("/notifications/taskIds"))
+            .and_then(|v| v.as_array())
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|i| i.as_str().map(String::from))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|ids| !ids.is_empty() && tasks_extension_advertised);
+
+        // Gate delivery at the broadcast layer: the subscription registry entry is
+        // created even when empty, so an empty filter delivers nothing (the
+        // registry's no-entry default is allow-all).
+        let mut allowed_types = Vec::new();
+        if honored.tools_list_changed == Some(true) {
+            allowed_types.push("notifications/tools/list_changed".to_string());
+        }
+        if honored.prompts_list_changed == Some(true) {
+            allowed_types.push("notifications/prompts/list_changed".to_string());
+        }
+        if honored.resources_list_changed == Some(true) {
+            allowed_types.push("notifications/resources/list_changed".to_string());
+        }
+        if honored.resource_subscriptions.is_some() {
+            allowed_types.push("notifications/resources/updated".to_string());
+        }
+        if honored_task_ids.is_some() {
+            allowed_types.push("notifications/tasks".to_string());
+        }
+        self.stream_manager
+            .subscribe_to_notifications(&session_id, allowed_types)
+            .await;
+
+        let connection_id = format!("listen-{}", uuid::Uuid::now_v7().as_simple());
+        let (tx, rx) = tokio::sync::mpsc::channel::<turul_mcp_session_storage::SseEvent>(64);
+        if let Err(e) = self
+            .stream_manager
+            .register_streaming_connection(&session_id, connection_id, tx)
+            .await
+        {
+            error!("Failed to register subscriptions/listen connection: {}", e);
+            return StreamableResponse::Error {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                message: "Failed to register subscription stream".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // The subscription id is the JSON-RPC id of the listen request.
+        let subscription_id = request.id.to_string();
+
+        // Acknowledgement — wire-complete JSON-RPC notification, first frame.
+        let mut ack_params = std::collections::HashMap::new();
+        let mut honored_value = serde_json::to_value(&honored).unwrap_or_default();
+        if let (Some(obj), Some(ids)) = (honored_value.as_object_mut(), honored_task_ids.as_ref()) {
+            obj.insert("taskIds".to_string(), serde_json::json!(ids));
+        }
+        ack_params.insert("notifications".to_string(), honored_value);
+        ack_params.insert(
+            "_meta".to_string(),
+            serde_json::json!({ META_KEY_SUBSCRIPTION_ID: subscription_id }),
+        );
+        let ack = turul_rpc::JsonRpcNotification::new_with_object_params(
+            SUBSCRIPTIONS_ACKNOWLEDGED_METHOD.to_string(),
+            ack_params,
+        );
+        let ack_frame = format!(
+            "event: message\ndata: {}\n\n",
+            serde_json::to_string(&ack).unwrap_or_else(|_| "{}".to_string())
+        );
+
+        // Live tail: filter to the honored types (the broadcast-layer gate already
+        // drops the rest — this is the per-URI filter plus defense in depth) and
+        // stamp the subscription id into every delivered notification.
+        let filter = honored;
+        let filter_task_ids = honored_task_ids;
+        let sub_id = subscription_id;
+        let live = ReceiverStream::new(rx).filter_map(move |ev| {
+            let mut data = ev.data;
+            let method = data
+                .get("method")
+                .and_then(|m| m.as_str())
+                .unwrap_or_default();
+            let allowed = match method {
+                "notifications/tools/list_changed" => filter.tools_list_changed == Some(true),
+                "notifications/prompts/list_changed" => filter.prompts_list_changed == Some(true),
+                "notifications/resources/list_changed" => {
+                    filter.resources_list_changed == Some(true)
+                }
+                "notifications/resources/updated" => {
+                    let uri = data
+                        .get("params")
+                        .and_then(|p| p.get("uri"))
+                        .and_then(|u| u.as_str());
+                    match (uri, &filter.resource_subscriptions) {
+                        (Some(u), Some(uris)) => uris.iter().any(|x| x == u),
+                        _ => false,
+                    }
+                }
+                // Tasks extension (SEP-2663): per-taskId delivery.
+                "notifications/tasks" => {
+                    let task_id = data
+                        .get("params")
+                        .and_then(|p| p.get("taskId"))
+                        .and_then(|t| t.as_str());
+                    match (task_id, &filter_task_ids) {
+                        (Some(id), Some(ids)) => ids.iter().any(|x| x == id),
+                        _ => false,
+                    }
+                }
+                _ => false,
+            };
+            if !allowed {
+                return None;
+            }
+            if let Some(obj) = data.as_object_mut() {
+                let params = obj
+                    .entry("params")
+                    .or_insert_with(|| serde_json::Value::Object(Default::default()));
+                if let Some(pobj) = params.as_object_mut() {
+                    let meta = pobj
+                        .entry("_meta")
+                        .or_insert_with(|| serde_json::Value::Object(Default::default()));
+                    if let Some(mobj) = meta.as_object_mut() {
+                        mobj.insert(
+                            META_KEY_SUBSCRIPTION_ID.to_string(),
+                            serde_json::Value::String(sub_id.clone()),
+                        );
+                    }
+                }
+            }
+            Some(Ok::<_, hyper::Error>(http_body::Frame::data(Bytes::from(
+                format!("id: {}\nevent: message\ndata: {}\n\n", ev.id, data),
+            ))))
+        });
+
+        let ack_stream = tokio_stream::once(Ok::<_, hyper::Error>(http_body::Frame::data(
+            Bytes::from(ack_frame),
+        )));
+        let body = StreamBody::new(ack_stream.chain(live));
+
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(CONTENT_TYPE, "text/event-stream")
+            .header("Cache-Control", "no-cache")
+            .header("X-Accel-Buffering", "no")
+            .header("MCP-Protocol-Version", context.protocol_version.as_str())
+            .body(http_body_util::BodyExt::boxed_unsync(body))
+            .unwrap()
+    }
+
     /// Create a streaming response using hyper::Body::channel()
     /// This enables true progressive responses with Transfer-Encoding: chunked
     async fn create_streaming_response(
         &self,
-        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        request: turul_rpc::JsonRpcRequest,
         session_id: String,
         context: StreamableHttpContext,
         pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
@@ -1511,16 +2134,28 @@ impl StreamableHttpHandler {
         use crate::notification_bridge::{
             SharedNotificationBroadcaster, StreamManagerNotificationBroadcaster,
         };
-        use turul_mcp_json_rpc_server::SessionContext;
+        use turul_rpc::SessionContext;
 
         let broadcaster: SharedNotificationBroadcaster = Arc::new(
             StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)),
         );
         let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
 
+        // 2026: surface the request headers to handlers — Mcp-Param-* validation
+        // happens at the tools/call handler, the only layer that knows the
+        // tool's inputSchema annotations.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let handler_metadata: std::collections::HashMap<String, serde_json::Value> = context
+            .headers
+            .iter()
+            .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+            .collect();
+        #[cfg(feature = "protocol-2025-11-25")]
+        let handler_metadata = std::collections::HashMap::new();
+
         let session_context = SessionContext {
             session_id: session_id.clone(),
-            metadata: std::collections::HashMap::new(),
+            metadata: handler_metadata,
             broadcaster: Some(broadcaster_any),
             timestamp: chrono::Utc::now().timestamp_millis() as u64,
             extensions: std::collections::HashMap::new(),
@@ -1528,8 +2163,53 @@ impl StreamableHttpHandler {
 
         // Register streaming POST connection with StreamManager for progress events
         // Transport policy: prefer JSON for non-streaming methods when client accepts both
-        let wants_sse = context.should_use_sse(&request.method);
+        let wants_sse = context.should_use_sse(&request);
         let connection_id = format!("post-{}", uuid::Uuid::now_v7().as_simple());
+
+        // 2026 + JSON framing: dispatch inline so the HTTP status can reflect
+        // the JSON-RPC outcome. MissingRequiredClientCapabilityError (-32021)
+        // MUST ride HTTP 400 per its schema; the chunked-channel path below
+        // commits 200 before dispatch completes and cannot retro-status.
+        // (SSE-framed responses inherently stay 200 — errors ride the stream.)
+        #[cfg(feature = "protocol-2026-07-28")]
+        if !wants_sse {
+            let (response, _) = self
+                .run_middleware_and_dispatch(
+                    request,
+                    context.headers.clone(),
+                    Some(session_context),
+                    pre_session_extensions,
+                )
+                .await;
+            let status = match &response {
+                // -32021 MissingRequiredClientCapability and -32020
+                // HeaderMismatch both mandate HTTP 400.
+                turul_rpc::JsonRpcResponse::Error(err)
+                    if matches!(
+                        err.error.code,
+                        turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH | -32021
+                    ) =>
+                {
+                    StatusCode::BAD_REQUEST
+                }
+                _ => StatusCode::OK,
+            };
+            let body_json = serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
+            let mut http_response = Response::builder()
+                .status(status)
+                .header(CONTENT_TYPE, "application/json")
+                .body(
+                    Full::new(Bytes::from(body_json))
+                        .map_err(|never| match never {})
+                        .boxed_unsync(),
+                )
+                .unwrap();
+            let mcp_headers = context.response_headers();
+            for (key, value) in mcp_headers.iter() {
+                http_response.headers_mut().insert(key, value.clone());
+            }
+            return http_response;
+        }
 
         // Progress forwarding only for SSE clients
         let (shutdown_tx, completion_rx) = if wants_sse {
@@ -1603,6 +2283,16 @@ impl StreamableHttpHandler {
                             // Handle explicit shutdown signal from main task
                             _ = &mut shutdown_rx => {
                                 debug!("🔍 Progress task: shutdown_rx branch fired! Received explicit shutdown signal for session: {}", session_id_clone);
+                                // Flush events already queued: request-scoped
+                                // notifications were emitted (and awaited)
+                                // before the tool returned, so they must reach
+                                // the wire ahead of the final response frame.
+                                while let Ok(sse_event) = progress_rx.try_recv() {
+                                    let sse_chunk = sse_event.format();
+                                    if sender_clone.send(Ok(Bytes::from(sse_chunk))).is_err() {
+                                        break;
+                                    }
+                                }
                                 break;
                             }
                         }
@@ -1664,44 +2354,58 @@ impl StreamableHttpHandler {
                 request_id, wants_sse
             );
 
-            // Process actual request through middleware pipeline
-            // Injection is applied immediately inside run_middleware_and_dispatch
-            let (response, _) = self_clone
-                .run_middleware_and_dispatch(
-                    request,
-                    headers,
-                    Some(session_context),
-                    pre_session_extensions,
-                )
-                .await;
+            // Process the request through the middleware pipeline, racing the
+            // client connection. Streamable HTTP §Cancellation: "Closing the
+            // SSE response stream MUST be treated by the server as
+            // cancellation of that request. The server SHOULD stop work …
+            // and MUST NOT send any further messages for it." Dropping the
+            // dispatch future stops the handler at its next await point;
+            // returning here guarantees nothing further is sent.
+            let mut shutdown_tx = shutdown_tx;
+            let dispatch = self_clone.run_middleware_and_dispatch(
+                request,
+                headers,
+                Some(session_context),
+                pre_session_extensions,
+            );
+            tokio::pin!(dispatch);
+            let (response, _) = tokio::select! {
+                result = &mut dispatch => result,
+                _ = sender.closed() => {
+                    debug!(
+                        "Client closed the response stream — cancelling request {:?}",
+                        request_id
+                    );
+                    if let Some(shutdown_tx) = shutdown_tx.take() {
+                        let _ = shutdown_tx.send(());
+                    }
+                    return;
+                }
+            };
 
             // Send final result - format depends on client type
             if wants_sse {
                 // For SSE clients, send as streaming frame with SSE framing
                 let final_frame = match response {
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
-                        turul_mcp_json_rpc_server::JsonRpcFrame::FinalResult {
+                    turul_rpc::JsonRpcResponse::Success(resp) => {
+                        turul_rpc::JsonRpcFrame::FinalResult {
                             request_id: request_id.clone(),
                             result: match resp.result {
-                                turul_mcp_json_rpc_server::response::ResponseResult::Success(
-                                    val,
-                                ) => val,
-                                turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                                turul_rpc::response::ResponseResult::Success(val) => val,
+                                turul_rpc::response::ResponseResult::Null => {
                                     serde_json::Value::Null
                                 }
                             },
                         }
                     }
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
-                        turul_mcp_json_rpc_server::JsonRpcFrame::Error {
-                            request_id: request_id.clone(),
-                            error: turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
-                                code: err.error.code,
-                                message: err.error.message,
-                                data: err.error.data,
-                            },
-                        }
-                    }
+                    turul_rpc::JsonRpcResponse::Error(err) => turul_rpc::JsonRpcFrame::Error {
+                        request_id: request_id.clone(),
+                        error: turul_rpc::error::JsonRpcErrorObject {
+                            code: err.error.code,
+                            message: err.error.message,
+                            data: err.error.data,
+                        },
+                    },
                 };
 
                 let final_json = final_frame.to_json();
@@ -1709,13 +2413,11 @@ impl StreamableHttpHandler {
                 let final_chunk =
                     format!("data: {}\n\n", serde_json::to_string(&final_json).unwrap());
 
-                if let Err(err) = sender.send(Ok(Bytes::from(final_chunk))) {
-                    error!("Failed to send SSE final chunk: {}", err);
-                }
-
-                // CRITICAL: Send explicit shutdown signal to progress forwarding task (SSE only)
-                // This breaks it out of the progress_rx.recv().await loop immediately
-                if let Some(shutdown_tx) = shutdown_tx {
+                // Shut down (and flush) the progress forwarding task BEFORE the
+                // final frame goes out: request-scoped notifications precede the
+                // final response on the wire, and the final response terminates
+                // the stream.
+                if let Some(shutdown_tx) = shutdown_tx.take() {
                     debug!(
                         "🔍 Main task sending shutdown signal to progress task for request: {:?}",
                         request_id
@@ -1770,6 +2472,10 @@ impl StreamableHttpHandler {
                         request_id
                     );
                 }
+
+                if let Err(err) = sender.send(Ok(Bytes::from(final_chunk))) {
+                    error!("Failed to send SSE final chunk: {}", err);
+                }
             } else {
                 // For JSON-only clients, send as regular JSON-RPC response (no streaming frames)
                 let final_json = serde_json::to_string(&response).unwrap();
@@ -1804,6 +2510,10 @@ impl StreamableHttpHandler {
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, content_type)
             .header("Transfer-Encoding", "chunked") // Key: Enable chunked encoding!
+            // nginx-family proxies buffer streaming responses by default,
+            // which holds SSE frames back from the client until the stream
+            // closes — defeating request-scoped notifications.
+            .header("X-Accel-Buffering", "no")
             .header("Cache-Control", "no-cache")
             .body(http_body_util::BodyExt::boxed_unsync(body))
             .unwrap();
@@ -1912,14 +2622,76 @@ impl StreamableHttpHandler {
     /// Returns (JsonRpcMessage, Option<SessionInjection>) where the injection
     /// is Some when session was None (initialize case) and needs to be applied
     /// after session creation.
+    ///
+    /// Every successful result leaving this handler is stamped with the server's
+    /// identity here — the one place it happens, so the JSON, SSE and
+    /// subscription-close paths cannot drift apart. The inner function has
+    /// several tails; wrapping it keeps the stamp from being duplicated per-tail.
     async fn run_middleware_and_dispatch(
         &self,
-        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        request: turul_rpc::JsonRpcRequest,
         headers: HashMap<String, String>,
-        session: Option<turul_mcp_json_rpc_server::SessionContext>,
+        session: Option<turul_rpc::SessionContext>,
         pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
     ) -> (
-        turul_mcp_json_rpc_server::JsonRpcMessage,
+        turul_rpc::JsonRpcResponse,
+        Option<crate::middleware::SessionInjection>,
+    ) {
+        let (response, injection) = self
+            .run_middleware_and_dispatch_inner(request, headers, session, pre_session_extensions)
+            .await;
+        #[cfg(feature = "protocol-2026-07-28")]
+        let response = self.stamp_server_info(response);
+        (response, injection)
+    }
+
+    /// Add `_meta.io.modelcontextprotocol/serverInfo` to a successful result.
+    ///
+    /// Scope is deliberately narrow: only the top-level object result of a
+    /// success response. Nested `_meta` objects are plain `MetaObject`s in the
+    /// schema, error responses carry no result at all, and results produced by
+    /// the *client* (sampling, elicitation, roots) never pass through here. A
+    /// handler that already set the key keeps its value.
+    #[cfg(feature = "protocol-2026-07-28")]
+    fn stamp_server_info(
+        &self,
+        response: turul_rpc::JsonRpcResponse,
+    ) -> turul_rpc::JsonRpcResponse {
+        let Some(info) = self.server_info.as_ref() else {
+            return response;
+        };
+        let turul_rpc::JsonRpcResponse::Success(mut resp) = response else {
+            return response;
+        };
+
+        if let turul_rpc::response::ResponseResult::Success(serde_json::Value::Object(
+            ref mut result,
+        )) = resp.result
+        {
+            let meta = result
+                .entry("_meta")
+                .or_insert_with(|| serde_json::Value::Object(Default::default()));
+            if let Some(meta) = meta.as_object_mut()
+                && !meta.contains_key(turul_mcp_protocol::meta::META_KEY_SERVER_INFO)
+                && let Ok(value) = serde_json::to_value(info)
+            {
+                meta.insert(
+                    turul_mcp_protocol::meta::META_KEY_SERVER_INFO.to_string(),
+                    value,
+                );
+            }
+        }
+        turul_rpc::JsonRpcResponse::Success(resp)
+    }
+
+    async fn run_middleware_and_dispatch_inner(
+        &self,
+        request: turul_rpc::JsonRpcRequest,
+        headers: HashMap<String, String>,
+        session: Option<turul_rpc::SessionContext>,
+        pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
+    ) -> (
+        turul_rpc::JsonRpcResponse,
         Option<crate::middleware::SessionInjection>,
     ) {
         // Fast path: if middleware stack is empty, dispatch directly
@@ -1945,10 +2717,10 @@ impl StreamableHttpHandler {
 
         // Convert params to Option<Value>
         let params = request.params.clone().map(|p| match p {
-            turul_mcp_json_rpc_server::RequestParams::Object(map) => {
+            turul_rpc::RequestParams::Object(map) => {
                 serde_json::Value::Object(map.into_iter().collect())
             }
-            turul_mcp_json_rpc_server::RequestParams::Array(arr) => serde_json::Value::Array(arr),
+            turul_rpc::RequestParams::Array(arr) => serde_json::Value::Array(arr),
         });
         let mut ctx = crate::middleware::RequestContext::new(&method, params);
 
@@ -1986,7 +2758,10 @@ impl StreamableHttpHandler {
         {
             Ok(inj) => inj,
             Err(err) => {
-                return (Self::map_middleware_error_to_jsonrpc(err, request.id), None);
+                return (
+                    crate::middleware::error::map_middleware_error_to_jsonrpc(err, request.id),
+                    None,
+                );
             }
         };
 
@@ -2026,15 +2801,15 @@ impl StreamableHttpHandler {
 
         // Execute after_dispatch
         let mut dispatcher_result = match &result {
-            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => match &resp.result {
-                turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
+            turul_rpc::JsonRpcResponse::Success(resp) => match &resp.result {
+                turul_rpc::response::ResponseResult::Success(val) => {
                     crate::middleware::DispatcherResult::Success(val.clone())
                 }
-                turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                turul_rpc::response::ResponseResult::Null => {
                     crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
                 }
             },
-            turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+            turul_rpc::JsonRpcResponse::Error(err) => {
                 crate::middleware::DispatcherResult::Error(err.error.message.clone())
             }
         };
@@ -2049,13 +2824,16 @@ impl StreamableHttpHandler {
                 (result, None)
             }
             Err(middleware_err) => (
-                Self::map_middleware_error_to_jsonrpc(middleware_err, request_id),
+                crate::middleware::error::map_middleware_error_to_jsonrpc(
+                    middleware_err,
+                    request_id,
+                ),
                 None,
             ),
         }
     }
 
-    /// Apply potentially-mutated `DispatcherResult` back into the `JsonRpcMessage`.
+    /// Apply potentially-mutated `DispatcherResult` back into the `JsonRpcResponse`.
     ///
     /// Handles all four mutation paths per the middleware contract:
     /// - Success → Success: value mutated in place
@@ -2063,89 +2841,36 @@ impl StreamableHttpHandler {
     /// - Error → Success: middleware recovered (only when error has request ID)
     /// - Error → Error: error message mutated
     fn apply_dispatcher_result(
-        result: turul_mcp_json_rpc_server::JsonRpcMessage,
+        result: turul_rpc::JsonRpcResponse,
         dispatcher_result: crate::middleware::DispatcherResult,
-    ) -> turul_mcp_json_rpc_server::JsonRpcMessage {
+    ) -> turul_rpc::JsonRpcResponse {
         match dispatcher_result {
             crate::middleware::DispatcherResult::Success(val) => match result {
-                turul_mcp_json_rpc_server::JsonRpcMessage::Response(mut resp) => {
-                    resp.result = turul_mcp_json_rpc_server::response::ResponseResult::Success(val);
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp)
+                turul_rpc::JsonRpcResponse::Success(mut resp) => {
+                    resp.result = turul_rpc::response::ResponseResult::Success(val);
+                    turul_rpc::JsonRpcResponse::Success(resp)
                 }
-                turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                turul_rpc::JsonRpcResponse::Error(err) => {
                     // Error→Success recovery: only when error has a request ID
                     match err.id {
-                        Some(id) => turul_mcp_json_rpc_server::JsonRpcMessage::Response(
-                            turul_mcp_json_rpc_server::response::JsonRpcResponse::success(id, val),
-                        ),
-                        None => turul_mcp_json_rpc_server::JsonRpcMessage::Error(err),
+                        Some(id) => turul_rpc::JsonRpcResponse::success(id, val.into()),
+                        None => turul_rpc::JsonRpcResponse::Error(err),
                     }
                 }
             },
             crate::middleware::DispatcherResult::Error(msg) => match result {
-                turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(
-                        turul_mcp_json_rpc_server::error::JsonRpcError::new(
-                            Some(resp.id),
-                            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::internal_error(
-                                Some(msg),
-                            ),
-                        ),
-                    )
+                turul_rpc::JsonRpcResponse::Success(resp) => {
+                    turul_rpc::JsonRpcResponse::Error(turul_rpc::error::JsonRpcError::new(
+                        Some(resp.id),
+                        turul_rpc::error::JsonRpcErrorObject::internal_error(Some(msg)),
+                    ))
                 }
-                turul_mcp_json_rpc_server::JsonRpcMessage::Error(mut err) => {
+                turul_rpc::JsonRpcResponse::Error(mut err) => {
                     err.error.message = msg;
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err)
+                    turul_rpc::JsonRpcResponse::Error(err)
                 }
             },
         }
-    }
-
-    /// Map MiddlewareError to JSON-RPC error with semantic error codes
-    fn map_middleware_error_to_jsonrpc(
-        err: crate::middleware::MiddlewareError,
-        request_id: turul_mcp_json_rpc_server::RequestId,
-    ) -> turul_mcp_json_rpc_server::JsonRpcMessage {
-        use crate::middleware::MiddlewareError;
-        use crate::middleware::error::error_codes;
-
-        let (code, message, data) = match err {
-            MiddlewareError::Unauthenticated(msg) => (error_codes::UNAUTHENTICATED, msg, None),
-            MiddlewareError::Unauthorized(msg) => (error_codes::UNAUTHORIZED, msg, None),
-            MiddlewareError::RateLimitExceeded {
-                message,
-                retry_after,
-            } => {
-                let data = retry_after.map(|s| serde_json::json!({"retryAfter": s}));
-                (error_codes::RATE_LIMIT_EXCEEDED, message, data)
-            }
-            MiddlewareError::InvalidRequest(msg) => (error_codes::INVALID_REQUEST, msg, None),
-            MiddlewareError::Internal(msg) => (error_codes::INTERNAL_ERROR, msg, None),
-            MiddlewareError::Custom { message, .. } => (error_codes::INTERNAL_ERROR, message, None),
-            MiddlewareError::HttpChallenge { .. } => {
-                unreachable!(
-                    "HttpChallenge must be caught at transport level before JSON-RPC dispatch"
-                )
-            }
-        };
-
-        let error_obj = if let Some(d) = data {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
-                code,
-                &message,
-                Some(d),
-            )
-        } else {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
-                code,
-                &message,
-                None::<serde_json::Value>,
-            )
-        };
-
-        turul_mcp_json_rpc_server::JsonRpcMessage::Error(
-            turul_mcp_json_rpc_server::JsonRpcError::new(Some(request_id), error_obj),
-        )
     }
 }
 

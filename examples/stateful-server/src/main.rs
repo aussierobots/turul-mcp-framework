@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::logging::LoggingLevel;
 use turul_mcp_server::prelude::*;
 
 /// Shopping cart tool that maintains state across requests
@@ -71,9 +72,17 @@ impl ShoppingCartTool {
 
                 session.set_typed_state("cart_items", &cart_items).await?;
 
-                // Send progress notification
+                // A completed cart mutation is a state-change event, not progress
+                // through a long-running request, and `notifications/progress`
+                // requires a token from the originating request that a cart
+                // operation has no reason to carry. Report it as a log message.
                 session
-                    .notify_progress(format!("cart_item_{}", item), 1)
+                    .notify_log(
+                        LoggingLevel::Info,
+                        json!({ "action": "add", "item": item, "quantity": quantity }),
+                        Some("shopping-cart".to_string()),
+                        None,
+                    )
                     .await;
 
                 json!({
@@ -97,7 +106,12 @@ impl ShoppingCartTool {
                     if new_qty <= 0 {
                         cart_items.remove(item);
                         session
-                            .notify_progress(format!("cart_remove_{}", item), 1)
+                            .notify_log(
+                                LoggingLevel::Info,
+                                json!({ "action": "remove", "item": item, "removedCompletely": true }),
+                                Some("shopping-cart".to_string()),
+                                None,
+                            )
                             .await;
                         json!({
                             "action": "remove",
@@ -109,7 +123,12 @@ impl ShoppingCartTool {
                     } else {
                         cart_items.insert(item.to_string(), (new_qty, price));
                         session
-                            .notify_progress(format!("cart_update_{}", item), 1)
+                            .notify_log(
+                                LoggingLevel::Info,
+                                json!({ "action": "update", "item": item, "remainingQuantity": new_qty }),
+                                Some("shopping-cart".to_string()),
+                                None,
+                            )
                             .await;
                         json!({
                             "action": "remove",
@@ -157,7 +176,14 @@ impl ShoppingCartTool {
                 let cleared_items = cart_items.len();
                 cart_items.clear();
                 session.set_typed_state("cart_items", &cart_items).await?;
-                session.notify_progress("cart_clear", 1).await;
+                session
+                    .notify_log(
+                        LoggingLevel::Info,
+                        json!({ "action": "clear", "clearedItems": cleared_items }),
+                        Some("shopping-cart".to_string()),
+                        None,
+                    )
+                    .await;
 
                 json!({
                     "action": "clear",
@@ -326,17 +352,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("stateful-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Stateful Server Example")
         .instructions("This server demonstrates session-based state management. State persists across requests within the same session and is automatically cleaned up when sessions expire.")
         .tool(ShoppingCartTool::default())
         .tool(UserPreferencesTool::default())
         .tool(SessionInfoTool::default())
-        .bind_address("127.0.0.1:8006".parse()?)
+        .bind_address("127.0.0.1:8011".parse()?)
         .sse(true)
         .build()?;
 
-    println!("Stateful server running at: http://127.0.0.1:8006/mcp");
+    println!("Stateful server running at: http://127.0.0.1:8011/mcp");
     println!("\\nAvailable tools:");
     println!("  - shopping_cart: Manage a persistent shopping cart (add, remove, list, clear)");
     println!("  - user_preferences: Manage user preferences (set, get, list, reset)");

@@ -122,7 +122,8 @@ async fn test_uri_template_resource_handler_integration() {
         .add_template_resource(template, resource);
 
     let read_params = json!({
-        "uri": "file:///user/alice123.json"
+        "uri": "file:///user/alice123.json",
+        "_meta": super::request_meta()
     });
 
     let result = read_handler.handle(Some(read_params)).await.unwrap();
@@ -170,7 +171,8 @@ async fn test_template_validation() {
 
     // Test with invalid user_id (contains @)
     let read_params = json!({
-        "uri": "file:///user/invalid@user.json"
+        "uri": "file:///user/invalid@user.json",
+        "_meta": super::request_meta()
     });
 
     let result = read_handler.handle(Some(read_params)).await;
@@ -195,7 +197,8 @@ async fn test_template_fallback_to_exact_uri() {
         .add_resource(static_resource);
 
     let read_params = json!({
-        "uri": "file:///static.json"
+        "uri": "file:///static.json",
+        "_meta": super::request_meta()
     });
 
     let result = read_handler.handle(Some(read_params)).await.unwrap();

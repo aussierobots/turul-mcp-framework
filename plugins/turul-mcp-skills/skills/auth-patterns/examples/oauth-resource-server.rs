@@ -1,10 +1,10 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // OAuth 2.1 Resource Server — single Authorization Server
 //
 // Cargo.toml dependencies:
-//   turul-mcp-server = { version = "0.3" }
-//   turul-mcp-oauth = { version = "0.3" }
-//   turul-mcp-derive = { version = "0.3" }
+//   turul-mcp-server = { version = "0.4" }
+//   turul-mcp-oauth = { version = "0.4" }
+//   turul-mcp-derive = { version = "0.4" }
 //   tokio = { version = "1", features = ["full"] }
 //   serde_json = "1"
 //   async-trait = "0.1"
@@ -86,7 +86,7 @@ async fn main() -> McpResult<()> {
     // 3. Build server with OAuth middleware
     let mut builder = McpServer::builder()
         .name("oauth-resource-server")
-        .version("0.3")
+        .version("0.4")
         .middleware(auth_middleware)
         .tool(WhoAmITool::default());
 

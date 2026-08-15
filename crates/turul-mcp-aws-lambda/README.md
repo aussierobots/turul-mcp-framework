@@ -12,7 +12,7 @@ AWS Lambda integration for the turul-mcp-framework, enabling serverless deployme
 ## Features
 
 - ✅ **Zero-Cold-Start Architecture** - Optimized Lambda integration
-- ✅ **MCP 2025-11-25 Compliance** - Full protocol support with SSE (snapshots or streaming)
+- ✅ **MCP 2026-07-28 Default** - Stateless core (`server/discover`, per-request `_meta`, no `Mcp-Session-Id`) with SSE (snapshots or streaming); 2025-11-25 sessionful handshake is opt-in
 - ✅ **DynamoDB Session Storage** - Persistent session management across invocations
 - ✅ **CORS Support** - Automatic CORS header injection for browser clients
 - ✅ **Type Conversion Layer** - Clean `lambda_http` ↔ `hyper` conversion
@@ -27,8 +27,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = "0.3"
-turul-mcp-derive = "0.3"
+turul-mcp-aws-lambda = "0.4"
+turul-mcp-derive = "0.4"
 lambda_http = "0.17"
 tokio = { version = "1.0", features = ["macros"] }
 ```
@@ -95,7 +95,7 @@ For real-time SSE streaming, enable the `streaming` feature and use `run_streami
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3", features = ["streaming"] }
+turul-mcp-aws-lambda = { version = "0.4", features = ["streaming"] }
 ```
 
 ```rust
@@ -460,7 +460,8 @@ cargo test --package turul-mcp-aws-lambda streaming
 ### Integration Testing
 
 ```bash
-# Test with local Lambda runtime
+# Test with local Lambda runtime — 2025-11-25 opt-in lane shown
+# (the default 2026-07-28 build is stateless: POST server/discover, no initialize, no Mcp-Session-Id)
 cargo lambda watch &
 curl -X POST http://localhost:9000/lambda-url/test \
   -H "Content-Type: application/json" \
@@ -498,7 +499,7 @@ let server = LambdaMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3", features = ["cors", "sse", "dynamodb"] }
+turul-mcp-aws-lambda = { version = "0.4", features = ["cors", "sse", "dynamodb"] }
 ```
 
 - `default` - Includes `cors` and `sse`

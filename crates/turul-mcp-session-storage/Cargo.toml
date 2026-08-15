@@ -1,12 +1,13 @@
 [package]
 name = "turul-mcp-session-storage"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Session storage abstractions for Model Context Protocol (MCP) servers"
+readme = "README.md"
 
 [dependencies]
 # Core dependencies
@@ -20,8 +21,7 @@ uuid = { workspace = true, features = ["v4", "v7"] }
 chrono = { workspace = true, features = ["serde"] }
 
 # Protocol types
-turul-mcp-protocol.workspace = true
-
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
 # Optional database support
 sqlx = { workspace = true, optional = true }
 
@@ -30,7 +30,9 @@ aws-config = { workspace = true, optional = true }
 aws-sdk-dynamodb = { workspace = true, optional = true }
 
 [features]
-default = ["in-memory"]
+default = ["in-memory", "protocol-2026-07-28"]
+protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25"]
+protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28"]
 in-memory = []
 sqlite = ["sqlx"]
 postgres = ["sqlx"]
@@ -38,3 +40,4 @@ dynamodb = ["aws-config", "aws-sdk-dynamodb"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+tempfile = { workspace = true }

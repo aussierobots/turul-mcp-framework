@@ -1,6 +1,6 @@
 # ADR-005: MCP Message Notifications and SSE Streaming Architecture
 
-**Status**: Active  
+**Status**: Superseded by ADR-023 (§"Notification Persistence Architecture" — SessionManager/SessionEventDispatcher event bus) and ADR-006 (§"MCP Streaming Terminology" — POST Streamable HTTP vs GET SSE vs, on the 2026-07-28 branch, `subscriptions/listen`). This ADR's SSE event-type fix (`event: <method>` instead of `event: data`) landed and remains true; the delivery architecture around it has since moved to the dispatcher model described in ADR-023.
 **Date**: 2025-09-02  
 **Drivers**: Nick Aversano, Claude Code
 

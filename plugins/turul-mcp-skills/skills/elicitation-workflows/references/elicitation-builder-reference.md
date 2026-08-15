@@ -1,5 +1,7 @@
 # Elicitation Builder Reference
 
+**`.build()` (→ `ElicitCreateRequest`) throughout this file is 2025-11-25 only** (`#[cfg(feature = "protocol-2025-11-25")]`) — it does not exist on a default 2026-07-28 build. The schema-building methods and `.build_dynamic()` (→ `DynamicElicitation`) work on both lanes; on 2026-07-28, feed `.message()`/`.requested_schema()` into `ElicitRequest::new_form()` instead. See the parent `SKILL.md`'s MRTR section.
+
 Complete API reference for `ElicitationBuilder`, `ElicitResultBuilder`, `DynamicElicitation`, and convenience constructors.
 
 ## ElicitationBuilder

@@ -186,7 +186,7 @@ impl PostgresSessionStorage {
             "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_events_timestamp ON events (timestamp)", // For cleanup
         ];
 
-        for index_sql in indexes.iter() {
+        for index_sql in indexes {
             if let Err(e) = sqlx::query(index_sql).execute(&self.pool).await {
                 // Concurrent index creation might fail if index already exists
                 debug!("Index creation note: {}", e);

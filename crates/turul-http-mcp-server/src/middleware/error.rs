@@ -5,12 +5,39 @@ use std::fmt;
 /// JSON-RPC 2.0 error codes for middleware errors
 ///
 /// These codes are used when converting `MiddlewareError` to `JsonRpcError`.
-/// Codes `-32000` to `-32099` are reserved for application-defined server errors.
+///
+/// MCP 2026-07-28 partitions JSON-RPC's `-32000..-32099` implementation-defined
+/// range: `-32000..-32019` is the legacy sub-range — new codes MUST NOT be
+/// allocated in it and new implementations SHOULD NOT use it at all — and
+/// `-32020..-32099` is reserved for the specification. New codes for purposes
+/// the specification does not define SHOULD be allocated outside the JSON-RPC
+/// reserved range `-32768..-32000`. See
+/// [Error Codes](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes).
+///
+/// The three codes below predate that partition and are frozen as legacy
+/// allocations; nothing new may join them, except `UNAUTHORIZED` — relocated
+/// below to correct a `MUST NOT` violation.
+///
+/// `UNAUTHORIZED` used to be `-32002`, one of the codes 2026-07-28 names as
+/// forbidden for this version to emit — it meant "resource not found" in
+/// 2025-11-25 and earlier, so a 2026 permission denial was wire-indistinguishable
+/// from a missing resource. It is now `-32005`. This trades that `MUST NOT`
+/// violation for a `SHOULD NOT`: `-32005` still sits in the legacy
+/// `-32000..-32019` sub-range the spec says new implementations should avoid
+/// entirely, rather than in the unreserved space above `-32099` the spec
+/// recommends for new codes. The spec's recommended range is unreachable for
+/// these three: [`map_middleware_error_to_jsonrpc`] builds them with
+/// `JsonRpcErrorObject::server_error`, whose `assert!` requires the code to lie
+/// in `-32099..=-32000` (a release decision of the sibling `turul-rpc` crate,
+/// not this one) and panics otherwise. `INVALID_REQUEST` and `INTERNAL_ERROR`
+/// are standard JSON-RPC codes and use their own constructors, so the assert
+/// does not apply to them.
 pub mod error_codes {
     /// Authentication required (-32001)
     pub const UNAUTHENTICATED: i64 = -32001;
-    /// Permission denied (-32002)
-    pub const UNAUTHORIZED: i64 = -32002;
+    /// Permission denied (-32005). Relocated from -32002, which 2026-07-28
+    /// forbids implementations of this version from emitting.
+    pub const UNAUTHORIZED: i64 = -32005;
     /// Rate limit exceeded (-32003)
     pub const RATE_LIMIT_EXCEEDED: i64 = -32003;
     /// Invalid request (standard JSON-RPC error)
@@ -36,11 +63,14 @@ pub mod error_codes {
 /// Each error variant maps to a specific JSON-RPC error code (see [`error_codes`]):
 ///
 /// - `Unauthenticated` → `-32001` "Authentication required"
-/// - `Unauthorized` → `-32002` "Permission denied"
+/// - `Unauthorized` → `-32005` "Permission denied"
 /// - `RateLimitExceeded` → `-32003` "Rate limit exceeded"
-/// - `InvalidRequest` → `-32600` (standard Invalid Request)
+/// - `InvalidRequest` → `-32600` (standard Invalid Request), with the message in
+///   `data.reason`
 /// - `Internal` → `-32603` (standard Internal error)
-/// - `Custom{code, msg}` → custom code from variant
+/// - `Custom{code, msg}` → `-32603`; the `code` string is application-level and
+///   has no JSON-RPC number, so it does not reach the wire
+/// - `HttpChallenge` → no JSON-RPC code; answered as a raw 401/403 before dispatch
 ///
 /// # Examples
 ///
@@ -212,6 +242,65 @@ impl MiddlewareError {
     }
 }
 
+/// Convert a middleware rejection into the JSON-RPC error response the client sees.
+///
+/// The sole owner of this mapping. Both transports call it, so the code a client
+/// receives cannot differ by which handler served the request.
+///
+/// The constructor is chosen by code class, not uniformly: `-32600` and `-32603`
+/// are standard JSON-RPC codes with their own constructors, while
+/// `JsonRpcErrorObject::server_error` asserts the code lies in the
+/// implementation-defined `-32099..=-32000`. Routing the standard codes through
+/// `server_error` tripped that assert, so `InvalidRequest`, `Internal` and
+/// `Custom` aborted the request instead of answering it.
+///
+/// `Custom` reports `-32603`: its `code` is a free-form application string with
+/// no JSON-RPC number, and inventing one would put it in a range the spec governs.
+///
+/// # Panics
+///
+/// On `HttpChallenge`, which the transport answers as a raw 401/403 before
+/// dispatch and must never reach here.
+pub fn map_middleware_error_to_jsonrpc(
+    err: MiddlewareError,
+    request_id: turul_rpc::RequestId,
+) -> turul_rpc::JsonRpcResponse {
+    use turul_rpc::error::JsonRpcErrorObject;
+
+    let error_obj = match err {
+        MiddlewareError::Unauthenticated(msg) => JsonRpcErrorObject::server_error(
+            error_codes::UNAUTHENTICATED,
+            &msg,
+            None::<serde_json::Value>,
+        ),
+        MiddlewareError::Unauthorized(msg) => JsonRpcErrorObject::server_error(
+            error_codes::UNAUTHORIZED,
+            &msg,
+            None::<serde_json::Value>,
+        ),
+        MiddlewareError::RateLimitExceeded {
+            message,
+            retry_after,
+        } => JsonRpcErrorObject::server_error(
+            error_codes::RATE_LIMIT_EXCEEDED,
+            &message,
+            retry_after.map(|s| serde_json::json!({ "retryAfter": s })),
+        ),
+        MiddlewareError::InvalidRequest(msg) => {
+            JsonRpcErrorObject::invalid_request(Some(serde_json::json!({ "reason": msg })))
+        }
+        MiddlewareError::Internal(msg) => JsonRpcErrorObject::internal_error(Some(msg)),
+        MiddlewareError::Custom { message, .. } => {
+            JsonRpcErrorObject::internal_error(Some(message))
+        }
+        MiddlewareError::HttpChallenge { .. } => {
+            unreachable!("HttpChallenge must be caught at transport level before JSON-RPC dispatch")
+        }
+    };
+
+    turul_rpc::JsonRpcResponse::Error(turul_rpc::JsonRpcError::new(Some(request_id), error_obj))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,6 +333,146 @@ mod tests {
 
         let err = MiddlewareError::custom("CUSTOM_ERROR", "Something went wrong");
         assert_eq!(err.to_string(), "CUSTOM_ERROR: Something went wrong");
+    }
+
+    /// Every variant a middleware can return must produce a response. Three of
+    /// them used to panic: `-32600`/`-32603` fall outside the
+    /// `-32099..=-32000` that `JsonRpcErrorObject::server_error` asserts, and
+    /// all six were routed through it, so `InvalidRequest`, `Internal` and
+    /// `Custom` aborted the request instead of answering it.
+    #[test]
+    fn every_returnable_variant_maps_to_a_response_without_panicking() {
+        let id = turul_rpc::RequestId::Number(1);
+        let cases: Vec<(MiddlewareError, i64)> = vec![
+            (MiddlewareError::unauthenticated("no token"), -32001),
+            (MiddlewareError::unauthorized("wrong scope"), -32005),
+            (MiddlewareError::rate_limit("slow down", Some(60)), -32003),
+            (MiddlewareError::invalid_request("malformed"), -32600),
+            (MiddlewareError::internal("db down"), -32603),
+            (MiddlewareError::custom("APP_CODE", "boom"), -32603),
+        ];
+
+        for (err, expected) in cases {
+            let label = err.to_string();
+            let response = map_middleware_error_to_jsonrpc(err, id.clone());
+            let turul_rpc::JsonRpcResponse::Error(e) = response else {
+                panic!("{label} must map to an error response");
+            };
+            assert_eq!(e.error.code, expected, "{label} must answer {expected}");
+        }
+    }
+
+    /// `retryAfter` is the one piece of data the mapping carries through, and a
+    /// client uses it to decide when to retry.
+    #[test]
+    fn rate_limit_carries_retry_after_but_only_when_given() {
+        let id = turul_rpc::RequestId::Number(1);
+
+        let with = map_middleware_error_to_jsonrpc(
+            MiddlewareError::rate_limit("slow down", Some(30)),
+            id.clone(),
+        );
+        let turul_rpc::JsonRpcResponse::Error(e) = with else {
+            panic!("expected an error response");
+        };
+        assert_eq!(
+            e.error.data.as_ref().and_then(|d| d.get("retryAfter")),
+            Some(&serde_json::json!(30))
+        );
+
+        let without =
+            map_middleware_error_to_jsonrpc(MiddlewareError::rate_limit("slow down", None), id);
+        let turul_rpc::JsonRpcResponse::Error(e) = without else {
+            panic!("expected an error response");
+        };
+        assert!(
+            e.error.data.is_none(),
+            "no retry_after means no data object: {:?}",
+            e.error.data
+        );
+    }
+
+    /// `UNAUTHENTICATED` and `RATE_LIMIT_EXCEEDED` are frozen legacy
+    /// allocations. `UNAUTHORIZED` is not frozen at its old value: `-32002` is
+    /// a code 2026-07-28 lists among those implementations of this version
+    /// MUST NOT emit, so it was relocated to `-32005`. None of the three may
+    /// enter the spec-reserved sub-range, and `UNAUTHORIZED` specifically must
+    /// never again be `-32002`.
+    #[test]
+    fn middleware_codes_are_frozen_legacy_allocations() {
+        const FROZEN: [(&str, i64); 3] = [
+            ("UNAUTHENTICATED", -32001),
+            ("UNAUTHORIZED", -32005),
+            ("RATE_LIMIT_EXCEEDED", -32003),
+        ];
+        assert_eq!(error_codes::UNAUTHENTICATED, FROZEN[0].1);
+        assert_eq!(error_codes::UNAUTHORIZED, FROZEN[1].1);
+        assert_eq!(error_codes::RATE_LIMIT_EXCEEDED, FROZEN[2].1);
+        assert_ne!(
+            error_codes::UNAUTHORIZED,
+            -32002,
+            "UNAUTHORIZED must never regress to -32002 — 2026-07-28 forbids \
+             implementations of this version from emitting it, and it means \
+             resource-not-found to every conformant peer"
+        );
+
+        for (name, code) in FROZEN {
+            assert!(
+                !(-32099..=-32020).contains(&code),
+                "{name} emits {code}, inside the spec-reserved -32020..-32099 \
+                 sub-range; implementations must not emit codes there that the \
+                 specification does not define"
+            );
+        }
+    }
+
+    /// The per-constant guard above did not catch `session_handler.rs`, which
+    /// emitted the literal `-32002` directly rather than through `error_codes`.
+    /// This scans the crate's own source for the literal, so a new emit site
+    /// fails regardless of how it is constructed. Source-level rather than
+    /// wire-level on purpose: the invariant is "this code appears in no emit
+    /// path", which no single request can demonstrate.
+    #[test]
+    fn no_source_file_emits_the_forbidden_resource_not_found_code() {
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders = Vec::new();
+        let mut stack = vec![src];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read src dir") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                // This file names the code in its own assertions and in this
+                // scan; the constants it defines are pinned by
+                // `middleware_codes_are_frozen_legacy_allocations` instead.
+                if path.file_name().is_some_and(|f| f == "error.rs")
+                    && path.parent().is_some_and(|d| d.ends_with("middleware"))
+                {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).expect("read source");
+                for (n, line) in text.lines().enumerate() {
+                    let code = line.trim_start();
+                    if code.starts_with("//") {
+                        continue;
+                    }
+                    if code.contains("-32002") {
+                        offenders.push(format!("{}:{}: {}", path.display(), n + 1, code.trim()));
+                    }
+                }
+            }
+        }
+        assert!(
+            offenders.is_empty(),
+            "2026-07-28 forbids implementations of this version from emitting \
+             -32002, which means resource-not-found to every conformant peer:\n{}",
+            offenders.join("\n")
+        );
     }
 
     #[test]

@@ -1,0 +1,24 @@
+[package]
+name = "streamable-http-client-2025-11-25"
+version = "0.4.0"
+edition.workspace = true
+description = "MCP 2025-11-25 Streamable HTTP raw-wire client with concurrent SSE processing"
+
+# Speaks the 2025-11-25 wire directly with reqwest — no turul-mcp-client and
+# no protocol crate — so every required header and envelope is visible in the
+# example's own source. The high-level client pattern is
+# streamable-http-client (2026-07-28 lane).
+[dependencies]
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+# `stream` for bytes_stream(): the SSE body is consumed frame by frame.
+reqwest = { workspace = true, features = ["stream"] }
+futures = { workspace = true }
+[[bin]]
+name = "streamable-http-client-2025-11-25"
+path = "src/main.rs"
+test = false

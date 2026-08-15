@@ -1,23 +1,24 @@
 [package]
 name = "turul-http-mcp-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "HTTP transport layer for Model Context Protocol (MCP) servers"
+readme = "README.md"
 
 [features]
-default = ["sse"]
+default = ["sse", "protocol-2026-07-28"]
+protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25"]
+protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28"]
 sse = []          # Server-Sent Events support
 
 [dependencies]
-turul-mcp-json-rpc-server = { workspace = true, features = [
-  "streams",
-] }
-turul-mcp-protocol = { workspace = true }
-turul-mcp-session-storage = { workspace = true }
+turul-rpc = { workspace = true, features = ["async", "streams"] }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true

@@ -12,6 +12,7 @@ pub mod notification_traits;
 pub mod prompt_traits;
 pub mod resource_traits;
 pub mod root_traits;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod sampling_traits;
 pub mod tool_traits;
 
@@ -25,5 +26,6 @@ pub use notification_traits::*;
 pub use prompt_traits::*;
 pub use resource_traits::*;
 pub use root_traits::*;
+#[cfg(feature = "protocol-2025-11-25")]
 pub use sampling_traits::*;
 pub use tool_traits::*;

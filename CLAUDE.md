@@ -1,243 +1,100 @@
 # CLAUDE.md
 
-1. Don’t assume. Don’t hide confusion. Surface tradeoffs.
+1. Don't assume. Don't hide confusion. Surface tradeoffs.
 2. Minimum code that solves the problem. Nothing speculative.
 3. Touch only what you must. Clean up only your own mess.
 4. Define success criteria. Loop until verified.
 
-Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and complete MCP 2025-11-25 specification support.
+Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and MCP 2026-07-28 specification support (2025-11-25 available as an opt-in build).
 
 > **Source of Truth**
+> - **The MCP specification + vendored schema** — what the wire must be
+> - **docs/adr/** — architectural decisions already taken
+> - **The code** — what is actually true today
 > - **AGENTS.md** — repo policy, compliance rules, full architecture
 > - **CLAUDE.md** — concise operator playbook (this file)
-> - **WORKING_MEMORY.md** — historical context and status
-> - **docs/adr/** — architectural decisions
-> - If conflict: AGENTS.md wins.
+>
+> Between the two playbooks, AGENTS.md wins. But both are prose *about* the system,
+> and prose generalises badly: where either contradicts the spec, an ADR, or working
+> code, **the playbook is what is wrong** — correct the wording rather than the
+> system. Cite the schema type, ADR number or file when invoking this; a preference
+> is not a contradiction.
 
-## Critical Rules
+## Branch Lock: `feat/turul-mcp-protocol-2026-07-28`
 
-### Protocol Crate Purity
-**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-11-25` unless it directly relates to MCP spec compliance.** No framework features, middleware hooks, or convenience additions.
+**This branch is the 0.4 release in preparation**, adopting MCP 2026-07-28 — now the
+released current specification (stateless core, `initialize`/`Mcp-Session-Id` removed,
+Tasks moved to extension, error code `-32002` → `-32602`, JSON Schema 2020-12, MCP Apps,
+caching headers, RFC 9207 auth, deprecations of Roots/Sampling/Logging).
+See https://modelcontextprotocol.io/specification/2026-07-28.
 
-**Forbidden**: Trait hierarchies, builder patterns, framework helpers, tutorial docs
-**Allowed**: MCP spec types, serde derives, basic builder methods on concrete types, spec error types
-**Framework traits belong in `turul-mcp-builders`** (`turul-mcp-builders/src/traits/`)
+**0.4 becomes the current release only when the maintainer opens the PR and merges it.**
+Until then this branch is pre-release: it holds the 0.4 line, `main` holds 0.3 /
+2025-11-25, and neither fact licenses merging. Write about this branch's contents as
+**0.4** — every non-frozen crate is already `0.4.0`, so "0.3" in a *current-state*
+claim is stale (see [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md)
+for what legitimately stays 0.3).
 
-### Simple Solutions First
-**ALWAYS** prefer simple, minimal fixes over complex or over-engineered solutions:
+Confirm the name before relying on the rules below — they bind whatever branch holds
+the 2026-07-28 work, and a stale name here would make them unenforceable as written:
 
-```rust
-// SIMPLE - Add parameter to existing signature
-async fn read(&self, params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>>
-
-// COMPLEX - Create new traits, elaborate architectures
-trait McpResourceLegacy { ... }  // Avoid backwards compatibility layers
-trait McpResourceV2 { ... }      // Avoid versioned APIs
+```bash
+git branch --show-current      # expect feat/turul-mcp-protocol-2026-07-28
 ```
 
-**Key Principles:**
-- **Work within existing architecture** - don't rebuild what works
-- **Major changes are too costly** - fix problems with minimal impact
-- **One obvious way to do it** - avoid multiple patterns for the same thing
-- **If it compiles and tests pass** - you probably fixed it correctly
+- **DO NOT merge `feat/turul-mcp-protocol-2026-07-28` into `main` without the maintainer's express authority.**
+- **DO NOT fast-forward, rebase-onto-main, squash-to-main, or open a merge PR for this branch** unless the maintainer (Nick) has explicitly authorized that specific action in the current session.
+- **DO NOT delete the branch, force-push it, or treat it as "complete"** without express authority. "Tests pass" / "all SEPs implemented" is not sufficient — final disposition is the maintainer's call.
+- All work for the 2026-07-28 spec lands on this branch. `main` continues to hold 2025-11-25 — now the *previous* spec, not the current one — until the maintainer chooses to cut over.
 
-### Test Compliance
+### Check the schema pins BEFORE any 2026-07-28 work
 
-**Tests validate the MCP spec and intended contract — never change tests to preserve buggy behavior.**
+**2026-07-28 has finalized.** The released schema lives at the immutable upstream path
+`schema/2026-07-28/schema.ts`; upstream `schema/draft/` is now the *next* spec cycle's
+floating pointer and is no longer what this crate tracks. Anything still resolving against
+`schema/draft/` or against `main` will silently drift onto next-cycle content. Verify the pin
+still names the released artifact — before writing code, and before trusting a green suite:
 
-- When code and tests disagree, verify against the MCP specification before changing either
-- Never silently accept multiple wire formats in tests (e.g., `.strip_prefix("data: ")` to handle both SSE and JSON) — assert the expected Content-Type and body format explicitly
-- Tests must assert wire-format compliance: Content-Type headers, HTTP status codes, JSON-RPC error codes, and response body shape
+```bash
+# 1. Which commit last changed the fixtures, and does the harness still pass there?
+cargo run -p turul-mcp-protocol-2026-07-28 --bin mcp-compliance-2026-07-28 \
+    --features compliance -- refresh          # dry-run; --write only once green
 
-### Test Coverage Discipline (pre-publish gate)
-
-**Every behavior-changing slice must satisfy all four before release:**
-
-1. **ADR exists or is updated.** Tests validate the ADR contract, not what the code happens to do. If no ADR governs the changed behavior, write or update one in the same slice and reference it in the CHANGELOG entry.
-2. **Production-path coverage.** Tests must exercise the entry point real consumers use (e.g., `Builder → server.handler() → handle_streaming()`), not just direct construction of the patched type. A fix verified only at the unit it touched does not cover the bug — v0.3.40 → v0.3.41 happened because tests bypassed the builder path.
-3. **Wire-layer coverage for transport-protocol boundaries.** When the fix touches code that produces bytes consumed by another protocol layer (Lambda Runtime API, hyper, SSE wire format, JSON-RPC envelope, MCP streamable HTTP), the test MUST exercise the bytes that hit that next layer — not just the framework-internal types that produce them. v0.3.42 happened because tests asserted "BodyDataStream yields ≥1 item" while production failed at "Lambda Runtime API wire bytes after delimiter are non-empty." For transport-protocol tests, drain through a verbatim transliteration of the upstream serializer (e.g. `lambda_runtime-<version>/src/requests.rs`) and assert on the resulting byte sequence. No "faithful mock" loophole — use the upstream code unmodified (call it if pub, replicate verbatim with a source-line citation if not).
-4. **Revert-and-fail check.** Temporarily revert the fix and run the new tests. They MUST fail. If they still pass, the test asserts code behavior rather than contract — rewrite it. Record the revert-and-fail result in the commit message.
-
-A green test suite written alongside the fix is suspect by default. The revert-and-fail check is the only proof the regression net catches the bug. The wire-layer rule exists because a test calibrated to the framework's internal types will pass for any fix that satisfies those types, even when the fix doesn't satisfy the actual protocol contract consumed downstream.
-
-### Protocol Re-export Rule (MANDATORY)
-
-**NEVER reference versioned protocol crates directly.** Always use the `turul-mcp-protocol` re-export crate.
-
-```rust
-// CORRECT
-use turul_mcp_protocol::*;
-use turul_mcp_protocol::elicitation::ElicitResult;
-
-// WRONG - NEVER reference versioned crates directly
-use turul_mcp_protocol_2025_11_25::*;   // FORBIDDEN
-use turul_mcp_protocol_2025_06_18::*;   // FORBIDDEN
+# 2. Has the vendored schema itself drifted from its pinned commit?
+shasum -a 256 crates/turul-mcp-protocol-2026-07-28/schema/schema.ts
+#    compare against the Content sha256 in schema/README.md, then diff that
+#    commit against the released tag 2026-07-28 — never against upstream main
 ```
 
-**Only exceptions**: `crates/turul-mcp-protocol/` (the re-export crate itself) and `crates/turul-mcp-protocol-2025-11-25/` (its own source).
+Governing rules — including the one-immutable-commit requirement and the
+`modeled=N` caveat — live in **AGENTS.md §Branch Lock → "Schema pin governance"**,
+which wins on conflict. Do not restate them here; this section is the runnable
+check only.
 
-**Import Hierarchy** (prefer top):
-- `turul_mcp_server::prelude::*` — re-exports everything (protocol + builders + server types)
-- `turul_mcp_builders::prelude::*` — framework traits + runtime builders
-- `turul_mcp_protocol::*` — MCP spec types only (Tool, Resource, Prompt, McpError)
+## Rules
 
-### Zero-Configuration Design
-Users NEVER specify method strings - framework auto-determines from types:
-```rust
-// CORRECT
-#[derive(McpTool)]
-struct Calculator;  // Framework → tools/call
+Each rule lives in its own file under [docs/rules/](docs/rules/README.md) — one topic
+per file, so a rule can be linked, cited by a reviewer, and updated without touching
+the others. The precedence in §Source of Truth above applies to every one of them:
+spec > ADR > code > rule text.
 
-// WRONG
-#[mcp_tool(method = "tools/call")]  // NO METHOD STRINGS!
-```
+| Rule | Governs |
+|---|---|
+| [protocol-crate-purity.md](docs/rules/protocol-crate-purity.md) | What may live in `turul-mcp-protocol*` crates; frozen 2025-* crates |
+| [protocol-reexport.md](docs/rules/protocol-reexport.md) | Always import via `turul-mcp-protocol`, never a versioned crate directly |
+| [spec-version-naming.md](docs/rules/spec-version-naming.md) | Full `YYYY-MM-DD` spec dates, never a bare year |
+| [zero-configuration-design.md](docs/rules/zero-configuration-design.md) | No method strings — framework derives them from types |
+| [crate-versioning.md](docs/rules/crate-versioning.md) | Per-crate `version =`, what's stale vs. legitimately still 0.3, workspace deps |
+| [comments.md](docs/rules/comments.md) | What a source comment may say; forbidden tags/citations; slice completion gate |
+| [test-coverage-discipline.md](docs/rules/test-coverage-discipline.md) | Pre-publish test gate; what makes a check meaningless; reviewer-agent briefing |
+| [notification-architecture.md](docs/rules/notification-architecture.md) | SessionManager as sole event bus; wire-complete notification envelopes; handler error rules |
+| [wire-format-compliance.md](docs/rules/wire-format-compliance.md) | Streamable HTTP headers/status codes, camelCase JSON, structuredContent, 2025-11-25 opt-in lane |
+| [scope-discipline.md](docs/rules/scope-discipline.md) | Minimal fixes only; stay inside the approved plan; core-crate change checklist |
 
-### Workspace Dependencies
-All crate dependencies MUST use `workspace = true` references. Declare versions in root `Cargo.toml` `[workspace.dependencies]`, reference with `.workspace = true` in crate `Cargo.toml`. Add crate-specific features inline: `hyper = { workspace = true, features = ["http1"] }`.
-
-### Feature Flags — Storage Backends
-Default features: `["http", "sse"]` — in-memory only, no backend deps compiled. Storage backends are opt-in:
-
-```toml
-# In-memory only (default)
-turul-mcp-server = "0.3"
-
-# With DynamoDB backends
-turul-mcp-server = { version = "0.3", features = ["dynamodb"] }
-
-# With DynamoDB + dynamic tools
-turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
-```
-
-Backend features (`sqlite`, `postgres`, `dynamodb`) forward to both `turul-mcp-session-storage` AND `turul-mcp-task-storage`. When `dynamic-tools` is enabled, they also forward to `turul-mcp-server-state-storage` via weak dep syntax (`?/`).
-
-### API Conventions
-- **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
-- **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
-- **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
-- **Session IDs**: Always `Uuid::now_v7().as_simple()` for temporal ordering (no-hyphen hex)
-
-### JSON Naming: camelCase ONLY
-
-**CRITICAL**: All JSON fields MUST use camelCase per MCP 2025-11-25.
-
-```rust
-// CORRECT - Always rename snake_case fields
-#[serde(rename = "additionalProperties")]
-additional_properties: Option<bool>,
-
-// WRONG - Never serialize as snake_case
-additional_properties: Option<bool>,  // becomes "additional_properties"
-```
-
-### Notification Wire Format: Always Use JsonRpcNotification
-
-**CRITICAL**: Protocol notification types (e.g., `ToolListChangedNotification`, `ResourceListChangedNotification`) are **NOT wire-complete**. They contain MCP-specific fields (`method`, `params`) but lack the required `jsonrpc: "2.0"` envelope.
-
-```rust
-// CORRECT — wire-complete JSON-RPC notification for transport:
-let notification = JsonRpcNotification::new("notifications/tools/list_changed".to_string());
-// Serializes to: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
-
-// WRONG — missing jsonrpc field, will fail client-side validation:
-let notification = ToolListChangedNotification::new();
-// Serializes to: {"method":"notifications/tools/list_changed"}  ← BROKEN
-```
-
-This applies to ALL notification types sent via SSE/HTTP transport. The protocol `*Notification` types are for parsing/type safety, not for direct wire emission.
-
-### Notification Persistence Architecture
-
-**SessionManager is the single event bus.** All notification emitters (ToolRegistry, SessionContext) go through `SessionManager::broadcast_event()`. Guaranteed persistence is provided by the `SessionEventDispatcher` — an awaited trait installed at the SessionManager layer, not at individual emitters.
-
-- `broadcast_event()` for Custom events enumerates targets from `storage.list_sessions()` (NOT the in-memory cache), filters terminated sessions, dispatches per-session via the awaited dispatcher
-- `dispatch_custom_event(session_id)` is for per-session delivery (e.g., fingerprint mismatch) — storage-backed, not cache-gated
-- `send_event_to_session()` is cache-backed (unchanged) — used only when the session is known to be attached in this process
-- The dispatcher calls `StreamManager::broadcast_to_session()` which persists to session event storage AND delivers to active connections
-- The SSE bridge task is observer-only for Custom events — NOT the persistence path
-- Without a dispatcher (e.g., no HTTP server), events are best-effort only (in-memory channels)
-
-**Do NOT add notification sinks or persistence hooks to individual emitters** — that splits the event architecture into competing delivery paths.
-
-**Distributed session targeting** (see ADR-023): In Lambda/multi-instance, the in-memory `SessionManager.sessions` cache may not contain sessions created by other instances. Notification targeting for Custom events uses `storage.list_sessions()`, not the cache.
-
-### Critical Error Handling Rules
-
-**MANDATORY**: Handlers return domain errors only. Dispatcher owns protocol conversion.
-
-**Key Rules:**
-1. Handlers return `Result<Value, McpError>` ONLY
-2. Dispatcher converts McpError → JsonRpcError automatically
-3. Never create JsonRpcError, JsonRpcResponse in business logic
-4. Use `McpError::InvalidParameters`, `McpError::ToolNotFound`, etc.
-
-### MCP Tool Output Compliance
-
-**Tools with `outputSchema` MUST provide `structuredContent`** - Framework handles automatically.
-
-```rust
-// Framework auto-generates structuredContent
-#[mcp_tool(
-    name = "word_count",
-    description = "Count words in text",
-    output_field = "countResult"  // Custom field name (optional, default "result")
-)]
-async fn count_words(text: String) -> McpResult<WordCount> {
-    Ok(WordCount { count: text.split_whitespace().count() })
-}
-```
-
-**Rules:**
-1. Framework automatically adds `structuredContent` when `outputSchema` exists
-2. Use `output_field` to customize output field name (default: "result")
-3. **NEVER change tests to match code** - Tests validate MCP spec compliance
-
-### Streamable HTTP Requirements
-
-**Accept Headers:**
-- `Accept: application/json` - JSON responses
-- `Accept: text/event-stream` - SSE streaming (required for progress notifications)
-- `Accept: */*` - Accept all
-
-**Session Initialization (Strict Mode):**
-1. POST /mcp with `initialize` → capture session ID from response
-2. POST /mcp with `notifications/initialized` → enable session (returns 202)
-3. Include `MCP-Session-ID` header in all subsequent requests
-
-**SSE Resumability (MCP 2025-11-25 spec, "Resumability and Redelivery"):**
-- **With `Last-Event-ID`**: Server MUST replay events after that ID on the originating stream. "Resumption is always via HTTP GET with `Last-Event-ID`."
-- **Without `Last-Event-ID`**: Fresh GET SSE stream. Server MAY send notifications. Replay policy for stored events is a deployment decision, not explicitly prohibited or required by the spec.
-- Event IDs are per-stream cursors. "The server MUST NOT replay messages that would have been delivered on a different stream."
-
-**Session Status Codes (Streamable HTTP):** (per MCP 2025-11-25 § Session Management)
-- Missing `Mcp-Session-Id` header → **400** ("Servers that require a session ID SHOULD respond to requests without an MCP-Session-Id header (other than initialization) with HTTP 400 Bad Request"). Pre-init `ping` bypass: with `allow_unauthenticated_ping = true` (default) sessionless pings succeed; with `false`, the rejection also returns 400 (same missing-header contract).
-- Nonexistent session ID → **404** (MCP spec: client must start fresh `initialize`)
-- Terminated session ID → **404** (MCP spec: treated same as nonexistent)
-- Auth token invalid/expired → **401** (OAuth middleware, separate from session)
-- Insufficient OAuth scope → **403**
-- Storage backend error → **500**
-
-**Legacy `session_handler.rs` (protocol ≤ 2024-11-05) GET SSE** also returns 400 for missing `Mcp-Session-Id` for cross-transport consistency (previously returned HTTP 200 with a JSON-RPC error body — non-spec).
-
-**Testing:** All requests need valid Accept header (application/json, text/event-stream, or */*)
-
-### MCP 2025-11-25 Compliance
-
-**Notification method strings**: `notifications/*/list_changed` (underscore) — spec-compliant form. Server accepts legacy `listChanged` (camelCase) for backward compat only.
-
-**JSON capability keys**: `listChanged` (camelCase) — correct per spec.
-
-**ToolChoiceMode**: `"auto" | "none" | "required"`. Legacy `"any"` accepted on deserialize only.
-
-**Role enum**: `User` and `Assistant` only — no `System` variant in MCP protocol.
-
-**Progress fields**: `f64` (not `u64`). Use `as_f64()`, never `as_u64()`.
-
-**structuredContent**: Auto-generated by framework when `outputSchema` exists.
-
-**Session handshake**: `initialize` → `notifications/initialized` → `Mcp-Session-Id` header on all subsequent requests.
-
-**Verify**: `cargo test -p turul-mcp-framework-integration-tests --test compliance`
+Before spawning a reviewer agent (Explore, Plan, code-reviewer, devils-advocate,
+etc.), point it at `AGENTS.md`, this file, and the relevant ADRs — see
+[test-coverage-discipline.md § Briefing reviewer agents](docs/rules/test-coverage-discipline.md#briefing-reviewer-agents)
+for why and exactly what to say.
 
 ## Quick Reference
 
@@ -259,7 +116,19 @@ let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 // Manual impls MUST include: impl HasExecution for MyTool {}
 ```
 
-### Task Support (per-tool)
+### Task Support (per-tool) — **2025-11-25 lane only**
+
+> **This section does not apply to the default build.** `TaskSupport` and
+> `ToolExecution` exist only in `turul-mcp-protocol-2025-11-25` (0 occurrences in
+> `turul-mcp-protocol-2026-07-28/src/`), and `.with_task_storage()` is
+> `#[cfg(feature = "protocol-2025-11-25")]` (`builder.rs:1412`). The derive macros
+> emit the attribute's code unconditionally, so a `task_support = "..."` tool on
+> the 2026-07-28 default lane fails to compile with `cannot find TaskSupport in
+> tools` / `cannot find type ToolExecution`. Removing the attribute clears both.
+>
+> On 2026-07-28, tasks moved to the **extension** `io.modelcontextprotocol/tasks`
+> (SEP-2663) — see `crates/turul-mcp-ext-tasks` and `examples/ext-tasks-server`,
+> and note SEP-2133 keeps it off by default. `tasks/list` was removed.
 
 Tools can declare `task_support` to enable the "Run as Task" button in MCP Inspector:
 
@@ -340,6 +209,12 @@ async fn add(a: f64) -> McpResult<MyOutput> { Ok(MyOutput { value: a }) }  // au
 
 For manual `HasOutputSchema` implementation, see `examples/calculator-add-manual-server`.
 
+### API Conventions
+- **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
+- **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
+- **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
+- **Session IDs**: Always `Uuid::now_v7().as_simple()` for temporal ordering (no-hyphen hex)
+
 ### Basic Server
 ```rust
 use turul_mcp_server::prelude::*;
@@ -352,11 +227,30 @@ let server = McpServer::builder()
 server.run().await
 ```
 
+### The two spec lanes cannot be built together
+
+`protocol-2025-11-25` and `protocol-2026-07-28` are mutually exclusive features on
+`turul-mcp-protocol`, so **`--workspace` and any `-p` list mixing lanes fail**:
+
+```
+error: turul-mcp-protocol: features `protocol-2025-11-25` and
+       `protocol-2026-07-28` are mutually exclusive — a build re-exports
+       exactly one MCP spec. Enable one.
+```
+
+That is the mutex working, not a broken tree. Split the `-p` list by lane. Give each
+lane its own `CARGO_TARGET_DIR` (e.g. `target-2025`) or every switch triggers a full
+rebuild. `scripts/ci-gates.sh` already separates them: `default` = 2026-07-28,
+`opt-in-2025` = 2025-11-25, `mutex` proves they still refuse to co-compile.
+
+Runnable per-lane commands and the client × server matrix live in
+[`docs/manual-e2e-matrix.md`](docs/manual-e2e-matrix.md).
+
 ### Development Commands
 ```bash
-cargo build
+cargo build     # 2026-07-28 default lane only — see the mutex above
 cargo test
-cargo run --example minimal-server
+cargo run -p minimal-server
 
 # Specific test suites
 cargo test -p turul-mcp-server --features dynamic-tools     # Dynamic tools + registry tests
@@ -364,8 +258,8 @@ cargo test -p turul-mcp-framework-integration-tests --test event_dispatcher_pers
 cargo test -p turul-mcp-framework-integration-tests --test compliance  # MCP spec compliance
 
 # MCP Testing
-cargo run --example client-initialise-server -- --port 52935
-cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
+cargo run -p client-initialise-server -- --port 52935
+cargo run -p client-initialise-report -- --url http://127.0.0.1:52935/mcp
 ```
 
 ### Debugging: Stale Build Issues
@@ -377,66 +271,9 @@ cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
 
 **Why**: Incremental compilation caches string literals/errors across crates.
 
-### Scope Discipline
-
-- **Stay inside the approved plan and stated requirement** — do not broaden scope by changing adjacent contracts, tests, or semantics unless directly required
-- **If a fix forces unrelated API behavior changes or test expectation changes, stop and reassess** — that's a signal you're modifying the wrong layer
-- **If scope or architecture becomes ambiguous, stop and ask** — do not improvise
-- **`replace_all` edits must be scoped precisely** — never use `replace_all` on patterns that appear in unrelated code paths
-
-## Before Modifying Core Crates
-
-- **Impact Analysis**: All examples, tests, user code affected?
-- **Breaking changes documented** clearly
-- **No panics** — `Result<T, McpError>` for all fallible operations
-- **Zero warnings**: `cargo check` must be clean
-- **Doctests**: Every ```rust block MUST compile — fix errors, don't convert to ```text
-- **Extend existing** components, never create "enhanced" versions
-- **Test with framework-native APIs**, not raw JSON manipulation
-
-```rust
-// Framework-native testing
-let tool = CalculatorTool { a: 5.0, b: 3.0 };
-let result = tool.call(json!({"a": 5.0, "b": 3.0}), None).await?;
-
-// NOT raw JSON manipulation
-let json_request = r#"{"method":"tools/call"}"#;
-```
-
-## Pre-Release Checklist
-
-Before publishing a new version:
-
-1. **Workspace version**: Update `version` in `Cargo.toml` `[workspace.package]` and all internal crate dependency versions
-2. **Example server versions**: Update `.version("x.y.z")` strings in `examples/*/src/main.rs`
-3. **Plugin skill versions**: Skills use generic minor version (`v0.3`, not `v0.3.13`) — do NOT bump on patch releases. Only update when the minor version changes (e.g., `v0.3` → `v0.4`).
-4. **CHANGELOG.md**: Add release entry with date and comparison links
-5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
-6. **Publish order** (dependency-first):
-   ```
-   json-rpc-server → protocol-2025-06-18 → protocol-2025-11-25 → protocol → builders →
-   session-storage → task-storage → server-state-storage → derive* → http-server → server → client → aws-lambda → oauth
-   ```
-   *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
-7. **Git tag**: `git tag v0.x.y && git push origin v0.x.y`
-
 ## Architecture
 
-### Workspace Crates
-- `turul-mcp-server/` - High-level framework (main entry point)
-- `turul-mcp-protocol/` - Protocol re-export crate (always use this)
-- `turul-mcp-protocol-2025-11-25/` - Versioned protocol types (internal only)
-- `turul-mcp-protocol-2025-06-18/` - Legacy protocol (backward compat)
-- `turul-mcp-builders/` - Runtime builders + framework traits
-- `turul-mcp-derive/` - Proc macros (McpTool, McpResource, McpPrompt, mcp_tool)
-- `turul-http-mcp-server/` - HTTP/SSE transport
-- `turul-mcp-json-rpc-server/` - **Compatibility shim** since 0.3.39 — re-exports [`turul-rpc`](https://github.com/aussierobots/turul-rpc) (sibling repo). New code should depend on `turul-rpc` directly. No 0.4 of this crate; framework 0.4.0 drops the dep entirely. See ADR-025.
-- `turul-mcp-client/` - Client library
-- `turul-mcp-session-storage/` - Pluggable session storage (InMemory, SQLite, PostgreSQL, DynamoDB)
-- `turul-mcp-task-storage/` - Task storage for long-running operations
-- `turul-mcp-server-state-storage/` - Server-global state for dynamic tool coordination
-- `turul-mcp-aws-lambda/` - AWS Lambda integration
-- `turul-mcp-oauth/` - OAuth 2.1 Resource Server support
+Full crate list lives in `AGENTS.md` §Architecture Overview — don't duplicate it here.
 
 ### Session Management
 - UUID v7 sessions with automatic cleanup
@@ -444,7 +281,7 @@ Before publishing a new version:
 - Pluggable storage (InMemory, SQLite, PostgreSQL, DynamoDB)
 
 ### HTTP Transport Routing
-- **Protocol >= 2025-03-26**: `StreamableHttpHandler` (chunked SSE, MCP 2025-11-25)
+- **Protocol >= 2025-03-26**: `StreamableHttpHandler` — serves both 2026-07-28 (stateless, `server/discover`) and 2025-11-25 (session handshake); which one is compiled in is the feature mutex's decision, not a runtime branch
 - **Protocol <= 2024-11-05**: `SessionMcpHandler` (buffered JSON, legacy compatibility)
 
 Routing in `crates/turul-http-mcp-server/src/server.rs`
@@ -477,3 +314,45 @@ git commit        # Only when user explicitly requests a commit
 ### Commit Message Style
 - **No `Co-Authored-By` attribution** — omit Claude/AI co-author trailers
 - **Succinct** — one-line summary, optional body only if non-obvious
+
+## Pre-Release Checklist
+
+Before publishing a new version:
+
+1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml` AND its pin in `[workspace.dependencies]`. Per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md), `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
+2. **Example server versions**: nothing to hand-edit — all 45 examples that set a server
+   version use `.version(env!("CARGO_PKG_VERSION"))`, so bumping the example's own
+   `[package] version` in `examples/<name>/Cargo.toml` is what moves the wire value.
+   Verify no hardcoded string has crept back in:
+   ```bash
+   grep -rn '\.version("' examples/ | grep -v CARGO_PKG   # expect no output
+   ```
+3. **Plugin skill versions**: Skills use the generic minor version (`v0.4`, not
+   `v0.4.1`) — do NOT bump on patch releases, only when the minor changes. Bump
+   *current-state* references only; see [docs/rules/crate-versioning.md § Version References](docs/rules/crate-versioning.md#version-references-what-is-stale-and-what-is-not) —
+   since-markers and changelog entries stay put.
+4. **CHANGELOG.md**: Add release entry with date and comparison links
+5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
+6. **Publish order** (dependency-first, derived from the actual non-dev dependency graph):
+   ```
+   protocol-2026-07-28 → protocol → session-storage → http-server → builders → derive* →
+   ext-tasks → oauth → schema-validation → server-state-storage → task-storage →
+   server → aws-lambda → client → ext-apps
+   ```
+   *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
+
+   External sibling crates are **not** in this sequence — they publish from their
+   own repos and must already be on crates.io: `turul-rpc` (0.2) and
+   `turul-jwt-validator` (>= 0.3.2, required by `turul-mcp-oauth` — the
+   `rust_crypto` feature does not exist before 0.3.2).
+
+   Frozen `turul-mcp-json-rpc-server`, `turul-mcp-protocol-2025-06-18` and
+   `turul-mcp-protocol-2025-11-25` stay published at `0.3.47` — no republish step.
+   `turul-mcp-framework-integration-tests` is `publish = false`.
+
+   Regenerate this list rather than hand-editing it — `turul-mcp-server` depends on
+   `turul-mcp-oauth` non-optionally, so an order that publishes the server first fails:
+   ```bash
+   cargo metadata --format-version 1 --no-deps   # then topo-sort on kind == null deps
+   ```
+7. **Git tag**: `git tag v0.x.y && git push origin v0.x.y`

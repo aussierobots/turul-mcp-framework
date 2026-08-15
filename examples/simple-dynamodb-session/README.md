@@ -1,10 +1,18 @@
-# Simple DynamoDB Session Storage Example
+# Simple DynamoDB Storage Backend Example (2026-07-28 lane)
 
-This example demonstrates DynamoDB-backed session storage for MCP servers. It shows how session state persists in AWS DynamoDB with automatic TTL cleanup.
+Demonstrates wiring a **durable DynamoDB storage backend** into an MCP
+server. On the 2026 stateless core there are no client-visible sessions —
+the storage backs the transport's internal per-request contexts and event
+streams. The demo tools drive the `SessionStorage` backend API directly
+against one durable record per run: `storage_info` counts accumulate across
+server restarts, which is the observable persistence proof.
+
+Cross-request APPLICATION state belongs in your own store; the 2025-11-25
+stateful session model lives on the opt-in lane (see `stateful-server`).
 
 ## Features
 
-- **Session-scoped storage**: Each MCP session gets isolated key-value storage in DynamoDB
+- **Backend API surface**: the demo drives `set_session_state`/`get_session_state` directly against a per-run record
 - **Automatic table creation**: Tables are created automatically when `verify_tables: true, create_tables: true`
 - **TTL cleanup**: Sessions and events automatically expire based on configured TTL
 - **AWS native**: Uses AWS SDK with proper IAM integration
@@ -51,7 +59,7 @@ The setup utility creates both required tables:
 
 The server runs at `http://127.0.0.1:8062/mcp` and provides these tools:
 
-### Store Value in Session
+### Store a value
 ```json
 {
   "jsonrpc": "2.0",
@@ -67,7 +75,7 @@ The server runs at `http://127.0.0.1:8062/mcp` and provides these tools:
 }
 ```
 
-### Get Value from Session
+### Read it back
 ```json
 {
   "jsonrpc": "2.0",
@@ -82,14 +90,14 @@ The server runs at `http://127.0.0.1:8062/mcp` and provides these tools:
 }
 ```
 
-### Session Information
+### Backend statistics
 ```json
 {
   "jsonrpc": "2.0",
   "id": 3,
   "method": "tools/call",
   "params": {
-    "name": "session_info",
+    "name": "storage_info",
     "arguments": {}
   }
 }
@@ -97,16 +105,18 @@ The server runs at `http://127.0.0.1:8062/mcp` and provides these tools:
 
 ## Available Tools
 
-- **`store_value`** - Store a value in this session's DynamoDB storage (session-scoped)
-- **`get_value`** - Retrieve a value from this session's DynamoDB storage (session-scoped)
-- **`session_info`** - Get information about the DynamoDB session
+- **`store_value`** - Write to this run's durable demo record
+- **`get_value`** - Read it back (within this run)
+- **`storage_info`** - Backend stats; counts accumulate across restarts
 
-## Session Storage Behavior
+## Storage Behavior
 
-- **Session-scoped**: Data is isolated per session ID
-- **Persistent**: Data survives server restarts
-- **TTL cleanup**: Sessions expire after 24 hours by default
+- **Durable**: rows outlive the process — restart and watch `storage_info` counts grow
+- **TTL cleanup**: Records expire after 24 hours by default
 - **Automatic scaling**: DynamoDB scales based on demand
+- **Per-run record**: each server start creates a fresh demo record, so
+  `store_value`/`get_value` round-trip within one run only. What survives a
+  restart is the *rows*, not the demo record id — see the walkthrough below.
 
 ## Configuration
 
@@ -155,15 +165,19 @@ Your AWS credentials need these DynamoDB permissions:
 }
 ```
 
-## Example Session
+## Durability walkthrough
 
 1. **Create tables**: `MCP_SESSION_TABLE=my-sessions cargo run --bin dynamodb-setup`
 2. **Start server**: `MCP_SESSION_TABLE=my-sessions cargo run --bin simple-dynamodb-session`
-3. **Store data**: `store_value(key='user_id', value=123)`
-4. **Restart server**: Server restarts, session persists in DynamoDB
-5. **Retrieve data**: `get_value(key='user_id')` returns `123`
-
-Each session maintains its own isolated storage space in the DynamoDB tables.
+3. **Baseline**: `storage_info()` → note `stored_records`
+4. **Round-trip**: `store_value(key='user_id', value=123)` then
+   `get_value(key='user_id')` → `123`
+5. **Restart server** against the same `MCP_SESSION_TABLE`
+6. **Proof**: `storage_info()` → `stored_records` has **grown**; the prior
+   run's rows are still in DynamoDB.
+   `get_value(key='user_id')` → `null`, because this run created a *new*
+   demo record. Durability is in the accumulated row count, not in the demo
+   record id, which the process does not carry across restarts.
 
 ## Cleanup
 

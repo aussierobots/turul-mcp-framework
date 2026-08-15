@@ -216,7 +216,7 @@ JsonSchema::Object {
 - ✅ `custom_output_field_test.rs` - Custom output field names
 - ✅ `tool-output-schemas` example - All patterns demonstrated
 
-**Coverage Gaps** (documented in TODO_TRACKER.md):
+**Coverage Gaps** (tracked in the 0.3-era TODO_TRACKER.md, since deleted; current tracking is the spec-compliance driver):
 - ❌ HashMap/BTreeMap fields not explicitly tested
 - ❌ $ref fallback behavior not verified
 

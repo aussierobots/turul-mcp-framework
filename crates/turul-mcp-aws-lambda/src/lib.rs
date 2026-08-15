@@ -39,7 +39,6 @@
 //! async fn main() -> Result<(), lambda_http::Error> {
 //!     let server = LambdaMcpServerBuilder::new()
 //!         .tool(ExampleTool::default())
-//!         .cors_allow_all_origins()
 //!         .build()
 //!         .await?;
 //!
@@ -226,7 +225,7 @@ fn event_log_level(event_type: &str) -> Option<tracing::Level> {
 ///
 /// This function uses `lambda_runtime::run()` directly with `serde_json::Value`
 /// (which always deserializes), then classifies the payload three ways via
-/// [`classify_runtime_event()`]:
+/// `classify_runtime_event()`:
 ///
 /// - **`ApiGatewayEvent`** — dispatched to the handler normally
 /// - **`StreamingCompletion`** — acknowledged silently (`debug` log)

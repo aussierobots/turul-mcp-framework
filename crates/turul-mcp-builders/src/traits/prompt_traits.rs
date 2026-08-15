@@ -8,7 +8,29 @@ use std::collections::HashMap;
 
 // Import protocol types (spec-defined)
 use turul_mcp_protocol::Prompt;
-use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument};
+use turul_mcp_protocol::prompts::PromptArgument;
+
+/// Framework-side prompt annotations (display hints). This is a FRAMEWORK
+/// type — the wire `Prompt` carries no annotations object in 2026-07-28;
+/// the schema's display affordances are `title` and `icons` on the prompt
+/// itself.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct PromptAnnotations {
+    /// Display name (precedence: Prompt.title > Prompt.name)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+}
+
+impl PromptAnnotations {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+}
 
 pub trait HasPromptMetadata {
     /// Programmatic identifier (fallback display name)
@@ -68,6 +90,10 @@ pub trait HasPromptMeta {
 /// ```rust
 /// use turul_mcp_protocol::prompts::*;
 /// use turul_mcp_builders::prelude::*;  // Import framework traits
+/// // On the 2025-11-25 lane `turul_mcp_protocol::prompts` also exports a
+/// // (different, wire-level) `PromptAnnotations`, so name the framework one
+/// // explicitly — an explicit import wins over both globs.
+/// use turul_mcp_builders::traits::prompt_traits::PromptAnnotations;
 /// use std::collections::HashMap;
 ///
 /// // This struct will automatically implement PromptDefinition!
@@ -134,6 +160,10 @@ pub trait HasPromptMeta {
 /// // Example of manual implementation without macros
 /// use turul_mcp_protocol::prompts::*;
 /// use turul_mcp_builders::prelude::*;  // Import framework traits
+/// // On the 2025-11-25 lane `turul_mcp_protocol::prompts` also exports a
+/// // (different, wire-level) `PromptAnnotations`, so name the framework one
+/// // explicitly — an explicit import wins over both globs.
+/// use turul_mcp_builders::traits::prompt_traits::PromptAnnotations;
 /// use std::collections::HashMap;
 ///
 /// struct DocumentationPrompt;

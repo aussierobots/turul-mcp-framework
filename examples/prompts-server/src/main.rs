@@ -12,7 +12,7 @@ use tracing::info;
 use turul_mcp_builders::prelude::*; // HasPromptMetadata, HasPromptDescription, etc.
 use turul_mcp_protocol::{
     McpError,
-    prompts::{PromptAnnotations, PromptArgument, PromptMessage},
+    prompts::{PromptArgument, PromptMessage},
 };
 use turul_mcp_server::prompt::McpPrompt;
 use turul_mcp_server::{McpResult, McpServer};
@@ -590,7 +590,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("real-prompts-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Real MCP Prompts Server")
         .instructions(
             "This server demonstrates ACTUAL MCP prompt protocol implementation. \
@@ -602,7 +602,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .prompt(code_review)
         .prompt(architecture_guidance)
         .bind_address("127.0.0.1:8006".parse()?)
-        .sse(true)
         .build()?;
 
     info!("🚀 Real MCP prompts server running at: http://127.0.0.1:8006/mcp");

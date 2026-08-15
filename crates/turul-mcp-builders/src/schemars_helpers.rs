@@ -365,6 +365,7 @@ impl ToolSchemaExt for ToolSchema {
         }
 
         // Convert each property using the centralized converter
+        #[cfg(feature = "protocol-2025-11-25")]
         let properties = obj
             .get("properties")
             .and_then(|v| v.as_object())
@@ -380,13 +381,29 @@ impl ToolSchemaExt for ToolSchema {
                     .collect()
             });
 
+        // 2026 `ToolSchema.properties` holds arbitrary JSON Schema 2020-12 `Value`s.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let properties = obj
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .map(|props| {
+                let _ = &definitions;
+                props.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+            });
+
         let required = obj.get("required").and_then(|v| v.as_array()).map(|arr| {
             arr.iter()
                 .filter_map(|v| v.as_str().map(String::from))
                 .collect()
         });
 
-        // Preserve remaining top-level fields (description, title, additionalProperties, etc.)
+        // Preserve remaining top-level fields (description, title,
+        // additionalProperties, etc.). Lane split: the 2025 typed model
+        // resolves `$ref`s into inline schemas, so its root drops
+        // `$defs`/`definitions`/`$schema`; the 2026 path keeps properties
+        // VERBATIM, so the root must retain `$defs`/`definitions` (otherwise
+        // every `#/$defs/X` pointer dangles) and the `$schema` dialect marker.
+        #[cfg(feature = "protocol-2025-11-25")]
         let reserved = [
             "type",
             "properties",
@@ -395,6 +412,8 @@ impl ToolSchemaExt for ToolSchema {
             "definitions",
             "$schema",
         ];
+        #[cfg(feature = "protocol-2026-07-28")]
+        let reserved = ["type", "properties", "required"];
         let additional: HashMap<String, Value> = obj
             .iter()
             .filter(|(k, _)| !reserved.contains(&k.as_str()))
@@ -407,6 +426,119 @@ impl ToolSchemaExt for ToolSchema {
             required,
             additional,
         })
+    }
+}
+
+/// Inline every local `$ref` (`#/$defs/X`, `#/definitions/X`) in `value`
+/// against `defs`, recursively. Errors on unresolvable pointers and on
+/// cyclic references — cyclic schemas cannot be inlined and are not
+/// supported as tool parameter/output types (restructure the type, or build
+/// the whole `ToolSchema` from a root schemars document via `from_schemars`,
+/// which keeps `$defs` at the schema root instead).
+pub fn resolve_local_refs(value: &Value, defs: &HashMap<String, Value>) -> Result<Value, String> {
+    fn walk(
+        value: &Value,
+        defs: &HashMap<String, Value>,
+        stack: &mut Vec<String>,
+    ) -> Result<Value, String> {
+        match value {
+            Value::Object(obj) => {
+                if let Some(reference) = obj.get("$ref").and_then(|r| r.as_str()) {
+                    let name = reference
+                        .strip_prefix("#/$defs/")
+                        .or_else(|| reference.strip_prefix("#/definitions/"))
+                        .ok_or_else(|| {
+                            format!("unsupported non-local $ref '{reference}' in tool schema")
+                        })?;
+                    if stack.iter().any(|n| n == name) {
+                        return Err(format!(
+                            "cyclic $ref '#/$defs/{name}' cannot be inlined into a tool                              property schema"
+                        ));
+                    }
+                    let definition = defs.get(name).ok_or_else(|| {
+                        format!("dangling $ref '{reference}': no such definition")
+                    })?;
+                    stack.push(name.to_string());
+                    let resolved = walk(definition, defs, stack)?;
+                    stack.pop();
+                    // 2020-12 allows $ref siblings; preserve them alongside the
+                    // resolved schema via allOf composition.
+                    let siblings: serde_json::Map<String, Value> = obj
+                        .iter()
+                        .filter(|(k, _)| k.as_str() != "$ref")
+                        .map(|(k, v)| Ok((k.clone(), walk(v, defs, stack)?)))
+                        .collect::<Result<_, String>>()?;
+                    if siblings.is_empty() {
+                        Ok(resolved)
+                    } else {
+                        let mut combined = siblings;
+                        combined.insert("allOf".to_string(), Value::Array(vec![resolved]));
+                        Ok(Value::Object(combined))
+                    }
+                } else {
+                    obj.iter()
+                        .map(|(k, v)| Ok((k.clone(), walk(v, defs, stack)?)))
+                        .collect::<Result<serde_json::Map<_, _>, String>>()
+                        .map(Value::Object)
+                }
+            }
+            Value::Array(items) => items
+                .iter()
+                .map(|v| walk(v, defs, &mut stack.clone()))
+                .collect::<Result<Vec<_>, String>>()
+                .map(Value::Array),
+            other => Ok(other.clone()),
+        }
+    }
+    let mut stack = Vec::new();
+    walk(value, defs, &mut stack)
+}
+
+/// Convert a schemars-generated document into a single property/field
+/// subschema for embedding inside a `ToolSchema`.
+///
+/// 2026-07-28: local `$ref`s are inlined (a subschema cannot carry the
+/// document-root `$defs` its absolute pointers need) and the result is a
+/// verbatim 2020-12 [`JsonSchema::Raw`] — `oneOf`/`anyOf`/`allOf`, `const`,
+/// enum constraints, and nested object trees survive untouched.
+/// 2025-11-25: the structured typed conversion (the wire model there is the
+/// typed enum).
+///
+/// # Panics
+/// On cyclic `$ref`s — cyclic schemas cannot be inlined into a property
+/// subschema and are not supported as tool parameter/output types. Surface a
+/// non-recursive type instead.
+pub fn schemars_param_schema(schema: schemars::Schema) -> JsonSchema {
+    let schema_value =
+        serde_json::to_value(&schema).expect("schemars schema should serialize to JSON");
+
+    let definitions: HashMap<String, Value> = ["$defs", "definitions"]
+        .iter()
+        .filter_map(|k| schema_value.get(*k).and_then(|v| v.as_object()))
+        .flat_map(|obj| obj.iter().map(|(k, v)| (k.clone(), v.clone())))
+        .collect();
+
+    #[cfg(feature = "protocol-2026-07-28")]
+    {
+        let resolved = resolve_local_refs(&schema_value, &definitions)
+            .unwrap_or_else(|e| panic!("unsupported tool schema: {e}"));
+        let mut resolved = resolved;
+        if let Some(obj) = resolved.as_object_mut() {
+            obj.remove("$schema");
+            obj.remove("$defs");
+            obj.remove("definitions");
+        }
+        JsonSchema::raw(resolved)
+    }
+
+    #[cfg(feature = "protocol-2025-11-25")]
+    {
+        let mut schema_value = schema_value;
+        if let Some(obj) = schema_value.as_object_mut() {
+            obj.remove("$defs");
+            obj.remove("definitions");
+        }
+        convert_value_to_json_schema_with_defs(&schema_value, &definitions)
     }
 }
 
@@ -558,5 +690,195 @@ mod tests {
                 .unwrap_err()
                 .contains("ToolSchema requires an object schema")
         );
+    }
+}
+
+#[cfg(all(test, feature = "protocol-2026-07-28"))]
+mod schema_fidelity_2026_tests {
+    //! 2020-12 fidelity through the 2026 conversion pipeline: nothing a
+    //! schemars-generated document expresses may be silently downgraded.
+    use super::*;
+    use schemars::{JsonSchema as SchemarsJsonSchema, schema_for};
+    use serde::Serialize;
+    use serde_json::json;
+
+    #[derive(Serialize, SchemarsJsonSchema)]
+    #[allow(dead_code)]
+    enum Mode {
+        Fast,
+        Thorough,
+    }
+
+    #[derive(Serialize, SchemarsJsonSchema)]
+    #[allow(dead_code)]
+    struct Inner {
+        threshold: f64,
+        mode: Mode,
+    }
+
+    #[derive(Serialize, SchemarsJsonSchema)]
+    #[allow(dead_code)]
+    struct Outer {
+        name: String,
+        inner: Inner,
+        tags: Vec<Mode>,
+    }
+
+    #[test]
+    fn nested_defs_are_inlined_with_constraints_intact() {
+        let schema = schema_for!(Outer);
+        let prop = schemars_param_schema(schema);
+        let v = serde_json::to_value(&prop).unwrap();
+
+        // No dangling pointers and no orphaned defs.
+        let rendered = v.to_string();
+        assert!(
+            !rendered.contains("$ref"),
+            "local $refs must be inlined: {rendered}"
+        );
+        assert!(
+            !rendered.contains("$defs") && !rendered.contains("definitions"),
+            "defs must not leak into a property subschema: {rendered}"
+        );
+
+        // The nested object tree survives with required + enum constraints.
+        assert_eq!(v["type"], "object");
+        assert_eq!(v["properties"]["inner"]["type"], "object");
+        assert!(
+            v["properties"]["inner"]["properties"]["threshold"]["type"] == "number",
+            "nested numeric property must survive: {v}"
+        );
+        let mode = &v["properties"]["inner"]["properties"]["mode"];
+        assert!(
+            mode.to_string().contains("Fast") && mode.to_string().contains("Thorough"),
+            "enum variants must survive inlining: {v}"
+        );
+        assert!(
+            v["properties"]["tags"]["items"].is_object(),
+            "array items must survive: {v}"
+        );
+        let required: Vec<_> = v["required"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|r| r.as_str())
+            .collect();
+        assert!(required.contains(&"name") && required.contains(&"inner"));
+    }
+
+    #[derive(Serialize, SchemarsJsonSchema)]
+    #[serde(tag = "kind")]
+    #[allow(dead_code)]
+    enum Shape {
+        Circle { radius: f64 },
+        Rect { w: f64, h: f64 },
+    }
+
+    #[derive(Serialize, SchemarsJsonSchema)]
+    #[allow(dead_code)]
+    struct Drawing {
+        title: String,
+        shape: Shape,
+        accent: Option<Mode>,
+    }
+
+    #[test]
+    fn tagged_union_one_of_survives_the_pipeline() {
+        // A data-bearing enum renders as oneOf-with-const-tag subschemas —
+        // exactly the shape the old typed conversion DOWNGRADED (no
+        // oneOf/const in the structured model). The pipeline must carry it.
+        let schema = schema_for!(Drawing);
+        let prop = schemars_param_schema(schema);
+        let v = serde_json::to_value(&prop).unwrap();
+        let shape = v["properties"]["shape"].to_string();
+        assert!(
+            shape.contains("oneOf") || shape.contains("anyOf"),
+            "the tagged-union composition must survive: {v}"
+        );
+        assert!(
+            shape.contains("Circle") && shape.contains("Rect"),
+            "both variant tags must survive: {v}"
+        );
+        assert!(
+            shape.contains("radius"),
+            "variant payload properties must survive: {v}"
+        );
+    }
+
+    #[test]
+    fn composition_keywords_survive_verbatim() {
+        // oneOf/anyOf/allOf + const are exactly what the typed model used to
+        // downgrade; the Raw path must carry them untouched.
+        let value = json!({
+            "oneOf": [
+                {"type": "string", "const": "a"},
+                {"type": "object", "properties": {"x": {"type": "integer"}}, "required": ["x"]}
+            ],
+            "anyOf": [{"type": "string"}],
+            "allOf": [{"minProperties": 1}]
+        });
+        let resolved = resolve_local_refs(&value, &HashMap::new()).unwrap();
+        assert_eq!(
+            resolved, value,
+            "composition keywords are preserved verbatim"
+        );
+    }
+
+    #[test]
+    fn cyclic_refs_are_rejected_not_silently_lost() {
+        // A self-referential definition cannot be inlined into a property
+        // subschema — the resolver must REJECT it (documented limitation),
+        // never emit a dangling or truncated schema.
+        let defs: HashMap<String, Value> = [(
+            "Node".to_string(),
+            json!({
+                "type": "object",
+                "properties": { "next": { "$ref": "#/$defs/Node" } }
+            }),
+        )]
+        .into();
+        let value = json!({ "$ref": "#/$defs/Node" });
+        let err = resolve_local_refs(&value, &defs).unwrap_err();
+        assert!(
+            err.contains("cyclic"),
+            "cycle must be named in the error: {err}"
+        );
+    }
+
+    #[test]
+    fn non_local_refs_are_rejected() {
+        // Network/external $refs MUST NOT be auto-dereferenced (spec) — and we
+        // can't inline what we won't fetch: precise rejection.
+        let value = json!({ "$ref": "https://example.com/schema.json" });
+        let err = resolve_local_refs(&value, &HashMap::new()).unwrap_err();
+        assert!(err.contains("non-local"), "{err}");
+    }
+
+    #[test]
+    fn ref_siblings_compose_via_all_of() {
+        let defs: HashMap<String, Value> = [("S".to_string(), json!({"type": "string"}))].into();
+        let value = json!({ "$ref": "#/$defs/S", "description": "named thing" });
+        let resolved = resolve_local_refs(&value, &defs).unwrap();
+        assert_eq!(resolved["description"], "named thing");
+        assert_eq!(resolved["allOf"][0]["type"], "string");
+    }
+
+    #[test]
+    fn root_from_schemars_keeps_defs_for_verbatim_properties() {
+        // The ToolSchema root path (whole-document conversion) keeps $defs at
+        // the root, where verbatim property `#/$defs/X` pointers resolve.
+        let schema = schema_for!(Outer);
+        let tool_schema = ToolSchema::from_schemars(schema).unwrap();
+        let v = serde_json::to_value(&tool_schema).unwrap();
+        assert!(
+            v.get("$defs").is_some() || !v.to_string().contains("$ref"),
+            "either $defs ride at the root or no refs remain: {v}"
+        );
+        if let Some(defs) = v.get("$defs") {
+            assert!(
+                defs.get("Inner").is_some(),
+                "Inner definition retained: {v}"
+            );
+        }
     }
 }

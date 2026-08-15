@@ -7,7 +7,7 @@ This example demonstrates the absolute minimum setup for an MCP server using the
 - **Minimal Setup**: Just 50 lines of code for a working MCP server
 - **Basic Tool Implementation**: Simple echo tool using function macro
 - **Default Configuration**: HTTP on 127.0.0.1:8641
-- **Essential MCP Functionality**: Initialize, list tools, call tools
+- **Essential MCP Functionality**: Discover the server, list tools, call tools
 
 ## Running the Example
 
@@ -17,22 +17,31 @@ cargo run --bin minimal-server
 
 The server will start on `http://127.0.0.1:8641/mcp` and provide:
 - One tool: `echo` - echoes back text input
-- Standard MCP endpoints: initialize, tools/list, tools/call
+- Standard MCP methods: server/discover, tools/list, tools/call
 
 ## Testing the Server
 
-### 1. Initialize the Connection
+The 2026-07-28 core is stateless: there is no `initialize`/`notifications/initialized`
+handshake and no `Mcp-Session-Id`. Every request carries its own per-request `_meta`
+(`io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`) and the
+`MCP-Protocol-Version: 2026-07-28` header.
+
+### 1. Discover the Server
 ```bash
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: server/discover" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
-    "method": "initialize",
+    "method": "server/discover",
     "params": {
-      "protocolVersion": "2025-11-25",
-      "capabilities": {},
-      "clientInfo": {"name": "test-client", "version": "1.0.0"}
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
     }
   }'
 ```
@@ -41,11 +50,19 @@ curl -X POST http://127.0.0.1:8641/mcp \
 ```bash
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/list" \
   -d '{
     "jsonrpc": "2.0",
     "id": 2,
     "method": "tools/list",
-    "params": {}
+    "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      }
+    }
   }'
 ```
 
@@ -53,11 +70,19 @@ curl -X POST http://127.0.0.1:8641/mcp \
 ```bash
 curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: echo" \
   -d '{
     "jsonrpc": "2.0",
     "id": 3,
     "method": "tools/call",
     "params": {
+      "_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "test-client", "version": "1.0.0"},
+        "io.modelcontextprotocol/clientCapabilities": {}
+      },
       "name": "echo",
       "arguments": {"text": "Hello, MCP!"}
     }
@@ -73,6 +98,5 @@ curl -X POST http://127.0.0.1:8641/mcp \
 
 ## Next Steps
 
-- See [manual-tools-server](../manual-tools-server) for more complex manual implementations
-- See [macro-calculator](../macro-calculator) for derive macro examples  
-- See [comprehensive-server](../comprehensive-server) for all MCP features
+- See [calculator-add-manual-server](../calculator-add-manual-server) for the manual trait-implementation reference
+- See [streamable-http-client](../streamable-http-client) for the paired 2026 client walkthrough

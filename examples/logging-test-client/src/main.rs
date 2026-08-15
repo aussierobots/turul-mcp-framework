@@ -130,13 +130,29 @@ impl LoggingTestClient {
         if let Some(session_header) = response.headers().get("Mcp-Session-Id") {
             let session_id = session_header.to_str()?.to_string();
             self.session_id = Some(session_id.clone());
+
+            // Strict lifecycle mode rejects every other method until the
+            // client acknowledges the handshake.
+            self.client
+                .post(&self.base_url)
+                .header("Content-Type", "application/json")
+                .header("Mcp-Session-Id", &session_id)
+                .json(&serde_json::json!({
+                    "jsonrpc": JSONRPC_VERSION,
+                    "method": "notifications/initialized"
+                }))
+                .send()
+                .await?;
+
             println!(
                 "✅ Session initialized with MCP protocol structs: {}",
                 session_id
             );
             Ok(session_id)
         } else {
-            anyhow::bail!("No Mcp-Session-Id header received");
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("No Mcp-Session-Id header received (HTTP {status}): {body}");
         }
     }
 

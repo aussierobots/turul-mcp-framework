@@ -1,12 +1,12 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Production-ready Lambda MCP server with auth middleware, env CORS, and logging
 //
 // Cargo.toml dependencies:
-//   turul-mcp-aws-lambda = { version = "0.3", features = ["dynamodb"] }
-//   turul-mcp-server = { version = "0.3" }
-//   turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
-//   turul-http-mcp-server = { version = "0.3" }
-//   turul-mcp-derive = { version = "0.3" }
+//   turul-mcp-aws-lambda = { version = "0.4", features = ["dynamodb"] }
+//   turul-mcp-server = { version = "0.4" }
+//   turul-mcp-session-storage = { version = "0.4", features = ["dynamodb"] }
+//   turul-http-mcp-server = { version = "0.4" }
+//   turul-mcp-derive = { version = "0.4" }
 //   lambda_http = "0.13"
 //   tokio = { version = "1", features = ["full"] }
 //   async-trait = "0.1"
@@ -38,11 +38,6 @@ impl McpMiddleware for LambdaAuthMiddleware {
         _session: Option<&dyn SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip auth for initialize and ping
-        if ctx.method() == "initialize" || ctx.method() == "ping" {
-            return Ok(());
-        }
-
         // API Gateway authorizer's custom context fields land as x-authorizer-*
         // headers. Use whatever identity field your authorizer Lambda returns
         // (e.g. user_id, sub, account_id). `principalId` is NOT forwarded — it

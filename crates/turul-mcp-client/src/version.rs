@@ -1,0 +1,326 @@
+//! Per-connection MCP wire-version negotiation for the bilingual client.
+//!
+//! A single `McpClient` probes the server with `server/discover` at `connect()`
+//! and locks one wire spec for its lifetime. [`classify_probe`] is the
+//! security-relevant core: a JSON-RPC `-32601` (Method Not Found) is the ONLY
+//! signal that downgrades to 2025-11-25. HTTP 4xx and every other JSON-RPC error
+//! abort the connect rather than silently downgrade the protocol the caller
+//! asked for — a 2026 server behind a broken gateway is not a 2025 server.
+
+use serde::{Deserialize, Serialize};
+
+/// The MCP wire spec a connection speaks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum McpVersion {
+    /// 2025-11-25 — stateful: `initialize` + `notifications/initialized` + `Mcp-Session-Id`.
+    V2025_11_25,
+    /// 2026-07-28 — stateless: `server/discover`, per-request `_meta` capability negotiation.
+    V2026_07_28,
+}
+
+impl McpVersion {
+    /// The wire protocol-version string for this spec.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            McpVersion::V2025_11_25 => "2025-11-25",
+            McpVersion::V2026_07_28 => "2026-07-28",
+        }
+    }
+}
+
+impl std::fmt::Display for McpVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Outcome of the `server/discover` probe sent during negotiation.
+// Unused in single-spec `client-2025-11-25-only` builds (no probe), hence dead_code there.
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum DiscoverProbe {
+    /// Server returned a valid `DiscoverResult` — it speaks 2026-07-28.
+    Discovered,
+    /// Server returned a JSON-RPC error response carrying this `error.code`.
+    /// For the UnsupportedProtocolVersionError code (`-32022`) the structured
+    /// `error.data.supported` list rides along (None when the server sent no
+    /// data).
+    JsonRpcError(i64, Option<Vec<String>>),
+    /// The HTTP request itself failed with this non-2xx status.
+    HttpStatus(u16),
+}
+
+/// What to do next, given a probe outcome.
+#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ProbeDecision {
+    /// Lock the connection to 2026-07-28.
+    Use2026,
+    /// Send `initialize` and lock the connection to 2025-11-25.
+    FallbackTo2025,
+    /// Abort negotiation — do NOT downgrade. Carries a human-readable reason.
+    Abort(String),
+}
+
+/// JSON-RPC "Method not found" — signals a pre-2026 server (one that lacks the
+/// `server/discover` method entirely).
+const METHOD_NOT_FOUND: i64 = -32601;
+
+/// JSON-RPC `UnsupportedProtocolVersionError` — a modern server's structured
+/// refusal of the probe's requested version (HTTP 400 body). The probe always
+/// requests 2026-07-28, so this code means "this server does not speak 2026".
+/// Mirrors `turul_mcp_protocol_2026_07_28::McpError::UnsupportedProtocolVersion`.
+const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32022;
+const INVALID_PARAMS: i64 = -32602;
+
+/// JSON-RPC `HeaderMismatchError` — mirrors
+/// `turul_mcp_protocol_2026_07_28::headers::ERROR_CODE_HEADER_MISMATCH`. A
+/// probe rejected with this code proves the server validated `server/discover`
+/// against the 2026-07-28 header contract — a modern-server signal, not a
+/// downgrade trigger.
+const HEADER_MISMATCH: i64 = -32020;
+/// JSON-RPC `MissingRequiredClientCapabilityError` — mirrors
+/// `turul_mcp_protocol_2026_07_28::McpError::MissingRequiredClientCapability`.
+/// Same modern-server signal as `HEADER_MISMATCH`.
+const MISSING_REQUIRED_CLIENT_CAPABILITY: i64 = -32021;
+
+/// Decide the negotiation action from a `server/discover` probe outcome.
+///
+/// `allow_legacy_gateway_fallback` broadens the fallback trigger to additionally
+/// accept HTTP 404/405 — for operators behind gateways that return those codes
+/// for unknown methods instead of tunneling the JSON-RPC envelope. It is off by
+/// default and weakens protocol-downgrade resistance when enabled.
+#[allow(dead_code)]
+pub(crate) fn classify_probe(
+    probe: DiscoverProbe,
+    allow_legacy_gateway_fallback: bool,
+) -> ProbeDecision {
+    match probe {
+        // A valid DiscoverResult is the positive signal for 2026.
+        DiscoverProbe::Discovered => ProbeDecision::Use2026,
+
+        // Method Not Found / Invalid Params = legacy-server signals. The era
+        // detection contract: "The fallback MUST NOT be keyed to one specific
+        // error code: legacy servers respond to unknown pre-initialize
+        // requests with implementation-defined errors (commonly -32601 or
+        // -32602)".
+        DiscoverProbe::JsonRpcError(METHOD_NOT_FOUND, _) => ProbeDecision::FallbackTo2025,
+        DiscoverProbe::JsonRpcError(INVALID_PARAMS, _) => ProbeDecision::FallbackTo2025,
+
+        // UnsupportedProtocolVersionError = the server validated the probe's
+        // requested 2026-07-28 and declined it — the spec's structured
+        // negotiation signal. "The client SHOULD select a mutually supported
+        // version from the supported list": fall back to 2025-11-25 when the
+        // server's data.supported names it; surface the list when no mutual
+        // version exists. With no list at all there is no server-named
+        // mutual version to select — that is not license to guess, so this
+        // aborts rather than falling back on inference.
+        DiscoverProbe::JsonRpcError(UNSUPPORTED_PROTOCOL_VERSION, supported) => match supported {
+            Some(list) if list.iter().any(|v| v == "2025-11-25") => ProbeDecision::FallbackTo2025,
+            Some(list) => ProbeDecision::Abort(format!(
+                "server declined 2026-07-28 and its supported versions {list:?} \
+                         include no version this client speaks (2026-07-28, 2025-11-25)"
+            )),
+            None => ProbeDecision::Abort(
+                "server declined 2026-07-28 (UnsupportedProtocolVersionError) but named no \
+                 supported-version list to select from — not a downgrade trigger"
+                    .to_string(),
+            ),
+        },
+
+        // HeaderMismatch / MissingRequiredClientCapability: the server
+        // understood `server/discover` and validated it against the
+        // 2026-07-28 wire contract before rejecting it — this itself proves
+        // the server speaks 2026-07-28. Recognized modern-server signal,
+        // never a downgrade trigger.
+        DiscoverProbe::JsonRpcError(code @ HEADER_MISMATCH, _)
+        | DiscoverProbe::JsonRpcError(code @ MISSING_REQUIRED_CLIENT_CAPABILITY, _) => {
+            ProbeDecision::Abort(format!(
+                "server/discover rejected with a recognized modern-server error {code}; \
+                 the server speaks 2026-07-28 — not a downgrade trigger"
+            ))
+        }
+
+        // Any other JSON-RPC error means the server UNDERSTOOD `server/discover`
+        // and rejected it for an unrelated reason — not a version signal.
+        DiscoverProbe::JsonRpcError(code, _) => ProbeDecision::Abort(format!(
+            "server/discover rejected with JSON-RPC error {code}; the server \
+             understood the method and refused it — not a version signal, not a downgrade trigger"
+        )),
+
+        // Opt-in escape hatch for gateways that 404/405 unknown methods.
+        DiscoverProbe::HttpStatus(status)
+            if allow_legacy_gateway_fallback && (status == 404 || status == 405) =>
+        {
+            ProbeDecision::FallbackTo2025
+        }
+
+        // All other HTTP failures are transport/authorization problems, NOT a
+        // version signal. Aborting (rather than downgrading) preserves the
+        // protocol the caller asked for.
+        DiscoverProbe::HttpStatus(status) => ProbeDecision::Abort(format!(
+            "server/discover failed with HTTP {status}; transport or authorization \
+             failure, not a version signal (no silent downgrade)"
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_wire_strings() {
+        assert_eq!(McpVersion::V2025_11_25.as_str(), "2025-11-25");
+        assert_eq!(McpVersion::V2026_07_28.as_str(), "2026-07-28");
+    }
+
+    #[test]
+    fn discover_ok_locks_2026() {
+        assert_eq!(
+            classify_probe(DiscoverProbe::Discovered, false),
+            ProbeDecision::Use2026
+        );
+    }
+
+    #[test]
+    fn unsupported_protocol_version_falls_back_to_2025() {
+        // "The client SHOULD select a mutually supported version from the
+        // supported list": 2025-11-25 in data.supported → fall back to it.
+        assert_eq!(
+            classify_probe(
+                DiscoverProbe::JsonRpcError(
+                    -32022,
+                    Some(vec!["2025-11-25".to_string(), "2025-06-18".to_string()])
+                ),
+                false
+            ),
+            ProbeDecision::FallbackTo2025
+        );
+        // No mutually supported version → surface the list, do not guess.
+        assert!(matches!(
+            classify_probe(
+                DiscoverProbe::JsonRpcError(-32022, Some(vec!["2099-01-01".to_string()])),
+                false
+            ),
+            ProbeDecision::Abort(msg) if msg.contains("2099-01-01")
+        ));
+    }
+
+    #[test]
+    fn unsupported_protocol_version_with_no_list_aborts_without_downgrade() {
+        // -32022 with no data.supported list at all: there is no server-named
+        // mutual version to select from, so falling back to 2025-11-25 would
+        // be an inference, not a spec-directed choice. Abort instead.
+        assert!(
+            matches!(
+                classify_probe(DiscoverProbe::JsonRpcError(-32022, None), false),
+                ProbeDecision::Abort(_)
+            ),
+            "-32022 with no supported list must abort, not silently fall back to 2025-11-25"
+        );
+    }
+
+    #[test]
+    fn pre_renumbering_32004_is_unrecognized_and_aborts() {
+        // -32004 is not the UnsupportedProtocolVersionError code (that is -32022);
+        // it falls in the implementation-defined (-32000..-32019) range and is
+        // unrelated to this client. No alias — an
+        // unrecognized code aborts (deliberate downgrade-resistance deviation), it
+        // does not fall back to 2025-11-25.
+        assert!(
+            matches!(
+                classify_probe(DiscoverProbe::JsonRpcError(-32004, None), false),
+                ProbeDecision::Abort(_)
+            ),
+            "-32004 must be treated as an unrecognized error, not the UnsupportedProtocolVersionError signal"
+        );
+    }
+
+    #[test]
+    fn recognized_modern_server_errors_abort_without_downgrade() {
+        // HeaderMismatch (-32020) and MissingRequiredClientCapability
+        // (-32021): the server understood and validated `server/discover`
+        // against the 2026-07-28 wire contract before rejecting it — this
+        // itself proves the server speaks 2026-07-28. Recognized
+        // modern-server signals, never a downgrade trigger.
+        for code in [-32020, -32021] {
+            assert!(
+                matches!(
+                    classify_probe(DiscoverProbe::JsonRpcError(code, None), false),
+                    ProbeDecision::Abort(_)
+                ),
+                "JSON-RPC error {code} is a recognized modern-server signal and must abort, not downgrade"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_error_codes_fall_back_to_2025() {
+        // Era detection: "The fallback MUST NOT be keyed to one specific
+        // error code: legacy servers respond to unknown pre-initialize
+        // requests with implementation-defined errors (commonly -32601 or
+        // -32602)".
+        for code in [-32601, -32602] {
+            assert_eq!(
+                classify_probe(DiscoverProbe::JsonRpcError(code, None), false),
+                ProbeDecision::FallbackTo2025,
+                "JSON-RPC error {code} is a recognized legacy-server signal"
+            );
+        }
+    }
+
+    #[test]
+    fn other_jsonrpc_errors_abort_without_downgrade() {
+        // Parse error, Invalid Request, Internal Error, and the legacy
+        // -32002: the server understood discover — never downgrade.
+        for code in [-32700, -32600, -32603, -32002, 100] {
+            assert!(
+                matches!(
+                    classify_probe(DiscoverProbe::JsonRpcError(code, None), false),
+                    ProbeDecision::Abort(_)
+                ),
+                "JSON-RPC error {code} must abort, not downgrade"
+            );
+        }
+    }
+
+    #[test]
+    fn http_4xx_aborts_by_default_no_downgrade() {
+        // Bare HTTP status is never a downgrade trigger by default (fail-closed): an
+        // attacker who can inject a 4xx must not be able to force a 2026→2025
+        // downgrade. A 2025-11-25 server is detected via the trusted JSON-RPC
+        // method-not-found (-32601) path instead — see test above.
+        for status in [400, 401, 403, 404, 405, 429] {
+            assert!(
+                matches!(
+                    classify_probe(DiscoverProbe::HttpStatus(status), false),
+                    ProbeDecision::Abort(_)
+                ),
+                "HTTP {status} must abort by default (no silent downgrade)"
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_gateway_hatch_allows_only_404_405_fallback() {
+        assert_eq!(
+            classify_probe(DiscoverProbe::HttpStatus(404), true),
+            ProbeDecision::FallbackTo2025
+        );
+        assert_eq!(
+            classify_probe(DiscoverProbe::HttpStatus(405), true),
+            ProbeDecision::FallbackTo2025
+        );
+        // Auth/server failures still abort even with the hatch enabled.
+        for status in [400, 401, 403, 500] {
+            assert!(
+                matches!(
+                    classify_probe(DiscoverProbe::HttpStatus(status), true),
+                    ProbeDecision::Abort(_)
+                ),
+                "HTTP {status} must abort even with the legacy-gateway hatch on"
+            );
+        }
+    }
+}

@@ -1,38 +1,26 @@
 [package]
 name = "mcp-resources-tests"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 publish = false
 autotests = false
 
+# 2025-11-25 E2E regression crate; framework deps pinned to the 2025 opt-in independent of the workspace 2026 default.
 [dependencies]
-turul-mcp-server.workspace = true
-turul-http-mcp-server.workspace = true
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server", version = "0.4", default-features = false, features = ["sse", "protocol-2025-11-25"] }
 turul-mcp-json-rpc-server.workspace = true
-turul-mcp-session-storage.workspace = true
-turul-mcp-protocol.workspace = true
-turul-mcp-derive.workspace = true
-turul-mcp-builders.workspace = true
+turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", version = "0.4", default-features = false, features = ["in-memory", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-uuid = { workspace = true, features = ["v7", "serde"] }
-reqwest = { workspace = true, features = ["json", "stream"] }
-hyper.workspace = true
-hyper-util.workspace = true
-http-body-util.workspace = true
-tower = { workspace = true, features = ["util"] }
-futures.workspace = true
-tokio-stream.workspace = true
-tempfile.workspace = true
 mcp-e2e-shared.workspace = true
-# Additional dependencies for test server binary
-clap.workspace = true
-base64.workspace = true
-chrono.workspace = true
 
 [lib]
 name = "mcp_resources_tests"
@@ -41,10 +29,6 @@ path = "src/lib.rs"
 [dev-dependencies]
 serial_test.workspace = true
 turul-mcp-client.workspace = true
-
-[[bin]]
-name = "resource-test-server-e2e"
-path = "bin/main.rs"
 
 [[test]]
 name = "all"

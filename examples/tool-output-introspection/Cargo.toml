@@ -1,6 +1,6 @@
 [package]
 name = "tool-output-introspection"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 publish = false
 

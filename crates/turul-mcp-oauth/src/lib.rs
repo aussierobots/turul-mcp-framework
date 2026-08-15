@@ -4,11 +4,37 @@
 //! acting as Resource Servers (RS). It does NOT implement an Authorization
 //! Server — tokens are validated against an external AS via JWKS.
 //!
+//! # Authorization-role posture (MCP 2026-07-28)
+//!
+//! The MCP authorization spec assigns requirements per OAuth role. This
+//! crate implements the **resource-server role only**:
+//!
+//! - RFC 9728 Protected Resource Metadata (`/.well-known/oauth-protected-resource`)
+//!   — the RS MUST — via [`ProtectedResourceMetadata`] / [`WellKnownOAuthHandler`].
+//! - OAuth 2.1 §5.2 access-token validation with RFC 8707 audience binding
+//!   — via [`JwtValidator`] / [`OAuthResourceMiddleware`].
+//!
+//! **Client ID Metadata Documents** (CIMD,
+//! draft-ietf-oauth-client-id-metadata-document-00) are a SHOULD for
+//! *authorization servers and MCP clients* — client registration never
+//! involves the resource server, so no CIMD surface belongs in this crate.
+//! Applications embedding an AS or building a full MCP OAuth client implement
+//! CIMD there.
+//!
+//! **Dynamic Client Registration** (RFC 7591) is deprecated upstream (MAY,
+//! retained for AS back-compat; not removed — earliest removal 2027-07-28)
+//! and is likewise an AS/client concern. This crate has never implemented a
+//! DCR surface and does not add one.
+//!
 //! # Architecture
 //!
 //! - **`OAuthResourceMiddleware`** — Pre-session middleware that validates
 //!   Bearer tokens and injects claims into request extensions
-//! - **`JwtValidator`** — JWT validation with JWKS caching and kid-miss refresh
+//! - **`JwtValidator`** — JWT validation with JWKS caching and kid-miss refresh.
+//!   Owned by [`turul_jwt_validator`] and re-exported here
+//! - **`hardened_validator`** — builds a [`JwtValidator`] with this crate's key
+//!   max-age, stale window and fetch retry, and rejects a non-loopback
+//!   plaintext `jwks_uri`. The bare constructor leaves all of those disabled
 //! - **`ProtectedResourceMetadata`** — RFC 9728 metadata document
 //! - **`WellKnownOAuthHandler`** — Route handler for `/.well-known/oauth-protected-resource`
 //!
@@ -45,7 +71,10 @@ pub mod middleware;
 pub mod well_known;
 
 pub use error::OAuthError;
-pub use jwt::{JwtValidator, TokenClaims};
+pub use jwt::{
+    Algorithm, JwksFetchErrorKind, JwtValidationError, JwtValidator, TokenClaims,
+    hardened_validator,
+};
 pub use metadata::ProtectedResourceMetadata;
 pub use middleware::OAuthResourceMiddleware;
 pub use well_known::WellKnownOAuthHandler;
@@ -58,7 +87,8 @@ pub type RouteEntry = (String, Arc<dyn turul_http_mcp_server::routes::RouteHandl
 /// Convenience function to create both the OAuth middleware and well-known route handlers
 ///
 /// Requires exactly one authorization server in the metadata. For multi-AS deployments,
-/// construct `JwtValidator` and `OAuthResourceMiddleware` manually.
+/// build the validator with [`hardened_validator`] and wire `OAuthResourceMiddleware`
+/// manually — not `JwtValidator::new`, which applies no hardening.
 ///
 /// Returns `Ok((middleware, routes))` where `routes` contains path/handler pairs for all
 /// RFC 9728 metadata endpoints. For resources with a path component (e.g.,
@@ -82,13 +112,14 @@ pub fn oauth_resource_server(
     if metadata.authorization_servers.len() != 1 {
         return Err(OAuthError::InvalidConfiguration(format!(
             "oauth_resource_server requires exactly one authorization server, got {}; \
-             for multi-AS deployments, construct JwtValidator and OAuthResourceMiddleware manually",
+             for multi-AS deployments, build one with hardened_validator and wire \
+             OAuthResourceMiddleware manually",
             metadata.authorization_servers.len()
         )));
     }
     let audience = &metadata.resource;
     let issuer = &metadata.authorization_servers[0];
-    let validator = Arc::new(JwtValidator::new(jwks_uri, audience).with_issuer(issuer));
+    let validator = Arc::new(jwt::hardened_validator(jwks_uri, audience)?.with_issuer(issuer));
     let middleware = Arc::new(OAuthResourceMiddleware::new(validator, metadata.clone()));
     let handler: Arc<dyn turul_http_mcp_server::routes::RouteHandler> =
         Arc::new(WellKnownOAuthHandler::new(&metadata));

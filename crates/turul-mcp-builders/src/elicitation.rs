@@ -8,9 +8,12 @@ use std::collections::HashMap;
 
 // Import protocol types
 use turul_mcp_protocol::elicitation::{
-    BooleanSchema, ElicitCreateRequest, ElicitResult, ElicitationSchema, EnumSchema, NumberSchema,
+    BooleanSchema, ElicitResult, ElicitationSchema, EnumSchema, NumberSchema,
     PrimitiveSchemaDefinition, StringFormat, StringSchema,
 };
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::elicitation::ElicitCreateRequest;
 
 // Import framework traits from local crate
 use crate::traits::{HasElicitationHandling, HasElicitationMetadata, HasElicitationSchema};
@@ -222,6 +225,7 @@ impl ElicitationBuilder {
     }
 
     /// Build the elicitation request
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn build(self) -> ElicitCreateRequest {
         let mut request = ElicitCreateRequest::new(self.message, self.schema);
         if let Some(meta) = self.meta {
@@ -302,12 +306,41 @@ impl HasElicitationHandling for DynamicElicitation {
                         }
                     }
                     PrimitiveSchemaDefinition::Enum(enum_schema) => {
-                        if let Some(str_value) = value.as_str() {
-                            if !enum_schema.enum_values.contains(&str_value.to_string()) {
+                        // 2026: EnumSchema is a union (single/multi-select +
+                        // legacy); 2025: the flat legacy struct.
+                        #[cfg(feature = "protocol-2026-07-28")]
+                        let allowed = enum_schema.allowed_values();
+                        #[cfg(feature = "protocol-2025-11-25")]
+                        let allowed = enum_schema.enum_values.clone();
+                        #[cfg(feature = "protocol-2026-07-28")]
+                        let multi = enum_schema.is_multi_select();
+                        #[cfg(feature = "protocol-2025-11-25")]
+                        let multi = false;
+                        if multi {
+                            let Some(items) = value.as_array() else {
+                                return Err(format!(
+                                    "Field '{}' must be an array of enum values",
+                                    field_name
+                                ));
+                            };
+                            for item in items {
+                                let ok = item
+                                    .as_str()
+                                    .is_some_and(|s| allowed.iter().any(|a| a == s));
+                                if !ok {
+                                    return Err(format!(
+                                        "Field '{}' items must each be one of: {}",
+                                        field_name,
+                                        allowed.join(", ")
+                                    ));
+                                }
+                            }
+                        } else if let Some(str_value) = value.as_str() {
+                            if !allowed.iter().any(|a| a == str_value) {
                                 return Err(format!(
                                     "Field '{}' must be one of: {}",
                                     field_name,
-                                    enum_schema.enum_values.join(", ")
+                                    allowed.join(", ")
                                 ));
                             }
                         } else {
@@ -501,12 +534,50 @@ impl ElicitationBuilder {
     }
 }
 
+/// Convert a raw JSON value into the wire-typed elicitation result content
+/// value for the active protocol version.
+///
+/// 2026-07-28 restricts `ElicitResult.content` values to
+/// `string | number | boolean | string[]` ([`ElicitResultValue`](turul_mcp_protocol::elicitation::ElicitResultValue));
+/// these callers have no fallible return path, so a shape outside that union
+/// (e.g. a nested object) is stringified via its JSON text rather than
+/// silently dropped. 2025-11-25 keeps the untyped `Value` as-is.
+#[cfg(feature = "protocol-2026-07-28")]
+fn to_elicit_result_value(value: Value) -> turul_mcp_protocol::elicitation::ElicitResultValue {
+    use turul_mcp_protocol::elicitation::ElicitResultValue;
+    match value {
+        Value::String(s) => ElicitResultValue::String(s),
+        Value::Number(n) => ElicitResultValue::Number(n.as_f64().unwrap_or(0.0)),
+        Value::Bool(b) => ElicitResultValue::Boolean(b),
+        Value::Array(items) => ElicitResultValue::StringArray(
+            items
+                .into_iter()
+                .map(|item| {
+                    item.as_str()
+                        .map(str::to_string)
+                        .unwrap_or_else(|| item.to_string())
+                })
+                .collect(),
+        ),
+        other => ElicitResultValue::String(other.to_string()),
+    }
+}
+
+#[cfg(feature = "protocol-2025-11-25")]
+fn to_elicit_result_value(value: Value) -> Value {
+    value
+}
+
 /// Result builder for creating elicitation responses
 pub struct ElicitResultBuilder;
 
 impl ElicitResultBuilder {
     /// Create an accept result with content
     pub fn accept(content: HashMap<String, Value>) -> ElicitResult {
+        let content = content
+            .into_iter()
+            .map(|(k, v)| (k, to_elicit_result_value(v)))
+            .collect();
         ElicitResult::accept(content)
     }
 
@@ -523,24 +594,150 @@ impl ElicitResultBuilder {
     /// Create an accept result with a single field
     pub fn accept_single(field_name: impl Into<String>, value: Value) -> ElicitResult {
         let mut content = HashMap::new();
-        content.insert(field_name.into(), value);
+        content.insert(field_name.into(), to_elicit_result_value(value));
         ElicitResult::accept(content)
     }
 
     /// Create an accept result with multiple fields from key-value pairs
     pub fn accept_fields(fields: Vec<(String, Value)>) -> ElicitResult {
-        let content = fields.into_iter().collect();
+        let content = fields
+            .into_iter()
+            .map(|(k, v)| (k, to_elicit_result_value(v)))
+            .collect();
         ElicitResult::accept(content)
+    }
+}
+
+#[cfg(feature = "protocol-2026-07-28")]
+/// Validate elicited content against the form schema that requested it
+/// (Elicitation §Form Security: "Servers SHOULD validate received data
+/// matches the requested schema"; the same check serves clients validating
+/// before sending).
+///
+/// On the stateless 2026 lane nothing server-side retains the leg-1 schema
+/// across the MRTR retry, so this cannot be enforced centrally by the
+/// framework — the tool (which re-derives its schema) calls this on the
+/// retry's elicit content.
+///
+/// Checks: content is an object; `required` keys present; no keys outside
+/// `properties`; per-property primitive type, string length bounds, numeric
+/// bounds and integer-ness, enum membership across all enum-union shapes.
+/// `StringFormat` (email/uri/date/date-time) is NOT verified — format
+/// assertions are annotation-only in JSON Schema by default.
+pub fn validate_elicit_content(schema: &ElicitationSchema, content: &Value) -> Result<(), String> {
+    let Some(obj) = content.as_object() else {
+        return Err("elicit content must be a JSON object".to_string());
+    };
+
+    for key in schema.required.as_deref().unwrap_or(&[]) {
+        if !obj.contains_key(key) {
+            return Err(format!("missing required elicited field {key:?}"));
+        }
+    }
+    for key in obj.keys() {
+        if !schema.properties.contains_key(key) {
+            return Err(format!("unexpected elicited field {key:?}"));
+        }
+    }
+
+    for (key, value) in obj {
+        let prop = &schema.properties[key];
+        validate_primitive(key, prop, value)?;
+    }
+    Ok(())
+}
+
+#[cfg(feature = "protocol-2026-07-28")]
+fn validate_primitive(
+    key: &str,
+    prop: &PrimitiveSchemaDefinition,
+    value: &Value,
+) -> Result<(), String> {
+    match prop {
+        PrimitiveSchemaDefinition::String(s) => {
+            let Some(v) = value.as_str() else {
+                return Err(format!("field {key:?} must be a string"));
+            };
+            let len = v.chars().count();
+            if let Some(min) = s.min_length
+                && len < min
+            {
+                return Err(format!("field {key:?} shorter than minLength {min}"));
+            }
+            if let Some(max) = s.max_length
+                && len > max
+            {
+                return Err(format!("field {key:?} longer than maxLength {max}"));
+            }
+            Ok(())
+        }
+        PrimitiveSchemaDefinition::Number(n) => {
+            let Some(v) = value.as_f64() else {
+                return Err(format!("field {key:?} must be a number"));
+            };
+            if n.schema_type == "integer" && value.as_i64().is_none() && value.as_u64().is_none() {
+                return Err(format!("field {key:?} must be an integer"));
+            }
+            if let Some(min) = n.minimum
+                && v < min
+            {
+                return Err(format!("field {key:?} below minimum {min}"));
+            }
+            if let Some(max) = n.maximum
+                && v > max
+            {
+                return Err(format!("field {key:?} above maximum {max}"));
+            }
+            Ok(())
+        }
+        PrimitiveSchemaDefinition::Boolean(_) => {
+            if value.is_boolean() {
+                Ok(())
+            } else {
+                Err(format!("field {key:?} must be a boolean"))
+            }
+        }
+        PrimitiveSchemaDefinition::Enum(e) => {
+            let allowed = e.allowed_values();
+            let is_multi = matches!(e, EnumSchema::MultiSelect(_));
+            if is_multi {
+                let Some(items) = value.as_array() else {
+                    return Err(format!("field {key:?} must be an array (multi-select)"));
+                };
+                for item in items {
+                    let Some(s) = item.as_str() else {
+                        return Err(format!("field {key:?} items must be strings"));
+                    };
+                    if !allowed.iter().any(|a| a == s) {
+                        return Err(format!("field {key:?} value {s:?} not in the enum"));
+                    }
+                }
+                Ok(())
+            } else {
+                let Some(s) = value.as_str() else {
+                    return Err(format!("field {key:?} must be a string (enum)"));
+                };
+                if allowed.iter().any(|a| a == s) {
+                    Ok(())
+                } else {
+                    Err(format!("field {key:?} value {s:?} not in the enum"))
+                }
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "protocol-2025-11-25")]
     use crate::traits::ElicitationDefinition;
     use serde_json::json;
     use turul_mcp_protocol::elicitation::ElicitAction;
 
+    // ElicitationBuilder::build() produces the 2025-11-25 ElicitCreateRequest, which
+    // the stateless 2026-07-28 core removed; these tests are 2025-11-25 only.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_elicitation_builder_basic() {
         let request = ElicitationBuilder::new("Enter your details")
@@ -573,6 +770,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_elicitation_builder_with_constraints() {
         let request = ElicitationBuilder::new("Create account")
@@ -595,6 +793,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_elicitation_builder_enum_field() {
         let choices = vec!["red".to_string(), "green".to_string(), "blue".to_string()];
@@ -622,6 +821,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_elicitation_builder_meta() {
         let request = ElicitationBuilder::new("Test")
@@ -636,6 +836,7 @@ mod tests {
         assert_eq!(meta.get("priority"), Some(&json!(1)));
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_convenience_builders() {
         // Text input
@@ -795,6 +996,14 @@ mod tests {
         // Accept with single field
         let single_result = ElicitResultBuilder::accept_single("name", json!("John"));
         assert!(matches!(single_result.action, ElicitAction::Accept));
+        #[cfg(feature = "protocol-2026-07-28")]
+        assert_eq!(
+            single_result.content.as_ref().unwrap().get("name"),
+            Some(&turul_mcp_protocol::elicitation::ElicitResultValue::String(
+                "John".to_string()
+            ))
+        );
+        #[cfg(feature = "protocol-2025-11-25")]
         assert_eq!(
             single_result.content.as_ref().unwrap().get("name"),
             Some(&json!("John"))
@@ -819,6 +1028,9 @@ mod tests {
         assert!(cancel_result.content.is_none());
     }
 
+    // ElicitationDefinition::to_create_request() builds the 2025-11-25 ElicitCreateRequest,
+    // gated out of the stateless 2026-07-28 core.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_trait_implementations() {
         let elicitation = ElicitationBuilder::new("Test message")
@@ -846,5 +1058,92 @@ mod tests {
         let request = elicitation.to_create_request();
         assert_eq!(request.method, "elicitation/create");
         assert_eq!(request.params.message, "Test message");
+    }
+}
+
+#[cfg(all(test, feature = "protocol-2026-07-28"))]
+mod validate_content_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn schema() -> ElicitationSchema {
+        let mut s = ElicitationSchema::new()
+            .with_property(
+                "name".to_string(),
+                PrimitiveSchemaDefinition::String({
+                    let mut st = StringSchema::new();
+                    st.min_length = Some(2);
+                    st.max_length = Some(10);
+                    st
+                }),
+            )
+            .with_property(
+                "age".to_string(),
+                PrimitiveSchemaDefinition::Number({
+                    let mut n = NumberSchema::integer();
+                    n.minimum = Some(0.0);
+                    n.maximum = Some(150.0);
+                    n
+                }),
+            )
+            .with_property(
+                "subscribe".to_string(),
+                PrimitiveSchemaDefinition::Boolean(BooleanSchema::new()),
+            )
+            .with_property(
+                "color".to_string(),
+                PrimitiveSchemaDefinition::Enum(EnumSchema::new(vec![
+                    "red".to_string(),
+                    "blue".to_string(),
+                ])),
+            );
+        s.required = Some(vec!["name".to_string()]);
+        s
+    }
+
+    #[test]
+    fn valid_content_passes() {
+        let content = json!({"name": "Nick", "age": 47, "subscribe": true, "color": "red"});
+        validate_elicit_content(&schema(), &content).unwrap();
+    }
+
+    #[test]
+    fn missing_required_field_fails() {
+        let err = validate_elicit_content(&schema(), &json!({"age": 1})).unwrap_err();
+        assert!(err.contains("missing required"), "{err}");
+    }
+
+    #[test]
+    fn unknown_field_fails() {
+        let err =
+            validate_elicit_content(&schema(), &json!({"name": "Nick", "extra": 1})).unwrap_err();
+        assert!(err.contains("unexpected"), "{err}");
+    }
+
+    #[test]
+    fn type_mismatches_fail() {
+        let s = schema();
+        assert!(validate_elicit_content(&s, &json!({"name": 5})).is_err());
+        assert!(validate_elicit_content(&s, &json!({"name": "ok", "age": "old"})).is_err());
+        assert!(validate_elicit_content(&s, &json!({"name": "ok", "subscribe": "yes"})).is_err());
+        assert!(validate_elicit_content(&s, &json!("not an object")).is_err());
+    }
+
+    #[test]
+    fn bounds_and_integerness_enforced() {
+        let s = schema();
+        assert!(validate_elicit_content(&s, &json!({"name": "x"})).is_err()); // minLength
+        assert!(validate_elicit_content(&s, &json!({"name": "0123456789ab"})).is_err()); // maxLength
+        assert!(validate_elicit_content(&s, &json!({"name": "ok", "age": 200})).is_err()); // maximum
+        assert!(validate_elicit_content(&s, &json!({"name": "ok", "age": 1.5})).is_err()); // integer
+    }
+
+    #[test]
+    fn enum_membership_enforced() {
+        let s = schema();
+        validate_elicit_content(&s, &json!({"name": "ok", "color": "blue"})).unwrap();
+        let err =
+            validate_elicit_content(&s, &json!({"name": "ok", "color": "green"})).unwrap_err();
+        assert!(err.contains("not in the enum"), "{err}");
     }
 }

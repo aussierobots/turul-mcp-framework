@@ -24,8 +24,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-builders = "0.3"
-turul-mcp-server = "0.3"
+turul-mcp-builders = "0.4"
+turul-mcp-server = "0.4"
 serde_json = "1.0"
 ```
 
@@ -532,8 +532,9 @@ cargo test --package turul-mcp-builders
 # Test specific builder
 cargo test --package turul-mcp-builders tool_builder
 
-# Integration tests with server
-cargo test --package turul-mcp-builders --features integration
+# The 2025-11-25 opt-in lane (there is no `integration` feature; the only
+# features are the two mutually exclusive protocol lanes)
+cargo test --package turul-mcp-builders --no-default-features --features protocol-2025-11-25
 ```
 
 ## Examples

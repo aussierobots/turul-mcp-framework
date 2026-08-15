@@ -195,7 +195,7 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
 
             impl turul_mcp_builders::HasPromptAnnotations for GeneratedPrompt {
-                fn annotations(&self) -> Option<&PromptAnnotations> { None }
+                fn annotations(&self) -> Option<&turul_mcp_builders::traits::PromptAnnotations> { None }
             }
 
             impl turul_mcp_builders::HasPromptMeta for GeneratedPrompt {

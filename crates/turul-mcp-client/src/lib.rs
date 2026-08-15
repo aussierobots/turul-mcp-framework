@@ -13,7 +13,8 @@
 //! ## Features
 //!
 //! - **Multi-transport**: HTTP and Server-Sent Events (SSE), with stdio planned
-//! - **Full Protocol**: Complete MCP 2025-11-25 specification support
+//! - **Bilingual Protocol**: Speaks both MCP 2026-07-28 (stateless core) and
+//!   2025-11-25; by default the client negotiates the spec per connection
 //! - **High Performance**: Built on Tokio with async/await throughout
 //! - **Session Management**: Automatic connection handling and recovery
 //! - **Real-time Streaming**: SSE support for progress and notifications
@@ -24,7 +25,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-client = "0.3"
+//! turul-mcp-client = "0.4"
 //! tokio = { version = "1.0", features = ["full"] }
 //! ```
 //!
@@ -54,14 +55,19 @@
 //! ### HTTP Transport (Streamable HTTP)
 //!
 //! The Streamable HTTP transport sends each MCP request as an independent HTTP
-//! POST. There is no persistent connection — session continuity is maintained
-//! via the `Mcp-Session-Id` header that the server returns during initialization
-//! and that the client includes on all subsequent requests.
+//! POST. There is no persistent connection. The client negotiates the spec per
+//! connection: on a 2026-07-28 connection it is stateless (no session id; each
+//! request carries `_meta` and the `MCP-Protocol-Version: 2026-07-28` header). On
+//! a connection locked to 2025-11-25, session continuity is maintained via the
+//! `Mcp-Session-Id` header the server returns during initialization and the client
+//! includes on subsequent requests.
 //!
 //! `transport.connect()` only marks the transport as logically ready; it performs
 //! no network I/O. The first real validation happens when `McpClient::connect()`
-//! sends the `initialize` POST followed by `notifications/initialized`. If the
-//! server is unreachable or rejects the handshake, the error surfaces there.
+//! probes `server/discover`. On a 2026-07-28 server discovery answers statelessly;
+//! on a 2025-locked connection the client falls back to the `initialize` POST
+//! followed by `notifications/initialized`. If the server is unreachable or rejects
+//! the probe, the error surfaces there.
 //!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,14 +78,18 @@
 //! # }
 //! ```
 //!
-//! ### SSE Transport (HTTP+SSE, legacy)
+//! ### SSE Transport (HTTP+SSE, deprecated — SEP-2596)
 //!
-//! For servers using the pre-2025-03-26 SSE-based protocol. Like the HTTP
-//! transport, `connect()` is a no-op marker — the SSE subscription is
-//! established lazily during message exchange.
+//! For servers using the pre-2025-03-26 SSE-based protocol. The HTTP+SSE
+//! transport is deprecated upstream ("new implementations SHOULD NOT adopt
+//! it") — use [`HttpTransport`](transport::HttpTransport) unless you must
+//! talk to an unmigrated ≤ 2024-11-05 server. Like the HTTP transport,
+//! `connect()` is a no-op marker — the SSE subscription is established
+//! lazily during message exchange.
 //!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! #![allow(deprecated)]
 //! use turul_mcp_client::transport::SseTransport;
 //!
 //! let transport = SseTransport::new("http://localhost:8080/mcp")?;
@@ -196,23 +206,56 @@
 //! - [`turul-mcp-protocol`](https://crates.io/crates/turul-mcp-protocol) - Protocol types
 //! - [`turul-mcp-derive`](https://crates.io/crates/turul-mcp-derive) - Macros for tools/resources
 
+// Spec-coexistence features are mutually exclusive. Bilingual (default) links
+// both protocol crates; narrowing to one requires --no-default-features.
+#[cfg(any(
+    all(feature = "client-bilingual", feature = "client-2025-11-25-only"),
+    all(feature = "client-bilingual", feature = "client-2026-07-28-only"),
+    all(feature = "client-2025-11-25-only", feature = "client-2026-07-28-only"),
+))]
+compile_error!(
+    "turul-mcp-client: `client-bilingual` (default), `client-2025-11-25-only`, and \
+     `client-2026-07-28-only` are mutually exclusive. To narrow:  \
+     `cargo build --no-default-features --features http,sse,client-2025-11-25-only`. \
+     Bilingual is the default — a bare `cargo build` is enough."
+);
+
+#[cfg(not(any(
+    feature = "client-bilingual",
+    feature = "client-2025-11-25-only",
+    feature = "client-2026-07-28-only"
+)))]
+compile_error!(
+    "turul-mcp-client: enable exactly one of `client-bilingual` (default), \
+     `client-2025-11-25-only`, or `client-2026-07-28-only`. If you used \
+     `--no-default-features`, add one explicitly."
+);
+
 pub mod client;
 pub mod config;
 pub mod error;
 pub mod prelude;
+pub(crate) mod protocol;
 pub mod session;
 pub mod streaming;
 pub mod transport;
+pub mod version;
 
 // Re-export main types
+#[cfg(feature = "ext-tasks")]
+pub use client::ToolCallOutcome;
 /// High-level MCP client with session management and automatic reconnection
-pub use client::{McpClient, McpClientBuilder, NotificationCallback, ToolCallResponse};
+pub use client::{
+    McpClient, McpClientBuilder, NotificationCallback, SubscriptionStream, ToolCallResponse,
+};
 /// Client configuration types for timeouts, retries, and connection parameters
 pub use config::{ClientConfig, RetryConfig, TimeoutConfig};
 /// Client-specific error types and result aliases for error handling
 pub use error::{McpClientError, McpClientResult};
 /// Session management types for tracking connection state and statistics
 pub use session::{SessionInfo, SessionManager, SessionState};
+/// Per-connection MCP wire-version negotiation
+pub use version::McpVersion;
 
 // Re-export transport types
 /// Transport layer abstractions for different MCP connection types
@@ -220,4 +263,4 @@ pub use transport::{Transport, TransportType};
 
 // Re-export protocol types for convenience
 /// Core MCP protocol types and message structures
-pub use turul_mcp_protocol::*;
+pub use turul_mcp_protocol_2025_11_25::*;

@@ -1,235 +1,195 @@
 # MCP Framework Examples
 
-This document provides a comprehensive overview of all **58 examples** in the MCP Framework, organized by learning progression from basic concepts to advanced implementations.
+Every directory under `examples/` appears in this file exactly once, with the
+spec lane it builds on and one line on what it demonstrates.
 
-**✅ All examples compile and phases 1-5 functionally verified (Compile → Start → Initialize → Execute)**
-**Last verified**: 2026-02-26 (v0.3.0, MCP 2025-11-25)
+**56 examples**, by lane:
 
-**Legend**:
-- ✅ **Verified Working** - Tested and confirmed functional
-- ⚙️ **Requires Setup** - External dependencies needed
-- 🎓 **Educational** - Teaches manual implementation patterns
-- 🚀 **Production Ready** - Uses optimized macros
-- 🔧 **Builder Pattern** - Runtime construction
+| Lane | Count | What it means |
+|---|---|---|
+| **2026-07-28** (default) | 37 | Built by a bare `cargo build` — they are in `[default-members]` |
+| **2025-11-25** (pinned) | 16 | Manifest pins `protocol-2025-11-25`; unifying them into the default build set trips the spec mutex, so they are built by `scripts/ci-gates.sh opt-in-2025` |
+| **2025-11-25** (wire only) | 3 | Raw `reqwest` clients with no protocol-crate dependency — they compile on any lane but speak the 2025-11-25 wire (`initialize` handshake, `Mcp-Session-Id`) |
 
-## 🟢 **GETTING STARTED** (5 examples) - Start Here
+`tests/examples_guard.rs` enforces the three registries agreeing: an example
+directory must be a `[workspace.members]` entry, must be named here, and must
+be in `[default-members]` or on a `-p` gate line in `scripts/ci-gates.sh`.
+Deleting an example means deleting its row here in the same change.
 
-**Complete Calculator Learning Suite** - Four progressive levels of MCP tool implementation:
+**Running an example**: examples are packages with `[[bin]]` targets, so use
+`-p`, not `--example`.
 
-| Example | Port | Status | Learning Level | Description |
-|---------|------|--------|----------------|-------------|
-| **minimal-server** 🚀 | 8641 | ✅ WORKING | Foundation | Simplest possible MCP server with echo tool |
-| **calculator-add-function-server** 🚀 | 8648 | ✅ WORKING | Level 1 - Ultra Simple | Function macro `#[mcp_tool]` |
-| **calculator-add-simple-server-derive** 🚀 | 8647 | ✅ WORKING | Level 2 - Most Common | Derive macro `#[derive(McpTool)]` |
-| **calculator-add-builder-server** 🔧 | 8649 | ✅ WORKING | Level 3 - Runtime | Builder pattern construction |
-| **calculator-add-manual-server** 🎓 | 8646 | ✅ WORKING | Level 4 - Full Control | Manual trait implementation |
-
-**Quick Start Command**:
 ```bash
-# Start with the minimal server
-cargo run --example minimal-server
-# Server: http://127.0.0.1:8641/mcp
+cargo run -p minimal-server                       # http://127.0.0.1:8641/mcp
+cargo run -p client-initialise-server -- --port 52950
 ```
 
-## 🟢 **SESSION STORAGE** (3 examples) - Persistent State
-
-| Example | Port | Status | Description | Use Case |
-|---------|------|--------|-------------|----------|
-| **simple-sqlite-session** | 8061 | ✅ WORKING | File-based persistence | Single-instance deployments |
-| **simple-postgres-session** | 8060 | ⚙️ REQUIRES_SETUP | Database-backed sessions | Production multi-instance |
-| **simple-dynamodb-session** | 8062 | ⚙️ REQUIRES_SETUP | AWS cloud sessions | Serverless deployments |
-
-**Setup Requirements**:
-- **PostgreSQL**: Requires Docker container (instructions in example)
-- **DynamoDB**: Requires AWS credentials configuration
-
-## 🟡 **RESOURCE SERVERS** (6 examples) - Resource Handling & Phase 6 Session-Aware
-
-| Example | Port | Status | Description | Key Features |
-|---------|------|--------|-------------|--------------|
-| **resource-server** | 8007 | ✅ VALIDATED | Resource macros | `#[derive(McpResource)]` with session context |
-| **resources-server** | 8041 | ✅ VALIDATED | Multiple resource types | Resource handling patterns |
-| **resource-test-server** | 8043 | ✅ VALIDATED | Resource testing | Resource validation framework |
-| **function-resource-server** | 8008 | ✅ VALIDATED | Function-based resources | Resource function patterns |
-| **dynamic-resource-server** | 8048 | ✅ VALIDATED | Runtime resources | Dynamic resource creation |
-| **session-aware-resource-server** | 8008 | ✅ VALIDATED | Session-aware resources | Phase 6 session context integration |
-
-## 🟢 **FEATURE-SPECIFIC SERVERS** (8 examples) - Specialized MCP Features
-
-| Example | Port | Status | Description | Key Features |
-|---------|------|--------|-------------|--------------|
-| **prompts-server** | 8006 | ✅ VALIDATED | Prompt handling | MCP prompts feature demonstration |
-| **prompts-test-server** | 8046 | ✅ VALIDATED | Prompt validation | Prompts testing and validation |
-| **completion-server** | 8042 | ✅ VALIDATED | Text completion | IDE completion integration |
-| **sampling-server** | 8044 | ✅ VALIDATED | Data sampling | LLM sampling feature support |
-| **elicitation-server** | 8047 | ✅ VALIDATED | Information gathering | User input elicitation patterns |
-| **pagination-server** | 8044 | ✅ VALIDATED | Result pagination | Large dataset pagination support |
-| **notification-server** | 8005 | ✅ VALIDATED | SSE notifications | Real-time notification patterns |
-| **roots-server** | 8050 | ✅ VALIDATED | Root directories | MCP roots/list endpoint demonstration |
-
-## 🔵 **ADVANCED/COMPOSITE SERVERS** (5 examples) - Complex Functionality
-
-| Example | Port | Status | Description | Advanced Features |
-|---------|------|--------|-------------|-------------------|
-| **comprehensive-server** | 8002 | ✅ VALIDATED | All MCP features in one server | Complete framework showcase |
-| **alert-system-server** | 8010 | ✅ VALIDATED | Alert management | Enterprise alert management system |
-| **audit-trail-server** | 8009 | ✅ VALIDATED | Audit logging | Comprehensive audit logging system |
-| **simple-logging-server** | 8008 | ✅ VALIDATED | Simplified logging | Simplified logging patterns |
-| **zero-config-getting-started** | 8641 | ✅ VALIDATED | Zero-configuration setup | Getting started tutorial server |
-
-## 🔴 **SESSION & STATE** (4 examples) - Advanced State Handling
-
-| Example | Port | Status | Description | Session Features |
-|---------|------|--------|-------------|------------------|
-| **stateful-server** | 8006 | ✅ VALIDATED | Advanced stateful operations | Session state management |
-| **session-logging-proof-test** | 8001 | ✅ VALIDATED | Session logging validation | Session-based logging verification |
-| **session-aware-logging-demo** | 8000 | ✅ VALIDATED | Session-scoped logging | Session-aware logging patterns |
-| **logging-test-server** | 8052 | ✅ VALIDATED | Logging test suite | Comprehensive logging test suite |
-
-## 🟠 **CLIENT EXAMPLES** (5 examples) - Client Implementation
-
-| Example | Type | Status | Description | Purpose |
-|---------|------|--------|-------------|---------|
-| **client-initialise-server** | Server | ✅ VALIDATED | Client connectivity test server | MCP session initialization testing |
-| **client-initialise-report** | Client | ✅ VALIDATED | MCP client implementation | Tests server initialization |
-| **streamable-http-client** | Client | ✅ VALIDATED | Streamable HTTP client | MCP 2025-11-25 streaming demo |
-| **logging-test-client** | Client | ✅ VALIDATED | Logging client | Tests logging functionality |
-| **session-management-compliance-test** | Combined | ✅ VALIDATED | Session compliance testing | MCP session spec compliance |
-
-**Client Testing**:
-```bash
-# Start the test server
-cargo run --example client-initialise-server
-
-# Test with client (in another terminal)
-cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
-```
-
-## ☁️ **AWS LAMBDA** (4 examples) - Serverless Deployment
-
-| Example | Type | Status | Description | AWS Features |
-|---------|------|--------|-------------|--------------|
-| **lambda-mcp-server** | Lambda | ✅ VALIDATED | Serverless MCP server | Basic Lambda deployment |
-| **lambda-mcp-server-streaming** | Lambda | ✅ VALIDATED | Streaming Lambda server | Lambda with streaming support |
-| **lambda-mcp-client** | Lambda Client | ✅ VALIDATED | Lambda MCP client | AWS Lambda client integration |
-| **lambda-authorizer** | Lambda | ✅ VALIDATED | API Gateway authorizer | REQUEST authorizer with wildcard methodArn for MCP |
-
-## 🟣 **TOOL CREATION & OUTPUT SCHEMAS** (6 examples) - Tool Patterns
-
-| Example | Port | Status | Description | Key Features |
-|---------|------|--------|-------------|--------------|
-| **derive-macro-server** | 8765 | ✅ VALIDATED | Derive macro tools | `#[derive(McpTool)]` with code generation tools |
-| **function-macro-server** | 8003 | ✅ VALIDATED | Function macro tools | `#[mcp_tool]` attribute macro patterns |
-| **manual-tools-server** | 8007 | ✅ VALIDATED | Manual tool impl | Session state, progress notifications, complex schemas |
-| **tools-test-server** | random | ✅ VALIDATED | Comprehensive tool testing | All MCP tool patterns and edge cases |
-| **tool-output-introspection** | 8641 | ✅ VALIDATED | Output schema via introspection | Automatic field-level output schema generation |
-| **tool-output-schemas** | 8641 | ✅ VALIDATED | Output schema via schemars | `schemars::JsonSchema` derive for JSON Schema output |
-
-## 🛡️ **MIDDLEWARE** (4 examples) - Request Processing Pipelines
-
-| Example | Port | Status | Description | Middleware Pattern |
-|---------|------|--------|-------------|-------------------|
-| **middleware-auth-server** | 8080 | ✅ VALIDATED | API key authentication | `before_dispatch` header extraction |
-| **middleware-logging-server** | 8670 | ✅ VALIDATED | Request timing/tracing | Request duration logging in `after_dispatch` |
-| **middleware-rate-limit-server** | 8671 | ✅ VALIDATED | Rate limiting | Per-session request counting |
-| **middleware-auth-lambda** | Lambda | ✅ VALIDATED | Lambda auth middleware | API Gateway authorizer context (V1 nested, V1 flat, V2) with Streamable HTTP (REST API V1) |
-
-## 🔄 **TASKS (MCP 2025-11-25)** (3 examples) - Long-Running Operations
-
-| Example | Type | Status | Description | Task Features |
-|---------|------|--------|-------------|---------------|
-| **tasks-e2e-inmemory-server** | Server | ✅ VALIDATED | Task-enabled MCP server | `slow_add` tool with configurable delay, InMemory storage |
-| **tasks-e2e-inmemory-client** | Client | ✅ VALIDATED | Task lifecycle client | Full task lifecycle: create, poll, cancel, result |
-| **client-task-lifecycle** | Client | ✅ VALIDATED | Task API demonstration | `call_tool_with_task`, `get_task`, `cancel_task` |
-
-**Task E2E Testing**:
-```bash
-# Start the task-enabled server
-cargo run --example tasks-e2e-inmemory-server
-
-# Run the client test suite (in another terminal)
-cargo run --example tasks-e2e-inmemory-client -- --url http://127.0.0.1:8080/mcp
-```
-
-## 📖 **TYPE SHOWCASES** (4 examples) - Print-Only Demonstrations
-
-These examples demonstrate MCP 2025-11-25 type construction without starting a server:
-
-| Example | Type | Status | Description | Types Demonstrated |
-|---------|------|--------|-------------|-------------------|
-| **builders-showcase** | Demo | ✅ VALIDATED | All 9 MCP builders | Tool, Resource, Prompt, Completion builders |
-| **icon-showcase** | Demo | ✅ VALIDATED | Icon support | `Icon` struct on tools, resources, prompts |
-| **sampling-with-tools-showcase** | Demo | ✅ VALIDATED | Sampling with tools | `tools` field on `CreateMessageParams` |
-| **task-types-showcase** | Demo | ✅ VALIDATED | Task type system | `Task`, `TaskStatus`, `TaskMetadata`, CRUD types |
-
-## 📚 **PERFORMANCE TESTING** (1 example) - Benchmarks
-
-| Example | Type | Status | Description | Purpose |
-|---------|------|--------|-------------|---------|
-| **performance-testing** | Benchmark | ✅ VALIDATED | Performance benchmarks | Comprehensive benchmark suite |
-
-## 🚨 **COMPREHENSIVE VALIDATION RESULTS**
-
-### ✅ **ALL 58 EXAMPLES COMPILE — 50 FUNCTIONALLY VERIFIED**
-**v0.3.0 (MCP 2025-11-25) — Last verified: 2026-02-26**
-
-- **Getting Started** - 5 examples (all tool creation levels)
-- **Session Storage** - 3 examples (SQLite, PostgreSQL, DynamoDB)
-- **Resource Servers** - 6 examples (session-aware resources)
-- **Feature-Specific** - 8 examples (prompts, sampling, elicitation, etc.)
-- **Advanced/Composite** - 5 examples (comprehensive, alerts, audit, logging)
-- **Session & State** - 4 examples (stateful operations, logging)
-- **Client Examples** - 5 examples (client-server communication)
-- **AWS Lambda** - 4 examples (server, streaming, client, authorizer)
-- **Tool Creation & Schemas** - 6 examples (macro patterns + output schemas)
-- **Middleware** - 4 examples (auth, logging, rate-limiting, Lambda auth)
-- **Tasks** - 3 examples (MCP 2025-11-25 task lifecycle)
-- **Type Showcases** - 4 examples (print-only type demonstrations)
-- **Performance Testing** - 1 example (benchmarks)
-
-> 50 examples functionally verified (Start → Initialize → Execute or Run → Check Output).
-> 2 skipped (external deps: PostgreSQL, DynamoDB). 2 blocked by client library bug (OPTIONS preflight).
-> 4 Lambda/performance examples compile-verified only. See `EXAMPLE_VERIFICATION_LOG.md`.
-
-### 🎯 **KEY ACHIEVEMENTS**
-- **Session-Aware Resources**: All resources support SessionContext
-- **Full MCP 2025-11-25 Compliance**: Complete specification implementation
-- **Zero Breaking Changes**: All existing examples continue to work
-
-### 📊 **Statistics**
-- **Total Examples**: 58 (25 archived in `examples/archived/`)
-- **Session-Aware Resources**: 6 examples demonstrating session context integration
-- **Client-Server Pairs**: 5 examples validating communication patterns
-- **Task Support**: 3 examples demonstrating MCP 2025-11-25 task lifecycle (InMemory storage)
-- **Middleware**: 4 examples (HTTP auth, logging, rate-limiting, Lambda auth)
-- **Storage Backends**: All 4 session backends (InMemory, SQLite, PostgreSQL, DynamoDB) working
-- **AWS Lambda Integration**: 4 examples (server, streaming, client, API Gateway authorizer)
-
-### 🔧 **Running Examples**
-
-**Basic Pattern**:
-```bash
-# Run any example
-cargo run --example <example-name>
-
-# Examples with custom ports
-cargo run --example client-initialise-server -- --port 8641
-```
-
-**With Features** (for PostgreSQL/DynamoDB examples):
-```bash
-cargo run --features postgres --example simple-postgres-session
-cargo run --features dynamodb --example simple-dynamodb-session
-```
-
-> **Note**: Some examples share default ports (e.g., 8641, 8008). Run only one example per port at a time.
-
-### 📝 **Development Notes**
-- All examples use the latest framework patterns
-- Session management is enabled by default
-- SSE notifications available on all HTTP servers
-- Error handling demonstrates proper MCP error types
+> The `-p` name is the directory name for every example except the two Lambda
+> ones: `examples/lambda-mcp-server` is package `lambda-turul-mcp-server` and
+> `examples/lambda-mcp-client` is package `lambda-turul-mcp-client`.
 
 ---
 
-**📋 Framework Status**: v0.3.0 — Full MCP 2025-11-25 compliance including tasks, icons, sampling tools, and URL elicitation.
+## Getting started — the four authoring levels
+
+The same `add(a, b)` tool written four ways. They differ on the wire, which is
+the point: compare `tools/list` and `tools/call` output across all four.
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **minimal-server** | 2026-07-28 | 8641 | The smallest server that answers: one `#[mcp_tool]` function, no configuration |
+| **zero-config-getting-started** | 2026-07-28 | 8641 | The zero-configuration story end to end — no method strings, no hand-written schemas |
+| **calculator-add-function-server** | 2026-07-28 | 8648 | Level 1 — `#[mcp_tool]` on a free function; `structuredContent` via `output_field` |
+| **calculator-add-simple-server-derive** | 2026-07-28 | 8647 | Level 2 — `#[derive(McpTool)]`; schemars-generated nested `outputSchema` |
+| **calculator-add-builder-server** | 2026-07-28 | 8649 | Level 3 — runtime `ToolBuilder` with a raw-`Value` closure and its own error codes |
+| **calculator-add-manual-server** | 2026-07-28 | 8646 | Level 4 — manual trait impls; the negative case: no `outputSchema`, no `structuredContent`, text only |
+
+## Tool authoring and output schemas
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **function-macro-server** | 2026-07-28 | 8003 | `#[mcp_tool]` across several signatures and error paths |
+| **derive-macro-server** | 2026-07-28 | 8765 | `#[derive(McpTool)]` over code-generation tools; templates embedded with `include_str!` so it runs from any CWD |
+| **tool-output-introspection** | 2026-07-28 | 8000 | Output schema generated by struct-field introspection — works only when the tool returns `Self` |
+| **tool-output-schemas** | 2026-07-28 | 8000 | Output schema generated from `schemars::JsonSchema` — the route for external output types |
+| **tools-test-server** | 2025-11-25 (pinned) | random (`--port`) | E2E fixture for `mcp-tools-tests`: every tool shape and edge case the 2025 suite asserts |
+| **pagination-server** | 2026-07-28 | random (`--port`) | Application-level cursor pagination inside a tool payload over SQLite — *not* protocol `cursor`/`nextCursor` |
+| **icon-showcase** | 2026-07-28 | n/a (prints) | The `Icon` struct on tools, resources, prompts and implementations |
+| **header-bound-tools-server** | 2026-07-28 | 8644 | SEP-2243 header-bound params: `x-mcp-header` → `Mcp-Param-*` mirroring, `-32020` on violation |
+
+## Resources
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **resource-server** | 2026-07-28 | 8007 | `#[derive(McpResource)]`; MIME types come from `#[resource(mime_type = ...)]` |
+| **resources-server** | 2026-07-28 | 8041 | A multi-resource server where `resources/list` and `resources/read` agree on `mimeType` |
+| **function-resource-server** | 2026-07-28 | 8008 | Function-authored resources plus URI templates via `resources/templates/list` |
+| **resource-test-server** | 2025-11-25 (pinned) | random (`--port`) | E2E fixture for `mcp-resources-tests` |
+| **session-aware-resource-server** | 2025-11-25 (pinned) | 8010 | A resource whose content accumulates across requests — needs cross-request session state, which the 2026 stateless core removed |
+
+## Prompts, completion, elicitation
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **prompts-server** | 2026-07-28 | 8006 | `prompts/list` and `prompts/get` with arguments |
+| **prompts-test-server** | 2025-11-25 (pinned) | random (`--port`) | E2E fixture for `mcp-prompts-tests` |
+| **completion-server** | 2026-07-28 | 8042 | `completion/complete` for IDE-style argument completion |
+| **mrtr-elicitation-server** | 2026-07-28 | 8642 | The 2026 mid-request-tool-refinement round trip: `input_required` → answer → `call_tool_with_input_responses`. Ships the paired `mrtr-elicitation-client` bin |
+| **elicitation-server** | 2025-11-25 (pinned) | random (`--port`) | A 2025-lane tool server used as the `mcp-elicitation-tests` fixture. It does **not** use the elicitation protocol — for that, see `mrtr-elicitation-server` |
+
+## Transport, sessions and state
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **notification-server** | 2026-07-28 | 8005 | Both 2026 server-initiated notification surfaces, including the ack-first `subscriptions/listen` stream |
+| **origin-policy-server** | 2026-07-28 | 8643 | DNS-rebinding protection: `OriginPolicy` default / AllowList / Disabled, and the 403 matrix |
+| **stateful-server** | 2025-11-25 (pinned) | 8011 | A shopping cart surviving across requests — cross-request session state, removed by the 2026 stateless core |
+| **session-management-compliance-test** | 2025-11-25 (wire) | targets `:52950` | Regression client for the 2025 session contract: id generation, expiry 404, reinitialize, DELETE termination |
+| **audit-trail-server** | 2026-07-28 | 8009 | Compliance-style audit logging persisted to SQLite (writes `audit_trail.db` into the CWD) |
+
+## Session storage backends
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **simple-sqlite-session** | 2026-07-28 | 8061 | File-backed session storage; durability is visible as an accumulating row count across restarts |
+| **simple-postgres-session** | 2026-07-28 | 8060 | PostgreSQL-backed storage — needs a running database |
+| **simple-dynamodb-session** | 2026-07-28 | 8062 | DynamoDB-backed storage — needs AWS credentials |
+
+Each ships `*-setup` / `*-teardown` bins alongside the server; `default-run`
+points at the server, so a bare `cargo run -p simple-sqlite-session` works.
+
+## Logging (deprecated in 2026-07-28)
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **logging-test-server** | 2025-11-25 (pinned) | 8003 | `logging/setLevel` plus per-session SSE log delivery |
+| **logging-test-client** | 2025-11-25 (pinned) | targets `:8003` | Drives the server across three thresholds with PASS/FAIL counts |
+
+## Tasks
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **ext-tasks-server** | 2026-07-28 | 8645 | The Tasks *extension* (SEP-2663): task election, polling, `tasks/update` mid-task input, sync fallback. Ships the paired `ext-tasks-client` bin |
+| **tasks-e2e-inmemory-server** | 2025-11-25 (pinned) | 8080 | In-core 2025 task lifecycle with a `slow_add` tool and InMemory task storage |
+| **tasks-e2e-inmemory-client** | 2025-11-25 (pinned) | targets `:8080` | Drives that lifecycle: create, poll, cancel, fetch result |
+
+## Deprecated in 2026-07-28 (SEP-2577) — kept for the 2025 lane
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **roots-server** | 2025-11-25 (pinned) | random (`--port`) | Advertising the `roots` capability; no tools and no filesystem access |
+| **sampling-server** | 2025-11-25 (pinned) | random (`--port`) | Registering sampling providers for `sampling/createMessage` |
+| **dynamic-tools-server** | 2025-11-25 (pinned) | 8484 | Runtime `ToolRegistry` activation with `notifications/tools/list_changed` |
+
+## Clients
+
+Every client pairs with a server **on its own lane** — start the server first.
+
+| Example | Lane | Pairs with | Demonstrates |
+|---|---|---|---|
+| **streamable-http-client** | 2026-07-28 | `minimal-server` (8641); `notification-server` (8005) for live deliveries | The canonical 2026 pair: `connect()` negotiation, discover retention, `call_tool`, request-scoped progress, `subscriptions/listen` |
+| **bilingual-fleet-client** | both | `minimal-server` (8641) + `client-initialise-server` (52950) | One binary sweeping a mixed fleet, negotiating the wire spec per connection |
+| **interop-client-probe** | 2026-07-28 | any foreign 2026-07-28 server | `turul-mcp-client` driven against a server this project did not write; reports `LEG <name> OK\|FAIL` per leg |
+| **interop-fixture-server** | 2026-07-28 | the cross-implementation probes in `scripts/interop-*.sh` | The frozen 2026 surface every foreign client is asserted against (port 8700) |
+| **client-initialise-server** | 2025-11-25 (pinned) | `client-initialise-report`, `session-management-compliance-test`, `streamable-http-client-2025-11-25` | The 2025 handshake fixture; `--storage-backend` selects the session store and the tools report which one is live |
+| **client-initialise-report** | 2025-11-25 (wire) | `client-initialise-server` | Raw-wire lifecycle probe: handshake, session data readback, DELETE |
+| **streamable-http-client-2025-11-25** | 2025-11-25 (wire) | `client-initialise-server` | Hand-parsed 2025 POST-SSE framing; asserts the server echoes the request's `progressToken` |
+
+## Middleware
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **middleware-auth-server** | 2026-07-28 | 8672 | API-key authentication via `before_dispatch` header extraction |
+| **middleware-logging-server** | 2026-07-28 | 8670 | Request timing recorded in `after_dispatch` |
+| **middleware-rate-limit-server** | 2026-07-28 | 8671 | Per-key request buckets rejecting with `-32003` |
+| **middleware-auth-lambda** | 2026-07-28 | Lambda | API Gateway authorizer context (V1 nested, V1 flat, V2) reaching middleware over Streamable HTTP |
+
+## AWS Lambda
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **lambda-authorizer** | 2026-07-28 | Lambda | A REQUEST authorizer returning an IAM policy with a wildcard `methodArn` for MCP |
+| **lambda-mcp-server** | 2025-11-25 (pinned) | Lambda | MCP over Lambda with DynamoDB session storage and SSE snapshots. Package `lambda-turul-mcp-server` |
+| **lambda-mcp-client** | 2026-07-28 | targets `:9000` | `probe` (exit 0 live / 1 dead) and an interactive session against a locally-watched Lambda. Package `lambda-turul-mcp-client` |
+
+## OAuth
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **oauth-resource-server** | 2026-07-28 | 8080 | OAuth 2.1 Resource Server (RFC 9728): JWKS Bearer validation, PRM well-known routes, `--required-scope` → 403 `insufficient_scope`. Needs a live authorization server |
+
+---
+
+## Known port collisions
+
+Ports are per-example defaults, not reservations. These overlap — run one at a
+time, or pass an explicit port:
+
+| Port | Examples |
+|---|---|
+| 8000 | `tool-output-introspection`, `tool-output-schemas` (both take the framework default bind) |
+| 8003 | `function-macro-server`, `logging-test-server` |
+| 8080 | `oauth-resource-server`, `tasks-e2e-inmemory-server` |
+| 8641 | `minimal-server`, `zero-config-getting-started` |
+
+## Framework status
+
+0.4.0 branch (`feat/turul-mcp-protocol-2026-07-28`): MCP 2026-07-28 stateless
+core by default, the 2025-11-25 stateful line as a per-manifest opt-in.
+Registered spec-gap status lives in `docs/plans/2026-07-28-spec-compliance.md`.
+
+## Archived
+
+`examples/archived/` holds examples retired from the build. It is in the
+workspace `exclude` list, so nothing here is compiled, gated, or published —
+these are reference reading only, and may not compile against the current API.
+
+| Example | Lane | Archived | Why |
+|---|---|---|---|
+| **session-logging-proof-test** | 2025-11-25 (pinned) | 2026-08-08 | Asserted nothing — it printed three sessions' log output and asked a human to eyeball three terminals. `logging-test-server` + `logging-test-client` prove the same property with PASS/FAIL counts. Logging is also deprecated for removal under SEP-2577, so the surface it demonstrated is on a clock. |
+
+An earlier `examples/archived/` directory was emptied on 2026-07-29: those 29
+examples predated the 2026-07-28 spec, were never workspace members, and so were
+never built by any gate. They were deleted rather than kept, and remain in git
+history. The directory was reinstated on 2026-08-08 under the exclusion rule
+above, so an archived example is inert rather than absent.

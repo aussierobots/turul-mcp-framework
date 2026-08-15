@@ -459,7 +459,15 @@ async fn test_progress_tracker_with_notifications() {
         "completed"
     );
     let parsed_obj = parsed_result.as_object().unwrap();
-    assert!(parsed_obj.contains_key("progress_token"));
+    // This call declared no `_meta.progressToken`, so the tool had none to echo.
+    // Asserting the key merely exists would pass whether the tool reported the
+    // caller's token, an invented one, or nothing.
+    assert_eq!(
+        parsed_obj.get("progress_token").unwrap().as_str().unwrap(),
+        "",
+        "with no progressToken in the request there is nothing to echo, and the \
+         tool must not substitute one of its own: {parsed_result}"
+    );
     assert!(parsed_obj.contains_key("completed_at"));
 
     // Test SSE client-side verification for progress notifications
@@ -527,14 +535,21 @@ async fn test_progress_tracker_with_notifications() {
     // Brief yield to let the server register the SSE subscription
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
-    // Now call a long-running progress tracker tool
+    // Declaring `_meta.progressToken` is what opts this request into
+    // notifications/progress. Without it there is nothing for the server to
+    // reference, and a compliant tool sends nothing — so a test that omitted the
+    // token while demanding notifications would be requiring the server to
+    // invent one, which is the defect rather than the contract.
+    const PROGRESS_TOKEN: &str = "tools-e2e-progress-1";
     let _progress_result = client
-        .call_tool(
-            "progress_tracker",
+        .make_request(
+            "tools/call",
             json!({
-                "duration": 1.5,
-                "steps": 3  // Should generate progress at 33%, 66%, 100%
+                "name": "progress_tracker",
+                "arguments": { "duration": 1.5, "steps": 3 },
+                "_meta": { "progressToken": PROGRESS_TOKEN }
             }),
+            8,
         )
         .await
         .expect("Failed to call progress tracker");
@@ -567,9 +582,12 @@ async fn test_progress_tracker_with_notifications() {
             i,
             event
         );
+        // Presence alone is not correlation: the token MUST be the one this
+        // request supplied, or the client cannot match the update to its call.
         assert!(
-            event.contains("\"progressToken\""),
-            "Progress notification {} missing progressToken field: {}",
+            event.contains(&format!("\"progressToken\":\"{PROGRESS_TOKEN}\"")),
+            "Progress notification {} must reference this request's token \
+             {PROGRESS_TOKEN}, not one of the tool's own choosing: {}",
             i,
             event
         );

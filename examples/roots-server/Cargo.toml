@@ -1,11 +1,13 @@
 [package]
 name = "roots-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 
+# 2025-11-25 regression example, pinned to the 2025 opt-in (this branch's 2026
+# default path does not serve the deprecated Roots feature).
 [dependencies]
-turul-mcp-server.workspace = true
-turul-mcp-protocol.workspace = true
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 tokio.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

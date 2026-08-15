@@ -1,6 +1,8 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Writing custom compliance assertions for MCP specification conformance
 // These patterns verify that your server correctly implements MCP protocol rules.
+// Spec lane: 2025-11-25 only — asserts the initialize handshake and its
+// protocolVersion, both removed by 2026-07-28's stateless core.
 
 use serde_json::json;
 use mcp_e2e_shared::e2e_utils::{McpTestClient, TestFixtures, TestServerManager};

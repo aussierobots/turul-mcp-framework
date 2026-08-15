@@ -1,8 +1,12 @@
 //! # MCP Server Framework
 //!
 //! A production-ready Rust framework for building Model Context Protocol (MCP) servers.
-//! Provides zero-configuration setup, comprehensive MCP 2025-11-25 specification support,
-//! and multiple deployment targets including HTTP, AWS Lambda, and local development.
+//! Provides zero-configuration setup and multiple deployment targets including HTTP,
+//! AWS Lambda, and local development.
+//!
+//! The default build targets the MCP 2026-07-28 stateless core (`server/discover`,
+//! per-request `_meta`, no `Mcp-Session-Id`). The MCP 2025-11-25 specification is
+//! opt-in via `--no-default-features --features http,sse,protocol-2025-11-25`.
 //!
 //! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-server.svg)](https://crates.io/crates/turul-mcp-server)
 //! [![Documentation](https://docs.rs/turul-mcp-server/badge.svg)](https://docs.rs/turul-mcp-server)
@@ -24,8 +28,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-server = "0.3"
-//! turul-mcp-derive = "0.3"  # For macros
+//! turul-mcp-server = "0.4"
+//! turul-mcp-derive = "0.4"  # For macros
 //! tokio = { version = "1.0", features = ["full"] }
 //! ```
 //!
@@ -98,7 +102,7 @@
 //!
 //! The framework supports extensive configuration through the builder pattern:
 //!
-//! ```rust,no_run
+//! ```ignore
 //! # use turul_mcp_server::prelude::*;
 //! # use turul_mcp_session_storage::SqliteSessionStorage;
 //! # use std::time::Duration;
@@ -118,17 +122,21 @@
 pub mod builder;
 pub mod cancellation;
 pub mod completion;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod elicitation;
 pub mod handlers;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod logging;
 pub mod middleware;
 pub mod notifications;
 pub mod prompt;
 pub mod resource;
 pub mod roots;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod sampling;
 pub mod server;
 pub mod session;
+#[cfg(feature = "protocol-2025-11-25")]
 pub mod task;
 pub mod tool;
 #[cfg(feature = "dynamic-tools")]
@@ -136,8 +144,11 @@ pub mod tool_registry;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
 // Re-export task storage from separate crate
+#[cfg(feature = "protocol-2025-11-25")]
 pub use turul_mcp_task_storage as task_storage;
 pub mod dispatch;
+#[cfg(feature = "ext-tasks")]
+pub mod ext_tasks;
 pub mod prelude;
 pub mod security;
 pub mod uri_template;
@@ -158,10 +169,12 @@ pub use completion::McpCompletion;
 /// Request dispatching and middleware support for MCP operations
 pub use dispatch::{DispatchContext, DispatchMiddleware, McpDispatcher};
 /// Elicitation handler for interactive form-based data collection
+#[cfg(feature = "protocol-2025-11-25")]
 pub use elicitation::McpElicitation;
 /// Collection of built-in MCP request handlers
 pub use handlers::*;
 /// Logging provider for structured application logs
+#[cfg(feature = "protocol-2025-11-25")]
 pub use logging::McpLogger;
 /// Notification system for real-time client updates via SSE
 pub use notifications::McpNotification;
@@ -172,27 +185,37 @@ pub use resource::McpResource;
 /// Root provider for workspace and project context
 pub use roots::McpRoot;
 /// Sampling configuration for LLM inference parameters
+#[cfg(feature = "protocol-2025-11-25")]
 pub use sampling::McpSampling;
 /// Security middleware and access control components
 pub use security::{
     AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,
 };
+/// Handler for the 2026-07-28 `server/discover` method
+#[cfg(feature = "protocol-2026-07-28")]
+pub use server::DiscoverHandler;
+/// Core MCP server and session-aware handlers
+#[cfg(feature = "protocol-2025-11-25")]
+pub use server::SessionAwareInitializeHandler;
 /// Core MCP server and session-aware handlers
 pub use server::{
-    ListToolsHandler, McpServer, SessionAwareInitializeHandler, SessionAwareMcpHandlerBridge,
-    SessionAwareToolHandler,
+    ListToolsHandler, McpServer, SessionAwareMcpHandlerBridge, SessionAwareToolHandler,
 };
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionEventDispatcher, SessionManager};
 /// Task executor abstraction for pluggable execution backends
+#[cfg(feature = "protocol-2025-11-25")]
 pub use task::executor::{TaskExecutor, TaskHandle};
 /// Task handlers for tasks/get, tasks/list, tasks/cancel, tasks/result
+#[cfg(feature = "protocol-2025-11-25")]
 pub use task::handlers::{
     TasksCancelHandler, TasksGetHandler, TasksListHandler, TasksResultHandler,
 };
 /// Task runtime for managing long-running operations
+#[cfg(feature = "protocol-2025-11-25")]
 pub use task::runtime::TaskRuntime;
 /// Default Tokio-based task executor
+#[cfg(feature = "protocol-2025-11-25")]
 pub use task::tokio_executor::TokioTaskExecutor;
 /// Tool trait for executable MCP functions
 pub use tool::McpTool;
@@ -232,10 +255,10 @@ pub enum ToolChangeMode {
 pub use turul_mcp_session_storage::SessionView;
 
 // Re-export foundational types
-/// JSON-RPC 2.0 request dispatcher and handler trait for protocol operations
-pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 /// Core MCP protocol types, errors, and specification compliance
 pub use turul_mcp_protocol::*;
+/// JSON-RPC 2.0 request dispatcher and handler trait for protocol operations
+pub use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 
 // Re-export builder pattern for Level 3 tool creation
 /// Dynamic tool creation with runtime configuration and type-safe builders

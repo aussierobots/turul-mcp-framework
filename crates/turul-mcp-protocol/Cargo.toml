@@ -1,20 +1,29 @@
 [package]
 name = "turul-mcp-protocol"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Model Context Protocol (MCP) specification implementation - Current version alias"
+readme = "README.md"
 
 [features]
-default = []
-server = ["turul-mcp-protocol-2025-11-25/server"]
-client = ["turul-mcp-protocol-2025-11-25/client"]
+# Spec-version coexistence: exactly one protocol-<date> feature selects which
+# versioned crate this alias re-exports (enforced by compile_error! in lib.rs).
+# Default is 2026-07-28 (stateless core); 2025-11-25 is the opt-in escape hatch
+# (`--no-default-features --features protocol-2025-11-25`).
+default = ["protocol-2026-07-28"]
+protocol-2025-11-25 = ["dep:turul-mcp-protocol-2025-11-25"]
+protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
+# server/client forward to whichever versioned crate is active (`?` = only if enabled).
+server = ["turul-mcp-protocol-2025-11-25?/server", "turul-mcp-protocol-2026-07-28?/server"]
+client = ["turul-mcp-protocol-2025-11-25?/client", "turul-mcp-protocol-2026-07-28?/client"]
 
 [dependencies]
-turul-mcp-protocol-2025-11-25.workspace = true
+turul-mcp-protocol-2025-11-25 = { workspace = true, optional = true }
+turul-mcp-protocol-2026-07-28 = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

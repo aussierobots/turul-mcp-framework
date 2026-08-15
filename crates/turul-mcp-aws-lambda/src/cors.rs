@@ -36,26 +36,34 @@ pub struct CorsConfig {
 
 impl Default for CorsConfig {
     fn default() -> Self {
+        // `Mcp-Session-Id` exists only on the 2025-11-25 wire. The 2026-07-28
+        // stateless core removed protocol-level sessions: the transport ignores
+        // an inbound session header and never mints one, so advertising it to a
+        // browser would claim a contract this server does not honour.
+        let mut allowed_headers = vec![
+            "Content-Type".to_string(),
+            "Accept".to_string(),
+            "Authorization".to_string(),
+        ];
+        #[cfg(feature = "protocol-2025-11-25")]
+        allowed_headers.push("Mcp-Session-Id".to_string());
+        allowed_headers.push("Mcp-Protocol-Version".to_string());
+        allowed_headers.push("Last-Event-ID".to_string());
+
+        let mut expose_headers = vec!["Mcp-Protocol-Version".to_string()];
+        #[cfg(feature = "protocol-2025-11-25")]
+        expose_headers.push("Mcp-Session-Id".to_string());
+        // Exposed so browser OAuth clients can read the RFC 9728
+        // challenge on 401 responses (non-safelisted CORS header).
+        expose_headers.push("WWW-Authenticate".to_string());
+
         Self {
             allowed_origins: vec!["*".to_string()],
             allowed_methods: vec![Method::GET, Method::POST, Method::DELETE, Method::OPTIONS],
-            allowed_headers: vec![
-                "Content-Type".to_string(),
-                "Accept".to_string(),
-                "Authorization".to_string(),
-                "Mcp-Session-Id".to_string(),
-                "Mcp-Protocol-Version".to_string(),
-                "Last-Event-ID".to_string(),
-            ],
+            allowed_headers,
             allow_credentials: false,
             max_age: Some(86400), // 24 hours
-            expose_headers: vec![
-                "Mcp-Session-Id".to_string(),
-                "Mcp-Protocol-Version".to_string(),
-                // Exposed so browser OAuth clients can read the RFC 9728
-                // challenge on 401 responses (non-safelisted CORS header).
-                "WWW-Authenticate".to_string(),
-            ],
+            expose_headers,
         }
     }
 }
@@ -334,6 +342,79 @@ mod tests {
         assert_eq!(
             response.headers().get("access-control-expose-headers"),
             Some(&HeaderValue::from_static("X-Custom"))
+        );
+    }
+
+    /// Collect a response header's comma-separated entries, lowercased.
+    fn header_entries(response: &LambdaResponse<Body>, name: &str) -> Vec<String> {
+        response
+            .headers()
+            .get(name)
+            .map(|v| {
+                v.to_str()
+                    .unwrap()
+                    .split(',')
+                    .map(|s| s.trim().to_ascii_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    fn injected_default_response() -> LambdaResponse<Body> {
+        let config = CorsConfig::default();
+        let mut response = LambdaResponse::builder()
+            .status(200)
+            .body(Body::Empty)
+            .unwrap();
+        inject_cors_headers(&mut response, &config, Some("https://example.com")).unwrap();
+        response
+    }
+
+    #[cfg(feature = "protocol-2026-07-28")]
+    #[tokio::test]
+    async fn test_stateless_response_does_not_advertise_session_header() {
+        // 2026-07-28 removed protocol-level sessions. The transport ignores an
+        // inbound `Mcp-Session-Id` and never mints one, so neither the request
+        // allowlist nor the readable-response list may name it — a browser
+        // client would otherwise treat it as part of this server's contract.
+        let response = injected_default_response();
+
+        let allowed = header_entries(&response, "access-control-allow-headers");
+        assert!(
+            !allowed.iter().any(|h| h == "mcp-session-id"),
+            "2026-07-28 response must not advertise Mcp-Session-Id in \
+             Access-Control-Allow-Headers; got {allowed:?}",
+        );
+
+        let exposed = header_entries(&response, "access-control-expose-headers");
+        assert!(
+            !exposed.iter().any(|h| h == "mcp-session-id"),
+            "2026-07-28 response must not advertise Mcp-Session-Id in \
+             Access-Control-Expose-Headers; got {exposed:?}",
+        );
+
+        // The rest of the surface is unchanged — guards against a fix that
+        // empties the lists instead of removing one entry.
+        assert!(allowed.iter().any(|h| h == "mcp-protocol-version"));
+        assert!(exposed.iter().any(|h| h == "www-authenticate"));
+    }
+
+    #[cfg(feature = "protocol-2025-11-25")]
+    #[tokio::test]
+    async fn test_stateful_response_advertises_session_header() {
+        // 2025-11-25 clients MUST send `Mcp-Session-Id` after initialization
+        // and MUST read it off the initialize response, so both lists name it.
+        let response = injected_default_response();
+
+        assert!(
+            header_entries(&response, "access-control-allow-headers")
+                .iter()
+                .any(|h| h == "mcp-session-id"),
+        );
+        assert!(
+            header_entries(&response, "access-control-expose-headers")
+                .iter()
+                .any(|h| h == "mcp-session-id"),
         );
     }
 

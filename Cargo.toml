@@ -5,6 +5,10 @@ members = [
   "crates/turul-mcp-json-rpc-server",
   "crates/turul-mcp-protocol-2025-06-18",
   "crates/turul-mcp-protocol-2025-11-25",
+  "crates/turul-mcp-protocol-2026-07-28",
+  "crates/turul-mcp-schema-validation",
+  "crates/turul-mcp-ext-apps",
+  "crates/turul-mcp-ext-tasks",
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
   "crates/turul-mcp-task-storage",
@@ -19,31 +23,33 @@ members = [
 
   # Test crates
 
-  # Active examples (33 total)
-  "examples/alert-system-server",
+  # Examples. Every directory under examples/ must be a member here, must be
+  # listed in EXAMPLES.md, and must be either in `default-members` below or
+  # named on a `-p` gate line in scripts/ci-gates.sh. The
+  # `every_example_is_documented_and_gated` test in tests/examples_guard.rs
+  # enforces all three.
   "examples/audit-trail-server",
-  "examples/builders-showcase",
+  "examples/bilingual-fleet-client",
   "examples/calculator-add-builder-server",
   "examples/calculator-add-function-server",
   "examples/calculator-add-manual-server",
   "examples/calculator-add-simple-server-derive",
   "examples/completion-server",
-  "examples/comprehensive-server",
   "examples/derive-macro-server",
-  "examples/dynamic-resource-server",
   "examples/dynamic-tools-server",
-  "examples/dynamic-tools-test-client",
   "examples/elicitation-server",
+  "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
   "examples/lambda-mcp-client",
   "examples/lambda-mcp-server",
-  "examples/lambda-mcp-server-streaming",
-  "examples/manual-tools-server",
+  "examples/interop-client-probe",
+  "examples/interop-fixture-server",
   "examples/minimal-server",
+  "examples/mrtr-elicitation-server",
   "examples/notification-server",
+  "examples/origin-policy-server",
   "examples/pagination-server",
-  "examples/performance-testing",
   "examples/prompts-server",
   "examples/prompts-test-server",
   "examples/resource-server",
@@ -53,7 +59,6 @@ members = [
   "examples/roots-server",
   "examples/sampling-server",
   "examples/simple-dynamodb-session",             # Simplified and ready - utility binaries commented out
-  "examples/simple-logging-server",
   "examples/simple-postgres-session",             # Fixed API mismatches - ready to use
   "examples/simple-sqlite-session",               # Fixed API mismatches - ready to use
   "examples/stateful-server",
@@ -62,10 +67,9 @@ members = [
   "examples/tools-test-server",
   "examples/zero-config-getting-started",
 
-  # MCP 2025-11-25 feature showcases
+  # MCP 2026-07-28 feature showcases
+  "examples/header-bound-tools-server",
   "examples/icon-showcase",
-  "examples/task-types-showcase",
-  "examples/sampling-with-tools-showcase",
 
   # Tasks E2E test examples
   "examples/tasks-e2e-inmemory-server",
@@ -74,13 +78,11 @@ members = [
   # Moved from turul-mcp-server/examples
   "examples/client-initialise-server",
   "examples/client-initialise-report",
-  "examples/client-task-lifecycle",
   "examples/logging-test-client",
   "examples/logging-test-server",
-  "examples/session-aware-logging-demo",
-  "examples/session-logging-proof-test",
   "examples/session-management-compliance-test",
   "examples/streamable-http-client",
+  "examples/streamable-http-client-2025-11-25",
 
   # AWS/Lambda authorizer examples
   "examples/lambda-authorizer",
@@ -105,12 +107,91 @@ members = [
   "tests/shared",
 ]
 
+# The default `cargo build`/`cargo test` path is the 2026-07-28 spec. Only crates
+# that build under the 2026 default are listed here; the inherently-2025 task-storage
+# (tasks moved to an extension) and the not-yet-migrated examples/tests stay out of
+# the default path and are built explicitly under `--features protocol-2025-11-25`.
+# Examples are added back here as they are migrated to 2026.
+default-members = [
+  "crates/turul-mcp-protocol-2026-07-28",
+  "crates/turul-mcp-schema-validation",
+  "crates/turul-mcp-ext-apps",
+  "crates/turul-mcp-ext-tasks",
+  "crates/turul-mcp-protocol",
+  "crates/turul-mcp-session-storage",
+  "crates/turul-mcp-server-state-storage",
+  "crates/turul-http-mcp-server",
+  "crates/turul-mcp-server",
+  "crates/turul-mcp-derive",
+  "crates/turul-mcp-builders",
+  "crates/turul-mcp-aws-lambda",
+  "crates/turul-mcp-oauth",
+
+  # Examples that build under the 2026-07-28 default. The only examples held out
+  # are the ones whose manifests pin `protocol-2025-11-25`: unifying those into
+  # this build set makes the turul-mcp-protocol alias see both spec features at
+  # once and the spec mutex fires. They are gated in scripts/ci-gates.sh
+  # `gate_opt_in_2025` instead.
+  #
+  # Examples that depend on turul-mcp-client belong here despite the client
+  # being bilingual — it links the versioned protocol crates directly and never
+  # the alias, so unification stays single-spec (verified by building this set).
+  "examples/audit-trail-server",
+  "examples/bilingual-fleet-client",
+  "examples/calculator-add-builder-server",
+  "examples/calculator-add-function-server",
+  "examples/calculator-add-manual-server",
+  "examples/calculator-add-simple-server-derive",
+  "examples/client-initialise-report",
+  "examples/completion-server",
+  "examples/derive-macro-server",
+  "examples/ext-tasks-server",
+  "examples/function-macro-server",
+  "examples/function-resource-server",
+  "examples/header-bound-tools-server",
+  "examples/icon-showcase",
+  "examples/interop-client-probe",
+  "examples/lambda-authorizer",
+  "examples/lambda-mcp-client",
+  "examples/middleware-auth-lambda",
+  "examples/middleware-auth-server",
+  "examples/middleware-logging-server",
+  "examples/middleware-rate-limit-server",
+  "examples/interop-fixture-server",
+  "examples/minimal-server",
+  "examples/mrtr-elicitation-server",
+  "examples/notification-server",
+  "examples/origin-policy-server",
+  "examples/oauth-resource-server",
+  "examples/pagination-server",
+  "examples/prompts-server",
+  "examples/resource-server",
+  "examples/resources-server",
+  "examples/session-management-compliance-test",
+  "examples/simple-dynamodb-session",
+  "examples/simple-postgres-session",
+  "examples/simple-sqlite-session",
+  "examples/streamable-http-client",
+  "examples/streamable-http-client-2025-11-25",
+  "examples/tool-output-introspection",
+  "examples/tool-output-schemas",
+  "examples/zero-config-getting-started",
+]
+
 exclude = [
+  # Archived examples: kept for reference, deliberately not built.
+  # See EXAMPLES.md §Archived for why each was retired.
+  "examples/archived",
   # AWS examples for future phase - re-enabled for 0.2.0
 ]
 
 [workspace.package]
-version = "0.3.47"
+# Per-crate independent versioning: individual crates carry their own literal
+# `version = "..."` declarations and do NOT inherit from this field. The value
+# here is a default for tooling that still references
+# `[workspace.package].version` (e.g. some IDE plugins); it does not flow into
+# any published crate.
+version = "0.4.0"
 edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
 license = "MIT OR Apache-2.0"
@@ -122,7 +203,12 @@ homepage = "https://github.com/aussierobots/turul-mcp-framework"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 schemars = "1.2"
-serde_yml = "0.0.12"
+# JSON Schema 2020-12 dialect validation for tool inputSchema. No
+# default features: excludes reqwest/resolve-file/resolve-http/tls-* so
+# remote/local $ref fetching is impossible to compile in, independent of the
+# in-process `Retrieve` guard the validator also installs.
+jsonschema = { version = "0.49", default-features = false }
+serde_yml = "0.0.13"
 thiserror = "2.0"
 async-trait = "0.1"
 async-stream = "0.3"
@@ -133,36 +219,51 @@ once_cell = "1"
 
 # HTTP/Server dependencies
 tokio = { version = "1", features = ["full"] }
-hyper = { version = "1.9", features = ["full"] }
+hyper = { version = "1.11", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 tower = { version = "0.5", features = ["full"] }
-tower-http = { version = "0.6", features = ["full"] }
+tower-http = { version = "0.7", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["full"] }
-tokio-tungstenite = { version = "0.29"}
-http = "1.4"
+http = "1.5"
 http-body-util = "0.1"
 http-body = "1"
 bytes = "1"
 
 # turul-rpc — generic JSON-RPC 2.0 framework, upstream of turul-mcp-json-rpc-server.
-turul-rpc = { version = "0.1", default-features = false }
+# This branch standardizes on the published `turul-rpc` 0.2 from crates.io for
+# every crate; 0.1 is not referenced anywhere on this branch.
+turul-rpc = { version = "0.2", default-features = false }
 
-# Internal crate dependencies
-turul-mcp-json-rpc-server = { version = "0.3.47", path = "crates/turul-mcp-json-rpc-server" }
-turul-mcp-protocol-2025-06-18 = { version = "0.3.47", path = "crates/turul-mcp-protocol-2025-06-18" }
-turul-mcp-protocol-2025-11-25 = { version = "0.3.47", path = "crates/turul-mcp-protocol-2025-11-25" }
-turul-mcp-protocol = { version = "0.3.47", path = "crates/turul-mcp-protocol" }
-turul-mcp-session-storage = { version = "0.3.47", path = "crates/turul-mcp-session-storage" }
-turul-mcp-task-storage = { version = "0.3.47", path = "crates/turul-mcp-task-storage" }
-turul-mcp-server-state-storage = { version = "0.3.47", path = "crates/turul-mcp-server-state-storage" }
-turul-http-mcp-server = { version = "0.3.47", path = "crates/turul-http-mcp-server" }
-turul-mcp-server = { version = "0.3.47", path = "crates/turul-mcp-server" }
-turul-mcp-derive = { version = "0.3.47", path = "crates/turul-mcp-derive" }
-turul-mcp-client = { version = "0.3.47", path = "crates/turul-mcp-client" }
-turul-mcp-builders = { version = "0.3.47", path = "crates/turul-mcp-builders" }
-turul-mcp-aws-lambda = { version = "0.3.47", path = "crates/turul-mcp-aws-lambda" }
-turul-mcp-oauth = { version = "0.3.47", path = "crates/turul-mcp-oauth" }
+# turul-jwt-validator — generic JWT/JWKS validator, upstream of what was
+# turul-mcp-oauth::jwt. Published crates.io pin (not a path dep) so the branch
+# builds without a sibling checkout. `rust_crypto` keeps the workspace's
+# existing jsonwebtoken backend; the crate defaults to aws_lc_rs.
+turul-jwt-validator = { version = "0.3", default-features = false, features = ["rust_crypto"] }
+
+# Internal crate dependencies.
+# Per-crate independent versioning: each crate publishes at its own semver.
+# The version pinned here is what consumers of this workspace see for
+# path+version resolution. Frozen historical protocol crates (`2025-06-18`,
+# `2025-11-25`) stay at their last 0.3.x publish — everything else moves on
+# its own cadence.
+turul-mcp-json-rpc-server = { version = "0.3", path = "crates/turul-mcp-json-rpc-server" }
+turul-mcp-protocol-2025-06-18 = { version = "0.3", path = "crates/turul-mcp-protocol-2025-06-18" }
+turul-mcp-protocol-2025-11-25 = { version = "0.3", path = "crates/turul-mcp-protocol-2025-11-25" }
+turul-mcp-protocol-2026-07-28 = { version = "0.4", path = "crates/turul-mcp-protocol-2026-07-28" }
+turul-mcp-schema-validation = { version = "0.4", path = "crates/turul-mcp-schema-validation" }
+turul-mcp-protocol = { version = "0.4", path = "crates/turul-mcp-protocol" }
+turul-mcp-session-storage = { version = "0.4", path = "crates/turul-mcp-session-storage" }
+turul-mcp-task-storage = { version = "0.4", path = "crates/turul-mcp-task-storage" }
+turul-mcp-server-state-storage = { version = "0.4", path = "crates/turul-mcp-server-state-storage" }
+turul-http-mcp-server = { version = "0.4", path = "crates/turul-http-mcp-server" }
+turul-mcp-server = { version = "0.4", path = "crates/turul-mcp-server" }
+turul-mcp-derive = { version = "0.4", path = "crates/turul-mcp-derive" }
+turul-mcp-client = { version = "0.4", path = "crates/turul-mcp-client" }
+turul-mcp-ext-tasks = { version = "0.1", path = "crates/turul-mcp-ext-tasks" }
+turul-mcp-builders = { version = "0.4", path = "crates/turul-mcp-builders" }
+turul-mcp-aws-lambda = { version = "0.4", path = "crates/turul-mcp-aws-lambda" }
+turul-mcp-oauth = { version = "0.4", path = "crates/turul-mcp-oauth" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -171,9 +272,9 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "htt
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
-criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
-sqlx = { version = "0.8", features = [
-  "runtime-tokio-rustls",
+sqlx = { version = "0.9.0", features = [
+  "runtime-tokio",
+  "tls-rustls-ring",
   "sqlite",
   "postgres",
   "chrono",
@@ -181,12 +282,16 @@ sqlx = { version = "0.8", features = [
 ] }
 tempfile = "3"
 toml = "1.1"
-regex = "1.12"
-base64 = "0.22"
+regex = "1.13"
+base64 = "0.23"
+wiremock = "0.6"
+# Test-only: reads RSA modulus/exponent out of a generated key to build a JWKS
+# document. Must track the crypto-bigint that `rsa` itself uses.
+crypto-bigint = "0.7"
 urlencoding = "2.1"
 
 # AWS SDK dependencies
-aws-config = "1.8"
+aws-config = "1.10"
 aws-sdk-dynamodb = "1"
 aws-sdk-sqs = "1"
 aws-sdk-sns = "1"
@@ -194,11 +299,10 @@ aws-sdk-sns = "1"
 # AWS Lambda dependencies
 lambda_runtime = "1"
 lambda_http = "1"
-lambda-web = "0.2"
 aws_lambda_events = "1"
 
 # Auth/Crypto dependencies
-jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto", "use_pem"] }
 rsa = "0.10.0-rc.17"
 
 # Other dependencies
@@ -206,24 +310,35 @@ url = "2.5"
 parking_lot = "0.12"
 rand = { version = "0.10", features = ["thread_rng"] }
 tracing-test = "0.2"
-pin-project = "1.1"
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = "2.0"
-serial_test = "3.4"
+syn = "3.0"
+serial_test = "4.0"
 tokio-test = "0.4"
 md5 = "0.8"
 
 # YAML processing
-serde_yaml = "0.9"
 
 # Example-specific dependencies
-indicatif = "0.18"
 colored = "3.1"
 
 # Test-specific dependencies
 mcp-e2e-shared = { path = "tests/shared" }
 
+
+[profile.dev]
+# Line tables, not full debuginfo: keeps file:line in backtraces, drops the type
+# information only a debugger would read.
+debug = "line-tables-only"
+
+# Dependencies carry no debuginfo: we never step into serde/tokio/hyper, and
+# their debuginfo was the bulk of target/debug/deps. Panic messages and their
+# file:line survive regardless — those come from #[track_caller], not debuginfo.
+[profile.dev.package."*"]
+debug = 0
+
+[profile.test.package."*"]
+debug = 0
 
 [profile.release]
 lto = true

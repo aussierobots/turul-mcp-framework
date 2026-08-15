@@ -1,5 +1,7 @@
-// turul-mcp-server v0.3
-// Rate limiting middleware: per-session counters with configurable window
+// turul-mcp-server v0.4
+// Rate limiting middleware: per-caller counters with configurable window.
+// Keyed on x-api-key, not session_id — on 2026-07-28 every request gets a
+// fresh throwaway session, so a session-keyed counter never accumulates.
 
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -30,23 +32,20 @@ impl McpMiddleware for RateLimitMiddleware {
     async fn before_dispatch(
         &self,
         ctx: &mut RequestContext<'_>,
-        session: Option<&dyn SessionView>,
+        _session: Option<&dyn SessionView>,
         _injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Don't rate-limit initialize (session doesn't exist yet)
-        if ctx.method() == "initialize" {
-            return Ok(());
-        }
-
-        let session_id = session
-            .and_then(|s| s.session_id())
+        let caller_id = ctx
+            .metadata()
+            .get("x-api-key")
+            .and_then(|v| v.as_str())
             .unwrap_or("anonymous")
             .to_string();
 
         let mut counters = self.counters.lock().unwrap();
         let now = Instant::now();
 
-        let (count, window_start) = counters.entry(session_id).or_insert((0, now));
+        let (count, window_start) = counters.entry(caller_id).or_insert((0, now));
 
         // Reset window if expired
         if now.duration_since(*window_start).as_secs() >= self.window_seconds {

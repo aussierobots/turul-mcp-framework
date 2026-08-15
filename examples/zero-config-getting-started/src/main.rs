@@ -43,15 +43,27 @@ impl LogProgress {
         session: Option<turul_mcp_server::SessionContext>,
     ) -> turul_mcp_server::McpResult<String> {
         if let Some(session) = session {
-            // Send built-in MCP progress notification to connected clients via SSE
-            session
-                .notify_progress(&self.message, self.percent as u64)
+            // The notification's `progressToken` must be the one the CALLER put in
+            // `params._meta.progressToken` — that is what lets a client match the
+            // update to its own request. Human-readable text goes in `message`.
+            // Returns false when the caller declared no token, which means it never
+            // opted into progress, so there is nothing to send.
+            let sent = session
+                .notify_request_progress_with_message(
+                    self.percent as f64,
+                    Some(100.0),
+                    &self.message,
+                )
                 .await;
-            tracing::info!(
-                "Sent MCP progress notification: {} ({}%)",
-                self.message,
-                self.percent
-            );
+            if sent {
+                tracing::info!(
+                    "Sent progress {}% against the caller's own token: {}",
+                    self.percent,
+                    self.message
+                );
+            } else {
+                tracing::info!("Caller declared no progressToken — nothing to send");
+            }
         }
 
         Ok(format!(
@@ -131,14 +143,14 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!(
         "   Built-in MCP notifications: progress, logging, resources (no registration needed)"
     );
-    println!("   Session storage: InMemorySessionStorage (zero-config default)");
+    println!("   Stateless 2026-07-28 core: no sessions — capabilities ride per-request _meta");
     println!("   HTTP transport: http://127.0.0.1:8641/mcp");
     println!();
 
     // ZERO CONFIGURATION - Framework handles everything automatically
     let server = McpServer::builder()
         .name("zero-config-demo")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .tool(Calculator { a: 0.0, b: 0.0 }) // Framework → tools/call
         .tool(LogProgress {
             message: String::new(),
@@ -152,23 +164,29 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     println!("✅ Server configured with zero manual configuration!");
 
-    println!("Server ready! Test with:");
+    const META: &str = r#""_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}"#;
+    println!("Server ready! Test with (2026-07-28 stateless — every request carries _meta):");
     println!("1. Calculator tool:");
     println!("   curl -X POST http://127.0.0.1:8641/mcp \\");
-    println!("     -H 'Content-Type: application/json' \\");
+    println!("     -H 'Content-Type: application/json' -H 'MCP-Protocol-Version: 2026-07-28' \\");
+    println!("     -H 'Mcp-Method: tools/call' -H 'Mcp-Name: calculator' \\");
     println!(
-        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{\"name\":\"calculator\",\"arguments\":{{\"a\":5,\"b\":3}}}}}}'"
+        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{{\"name\":\"calculator\",\"arguments\":{{\"a\":5,\"b\":3}},{META}}}}}'"
     );
     println!();
-    println!("2. Progress logging tool (sends real-time MCP notifications):");
-    println!("   curl -X POST http://127.0.0.1:8641/mcp \\");
-    println!("     -H 'Content-Type: application/json' \\");
+    println!("2. Progress logging tool (request-scoped notifications ride the POST response):");
+    println!("   curl -N -X POST http://127.0.0.1:8641/mcp \\");
     println!(
-        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{{\"name\":\"log_progress\",\"arguments\":{{\"message\":\"Processing data\",\"percent\":75}}}}}}'"
+        "     -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \\"
     );
-    println!();
-    println!("3. Monitor MCP progress notifications (SSE):");
-    println!("   curl -N -H 'Accept: text/event-stream' http://127.0.0.1:8641/mcp");
+    println!("     -H 'MCP-Protocol-Version: 2026-07-28' \\");
+    println!("     -H 'Mcp-Method: tools/call' -H 'Mcp-Name: log_progress' \\");
+    println!(
+        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/call\",\"params\":{{\"name\":\"log_progress\",\"arguments\":{{\"message\":\"Processing data\",\"percent\":75}},{META}}}}}'"
+    );
+    println!(
+        "   (the 2026 endpoint is POST-only — notifications arrive on the request's own SSE stream)"
+    );
     println!();
 
     Ok(server.run().await?)

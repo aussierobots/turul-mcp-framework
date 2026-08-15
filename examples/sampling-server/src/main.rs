@@ -19,6 +19,24 @@ use turul_mcp_protocol::{
 use turul_mcp_server::sampling::McpSampling;
 use turul_mcp_server::{McpResult, McpServer};
 
+/// Does the request's `modelPreferences.hints` name this provider's model?
+///
+/// A request with no hints has expressed no preference, so any provider may
+/// claim it. A request with hints is claimed only by the provider whose
+/// model id is named — this is what lets a client route
+/// `sampling/createMessage` to a specific registered provider.
+fn hints_match(request: &CreateMessageRequest, model_id: &str) -> bool {
+    match request
+        .params
+        .model_preferences
+        .as_ref()
+        .and_then(|prefs| prefs.hints.as_ref())
+    {
+        Some(hints) => hints.iter().any(|h| h.name.as_deref() == Some(model_id)),
+        None => true,
+    }
+}
+
 /// Creative writing assistant sampling handler
 /// Implements actual MCP sampling protocol for creative content generation
 pub struct CreativeWritingSampler {
@@ -222,6 +240,10 @@ I'd love to help you develop this further! What specific aspect would you like t
         ))
     }
 
+    fn can_handle(&self, request: &CreateMessageRequest) -> bool {
+        hints_match(request, "creative-assistant-v1")
+    }
+
     async fn validate_request(&self, request: &CreateMessageRequest) -> McpResult<()> {
         // Ensure we have at least one message
         if request.params.messages.is_empty() {
@@ -319,6 +341,10 @@ impl HasSamplingTools for TechnicalWritingSampler {}
 
 #[async_trait]
 impl McpSampling for TechnicalWritingSampler {
+    fn can_handle(&self, request: &CreateMessageRequest) -> bool {
+        hints_match(request, "technical-assistant-v1")
+    }
+
     async fn sample(&self, request: CreateMessageRequest) -> McpResult<CreateMessageResult> {
         info!("📋 Processing technical writing sampling request");
 
@@ -455,6 +481,10 @@ impl HasSamplingTools for ConversationalSampler {}
 
 #[async_trait]
 impl McpSampling for ConversationalSampler {
+    fn can_handle(&self, request: &CreateMessageRequest) -> bool {
+        hints_match(request, "conversational-assistant-v1")
+    }
+
     async fn sample(&self, _request: CreateMessageRequest) -> McpResult<CreateMessageResult> {
         info!("💬 Processing conversational sampling request");
 
@@ -515,7 +545,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("real-sampling-server")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Real MCP Sampling Server")
         .instructions(
             "This server demonstrates ACTUAL MCP sampling protocol implementation. \

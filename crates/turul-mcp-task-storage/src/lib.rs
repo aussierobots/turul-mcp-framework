@@ -49,6 +49,11 @@
 //! - **`TaskOutcome`**: Success/Error result stored for `tasks/result` retrieval
 //! - **State machine**: Validates transitions per MCP spec lifecycle
 
+#[cfg(feature = "protocol-2026-07-28")]
+compile_error!(
+    "turul-mcp-task-storage targets MCP 2025-11-25; in 2026-07-28 tasks moved to the turul-mcp-ext-tasks extension."
+);
+
 // Core modules
 pub mod error;
 #[cfg(feature = "in-memory")]

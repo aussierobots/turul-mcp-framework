@@ -101,39 +101,21 @@ async fn test_roots_list_with_pagination() {
             51,
         )
         .await
-        .expect("Failed to list roots with cursor");
+        .expect("request transport should succeed");
 
     debug!("Paginated roots result: {:?}", paginated_result);
 
-    assert!(
-        paginated_result.contains_key("result"),
-        "Response should contain 'result'"
+    // Pagination §Error Handling: a fabricated cursor is invalid and SHOULD
+    // produce -32602 — not a silent page.
+    let error = paginated_result
+        .get("error")
+        .and_then(|e| e.as_object())
+        .expect("fabricated cursor must be rejected with a JSON-RPC error");
+    assert_eq!(
+        error.get("code").and_then(|c| c.as_i64()),
+        Some(-32602),
+        "invalid cursor must be -32602: {error:?}"
     );
-    let result = paginated_result.get("result").unwrap().as_object().unwrap();
-
-    assert!(
-        result.contains_key("roots"),
-        "Result should contain 'roots'"
-    );
-
-    // Check for pagination metadata if present
-    if result.contains_key("nextCursor") {
-        let next_cursor = result.get("nextCursor").unwrap();
-        assert!(
-            next_cursor.is_string() || next_cursor.is_null(),
-            "nextCursor should be string or null"
-        );
-        info!(
-            "✅ Pagination metadata present: nextCursor={:?}",
-            next_cursor
-        );
-    }
-
-    // Check for _meta field if present (MCP supports _meta)
-    if result.contains_key("_meta") {
-        let meta = result.get("_meta").unwrap().as_object().unwrap();
-        info!("✅ Meta information present: {:?}", meta);
-    }
 }
 
 #[tokio::test]

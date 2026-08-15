@@ -1,12 +1,12 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Lambda MCP server with OAuth 2.1 RS
 //
 // Cargo.toml dependencies:
-//   turul-mcp-aws-lambda = { version = "0.3", features = ["streaming", "dynamodb"] }
-//   turul-mcp-server = { version = "0.3" }
-//   turul-mcp-oauth = { version = "0.3" }
-//   turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
-//   turul-mcp-derive = { version = "0.3" }
+//   turul-mcp-aws-lambda = { version = "0.4", features = ["streaming", "dynamodb"] }
+//   turul-mcp-server = { version = "0.4" }
+//   turul-mcp-oauth = { version = "0.4" }
+//   turul-mcp-session-storage = { version = "0.4", features = ["dynamodb"] }
+//   turul-mcp-derive = { version = "0.4" }
 //   tokio = { version = "1", features = ["full"] }
 //   serde_json = "1"
 //

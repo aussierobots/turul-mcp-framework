@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-server.svg)](https://crates.io/crates/turul-mcp-server)
 [![Documentation](https://docs.rs/turul-mcp-server/badge.svg)](https://docs.rs/turul-mcp-server)
 
-High-level framework for building Model Context Protocol (MCP) servers with full MCP 2025-11-25 compliance.
+High-level framework for building Model Context Protocol (MCP) servers. The default build targets the MCP 2026-07-28 stateless core (`server/discover`, per-request `_meta`, no `Mcp-Session-Id`); MCP 2025-11-25 is opt-in via `--no-default-features --features http,sse,protocol-2025-11-25`.
 
 ## Overview
 
@@ -11,13 +11,13 @@ High-level framework for building Model Context Protocol (MCP) servers with full
 
 ## Features
 
-- ✅ **MCP 2025-11-25 Compliance** - Full protocol compliance with latest features
+- ✅ **MCP 2026-07-28 Default** - Stateless core (`server/discover`, per-request `_meta`); 2025-11-25 opt-in
 - ✅ **Zero-Configuration** - Framework auto-determines ALL methods from types  
 - ✅ **Four Tool Creation Levels** - Function/derive/builder/manual approaches
 - ✅ **Real-time Notifications** - SSE streaming with JSON-RPC format
 - ✅ **Session Management** - UUID v7 sessions with automatic cleanup
 - ✅ **Pluggable Storage** - InMemory, SQLite, PostgreSQL, DynamoDB backends
-- ✅ **Task Support** - MCP 2025-11-25 long-running task lifecycle with pluggable storage
+- ✅ **Task Support** - long-running task lifecycle with pluggable storage (core tasks are a 2025-11-25 opt-in feature; 2026-07-28 moves tasks to an extension)
 - ✅ **Type Safety** - Compile-time schema generation and validation
 
 ## Architectural Patterns
@@ -36,8 +36,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.3"
-turul-mcp-derive = "0.3"  # Required for function macros and derive macros
+turul-mcp-server = "0.4"
+turul-mcp-derive = "0.4"  # Required for function macros and derive macros
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ### Level 2: Derive Macros (Struct-Based)
-*Requires: `turul-mcp-derive = "0.3"` dependency*
+*Requires: `turul-mcp-derive = "0.4"` dependency*
 
 ```rust
 use turul_mcp_derive::McpTool;
@@ -358,7 +358,9 @@ server.run().await
 
 ## Protocol Compliance
 
-### MCP 2025-11-25 Features
+> The default build is the MCP 2026-07-28 stateless core. The features below are the MCP 2025-11-25 opt-in spec lane (`--no-default-features --features http,sse,protocol-2025-11-25`); `initialize`/`notifications/initialized`/`Mcp-Session-Id` apply only there.
+
+### MCP 2025-11-25 Features (opt-in)
 
 - ✅ **Initialize/Initialized** - Capability negotiation
 - ✅ **Tools** - Dynamic tool calling with schema validation
@@ -388,7 +390,7 @@ let server = McpServer::builder()
 // - resources.subscribe = false (no subscriptions)
 // - resources.listChanged = false (static resource list)
 
-// Optional strict lifecycle: notifications/initialized can be sent after successful setup
+// Optional strict lifecycle (2025-11-25 opt-in lane): notifications/initialized after setup
 ```
 
 ## Examples
@@ -428,7 +430,7 @@ All MCP components use consistent trait patterns from `turul-mcp-builders`:
 
 See [`turul-mcp-builders`](../turul-mcp-builders/README.md) for trait documentation.
 
-## Task Storage (MCP 2025-11-25)
+## Task Storage (MCP 2025-11-25 opt-in)
 
 Enable long-running task support by adding a `TaskStorage` backend:
 
@@ -453,7 +455,7 @@ See `turul-mcp-task-storage` for backend options and the task storage trait.
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["sqlite", "postgres"] }
+turul-mcp-server = { version = "0.4", features = ["sqlite", "postgres"] }
 ```
 
 - `default` - All features enabled
@@ -472,8 +474,8 @@ cargo test --package turul-mcp-server
 # Test with specific storage backend
 cargo test --package turul-mcp-server --features sqlite
 
-# Integration tests
-cargo test --package turul-mcp-server --test integration
+# Wire-acceptance suites (one target per behaviour; see tests/ for the full list)
+cargo test --package turul-mcp-server --test discover_stateless_2026
 ```
 
 ## License

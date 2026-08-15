@@ -50,21 +50,101 @@ fn camel_to_readable(input: &str) -> String {
     result
 }
 
+/// Lift `icons = <expr>` out of `#[tool(...)]`, returning the expression and the
+/// attribute list with that entry removed.
+///
+/// `extract_tool_meta` treats a `#[tool(...)]` key it does not recognise as a
+/// parse failure, so `icons` has to be removed before the remaining keys are
+/// handed to it. Splitting happens on token trees rather than parsed `Meta`
+/// because `output = Vec<T>` is a type, not an expression.
+fn split_icons_attr(attrs: &[syn::Attribute]) -> Result<(Option<syn::Expr>, Vec<syn::Attribute>)> {
+    use proc_macro2::{TokenStream as TokenStream2, TokenTree};
+
+    let mut icons: Option<syn::Expr> = None;
+    let mut kept_attrs = Vec::new();
+
+    for attr in attrs {
+        let syn::Meta::List(list) = &attr.meta else {
+            kept_attrs.push(attr.clone());
+            continue;
+        };
+        if !list.path.is_ident("tool") {
+            kept_attrs.push(attr.clone());
+            continue;
+        }
+
+        let mut entries: Vec<Vec<TokenTree>> = vec![Vec::new()];
+        for tt in list.tokens.clone() {
+            match &tt {
+                TokenTree::Punct(p) if p.as_char() == ',' => entries.push(Vec::new()),
+                _ => entries.last_mut().unwrap().push(tt),
+            }
+        }
+
+        let mut kept_entries: Vec<TokenStream2> = Vec::new();
+        for entry in entries {
+            let is_icons = matches!(entry.first(), Some(TokenTree::Ident(i)) if i == "icons");
+            if !is_icons {
+                if !entry.is_empty() {
+                    kept_entries.push(entry.into_iter().collect());
+                }
+                continue;
+            }
+            // `icons` `=` <expr>
+            let value: TokenStream2 = entry.into_iter().skip(2).collect();
+            if value.is_empty() {
+                return Err(syn::Error::new_spanned(
+                    attr,
+                    "icons must be `icons = <expr>` yielding Vec<turul_mcp_protocol::icons::Icon>",
+                ));
+            }
+            icons = Some(syn::parse2(value)?);
+        }
+
+        let rebuilt = quote! { #(#kept_entries),* };
+        kept_attrs.push(syn::parse_quote!(#[tool(#rebuilt)]));
+    }
+
+    Ok((icons, kept_attrs))
+}
+
+/// `HasIcons` for a macro-authored tool. With no `icons = <expr>` the default
+/// (no icons) impl is emitted; the trait is a supertrait of `ToolDefinition`,
+/// so some impl is always required.
+pub(crate) fn generate_icons_impl(name: &syn::Ident, icons: Option<&syn::Expr>) -> TokenStream {
+    match icons {
+        Some(expr) => quote! {
+            impl turul_mcp_builders::traits::HasIcons for #name {
+                fn icons(&self) -> Option<&Vec<turul_mcp_protocol::icons::Icon>> {
+                    static ICONS: std::sync::OnceLock<Vec<turul_mcp_protocol::icons::Icon>> =
+                        std::sync::OnceLock::new();
+                    Some(ICONS.get_or_init(|| #expr))
+                }
+            }
+        },
+        None => quote! {
+            impl turul_mcp_builders::traits::HasIcons for #name {}
+        },
+    }
+}
+
 pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &input.ident;
 
     // AUTO-DETERMINE tool name from struct name (ZERO CONFIGURATION!)
     let auto_name = auto_determine_tool_name(name.to_string());
 
+    let (icons_expr, attrs) = split_icons_attr(&input.attrs)?;
+
     // Try to extract attributes, but use auto-determined values as defaults.
     // extract_tool_meta requires name+description; if missing, we parse partial
     // attributes (e.g., output, annotations) and fill in auto-determined defaults.
-    let tool_meta = match extract_tool_meta(&input.attrs) {
+    let tool_meta = match extract_tool_meta(&attrs) {
         Ok(meta) => meta,
         Err(_) => {
             // extract_tool_meta failed (likely missing name/description).
             // Re-parse attributes to salvage output, annotations, etc.
-            let partial = crate::utils::extract_tool_meta_partial(&input.attrs);
+            let partial = crate::utils::extract_tool_meta_partial(&attrs);
             crate::utils::ToolMeta {
                 name: auto_name,
                 description: camel_to_readable(&name.to_string()),
@@ -171,6 +251,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let annotations_impl =
         crate::utils::generate_annotations_impl(name, &tool_meta.to_annotation_meta());
 
+    let icons_impl = generate_icons_impl(name, icons_expr.as_ref());
+
     // Determine the output field name consistently for both schema and runtime
     let runtime_field_name = if let Some(ref output_type) = tool_meta.output_type {
         // User specified output type - use same logic as schema generation
@@ -261,9 +343,9 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 INPUT_SCHEMA.get_or_init(|| {
                     use std::collections::HashMap;
                     turul_mcp_protocol::tools::ToolSchema::object()
-                        .with_properties(HashMap::from([
+                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                             #(#schema_properties),*
-                        ]))
+                        ])))
                         .with_required(vec![
                             #(#required_fields),*
                         ])
@@ -319,9 +401,9 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 };
 
                 turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
+                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                         (field_name.to_string(), field_schema)
-                    ]))
+                    ])))
                     .with_required(vec![field_name.to_string()])
             }
 
@@ -371,9 +453,9 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 let field_schema = infer_schema(value);
 
                 turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
+                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                         (field_name.to_string(), field_schema)
-                    ]))
+                    ])))
                     .with_required(vec![field_name.to_string()])
             }
         }
@@ -386,7 +468,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_builders::traits::HasIcons for #name {}
+        #icons_impl
 
         #execution_impl
 
@@ -435,9 +517,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                             // Check if the schema needs correction based on actual return value
                             let needs_correction = if let Some(props) = &schema.properties {
                                 if let Some(output_schema) = props.get(&field_name) {
-                                    // Check if schema says "object" but value is array
-                                    use turul_mcp_protocol::schema::JsonSchema;
-                                    matches!(output_schema, JsonSchema::Object { .. }) && result_value.is_array()
+                                    // Schema says "object" but the value is an array.
+                                    turul_mcp_builders::tool_prop_is_object(output_schema) && result_value.is_array()
                                 } else {
                                     false
                                 }
@@ -456,7 +537,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                                     max_items: None,
                                 };
                                 Some(turul_mcp_protocol::tools::ToolSchema::object()
-                                    .with_properties(HashMap::from([(field_name.clone(), array_schema)]))
+                                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([(field_name.clone(), array_schema)])))
                                     .with_required(vec![field_name.clone()]))
                             } else {
                                 Some(schema.clone())

@@ -1,6 +1,6 @@
 [package]
 name = "prompts-test-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 description = "MCP Prompts Test Server - Comprehensive test prompts for E2E validation"
 license = "MIT OR Apache-2.0"
@@ -10,11 +10,12 @@ test = false
 name = "prompts-test-server"
 path = "src/main.rs"
 
+# 2025-11-25 E2E fixture; framework deps pinned to the 2025 opt-in independent of the workspace 2026 default.
 [dependencies]
 # Framework dependencies
-turul-mcp-server = { workspace = true, features = ["http"] }
-turul-mcp-protocol = { workspace = true }
-turul-mcp-builders = { workspace = true }
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 
 # Async runtime
 tokio.workspace = true

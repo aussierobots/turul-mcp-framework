@@ -141,4 +141,4 @@ Client sends initialize request with protocolVersion
 - [ADR-016: Task Storage Architecture](./016-task-storage-architecture.md) -- storage trait, 4 backends, parity test suite
 - [ADR-017: Task Runtime-Executor Boundary](./017-task-runtime-executor-boundary.md) -- three-layer split: storage / executor / runtime
 - [ADR-018: Task Pagination Cursor Contract](./018-task-pagination-cursor-contract.md) -- deterministic cursor-based pagination
-- [WORKING_MEMORY.md](../../WORKING_MEMORY.md) - Current migration status
+- WORKING_MEMORY.md - migration status at the time *(historical 0.3-era doc — deleted in the 0.4 docs purge; see the v0.3.x tags)*

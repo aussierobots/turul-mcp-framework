@@ -218,7 +218,8 @@ async fn test_handler_without_security() {
         .add_resource(resource);
 
     let params = json!({
-        "uri": "file:///tmp/test.txt"
+        "uri": "file:///tmp/test.txt",
+        "_meta": super::request_meta()
     });
 
     let result = handler.handle(Some(params)).await;
@@ -253,7 +254,8 @@ async fn test_security_with_valid_uri_template() {
 
     let session = create_test_session();
 
-    let params = json!({"uri": "file:///secure/alice123/data.json"});
+    let params =
+        json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
     let result = read_handler
         .handle_with_session(Some(params), Some(session))
         .await;
@@ -282,7 +284,7 @@ async fn test_security_blocks_invalid_uri() {
 
     let session = create_test_session();
 
-    let params = json!({"uri": "file:///etc/passwd"});
+    let params = json!({"uri": "file:///etc/passwd", "_meta": super::request_meta()});
     let result = read_handler
         .handle_with_session(Some(params), Some(session))
         .await;
@@ -310,7 +312,8 @@ async fn test_security_requires_session() {
         .add_template_resource(template, SecureTestResource::new());
 
     // Test request without session — should fail
-    let params = json!({"uri": "file:///secure/alice123/data.json"});
+    let params =
+        json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
     let result = read_handler.handle_with_session(Some(params), None).await;
 
     assert!(result.is_err());
@@ -347,7 +350,8 @@ async fn test_rate_limiting_integration() {
         .add_template_resource(template, SecureTestResource::new());
 
     let session = create_test_session();
-    let params = json!({"uri": "file:///secure/alice123/data.json"});
+    let params =
+        json!({"uri": "file:///secure/alice123/data.json", "_meta": super::request_meta()});
 
     // First two requests should succeed
     let result1 = read_handler
@@ -407,6 +411,7 @@ async fn test_input_validation_integration() {
     // Deeply nested JSON should fail
     let malicious_params = json!({
         "uri": "file:///secure/alice123/data.json",
+        "_meta": super::request_meta(),
         "nested": {
             "level1": {
                 "level2": {
@@ -509,7 +514,7 @@ async fn test_mime_type_and_size_validation() {
         );
 
     let session = create_test_session();
-    let params = json!({"uri": "file:///large.bin"});
+    let params = json!({"uri": "file:///large.bin", "_meta": super::request_meta()});
 
     let result = read_handler
         .handle_with_session(Some(params), Some(session))

@@ -1,6 +1,6 @@
 [package]
 name = "middleware-auth-lambda"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 publish = false
 description = "AWS Lambda MCP server with authentication middleware"
@@ -25,7 +25,6 @@ turul-mcp-protocol = { workspace = true }
 turul-mcp-session-storage = { workspace = true, features = ["dynamodb"] }
 turul-mcp-aws-lambda = { workspace = true }
 turul-http-mcp-server = { workspace = true }
-turul-mcp-json-rpc-server = { workspace = true }
 
 # Core dependencies
 tokio.workspace = true

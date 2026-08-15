@@ -1,15 +1,21 @@
 [package]
 name = "turul-mcp-derive"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Procedural macros for the MCP framework"
+readme = "README.md"
 
 [lib]
 proc-macro = true
+
+[features]
+default = ["protocol-2026-07-28"]
+protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25"]
+protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28"]
 
 [dependencies]
 proc-macro2 = { workspace = true }
@@ -21,7 +27,7 @@ regex = { workspace = true }
 async-trait.workspace = true
 
 # Internal dependencies
-turul-mcp-protocol.workspace = true
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
 schemars.workspace = true
 
 [dev-dependencies]
@@ -29,5 +35,5 @@ tokio = { workspace = true, features = ["test-util"] }
 async-trait.workspace = true
 tracing-test = { workspace = true }
 turul-mcp-server = { workspace = true }
-turul-mcp-builders = { workspace = true }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
 

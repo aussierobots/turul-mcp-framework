@@ -252,8 +252,8 @@ mod schema_generation_tests {
             "Unknown types should use schemars for schema generation, got: {schema_str}"
         );
         assert!(
-            contains_pattern(&schema_str, "convert_value_to_json_schema_with_defs"),
-            "Should use the schemars-to-JsonSchema converter, got: {schema_str}"
+            contains_pattern(&schema_str, "schemars_param_schema"),
+            "Should use the lane-aware schemars conversion helper, got: {schema_str}"
         );
     }
 

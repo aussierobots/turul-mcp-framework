@@ -37,7 +37,7 @@ bash plugins/turul-mcp-skills/scripts/scaffold-mcp-server.sh "$ARGUMENTS" --stor
 
 If the script is not available locally, generate the files manually following the patterns in [storage-backend-matrix.md](../references/storage-backend-matrix.md):
 
-- `Cargo.toml` with dependencies: `turul-mcp-server` (with backend-specific features), `turul-mcp-derive`, `turul-mcp-protocol`, `tokio`, `serde`, `serde_json`, `schemars`, `tracing`, `tracing-subscriber` (all targeting v0.3.x for turul crates). For non-inmemory backends, also add `turul-mcp-session-storage` with the matching feature.
+- `Cargo.toml` with dependencies: `turul-mcp-server` (with backend-specific features), `turul-mcp-derive`, `turul-mcp-protocol`, `tokio`, `serde`, `serde_json`, `schemars`, `tracing`, `tracing-subscriber` (all targeting v0.4.x for turul crates). For non-inmemory backends, also add `turul-mcp-session-storage` with the matching feature.
 - `src/main.rs` with a starter tool using the `#[mcp_tool]` function macro pattern and storage-specific builder setup.
 - `.env.example` (non-inmemory backends only) with connection string template.
 

@@ -18,16 +18,16 @@ Part of the [Turul MCP Framework](https://github.com/aussierobots/turul-mcp-fram
 ```toml
 [dependencies]
 # In-memory only (default)
-turul-mcp-server-state-storage = "0.3"
+turul-mcp-server-state-storage = "0.4"
 
 # With DynamoDB
-turul-mcp-server-state-storage = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-server-state-storage = { version = "0.4", features = ["dynamodb"] }
 ```
 
 Typically used via `turul-mcp-server` — the `dynamic-tools` feature pulls in this crate, and backend features (`sqlite`, `postgres`, `dynamodb`) forward automatically via weak dependency syntax:
 
 ```toml
-turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
+turul-mcp-server = { version = "0.4", features = ["dynamodb", "dynamic-tools"] }
 ```
 
 ## Trait

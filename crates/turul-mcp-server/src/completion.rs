@@ -83,6 +83,7 @@ pub trait McpCompletion: CompletionDefinition + Send + Sync {
 ///
 /// This is a convenience function for converting completion definitions
 /// to protocol requests.
+#[cfg(feature = "protocol-2025-11-25")]
 pub fn completion_to_request(completion: &dyn McpCompletion) -> CompleteRequest {
     completion.to_complete_request()
 }
@@ -145,6 +146,9 @@ mod tests {
         assert_eq!(completion.argument().value, "test");
     }
 
+    // `to_complete_request` is a 2025-11-25 builder helper not present in the
+    // 2026-07-28 core; these two cases exercise that 2025 request shape.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_completion_validation() {
         let completion = TestCompletion {
@@ -157,6 +161,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_empty_reference_validation() {
         let completion = TestCompletion {

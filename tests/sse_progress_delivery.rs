@@ -182,9 +182,12 @@ async fn test_post_streaming_delivers_progress_before_result() {
             "jsonrpc": "2.0",
             "method": "tools/call",
             "id": 2,
+                // A progressToken is what opts a request into request-scoped
+                // notifications, and therefore into stream framing.
             "params": {
                 "name": "slow_calculation",
-                "arguments": {}
+                "arguments": {},
+                "_meta": { "progressToken": "slow-calc-progress" }
             }
         }))
         .send()

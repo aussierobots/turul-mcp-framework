@@ -2,6 +2,10 @@
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
+// Implements the SEP-2577-deprecated-but-present roots feature; the `Root` protocol
+// type is deprecated in 2026-07-28 but still valid and intentionally supported here.
+#![allow(deprecated)]
+
 use serde_json::Value;
 use std::collections::HashMap;
 use turul_mcp_protocol::roots::Root;

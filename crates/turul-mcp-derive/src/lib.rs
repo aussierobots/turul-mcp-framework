@@ -22,8 +22,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-derive = "0.3"
-//! turul-mcp-server = "0.3"  # For server-side usage
+//! turul-mcp-derive = "0.4"
+//! turul-mcp-server = "0.4"  # For server-side usage
 //! ```
 //!
 //! ## Quick Start
@@ -109,7 +109,6 @@
 //! | `#[mcp_resource]` | Function resources | Dynamic resources |
 //! | `tool!` | Declarative tools | Runtime creation |
 //! | `resource!` | Declarative resources | Runtime creation |
-//! | `#[derive(JsonSchema)]` | Schema generation | Type validation |
 //!
 //! ## Examples
 //!
@@ -133,7 +132,6 @@ use syn::{DeriveInput, ItemFn, Meta, Token, parse_macro_input, punctuated::Punct
 
 mod completion_derive;
 mod elicitation_derive;
-mod json_schema_derive;
 mod logging_derive;
 mod macros;
 mod notification_derive;
@@ -229,7 +227,7 @@ mod tests;
 /// `"type": ["string", "null"]`. When the value is `None`, omitting the field passes validation,
 /// but serializing as `null` fails because the schema expects a string.
 ///
-/// **Note**: Primitive types (String, i32, f64, bool, Vec<T>) don't need JsonSchema
+/// **Note**: Primitive types (`String`, `i32`, `f64`, `bool`, `Vec<T>`) don't need JsonSchema
 ///
 /// # Example
 ///
@@ -370,37 +368,6 @@ pub fn derive_mcp_resource(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// JsonSchema derive macro for generating JSON schema from struct definitions
-///
-/// This macro generates a JSON schema implementation for structs that can be used
-/// as output types in MCP tools. It introspects the struct fields and generates
-/// the appropriate schema properties and requirements.
-///
-/// # Example
-///
-/// ```rust,no_run
-/// use turul_mcp_derive::JsonSchema;
-/// use serde::{Deserialize, Serialize};
-///
-/// #[derive(JsonSchema, Serialize, Deserialize)]
-/// struct CalculationResult {
-///     pub operation: String,
-///     pub result: f64,
-///     pub metadata: CalculationMetadata,
-/// }
-///
-/// #[derive(JsonSchema, Serialize, Deserialize)]
-/// struct CalculationMetadata {
-///     pub precision: String,
-///     pub is_exact: bool,
-/// }
-/// ```
-#[proc_macro_derive(JsonSchema)]
-pub fn derive_json_schema(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    json_schema_derive::derive_json_schema(input).into()
-}
-
 /// Declarative macro for creating simple resources
 ///
 /// This provides a concise syntax for resource creation.
@@ -464,9 +431,13 @@ pub fn schema_for(input: TokenStream) -> TokenStream {
 
 /// Derive macro for automatically implementing McpElicitation
 ///
+/// Elicitation is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::McpElicitation;
 ///
 /// #[derive(McpElicitation)]
@@ -508,9 +479,13 @@ pub fn derive_mcp_prompt(input: TokenStream) -> TokenStream {
 
 /// Derive macro for automatically implementing McpSampling
 ///
+/// Sampling is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::McpSampling;
 /// use turul_mcp_protocol::prelude::*;
 ///
@@ -554,9 +529,13 @@ pub fn derive_mcp_completion(input: TokenStream) -> TokenStream {
 
 /// Derive macro for automatically implementing McpLogger
 ///
+/// Logging is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::McpLogger;
 /// use turul_mcp_builders::prelude::{HasLoggingMetadata, LoggerDefinition, HasLogLevel};
 ///
@@ -707,9 +686,13 @@ pub fn prompt(input: TokenStream) -> TokenStream {
 ///
 /// This provides a concise syntax for sampling configuration.
 ///
+/// Sampling is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::sampling;
 /// use turul_mcp_protocol::prelude::*;
 ///
@@ -789,9 +772,13 @@ pub fn completion(input: TokenStream) -> TokenStream {
 
 /// Declarative macro for creating MCP elicitation handlers with concise syntax.
 ///
+/// Elicitation is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::elicitation;
 ///
 /// elicitation! {
@@ -831,9 +818,13 @@ pub fn roots(input: TokenStream) -> TokenStream {
 
 /// Declarative macro for creating MCP logging handlers with concise syntax.
 ///
+/// Logging is a 2025-11-25 feature; the generated code references types the
+/// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
+///
 /// # Example
 ///
-/// ```rust,no_run
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// use turul_mcp_derive::logging;
 /// use turul_mcp_protocol::prelude::*;
 /// use turul_mcp_builders::prelude::*;

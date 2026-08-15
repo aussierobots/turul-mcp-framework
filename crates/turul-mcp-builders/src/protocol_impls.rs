@@ -12,17 +12,25 @@ use crate::traits::*;
 use turul_mcp_protocol::completion::{
     CompleteArgument, CompleteRequest, CompletionContext, CompletionReference,
 };
-use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitationSchema};
-use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification};
 use turul_mcp_protocol::notifications::{
-    CancelledNotification, InitializedNotification, Notification, ProgressNotification,
-    PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
-    RootsListChangedNotification, ToolListChangedNotification,
+    CancelledNotification, Notification, ProgressNotification, PromptListChangedNotification,
+    ResourceListChangedNotification, ResourceUpdatedNotification, ToolListChangedNotification,
 };
+// `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+#[allow(deprecated)]
 use turul_mcp_protocol::roots::Root;
-use turul_mcp_protocol::sampling::{CreateMessageParams, ModelPreferences, SamplingMessage};
-use turul_mcp_protocol::tools::ToolExecution;
 use turul_mcp_protocol::{Prompt, Resource, Tool, ToolSchema};
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitationSchema};
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification};
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::notifications::{InitializedNotification, RootsListChangedNotification};
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::sampling::{CreateMessageParams, ModelPreferences, SamplingMessage};
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::tools::ToolExecution;
 
 // ============================================================================
 // Resource trait implementations
@@ -109,7 +117,7 @@ impl HasPromptArguments for Prompt {
 }
 
 impl HasPromptAnnotations for Prompt {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::prompts::PromptAnnotations> {
+    fn annotations(&self) -> Option<&crate::traits::prompt_traits::PromptAnnotations> {
         // Prompt struct doesn't have annotations field in current protocol
         None
     }
@@ -156,8 +164,14 @@ impl HasInputSchema for Tool {
 }
 
 impl HasOutputSchema for Tool {
+    #[cfg(feature = "protocol-2025-11-25")]
     fn output_schema(&self) -> Option<&ToolSchema> {
         self.output_schema.as_ref()
+    }
+
+    #[cfg(feature = "protocol-2026-07-28")]
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
     }
 }
 
@@ -179,6 +193,7 @@ impl HasIcons for Tool {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasExecution for Tool {
     fn execution(&self) -> Option<ToolExecution> {
         self.execution.clone()
@@ -191,6 +206,7 @@ impl HasExecution for Tool {
 // Root trait implementations
 // ============================================================================
 
+#[allow(deprecated)]
 impl HasRootMetadata for Root {
     fn name(&self) -> Option<&str> {
         self.name.as_deref()
@@ -201,14 +217,17 @@ impl HasRootMetadata for Root {
     }
 }
 
+#[allow(deprecated)]
 impl HasRootPermissions for Root {
     // Root struct doesn't have permissions field - framework can add later if needed
 }
 
+#[allow(deprecated)]
 impl HasRootFiltering for Root {
     // Root struct doesn't have filtering field - framework can add later if needed
 }
 
+#[allow(deprecated)]
 impl HasRootAnnotations for Root {
     fn annotations(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         self.meta.as_ref()
@@ -221,6 +240,7 @@ impl HasRootAnnotations for Root {
 // Sampling trait implementations
 // ============================================================================
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasSamplingConfig for CreateMessageParams {
     fn max_tokens(&self) -> u32 {
         self.max_tokens
@@ -235,6 +255,7 @@ impl HasSamplingConfig for CreateMessageParams {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasSamplingContext for CreateMessageParams {
     fn messages(&self) -> &[SamplingMessage] {
         &self.messages
@@ -249,6 +270,7 @@ impl HasSamplingContext for CreateMessageParams {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasModelPreferences for CreateMessageParams {
     fn model_preferences(&self) -> Option<&ModelPreferences> {
         self.model_preferences.as_ref()
@@ -259,6 +281,7 @@ impl HasModelPreferences for CreateMessageParams {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasSamplingTools for CreateMessageParams {
     fn tools(&self) -> Option<&Vec<turul_mcp_protocol::Tool>> {
         self.tools.as_ref()
@@ -267,6 +290,7 @@ impl HasSamplingTools for CreateMessageParams {
 
 // SamplingDefinition is automatically implemented via blanket impl
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasSamplingMessageMetadata for SamplingMessage {
     fn role(&self) -> &turul_mcp_protocol::sampling::Role {
         &self.role
@@ -281,6 +305,7 @@ impl HasSamplingMessageMetadata for SamplingMessage {
 // Logging trait implementations
 // ============================================================================
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasLoggingMetadata for LoggingMessageNotification {
     fn method(&self) -> &str {
         &self.method
@@ -291,18 +316,21 @@ impl HasLoggingMetadata for LoggingMessageNotification {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasLogLevel for LoggingMessageNotification {
     fn level(&self) -> LoggingLevel {
         self.params.level
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasLogFormat for LoggingMessageNotification {
     fn data(&self) -> &serde_json::Value {
         &self.params.data
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasLogTransport for LoggingMessageNotification {
     // Use default implementations
 }
@@ -343,6 +371,7 @@ impl HasCompletionHandling for CompleteRequest {
 // Elicitation trait implementations
 // ============================================================================
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasElicitationMetadata for ElicitCreateRequest {
     fn message(&self) -> &str {
         &self.params.message
@@ -351,12 +380,14 @@ impl HasElicitationMetadata for ElicitCreateRequest {
     // title() uses default implementation which returns None
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasElicitationSchema for ElicitCreateRequest {
     fn requested_schema(&self) -> &ElicitationSchema {
         &self.params.requested_schema
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasElicitationHandling for ElicitCreateRequest {
     // Use default implementations
 }
@@ -453,12 +484,14 @@ impl HasNotificationPayload for PromptListChangedNotification {
 impl HasNotificationRules for PromptListChangedNotification {}
 
 // RootsListChangedNotification
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasNotificationMetadata for RootsListChangedNotification {
     fn method(&self) -> &str {
         &self.method
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasNotificationPayload for RootsListChangedNotification {
     fn payload(&self) -> Option<serde_json::Value> {
         // Serialize params if present (includes _meta)
@@ -468,6 +501,7 @@ impl HasNotificationPayload for RootsListChangedNotification {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasNotificationRules for RootsListChangedNotification {}
 
 // ProgressNotification
@@ -527,12 +561,14 @@ impl HasNotificationRules for CancelledNotification {
 }
 
 // InitializedNotification
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasNotificationMetadata for InitializedNotification {
     fn method(&self) -> &str {
         &self.method
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasNotificationPayload for InitializedNotification {
     fn payload(&self) -> Option<serde_json::Value> {
         // Serialize params if present (includes _meta)
@@ -542,6 +578,7 @@ impl HasNotificationPayload for InitializedNotification {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl HasNotificationRules for InitializedNotification {
     fn priority(&self) -> u32 {
         3 // Initialization has highest priority

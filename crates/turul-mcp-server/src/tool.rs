@@ -119,10 +119,10 @@ mod tests {
     impl TestTool {
         fn new() -> Self {
             let input_schema = ToolSchema::object()
-                .with_properties(HashMap::from([(
+                .with_properties(turul_mcp_builders::tool_props(HashMap::from([(
                     "message".to_string(),
                     JsonSchema::string(),
-                )]))
+                )])))
                 .with_required(vec!["message".to_string()]);
             Self { input_schema }
         }
@@ -169,6 +169,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for TestTool {}
 
     // ToolDefinition is automatically implemented via blanket impl!
@@ -241,6 +242,7 @@ mod tests {
     /// Regression test: verify that HasExecution is wired through to_tool() → Tool → JSON.
     /// A tool with task_support=optional must serialize `execution.taskSupport = "optional"`.
     /// A tool without execution must omit the field entirely.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_execution_wiring_in_descriptor() {
         use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};
@@ -376,6 +378,7 @@ mod tests {
         }
     }
     impl HasIcons for AnotherTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for AnotherTool {}
     #[async_trait]
     impl McpTool for AnotherTool {
@@ -531,6 +534,7 @@ mod tests {
             }
         }
         impl HasIcons for OrderTestTool {}
+        #[cfg(feature = "protocol-2025-11-25")]
         impl HasExecution for OrderTestTool {}
         #[async_trait]
         impl McpTool for OrderTestTool {
@@ -549,7 +553,8 @@ mod tests {
         props_a.insert("beta".to_string(), JsonSchema::number());
         props_a.insert("gamma".to_string(), JsonSchema::boolean());
         let tool_a = Arc::new(OrderTestTool {
-            input_schema: ToolSchema::object().with_properties(props_a),
+            input_schema: ToolSchema::object()
+                .with_properties(turul_mcp_builders::tool_props(props_a)),
         }) as Arc<dyn McpTool>;
 
         // Order B: c, a, b (different insertion order)
@@ -558,7 +563,8 @@ mod tests {
         props_b.insert("alpha".to_string(), JsonSchema::string());
         props_b.insert("beta".to_string(), JsonSchema::number());
         let tool_b = Arc::new(OrderTestTool {
-            input_schema: ToolSchema::object().with_properties(props_b),
+            input_schema: ToolSchema::object()
+                .with_properties(turul_mcp_builders::tool_props(props_b)),
         }) as Arc<dyn McpTool>;
 
         let fp_a = compute_tool_fingerprint(&tool_map(vec![tool_a]));
@@ -607,6 +613,7 @@ mod tests {
             }
         }
         impl HasIcons for NestedTestTool {}
+        #[cfg(feature = "protocol-2025-11-25")]
         impl HasExecution for NestedTestTool {}
         #[async_trait]
         impl McpTool for NestedTestTool {
@@ -629,7 +636,8 @@ mod tests {
             for (k, v) in outer_order {
                 outer_props.insert(k.to_string(), v.clone());
             }
-            let mut schema = ToolSchema::object().with_properties(outer_props);
+            let mut schema =
+                ToolSchema::object().with_properties(turul_mcp_builders::tool_props(outer_props));
             let mut additional = HashMap::new();
             for (k, v) in additional_order {
                 additional.insert(k.to_string(), v.clone());
@@ -722,6 +730,7 @@ mod tests {
             }
         }
         impl HasIcons for AnnotatedTool {}
+        #[cfg(feature = "protocol-2025-11-25")]
         impl HasExecution for AnnotatedTool {}
         #[async_trait]
         impl McpTool for AnnotatedTool {

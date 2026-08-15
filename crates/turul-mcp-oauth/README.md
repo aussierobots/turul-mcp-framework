@@ -12,7 +12,8 @@ This crate provides Bearer token validation for MCP servers acting as OAuth 2.1 
 Key components:
 
 - **`OAuthResourceMiddleware`** — Pre-session middleware that validates Bearer tokens and injects claims into request extensions
-- **`JwtValidator`** — JWT validation with JWKS caching, kid-miss refresh, and RS256/ES256 support
+- **`JwtValidator`** — JWT validation with JWKS caching, kid-miss refresh, and RS256/ES256 support. Owned by [`turul-jwt-validator`](https://crates.io/crates/turul-jwt-validator) and re-exported here (ADR-032)
+- **`hardened_validator`** — builds a `JwtValidator` carrying this crate's key max-age, stale window and fetch retry, and rejects a non-loopback plaintext `jwks_uri`. Prefer it over `JwtValidator::new`, which leaves all three disabled
 - **`ProtectedResourceMetadata`** — RFC 9728 metadata document with canonical URI validation
 - **`WellKnownOAuthHandler`** — Route handler for `/.well-known/oauth-protected-resource`
 
@@ -22,8 +23,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.3"
-turul-mcp-oauth = "0.3"
+turul-mcp-server = "0.4"
+turul-mcp-oauth = "0.4"
 ```
 
 Use the convenience function for single-AS deployments:
@@ -80,7 +81,7 @@ For multi-AS deployments or custom validation, construct the components directly
 
 ```rust,no_run
 use std::sync::Arc;
-use turul_mcp_oauth::{JwtValidator, OAuthResourceMiddleware, ProtectedResourceMetadata};
+use turul_mcp_oauth::{hardened_validator, OAuthResourceMiddleware, ProtectedResourceMetadata};
 
 let metadata = ProtectedResourceMetadata::new(
     "https://example.com/mcp",
@@ -91,10 +92,10 @@ let metadata = ProtectedResourceMetadata::new(
 ).unwrap();
 
 let validator = Arc::new(
-    JwtValidator::new(
+    hardened_validator(
         "https://auth1.example.com/.well-known/jwks.json",
         "https://example.com/mcp",
-    )
+    )?
     .with_issuer("https://auth1.example.com"),
 );
 

@@ -9,9 +9,7 @@ use hyper::{Response, StatusCode, header};
 use serde_json::Value;
 use tracing::error;
 
-use turul_mcp_json_rpc_server::{
-    JsonRpcError, JsonRpcResponse, error::JsonRpcErrorObject, types::RequestId,
-};
+use turul_rpc::{JsonRpcError, JsonRpcResponse, error::JsonRpcErrorObject, types::RequestId};
 
 /// HTTP body type for JSON-RPC responses
 type JsonRpcBody = Full<Bytes>;
@@ -58,7 +56,7 @@ pub fn jsonrpc_success_response(
     id: RequestId,
     result: Value,
 ) -> Result<Response<JsonRpcBody>, hyper::Error> {
-    let response = JsonRpcResponse::success(id, result);
+    let response = JsonRpcResponse::success(id, result.into());
 
     let body_bytes = serde_json::to_vec(&response).unwrap_or_else(|e| {
         error!("Failed to serialize JSON-RPC response: {}", e);
@@ -132,7 +130,7 @@ pub fn bad_request_response(message: &str) -> Response<JsonRpcBody> {
 /// Build HTTP response for OPTIONS preflight requests.
 ///
 /// Returns a bare 200 OK with an empty body. CORS headers are added by
-/// [`CorsLayer::apply_cors_headers`] in `server.rs` when `enable_cors` is true.
+/// `CorsLayer::apply_cors_headers` in `server.rs` when `enable_cors` is true.
 pub fn options_response() -> Response<JsonRpcBody> {
     Response::builder()
         .status(StatusCode::OK)

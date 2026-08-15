@@ -6,13 +6,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(feature = "protocol-2025-11-25")]
+use serde_json::json;
 use tracing::debug;
 
 use crate::resource::{McpResource, resource_to_descriptor};
 
 use crate::{McpResult, SessionContext};
-use turul_mcp_protocol::{McpError, WithMeta};
+use turul_mcp_protocol::McpError;
 
 //pub mod response;
 //pub use response::*;
@@ -30,6 +32,190 @@ fn extract_limit_from_params(params: &Option<Value>) -> Option<usize> {
             .and_then(|v| v.as_u64())
             .map(|n| n as usize)
     })
+}
+
+/// Read the pagination cursor from raw `params.cursor`.
+fn extract_cursor_from_params(params: &Option<Value>) -> Option<turul_mcp_protocol::meta::Cursor> {
+    params
+        .as_ref()
+        .and_then(|p| p.get("cursor"))
+        .and_then(|c| c.as_str())
+        .map(turul_mcp_protocol::meta::Cursor::from)
+}
+
+/// Caller-supplied `_meta` keys to echo back onto the result, excluding the
+/// request-scoped routing keys defined by the protocol meta object.
+/// MRTR (SEP-2322): convert a provider's `McpError::InputRequired` outcome
+/// into a successful `InputRequiredResult` value, after enforcing that every
+/// input request targets a capability the client declared in the request's
+/// `_meta` `clientCapabilities` (undeclared → `-32021`, HTTP 400). Gating is
+/// mode-aware: URL-mode elicitation needs `elicitation.url`, form mode rides
+/// the empty object ("an empty capabilities object is equivalent to declaring
+/// support for form mode only"), and tool-enabled sampling (`tools` /
+/// `toolChoice` present) needs `sampling.tools`. Shared by the three methods
+/// permitted to return `input_required`: `tools/call`, `resources/read`,
+/// `prompts/get`.
+#[cfg(feature = "protocol-2026-07-28")]
+pub(crate) fn input_required_to_result(
+    input_requests: Option<turul_mcp_protocol::input_required::InputRequests>,
+    request_state: Option<String>,
+    caps: &turul_mcp_protocol::initialize::ClientCapabilities,
+) -> McpResult<Value> {
+    use turul_mcp_protocol::input_required::{InputRequest, InputRequiredResult};
+
+    // A CreateMessage input request's message history must satisfy the
+    // sampling message-shape MUSTs (ToolResult-only user messages, ToolUse
+    // immediately paired with a matching ToolResult) before it is packaged up
+    // and sent to the client.
+    if let Some(ref requests) = input_requests {
+        for request in requests.values() {
+            #[allow(deprecated)]
+            if let InputRequest::CreateMessage(create) = request
+                && let Err(reason) = create.params.validate_message_shape()
+            {
+                return Err(McpError::InvalidParameters(format!(
+                    "sampling/createMessage input request has an invalid message shape: {reason}"
+                )));
+            }
+        }
+    }
+
+    if let Some(ref requests) = input_requests {
+        for request in requests.values() {
+            #[allow(deprecated)]
+            let missing = match request {
+                InputRequest::Elicit(elicit) => match &caps.elicitation {
+                    None => Some(serde_json::json!({ "elicitation": {} })),
+                    Some(e) => {
+                        use turul_mcp_protocol::elicitation::ElicitRequestParams;
+                        match &elicit.params {
+                            // URL mode needs the explicit url sub-capability.
+                            ElicitRequestParams::Url(_) if e.url.is_none() => {
+                                Some(serde_json::json!({ "elicitation": { "url": {} } }))
+                            }
+                            // Form mode: an empty capabilities object declares
+                            // form-only support; an explicit url-only object
+                            // does NOT imply form.
+                            ElicitRequestParams::Form(_) if e.form.is_none() && e.url.is_some() => {
+                                Some(serde_json::json!({ "elicitation": { "form": {} } }))
+                            }
+                            _ => None,
+                        }
+                    }
+                },
+                InputRequest::CreateMessage(create) => match &caps.sampling {
+                    None => Some(serde_json::json!({ "sampling": {} })),
+                    // Tool-enabled sampling needs the tools sub-capability.
+                    Some(sc)
+                        if (create.params.tools.is_some()
+                            || create.params.tool_choice.is_some())
+                            && sc.tools.is_none() =>
+                    {
+                        Some(serde_json::json!({ "sampling": { "tools": {} } }))
+                    }
+                    Some(_) => None,
+                },
+                InputRequest::ListRoots(_) if caps.roots.is_none() => {
+                    Some(serde_json::json!({ "roots": {} }))
+                }
+                _ => None,
+            };
+            if let Some(required) = missing {
+                return Err(McpError::MissingRequiredClientCapability { required });
+            }
+        }
+    }
+
+    let result = match (input_requests, request_state) {
+        (Some(requests), Some(state)) => {
+            InputRequiredResult::with_requests_and_state(requests, state)
+        }
+        (Some(requests), None) => InputRequiredResult::with_requests(requests),
+        (None, Some(state)) => InputRequiredResult::with_state(state),
+        (None, None) => {
+            // Schema invariant: at least one field must be present.
+            return Err(McpError::ToolExecutionError(
+                "InputRequired with neither inputRequests nor requestState".into(),
+            ));
+        }
+    };
+    serde_json::to_value(result).map_err(McpError::from)
+}
+
+pub(crate) fn extract_request_meta_extra(params: &Option<Value>) -> HashMap<String, Value> {
+    const RESERVED: &[&str] = &[
+        "progressToken",
+        "io.modelcontextprotocol/protocolVersion",
+        "io.modelcontextprotocol/clientInfo",
+        "io.modelcontextprotocol/clientCapabilities",
+        "io.modelcontextprotocol/logLevel",
+    ];
+    params
+        .as_ref()
+        .and_then(|p| p.get("_meta"))
+        .and_then(|m| m.as_object())
+        .map(|obj| {
+            obj.iter()
+                .filter(|(k, _)| !RESERVED.contains(&k.as_str()))
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Finalize a paginated list result with cursor/total/hasMore context and the
+/// caller's echoed `_meta` extras.
+///
+/// On 2025-11-25 the cursor/total/hasMore travel in a `PaginatedResponse`
+/// `_meta` envelope. On 2026-07-28 the result carries `nextCursor` directly
+/// and `_meta` holds only the echoed caller extras (the schema `Result` has no
+/// total/hasMore fields).
+fn paginate_list_response<T: serde::Serialize>(
+    base_response: T,
+    next_cursor: Option<turul_mcp_protocol::meta::Cursor>,
+    total: Option<u64>,
+    has_more: bool,
+    request_meta_extra: HashMap<String, Value>,
+) -> McpResult<Value> {
+    #[cfg(feature = "protocol-2025-11-25")]
+    {
+        let _ = &total;
+        let mut response = turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+        );
+        if !request_meta_extra.is_empty() {
+            use turul_mcp_protocol::meta::WithMeta;
+            let mut response_meta = response.meta().cloned().unwrap_or_else(|| {
+                turul_mcp_protocol::meta::Meta::with_pagination(None, total, has_more)
+            });
+            for (key, value) in request_meta_extra {
+                response_meta.extra.insert(key, value);
+            }
+            response = response.with_meta(response_meta);
+        }
+        serde_json::to_value(response).map_err(McpError::from)
+    }
+    #[cfg(not(feature = "protocol-2025-11-25"))]
+    {
+        let _ = (&next_cursor, &total, &has_more);
+        let mut value = serde_json::to_value(base_response).map_err(McpError::from)?;
+        if !request_meta_extra.is_empty()
+            && let Some(obj) = value.as_object_mut()
+        {
+            let meta = obj
+                .entry("_meta")
+                .or_insert_with(|| Value::Object(serde_json::Map::new()));
+            if let Some(meta_obj) = meta.as_object_mut() {
+                for (key, val) in request_meta_extra {
+                    meta_obj.insert(key, val);
+                }
+            }
+        }
+        Ok(value)
+    }
 }
 
 /// Generic MCP handler trait
@@ -65,20 +251,117 @@ impl McpHandler for PingHandler {
     }
 }
 
-/// Completion handler for completion/complete endpoint
-pub struct CompletionHandler;
+/// Completion handler for the completion/complete endpoint.
+///
+/// Routes to registered [`McpCompletion`](crate::McpCompletion) providers:
+/// highest `priority()` first, first `can_handle()` wins. Responses honor the
+/// spec's 100-item cap on `completion.values` (oversized provider output is
+/// truncated with `total`/`hasMore` reflecting the cut). With no matching
+/// provider the result carries empty values.
+#[derive(Default)]
+pub struct CompletionHandler {
+    providers: Vec<Arc<dyn crate::McpCompletion>>,
+}
+
+impl CompletionHandler {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_providers(mut self, providers: Vec<Arc<dyn crate::McpCompletion>>) -> Self {
+        self.providers = providers;
+        // Stable sort: priority desc, insertion order as the tiebreak.
+        self.providers
+            .sort_by_key(|p| std::cmp::Reverse(p.priority()));
+        self
+    }
+}
+
+/// Does a provider's declared reference target the request's reference?
+fn completion_reference_matches(
+    declared: &turul_mcp_protocol::completion::CompletionReference,
+    requested: &turul_mcp_protocol::completion::CompletionReference,
+) -> bool {
+    use turul_mcp_protocol::completion::CompletionReference as Ref;
+    match (declared, requested) {
+        (Ref::Prompt(a), Ref::Prompt(b)) => a.name == b.name,
+        (Ref::ResourceTemplate(a), Ref::ResourceTemplate(b)) => a.uri == b.uri,
+        _ => false,
+    }
+}
+
+/// `completion.values` carries "Maximum 100 items" per the Completion spec.
+const COMPLETION_VALUES_CAP: usize = 100;
 
 #[async_trait]
 impl McpHandler for CompletionHandler {
-    async fn handle(&self, _params: Option<Value>) -> McpResult<Value> {
-        use turul_mcp_protocol::completion::{CompleteResult, CompletionResult};
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        use turul_mcp_protocol::completion::{CompleteRequest, CompleteResult, CompletionResult};
+        // The params struct is `CompleteRequestParams` on 2026-07-28 (required
+        // `_meta`) and `CompleteParams` on the frozen 2025-11-25 snapshot.
+        #[cfg(feature = "protocol-2025-11-25")]
+        use turul_mcp_protocol::completion::CompleteParams as TypedCompleteParams;
+        #[cfg(feature = "protocol-2026-07-28")]
+        use turul_mcp_protocol::completion::CompleteRequestParams as TypedCompleteParams;
 
-        // Default implementation - can be overridden by users
-        let values = vec!["example1".to_string(), "example2".to_string()];
+        let params = params.ok_or_else(|| {
+            McpError::InvalidParameters("completion/complete requires params".to_string())
+        })?;
+        let typed: TypedCompleteParams = serde_json::from_value(params)
+            .map_err(|e| McpError::InvalidParameters(format!("invalid completion params: {e}")))?;
+        // The untagged reference union accepts any `type` string — enforce
+        // the schema's literals ("ref/prompt" / "ref/resource") here.
+        let ref_type = match &typed.reference {
+            turul_mcp_protocol::completion::CompletionReference::Prompt(p) => {
+                (&p.ref_type, "ref/prompt")
+            }
+            turul_mcp_protocol::completion::CompletionReference::ResourceTemplate(r) => {
+                (&r.ref_type, "ref/resource")
+            }
+        };
+        if ref_type.0 != ref_type.1 {
+            return Err(McpError::InvalidParameters(format!(
+                "unknown completion reference type {:?} (expected \"ref/prompt\" or \"ref/resource\")",
+                ref_type.0
+            )));
+        }
+        let request = CompleteRequest {
+            method: "completion/complete".to_string(),
+            params: typed,
+        };
 
-        let completion_result = CompletionResult::new(values);
-        let response = CompleteResult::new(completion_result);
-        serde_json::to_value(response).map_err(McpError::from)
+        // Providers declaring the request's exact reference win; a provider
+        // whose can_handle accepts the request is the fallback. Both passes
+        // run in (priority desc, insertion) order, so routing is
+        // deterministic.
+        let provider = self
+            .providers
+            .iter()
+            .find(|p| {
+                completion_reference_matches(p.reference(), &request.params.reference)
+                    && p.can_handle(&request)
+            })
+            .or_else(|| self.providers.iter().find(|p| p.can_handle(&request)));
+        let result = match provider {
+            Some(provider) => {
+                crate::McpCompletion::validate_request(provider.as_ref(), &request).await?;
+                let mut result = provider.complete(request).await?;
+                let len = result.completion.values.len();
+                if len > COMPLETION_VALUES_CAP {
+                    result.completion.values.truncate(COMPLETION_VALUES_CAP);
+                    result.completion.has_more = Some(true);
+                    // `CompletionResult.total` is `f64` on the 2026-07-28
+                    // protocol crate but `u32` on the frozen 2025-11-25 one.
+                    #[cfg(feature = "protocol-2026-07-28")]
+                    result.completion.total.get_or_insert(len as f64);
+                    #[cfg(feature = "protocol-2025-11-25")]
+                    result.completion.total.get_or_insert(len as u32);
+                }
+                result
+            }
+            None => CompleteResult::new(CompletionResult::new(Vec::new())),
+        };
+        serde_json::to_value(result).map_err(McpError::from)
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -120,8 +403,8 @@ impl PromptsListHandler {
 impl McpHandler for PromptsListHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         // Handle prompts/list with pagination support
-        use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
-        use turul_mcp_protocol::prompts::{ListPromptsParams, ListPromptsResult, Prompt};
+        use turul_mcp_protocol::meta::Cursor;
+        use turul_mcp_protocol::prompts::{ListPromptsResult, Prompt};
 
         // Extract limit from raw params before parsing to typed params (MCP extension field)
         // Clamp to 1000 for DoS protection, reject zero
@@ -139,16 +422,8 @@ impl McpHandler for PromptsListHandler {
             None => DEFAULT_PAGE_SIZE,
         };
 
-        // Parse typed parameters with proper error handling (MCP compliance)
-        let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListPromptsParams>(params_value).map_err(|e| {
-                McpError::InvalidParameters(format!("Invalid parameters for prompts/list: {}", e))
-            })?
-        } else {
-            ListPromptsParams::new()
-        };
-
-        let cursor = list_params.cursor;
+        let cursor = extract_cursor_from_params(&params);
+        let request_meta_extra = extract_request_meta_extra(&params);
 
         debug!(
             "Listing prompts with cursor: {:?}, limit: {}",
@@ -161,12 +436,21 @@ impl McpHandler for PromptsListHandler {
             .values()
             .map(|p| {
                 let mut prompt = Prompt::new(p.name());
+                if let Some(title) = p.title() {
+                    prompt = prompt.with_title(title);
+                }
                 if let Some(desc) = p.description() {
                     prompt = prompt.with_description(desc);
                 }
                 // Include arguments from the prompt object
                 if let Some(args) = p.arguments() {
                     prompt = prompt.with_arguments(args.clone());
+                }
+                if let Some(icons) = p.icons() {
+                    prompt = prompt.with_icons(icons.to_vec());
+                }
+                if let Some(meta) = p.prompt_meta() {
+                    prompt = prompt.with_meta(meta.clone());
                 }
                 prompt
             })
@@ -179,6 +463,15 @@ impl McpHandler for PromptsListHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last name from previous page
             let cursor_name = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last prompt name of a previously served page).
+            if !all_prompts.iter().any(|p| p.name.as_str() == cursor_name) {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_name
+                )));
+            }
 
             // Find the position after the cursor name
             all_prompts
@@ -217,33 +510,19 @@ impl McpHandler for PromptsListHandler {
 
         let mut base_response = ListPromptsResult::new(page_prompts);
 
-        // Set top-level nextCursor field on the result before wrapping
         if let Some(ref cursor) = next_cursor {
             base_response = base_response.with_next_cursor(cursor.clone());
         }
 
         let total = Some(all_prompts.len() as u64);
 
-        let next_cursor_clone = next_cursor.clone();
-        let mut paginated_response =
-            PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
-
-        // Propagate optional _meta from request to response (MCP 2025-11-25 compliance)
-        if let Some(request_meta) = list_params.meta {
-            // Get existing meta from PaginatedResponse or use pagination defaults
-            let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
-                turul_mcp_protocol::meta::Meta::with_pagination(next_cursor_clone, total, has_more)
-            });
-
-            // Merge request's _meta fields into extra without clobbering pagination
-            for (key, value) in request_meta {
-                response_meta.extra.insert(key, value);
-            }
-
-            paginated_response = paginated_response.with_meta(response_meta);
-        }
-
-        serde_json::to_value(paginated_response).map_err(McpError::from)
+        paginate_list_response(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+            request_meta_extra,
+        )
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -285,11 +564,18 @@ impl PromptsGetHandler {
 impl McpHandler for PromptsGetHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         use std::collections::HashMap as StdHashMap;
-        use turul_mcp_protocol::prompts::{GetPromptParams, GetPromptResult};
+        use turul_mcp_protocol::prompts::GetPromptResult;
+
+        let request_meta_extra = extract_request_meta_extra(&params);
 
         // Parse get prompt parameters
         let params = params.ok_or_else(|| McpError::missing_param("GetPromptParams"))?;
-        let get_params: GetPromptParams = serde_json::from_value(params)?;
+        #[cfg(feature = "protocol-2025-11-25")]
+        let get_params: turul_mcp_protocol::prompts::GetPromptParams =
+            serde_json::from_value(params)?;
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        let get_params: turul_mcp_protocol::prompts::GetPromptRequestParams =
+            serde_json::from_value(params)?;
 
         debug!(
             "Getting prompt: {} with arguments: {:?}",
@@ -329,9 +615,42 @@ impl McpHandler for PromptsGetHandler {
             None => StdHashMap::new(),
         };
 
+        // MRTR retry leg: `McpPrompt::render` has no session parameter, so the
+        // retry's inputResponses / requestState ride the render args under
+        // reserved io.modelcontextprotocol/* keys (documented on McpPrompt).
+        #[cfg(feature = "protocol-2026-07-28")]
+        let arguments = {
+            let mut arguments = arguments;
+            if let Some(ref responses) = get_params.input_responses
+                && let Ok(v) = serde_json::to_value(responses)
+            {
+                arguments.insert("io.modelcontextprotocol/inputResponses".to_string(), v);
+            }
+            if let Some(ref state) = get_params.request_state {
+                arguments.insert(
+                    "io.modelcontextprotocol/requestState".to_string(),
+                    serde_json::Value::String(state.clone()),
+                );
+            }
+            arguments
+        };
+
         // Generate prompt messages using the prompt implementation
         // Note: MCP 2025-11-25 spec enforces only 'user' and 'assistant' roles via Role enum - no 'system' role
-        let messages = prompt.render(Some(arguments)).await?;
+        let messages = match prompt.render(Some(arguments)).await {
+            #[cfg(feature = "protocol-2026-07-28")]
+            Err(McpError::InputRequired {
+                input_requests,
+                request_state,
+            }) => {
+                return input_required_to_result(
+                    input_requests,
+                    request_state,
+                    &get_params.meta.client_capabilities,
+                );
+            }
+            other => other?,
+        };
 
         // Create response with messages
         let mut response = GetPromptResult::new(messages);
@@ -339,9 +658,9 @@ impl McpHandler for PromptsGetHandler {
             response = response.with_description(desc);
         }
 
-        // Propagate optional _meta from request to response (MCP 2025-11-25 compliance)
-        if let Some(meta) = get_params.meta {
-            response = response.with_meta(meta);
+        // Propagate caller-supplied _meta extras from request to response.
+        if !request_meta_extra.is_empty() {
+            response = response.with_meta(request_meta_extra);
         }
 
         serde_json::to_value(response).map_err(McpError::from)
@@ -391,8 +710,8 @@ impl ResourcesListHandler {
 #[async_trait]
 impl McpHandler for ResourcesListHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
-        use turul_mcp_protocol::resources::{ListResourcesParams, ListResourcesResult, Resource};
+        use turul_mcp_protocol::meta::Cursor;
+        use turul_mcp_protocol::resources::{ListResourcesResult, Resource};
 
         // Extract limit from raw params before parsing to typed params (MCP extension field)
         // Clamp to 1000 for DoS protection, reject zero
@@ -410,16 +729,8 @@ impl McpHandler for ResourcesListHandler {
             None => DEFAULT_PAGE_SIZE,
         };
 
-        // Parse typed parameters with proper error handling (MCP compliance)
-        let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListResourcesParams>(params_value).map_err(|e| {
-                McpError::InvalidParameters(format!("Invalid parameters for resources/list: {}", e))
-            })?
-        } else {
-            ListResourcesParams::new()
-        };
-
-        let cursor = list_params.cursor;
+        let cursor = extract_cursor_from_params(&params);
+        let request_meta_extra = extract_request_meta_extra(&params);
 
         debug!(
             "Listing resources with cursor: {:?}, limit: {}",
@@ -440,6 +751,15 @@ impl McpHandler for ResourcesListHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last URI from previous page
             let cursor_uri = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last resource uri of a previously served page).
+            if !all_resources.iter().any(|r| r.uri.as_str() == cursor_uri) {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_uri
+                )));
+            }
 
             // Find the position after the cursor URI
             all_resources
@@ -478,33 +798,19 @@ impl McpHandler for ResourcesListHandler {
 
         let mut base_response = ListResourcesResult::new(page_resources);
 
-        // Set top-level nextCursor field on the result before wrapping
         if let Some(ref cursor) = next_cursor {
             base_response = base_response.with_next_cursor(cursor.clone());
         }
 
         let total = Some(all_resources.len() as u64);
 
-        let next_cursor_clone = next_cursor.clone();
-        let mut paginated_response =
-            PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
-
-        // Propagate optional _meta from request to response (MCP 2025-11-25 compliance)
-        if let Some(request_meta) = list_params.meta {
-            // Get existing meta from PaginatedResponse or use pagination defaults
-            let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
-                turul_mcp_protocol::meta::Meta::with_pagination(next_cursor_clone, total, has_more)
-            });
-
-            // Merge request's _meta fields into extra without clobbering pagination
-            for (key, value) in request_meta {
-                response_meta.extra.insert(key, value);
-            }
-
-            paginated_response = paginated_response.with_meta(response_meta);
-        }
-
-        serde_json::to_value(paginated_response).map_err(McpError::from)
+        paginate_list_response(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+            request_meta_extra,
+        )
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -604,7 +910,7 @@ impl McpHandler for ResourcesReadHandler {
         params: Option<Value>,
         session: Option<SessionContext>,
     ) -> McpResult<Value> {
-        use turul_mcp_protocol::resources::{ReadResourceParams, ReadResourceResult};
+        use turul_mcp_protocol::resources::ReadResourceResult;
 
         // Security validation
         if let Some(security_middleware) = &self.security_middleware {
@@ -617,9 +923,58 @@ impl McpHandler for ResourcesReadHandler {
 
         // Parse read resource parameters
         let params = params.ok_or_else(|| McpError::missing_param("ReadResourceParams"))?;
-        let read_params: ReadResourceParams = serde_json::from_value(params)?;
+        #[cfg(feature = "protocol-2025-11-25")]
+        let read_params: turul_mcp_protocol::resources::ReadResourceParams =
+            serde_json::from_value(params)?;
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        let read_params: turul_mcp_protocol::resources::ReadResourceRequestParams =
+            serde_json::from_value(params)?;
 
         debug!("Reading resource with URI: {}", read_params.uri);
+
+        // MRTR retry leg: surface the client's inputResponses / requestState to
+        // the provider via the session extensions (SessionContext::input_responses).
+        #[cfg(feature = "protocol-2026-07-28")]
+        let session = {
+            let mut session = session;
+            if let Some(ref mut ctx) = session {
+                if let Some(ref responses) = read_params.input_responses
+                    && let Ok(v) = serde_json::to_value(responses)
+                {
+                    ctx.extensions
+                        .insert("mcp:mrtr:inputResponses".to_string(), v);
+                }
+                if let Some(ref state) = read_params.request_state {
+                    ctx.extensions.insert(
+                        "mcp:mrtr:requestState".to_string(),
+                        Value::String(state.clone()),
+                    );
+                }
+                if let Some(ref token) = read_params.meta.progress_token
+                    && let Ok(v) = serde_json::to_value(token)
+                {
+                    ctx.extensions.insert("mcp:progressToken".to_string(), v);
+                }
+            }
+            session
+        };
+
+        // Progress opt-in on 2025-11-25: `ReadResourceParams::meta` is an
+        // untyped map on this spec snapshot, so the token is read by key.
+        #[cfg(feature = "protocol-2025-11-25")]
+        let session = {
+            let mut session = session;
+            if let Some(ref mut ctx) = session
+                && let Some(token) = read_params
+                    .meta
+                    .as_ref()
+                    .and_then(|meta| meta.get("progressToken"))
+            {
+                ctx.extensions
+                    .insert("mcp:progressToken".to_string(), token.clone());
+            }
+            session
+        };
 
         // Additional security validation for the specific URI
         if let Some(security_middleware) = &self.security_middleware {
@@ -658,9 +1013,20 @@ impl McpHandler for ResourcesReadHandler {
                 );
             }
 
-            let contents = resource
-                .read(Some(enhanced_params), session.as_ref())
-                .await?;
+            let contents = match resource.read(Some(enhanced_params), session.as_ref()).await {
+                #[cfg(feature = "protocol-2026-07-28")]
+                Err(McpError::InputRequired {
+                    input_requests,
+                    request_state,
+                }) => {
+                    return input_required_to_result(
+                        input_requests,
+                        request_state,
+                        &read_params.meta.client_capabilities,
+                    );
+                }
+                other => other?,
+            };
 
             // Validate content before returning
             if let Some(security_middleware) = &self.security_middleware {
@@ -692,6 +1058,22 @@ impl McpHandler for ResourcesReadHandler {
                 }
             }
 
+            // "Binary data MUST be properly encoded" — reject invalid base64
+            // before it ships as a wire payload (provider bug, not client's).
+            for content in &contents {
+                if let turul_mcp_protocol::resources::ResourceContent::Blob(blob) = content
+                    && base64::Engine::decode(
+                        &base64::engine::general_purpose::STANDARD,
+                        blob.blob.as_bytes(),
+                    )
+                    .is_err()
+                {
+                    return Err(McpError::ToolExecutionError(format!(
+                        "resource {} returned blob contents that are not valid base64",
+                        blob.uri
+                    )));
+                }
+            }
             let response = ReadResourceResult::new(contents);
             return serde_json::to_value(response).map_err(McpError::from);
         }
@@ -707,7 +1089,20 @@ impl McpHandler for ResourcesReadHandler {
 
         // Call the resource's read method with original params
         let params = Some(serde_json::to_value(&read_params)?);
-        let contents = resource.read(params, session.as_ref()).await?;
+        let contents = match resource.read(params, session.as_ref()).await {
+            #[cfg(feature = "protocol-2026-07-28")]
+            Err(McpError::InputRequired {
+                input_requests,
+                request_state,
+            }) => {
+                return input_required_to_result(
+                    input_requests,
+                    request_state,
+                    &read_params.meta.client_capabilities,
+                );
+            }
+            other => other?,
+        };
 
         // Validate content before returning
         if let Some(security_middleware) = &self.security_middleware {
@@ -739,6 +1134,22 @@ impl McpHandler for ResourcesReadHandler {
             }
         }
 
+        // "Binary data MUST be properly encoded" — reject invalid base64
+        // before it ships as a wire payload (provider bug, not client's).
+        for content in &contents {
+            if let turul_mcp_protocol::resources::ResourceContent::Blob(blob) = content
+                && base64::Engine::decode(
+                    &base64::engine::general_purpose::STANDARD,
+                    blob.blob.as_bytes(),
+                )
+                .is_err()
+            {
+                return Err(McpError::ToolExecutionError(format!(
+                    "resource {} returned blob contents that are not valid base64",
+                    blob.uri
+                )));
+            }
+        }
         let response = ReadResourceResult::new(contents);
         serde_json::to_value(response).map_err(McpError::from)
     }
@@ -752,8 +1163,10 @@ impl McpHandler for ResourcesReadHandler {
 pub type ResourcesHandler = ResourcesListHandler;
 
 /// Logging handler for logging/setLevel endpoint
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct LoggingHandler;
 
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait]
 impl McpHandler for LoggingHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
@@ -839,6 +1252,8 @@ impl McpHandler for LoggingHandler {
 }
 
 /// Roots handler for roots/list endpoint
+// `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+#[allow(deprecated)]
 pub struct RootsHandler {
     roots: Vec<turul_mcp_protocol::roots::Root>,
 }
@@ -849,6 +1264,7 @@ impl Default for RootsHandler {
     }
 }
 
+#[allow(deprecated)]
 impl RootsHandler {
     pub fn new() -> Self {
         Self { roots: Vec::new() }
@@ -861,17 +1277,13 @@ impl RootsHandler {
 }
 
 #[async_trait]
+#[allow(deprecated)]
 impl McpHandler for RootsHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
+        use turul_mcp_protocol::meta::Cursor;
         use turul_mcp_protocol::roots::ListRootsResult;
 
-        // Parse cursor from params if provided
-        let cursor = params
-            .as_ref()
-            .and_then(|p| p.get("cursor"))
-            .and_then(|c| c.as_str())
-            .map(Cursor::from);
+        let cursor = extract_cursor_from_params(&params);
 
         debug!("Listing roots with cursor: {:?}", cursor);
 
@@ -887,6 +1299,15 @@ impl McpHandler for RootsHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last URI from previous page
             let cursor_uri = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last root uri of a previously served page).
+            if !all_roots.iter().any(|r| r.uri.as_str() == cursor_uri) {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_uri
+                )));
+            }
 
             // Find the position after the cursor URI
             all_roots
@@ -925,14 +1346,11 @@ impl McpHandler for RootsHandler {
 
         let base_response = ListRootsResult::new(page_roots);
 
-        // Note: ListRootsResult doesn't have next_cursor field - roots may not be paginatable per MCP spec
+        // ListRootsResult has no nextCursor field — roots are not paginatable per spec.
 
         let total = Some(all_roots.len() as u64);
 
-        let paginated_response =
-            PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
-
-        serde_json::to_value(paginated_response).map_err(McpError::from)
+        paginate_list_response(base_response, next_cursor, total, has_more, HashMap::new())
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -941,8 +1359,10 @@ impl McpHandler for RootsHandler {
 }
 
 /// Sampling handler for sampling/createMessage endpoint (default/mock implementation)
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct SamplingHandler;
 
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait]
 impl McpHandler for SamplingHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
@@ -990,16 +1410,29 @@ impl McpHandler for SamplingHandler {
 /// This handler validates requests and dispatches to actual McpSampling
 /// implementations registered via .sampling_provider(). It replaces the
 /// default SamplingHandler when providers are configured.
+///
+/// Routes like [`CompletionHandler`]: the first provider whose `can_handle()`
+/// accepts the request wins, trying providers in `priority()` descending
+/// order and, for equal priority, in registration order. Registration order is
+/// carried by the `Vec` rather than recovered from a key, so no iteration order
+/// (which varies per process) can reach the dispatch decision.
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct ProvidedSamplingHandler {
-    providers: HashMap<String, Arc<dyn crate::McpSampling>>,
+    providers: Vec<Arc<dyn crate::McpSampling>>,
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl ProvidedSamplingHandler {
-    pub fn new(providers: HashMap<String, Arc<dyn crate::McpSampling>>) -> Self {
+    /// `providers` arrives in registration order. `sort_by_key` is stable, so
+    /// sorting on priority alone leaves equal-priority providers in that order.
+    pub fn new(providers: Vec<Arc<dyn crate::McpSampling>>) -> Self {
+        let mut providers = providers;
+        providers.sort_by_key(|provider| std::cmp::Reverse(provider.priority()));
         Self { providers }
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait]
 impl McpHandler for ProvidedSamplingHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
@@ -1023,11 +1456,12 @@ impl McpHandler for ProvidedSamplingHandler {
             params: message_params,
         };
 
-        // Select provider - use first for now (can enhance with can_handle/priority later)
+        // First provider (priority desc, registration order tiebreak) whose
+        // can_handle() accepts the request wins — see struct docs.
         let provider = self
             .providers
-            .values()
-            .next()
+            .iter()
+            .find(|provider| provider.can_handle(&request))
             .ok_or_else(|| McpError::configuration("No sampling provider available"))?;
 
         // Validate request - THIS is where maxTokens=0 gets caught!
@@ -1101,20 +1535,8 @@ impl McpHandler for ResourceTemplatesHandler {
             None => DEFAULT_PAGE_SIZE,
         };
 
-        // Parse typed parameters with proper error handling (MCP compliance)
-        use turul_mcp_protocol::resources::ListResourceTemplatesParams;
-        let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListResourceTemplatesParams>(params_value).map_err(|e| {
-                McpError::InvalidParameters(format!(
-                    "Invalid parameters for resources/templates/list: {}",
-                    e
-                ))
-            })?
-        } else {
-            ListResourceTemplatesParams::new()
-        };
-
-        let cursor = list_params.cursor;
+        let cursor = extract_cursor_from_params(&params);
+        let request_meta_extra = extract_request_meta_extra(&params);
         debug!(
             "Listing resource templates with cursor: {:?}, limit: {}",
             cursor, page_size
@@ -1152,6 +1574,18 @@ impl McpHandler for ResourceTemplatesHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last uri_template from previous page
             let cursor_template = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last template uri of a previously served page).
+            if !all_templates
+                .iter()
+                .any(|t| t.uri_template.as_str() == cursor_template)
+            {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_template
+                )));
+            }
 
             // Find the position after the cursor template
             all_templates
@@ -1187,32 +1621,17 @@ impl McpHandler for ResourceTemplatesHandler {
 
         let mut base_response = ListResourceTemplatesResult::new(page_templates);
 
-        // Set top-level nextCursor field on the result before wrapping
         if let Some(ref cursor) = next_cursor {
             base_response = base_response.with_next_cursor(cursor.clone());
         }
 
-        use turul_mcp_protocol::meta::PaginatedResponse;
-        let next_cursor_clone = next_cursor.clone();
-        let mut paginated_response =
-            PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
-
-        // Propagate optional _meta from request to response (MCP 2025-11-25 compliance)
-        if let Some(request_meta) = list_params.meta {
-            // Get existing meta from PaginatedResponse or use pagination defaults
-            let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
-                turul_mcp_protocol::meta::Meta::with_pagination(next_cursor_clone, total, has_more)
-            });
-
-            // Merge request's _meta fields into extra without clobbering pagination
-            for (key, value) in request_meta {
-                response_meta.extra.insert(key, value);
-            }
-
-            paginated_response = paginated_response.with_meta(response_meta);
-        }
-
-        serde_json::to_value(paginated_response).map_err(McpError::from)
+        paginate_list_response(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+            request_meta_extra,
+        )
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -1224,6 +1643,7 @@ impl McpHandler for ResourceTemplatesHandler {
 ///
 /// This trait enables server implementations to provide custom user interfaces
 /// for collecting structured input from users via JSON Schema-defined forms.
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait]
 pub trait ElicitationProvider: Send + Sync {
     /// Present an elicitation request to the user and return their response
@@ -1240,8 +1660,10 @@ pub trait ElicitationProvider: Send + Sync {
 }
 
 /// Default console-based elicitation provider for demonstration
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct MockElicitationProvider;
 
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait]
 impl ElicitationProvider for MockElicitationProvider {
     async fn elicit(
@@ -1276,10 +1698,12 @@ impl ElicitationProvider for MockElicitationProvider {
 }
 
 /// Elicitation handler for elicitation/create endpoint
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct ElicitationHandler {
     provider: Arc<dyn ElicitationProvider>,
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl ElicitationHandler {
     pub fn new(provider: Arc<dyn ElicitationProvider>) -> Self {
         Self { provider }
@@ -1290,6 +1714,7 @@ impl ElicitationHandler {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait]
 impl McpHandler for ElicitationHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
@@ -1329,6 +1754,47 @@ impl McpHandler for ElicitationHandler {
 
 use crate::session::SessionManager;
 
+/// Dedicated handler for inbound `notifications/cancelled`: the cancellation
+/// MECHANISM on Streamable HTTP is closing the request's response stream, so
+/// the notification is accepted and ignored — but its `requestId` and
+/// `reason` are extracted into a structured log line ("Both parties SHOULD
+/// log cancellation reasons for debugging", Cancellation §Behavior).
+pub struct CancelledNotificationHandler;
+
+impl CancelledNotificationHandler {
+    /// `(requestId, reason)` from `notifications/cancelled` params.
+    pub(crate) fn extract(params: Option<&Value>) -> (Option<String>, Option<String>) {
+        let request_id = params.and_then(|p| p.get("requestId")).map(|v| {
+            v.as_str()
+                .map(String::from)
+                .unwrap_or_else(|| v.to_string())
+        });
+        let reason = params
+            .and_then(|p| p.get("reason"))
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        (request_id, reason)
+    }
+}
+
+#[async_trait]
+impl McpHandler for CancelledNotificationHandler {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        let (request_id, reason) = Self::extract(params.as_ref());
+        tracing::info!(
+            request_id = request_id.as_deref().unwrap_or("<none>"),
+            reason = reason.as_deref().unwrap_or("<none>"),
+            "Cancellation requested by peer (accepted and ignored on Streamable HTTP — \
+             the stream close is the cancellation mechanism)"
+        );
+        Ok(Value::Null)
+    }
+
+    fn supported_methods(&self) -> Vec<String> {
+        vec!["notifications/cancelled".to_string()]
+    }
+}
+
 /// Generic notifications handler for most notification endpoints
 pub struct NotificationsHandler;
 
@@ -1344,6 +1810,7 @@ impl McpHandler for NotificationsHandler {
         vec![
             "notifications/message".to_string(),
             "notifications/progress".to_string(),
+            // notifications/cancelled has its own CancelledNotificationHandler
             // MCP 2025-11-25 spec (underscore)
             "notifications/resources/list_changed".to_string(),
             "notifications/tools/list_changed".to_string(),
@@ -1488,5 +1955,121 @@ impl McpHandler for InitializedNotificationHandler {
 
     fn supported_methods(&self) -> Vec<String> {
         vec!["notifications/initialized".to_string()]
+    }
+}
+
+#[cfg(test)]
+mod cancelled_notification_tests {
+    use super::CancelledNotificationHandler;
+    use serde_json::json;
+
+    #[test]
+    fn extracts_request_id_and_reason() {
+        let params = json!({ "requestId": "req-9", "reason": "user clicked stop" });
+        let (id, reason) = CancelledNotificationHandler::extract(Some(&params));
+        assert_eq!(id.as_deref(), Some("req-9"));
+        assert_eq!(reason.as_deref(), Some("user clicked stop"));
+    }
+
+    #[test]
+    fn numeric_request_id_and_absent_reason() {
+        let params = json!({ "requestId": 42 });
+        let (id, reason) = CancelledNotificationHandler::extract(Some(&params));
+        assert_eq!(id.as_deref(), Some("42"));
+        assert_eq!(reason, None);
+    }
+
+    #[test]
+    fn missing_params_is_harmless() {
+        let (id, reason) = CancelledNotificationHandler::extract(None);
+        assert_eq!(id, None);
+        assert_eq!(reason, None);
+    }
+}
+
+#[cfg(feature = "protocol-2025-11-25")]
+#[cfg(test)]
+mod provided_sampling_handler_tests {
+    use super::{McpHandler, ProvidedSamplingHandler};
+    use async_trait::async_trait;
+    use serde_json::json;
+    use std::sync::Arc;
+    use turul_mcp_builders::prelude::*;
+    use turul_mcp_protocol::prompts::ContentBlock;
+    use turul_mcp_protocol::sampling::{
+        CreateMessageRequest, CreateMessageResult, Role, SamplingMessage,
+    };
+
+    /// A sampling provider whose only distinguishing trait is its model id —
+    /// equal priority (default 0) and unconditional `can_handle` (default
+    /// `true`), same as every other provider in this test, so nothing but
+    /// registration order can break the tie.
+    struct NamedSampler {
+        model_id: &'static str,
+    }
+
+    impl HasSamplingConfig for NamedSampler {
+        fn max_tokens(&self) -> u32 {
+            100
+        }
+    }
+
+    impl HasSamplingContext for NamedSampler {
+        fn messages(&self) -> &[SamplingMessage] {
+            &[]
+        }
+    }
+
+    impl HasModelPreferences for NamedSampler {}
+    impl HasIcons for NamedSampler {}
+    impl HasSamplingTools for NamedSampler {}
+
+    #[async_trait]
+    impl crate::McpSampling for NamedSampler {
+        async fn sample(
+            &self,
+            _request: CreateMessageRequest,
+        ) -> crate::McpResult<CreateMessageResult> {
+            Ok(CreateMessageResult::new(
+                Role::Assistant,
+                ContentBlock::Text {
+                    text: "response".to_string(),
+                    annotations: None,
+                    meta: None,
+                },
+                self.model_id,
+            ))
+        }
+    }
+
+    /// Regression test for the HashMap-iteration-order bug: `.sampling_provider()`
+    /// Three providers of equal priority, all accepting: the first registered
+    /// must answer, on every call and in every process.
+    #[tokio::test]
+    async fn equal_priority_providers_answer_in_registration_order() {
+        let providers: Vec<Arc<dyn crate::McpSampling>> = vec![
+            Arc::new(NamedSampler {
+                model_id: "provider-zero",
+            }),
+            Arc::new(NamedSampler {
+                model_id: "provider-one",
+            }),
+            Arc::new(NamedSampler {
+                model_id: "provider-two",
+            }),
+        ];
+
+        let handler = ProvidedSamplingHandler::new(providers);
+        let request = json!({
+            "messages": [{"role": "user", "content": {"type": "text", "text": "hi"}}],
+            "maxTokens": 50
+        });
+
+        let result = handler
+            .handle(Some(request))
+            .await
+            .expect("handle should succeed");
+        let model = result.get("model").and_then(|m| m.as_str());
+        assert_eq!(model, Some("provider-zero"));
     }
 }

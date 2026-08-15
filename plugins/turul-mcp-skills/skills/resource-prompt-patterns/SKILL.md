@@ -16,6 +16,8 @@ description: >
 
 # Resource & Prompt Patterns — Turul MCP Framework
 
+**Spec lane: applies to both 2026-07-28 and 2025-11-25.** These are pure compile-time authoring patterns (function macro, derive, `resource!{}`/`prompt!{}`, builder) with no reference to `initialize`, sessions, SSE, tasks, or elicitation — unchanged across the spec revision.
+
 Resources and prompts are two of the three core MCP primitives (alongside tools). Resources expose **data for clients to read**; prompts expose **conversational templates with arguments**.
 
 ## When to Use Resources vs Prompts
@@ -46,7 +48,7 @@ Need a resource?
 **Best for:** Most resources. Typed parameters, auto-generated `McpResource` impl.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_derive::mcp_resource;
 use turul_mcp_server::prelude::*;
 
@@ -82,7 +84,7 @@ let server = McpServer::builder()
 **Best for:** Resources needing session access or complex read logic with a named struct.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_derive::McpResource;
 use turul_mcp_server::prelude::*;
 
@@ -122,7 +124,7 @@ let server = McpServer::builder()
 **Best for:** Inline one-off resources with closure body. Generates full struct + all traits + `McpResource` impl.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_server::prelude::*;
 
 let config = resource! {
@@ -150,7 +152,7 @@ let server = McpServer::builder()
 **Best for:** Resources whose definitions are unknown at compile time (loaded from config/DB).
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_server::prelude::*;
 
 let resource = ResourceBuilder::new("file:///status.json")
@@ -202,7 +204,7 @@ Note: There is no #[mcp_prompt] function macro (unlike tools and resources).
 **Best for:** Prompts with typed fields that become MCP arguments.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_derive::McpPrompt;
 use turul_mcp_server::prelude::*;
 
@@ -249,7 +251,7 @@ let server = McpServer::builder()
 **Best for:** Inline one-off prompts with closure body. Generates full struct + all traits + `McpPrompt` impl.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_server::prelude::*;
 
 let greet = prompt! {
@@ -283,7 +285,7 @@ let server = McpServer::builder()
 **Best for:** Runtime-defined prompts with built-in template processing.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_server::prelude::*;
 
 let prompt = PromptBuilder::new("summarize")
@@ -347,6 +349,6 @@ PromptMessage::user_image(data, mime)     // User image (base64)
 
 **Middleware (auth, rate limiting, logging)?** → See the `middleware-patterns` skill for `McpMiddleware`, `RequestContext`, `SessionInjection`, and `MiddlewareError`.
 
-**Error handling (McpError variants, decision tree)?** → See the `error-handling-patterns` skill for all 22 variants, error codes, and `From` conversions.
+**Error handling (McpError variants, decision tree)?** → See the `error-handling-patterns` skill for all McpError variants, error codes, and `From` conversions.
 
 **Session state?** Use `session.get_typed_state(key).await` / `session.set_typed_state(key, value).await?`. See: [CLAUDE.md — API Conventions](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#api-conventions)

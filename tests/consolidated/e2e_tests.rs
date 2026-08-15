@@ -15,6 +15,9 @@ mod e2e_sse_notification_roundtrip;
 #[path = "../sse_progress_delivery.rs"]
 mod sse_progress_delivery;
 
+#[path = "../sse_wire_grammar_2025_11_25.rs"]
+mod sse_wire_grammar_2025_11_25;
+
 #[path = "../client_drop_test.rs"]
 mod client_drop_test;
 

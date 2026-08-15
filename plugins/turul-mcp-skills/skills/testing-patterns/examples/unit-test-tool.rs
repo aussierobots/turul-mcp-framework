@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Unit testing a tool with the framework-native call() API
 
 use serde::{Deserialize, Serialize};

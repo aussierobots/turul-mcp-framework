@@ -20,9 +20,13 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     let mut destructive = None;
     let mut idempotent = None;
     let mut open_world = None;
+    let mut icons: Option<syn::Expr> = None;
 
     for arg in args {
         match arg {
+            Meta::NameValue(nv) if nv.path.is_ident("icons") => {
+                icons = Some(nv.value.clone());
+            }
             Meta::NameValue(nv) if nv.path.is_ident("name") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
                     && let Lit::Str(s) = &expr_lit.lit
@@ -263,6 +267,8 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     };
     let annotations_impl = crate::utils::generate_annotations_impl(&struct_name, &annotation_meta);
 
+    let icons_impl = crate::tool_derive::generate_icons_impl(&struct_name, icons.as_ref());
+
     // Generate HasExecution impl based on task_support attribute
     let execution_impl = match task_support.as_deref() {
         Some("optional") => quote! {
@@ -310,9 +316,9 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
             fn get_input_schema() -> turul_mcp_protocol::tools::ToolSchema {
                 use std::collections::HashMap;
                 turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
+                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                         #(#schema_properties),*
-                    ]))
+                    ])))
                     .with_required(vec![
                         #(#required_fields),*
                     ])
@@ -353,7 +359,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+        #icons_impl
 
         #[automatically_derived]
         #execution_impl

@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Resource Pattern 1: Function Macro #[mcp_resource]
 // URI template variable {service} becomes a typed function parameter.
 

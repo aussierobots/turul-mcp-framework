@@ -1,5 +1,7 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Cancellation: how the executor handles cancellation transparently
+// Spec lane: 2025-11-25 in-core tasks only (--no-default-features --features protocol-2025-11-25).
+// For the 2026-07-28 Tasks extension (SEP-2663), see ../SKILL.md.
 //
 // Tools are normal async functions. The TokioTaskExecutor wraps your tool
 // in cancellation logic externally — you don't check for cancellation signals.

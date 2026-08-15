@@ -5,6 +5,7 @@
 use crate::handlers::{McpHandler, ResourcesListHandler};
 use async_trait::async_trait;
 use serde_json::{Value, json};
+use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::meta::PaginatedResponse;
 use turul_mcp_protocol::resources::{ListResourcesResult, ResourceContent};
 
@@ -140,9 +141,14 @@ async fn test_pagination_cursor_consistency() {
     assert!(meta.cursor.is_none()); // No next cursor when all fit in one page
 }
 
+/// Pagination §Error Handling: an invalid cursor SHOULD be rejected with
+/// `-32602`, and the schema names "Pagination: Invalid or expired cursor
+/// values" as an `InvalidParamsError` context. Silently restarting from the
+/// beginning would hand the caller a full first page while it believed it was
+/// resuming, so the failure would surface as duplicated items rather than an
+/// error.
 #[tokio::test]
-async fn test_pagination_with_invalid_cursor() {
-    // Test that invalid cursors are handled gracefully
+async fn test_invalid_cursor_is_rejected_with_invalid_params() {
     let mut handler = ResourcesListHandler::new();
 
     for i in 1..=5 {
@@ -150,15 +156,16 @@ async fn test_pagination_with_invalid_cursor() {
         handler = handler.add_resource(resource);
     }
 
-    // Test with invalid cursor (should start from beginning)
     let invalid_params = json!({ "cursor": "invalid_cursor_value" });
-    let response = handler.handle(Some(invalid_params)).await.unwrap();
-    let data: PaginatedResponse<ListResourcesResult> = serde_json::from_value(response).unwrap();
+    let err = handler
+        .handle(Some(invalid_params))
+        .await
+        .expect_err("an unissued cursor must not be served");
 
-    // Should return all resources (graceful fallback)
-    assert_eq!(data.data.resources.len(), 5);
-    assert!(data.meta.is_some());
-    assert_eq!(data.meta.as_ref().unwrap().has_more, Some(false));
+    assert!(
+        matches!(err, McpError::InvalidParameters(ref m) if m.contains("invalid_cursor_value")),
+        "expected InvalidParameters naming the offending cursor, got {err:?}"
+    );
 }
 
 #[tokio::test]

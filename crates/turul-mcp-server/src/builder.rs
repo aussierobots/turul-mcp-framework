@@ -8,10 +8,11 @@ use std::sync::Arc;
 
 use crate::handlers::*;
 use crate::resource::McpResource;
+#[cfg(feature = "protocol-2025-11-25")]
 use crate::tool::tool_to_descriptor;
-use crate::{
-    McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpRoot, McpSampling,
-};
+use crate::{McpCompletion, McpNotification, McpPrompt};
+#[cfg(feature = "protocol-2025-11-25")]
+use crate::{McpElicitation, McpLogger, McpSampling};
 use crate::{McpServer, McpTool, Result};
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::initialize::*;
@@ -41,19 +42,28 @@ pub struct McpServerBuilder {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 
     /// Elicitations registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     elicitations: HashMap<String, Arc<dyn McpElicitation>>,
 
     /// Sampling providers registered with the server
-    sampling: HashMap<String, Arc<dyn McpSampling>>,
+    #[cfg(feature = "protocol-2025-11-25")]
+    sampling: Vec<Arc<dyn McpSampling>>,
 
     /// Completion providers registered with the server
-    completions: HashMap<String, Arc<dyn McpCompletion>>,
+    completions: Vec<Arc<dyn McpCompletion>>,
+    /// Tasks-extension store (SEP-2663); presence advertises the extension.
+    #[cfg(feature = "ext-tasks")]
+    ext_task_store: Option<Arc<dyn turul_mcp_ext_tasks::TaskStore>>,
+    /// Tool names marked for task election; value = required (true → -32021
+    /// when the client did not declare the extension; false → sync fallback).
+    #[cfg(feature = "ext-tasks")]
+    ext_task_tools: std::collections::HashMap<String, bool>,
 
     /// Loggers registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
 
     /// Root providers registered with the server
-    root_providers: HashMap<String, Arc<dyn McpRoot>>,
 
     /// Notification providers registered with the server
     notifications: HashMap<String, Arc<dyn McpNotification>>,
@@ -62,6 +72,10 @@ pub struct McpServerBuilder {
     handlers: HashMap<String, Arc<dyn McpHandler>>,
 
     /// Roots configured for the server
+    // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+    #[allow(deprecated)]
+    /// 2025-11-25 only: the 2026 server never hosts an inbound `roots/list`.
+    #[cfg(feature = "protocol-2025-11-25")]
     roots: Vec<turul_mcp_protocol::roots::Root>,
 
     /// Optional instructions for clients
@@ -75,9 +89,11 @@ pub struct McpServerBuilder {
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
 
     /// Task storage / runtime (None = tasks not supported)
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
 
     /// Recovery timeout for stuck tasks (milliseconds), default 5 minutes
+    #[cfg(feature = "protocol-2025-11-25")]
     task_recovery_timeout_ms: u64,
 
     /// MCP Lifecycle enforcement configuration
@@ -103,6 +119,8 @@ pub struct McpServerBuilder {
     enable_sse: bool,
     #[cfg(feature = "http")]
     allow_unauthenticated_ping: Option<bool>,
+    #[cfg(feature = "http")]
+    origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
 
     /// Validation errors collected during builder configuration
     validation_errors: Vec<String>,
@@ -121,12 +139,14 @@ impl McpServerBuilder {
         let tools = HashMap::new();
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
 
-        // Add all standard MCP 2025-11-25 handlers by default
+        // Add all standard MCP handlers by default. `ping` (no PingRequest in the
+        // schema) was removed from the 2026-07-28 core, so it is 2025-only.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
-        handlers.insert(
-            "completion/complete".to_string(),
-            Arc::new(CompletionHandler),
-        );
+        // completion/complete is NOT a default handler: "Servers SHOULD
+        // return -32601 when completion is unsupported" — it is registered
+        // by with_completion() or at build() when providers exist, so an
+        // unconfigured server answers 404 + -32601 like any unknown method.
         handlers.insert(
             "resources/list".to_string(),
             Arc::new(ResourcesListHandler::new()),
@@ -134,6 +154,14 @@ impl McpServerBuilder {
         handlers.insert(
             "resources/read".to_string(),
             Arc::new(ResourcesReadHandler::new()),
+        );
+        // Registered unconditionally, like the other two resource methods: a
+        // server that declares the resources capability but happens to have no
+        // templates must answer with an empty list, not -32601. build() swaps in
+        // a populated handler when templates were configured.
+        handlers.insert(
+            "resources/templates/list".to_string(),
+            Arc::new(ResourceTemplatesHandler::new()),
         );
         handlers.insert(
             "prompts/list".to_string(),
@@ -143,13 +171,18 @@ impl McpServerBuilder {
             "prompts/get".to_string(),
             Arc::new(PromptsGetHandler::new()),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
+        // roots/list is a server→client request on 2026 (carried inside MRTR
+        // input requests) — only the 2025 stateful lane hosts it inbound.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "sampling/createMessage".to_string(),
             Arc::new(SamplingHandler),
         );
-        // Note: resources/templates/list is only registered if template resources are configured (see build method)
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "elicitation/create".to_string(),
             Arc::new(ElicitationHandler::with_mock_provider()),
@@ -157,13 +190,33 @@ impl McpServerBuilder {
 
         // Add all notification handlers (except notifications/initialized which is handled specially)
         let notifications_handler = Arc::new(NotificationsHandler);
+        // `ClientNotification` (2026-07-28 schema) dropped `ProgressNotification`
+        // from the client→server union, and `notifications/message` was never a
+        // member of that union on any pin — both are inbound-accepted only on the
+        // 2025-11-25 lane. The 2026 dispatch table simply has no entry for either
+        // method; an unmatched inbound notification is a silent no-op (the
+        // Streamable HTTP POST path still returns 202 regardless of a dispatch
+        // match — see StreamableHttpHandler's notification branch).
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/message".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/progress".to_string(),
             notifications_handler.clone(),
+        );
+        // CancelledNotification has a schema binding on both lanes. On
+        // Streamable HTTP the cancellation MECHANISM is closing the request's
+        // response stream (the transport cancels in-flight dispatch); an
+        // inbound notifications/cancelled is accepted and ignored — request
+        // ids are per-client on the stateless lane and cannot be correlated
+        // across connections ("Invalid cancellation notifications SHOULD be
+        // ignored"). The dedicated handler logs requestId + reason.
+        handlers.insert(
+            "notifications/cancelled".to_string(),
+            Arc::new(CancelledNotificationHandler),
         );
         // MCP 2025-11-25 spec-correct underscore form
         handlers.insert(
@@ -182,6 +235,7 @@ impl McpServerBuilder {
             "notifications/prompts/list_changed".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/roots/list_changed".to_string(),
             notifications_handler.clone(),
@@ -199,10 +253,12 @@ impl McpServerBuilder {
             "notifications/prompts/listChanged".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/roots/listChanged".to_string(),
-            notifications_handler,
+            notifications_handler.clone(),
         );
+        let _ = notifications_handler;
 
         // Note: notifications/initialized is handled by InitializedNotificationHandler in server.rs
 
@@ -216,22 +272,31 @@ impl McpServerBuilder {
             resources: HashMap::new(),
             template_resources: Vec::new(),
             prompts: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             elicitations: HashMap::new(),
-            sampling: HashMap::new(),
-            completions: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
+            sampling: Vec::new(),
+            completions: Vec::new(),
+            #[cfg(feature = "ext-tasks")]
+            ext_task_store: None,
+            #[cfg(feature = "ext-tasks")]
+            ext_task_tools: std::collections::HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
-            root_providers: HashMap::new(),
             notifications: HashMap::new(),
             handlers,
+            #[cfg(feature = "protocol-2025-11-25")]
             roots: Vec::new(),
             instructions: None,
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
-            session_storage: None,             // Default: InMemory storage
-            task_runtime: None,                // Default: tasks not supported
+            session_storage: None, // Default: InMemory storage
+            #[cfg(feature = "protocol-2025-11-25")]
+            task_runtime: None, // Default: tasks not supported
+            #[cfg(feature = "protocol-2025-11-25")]
             task_recovery_timeout_ms: 300_000, // Default: 5 minutes
-            strict_lifecycle: true,            // MCP 2025-11-25: require notifications/initialized
-            test_mode: false,                  // Default: production mode with security
+            strict_lifecycle: true, // MCP 2025-11-25: require notifications/initialized
+            test_mode: false,      // Default: production mode with security
             middleware_stack: crate::middleware::MiddlewareStack::new(),
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             #[cfg(feature = "http")]
@@ -244,6 +309,8 @@ impl McpServerBuilder {
             enable_sse: cfg!(feature = "sse"),
             #[cfg(feature = "http")]
             allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
+            #[cfg(feature = "http")]
+            origin_policy: None, // Default: ServerConfig default (SameOriginOrLoopback)
             validation_errors: Vec::new(),
             tool_change_mode: crate::ToolChangeMode::Static,
             #[cfg(feature = "dynamic-tools")]
@@ -320,10 +387,59 @@ impl McpServerBuilder {
     }
 
     /// Registers a tool that clients can execute
+    /// Tool-name format check (Tools §Tool Names, all SHOULD-level):
+    /// 1–128 chars; only `A-Z a-z 0-9 _ - .`; no spaces or commas.
+    pub(crate) fn tool_name_violation(name: &str) -> Option<String> {
+        if name.is_empty() || name.len() > 128 {
+            return Some(format!(
+                "tool name {name:?} length {} is outside 1..=128",
+                name.len()
+            ));
+        }
+        name.chars()
+            .find(|c| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.')))
+            .map(|c| format!("tool name {name:?} contains disallowed character {c:?}"))
+    }
+
     pub fn tool<T: McpTool + 'static>(mut self, tool: T) -> Self {
+        if let Some(violation) = Self::tool_name_violation(tool.name()) {
+            tracing::warn!(
+                "{violation} — Tools §Tool Names says names SHOULD use only \
+                 A-Z a-z 0-9 _ - . and be 1..=128 chars"
+            );
+        }
         let name = tool.name().to_string();
         self.tools.insert(name, Arc::new(tool));
         self
+    }
+
+    /// Configure the Tasks extension (`io.modelcontextprotocol/tasks`,
+    /// SEP-2663): advertises the extension in `capabilities.extensions` and
+    /// registers the `tasks/get`/`tasks/update`/`tasks/cancel` handlers.
+    /// Tools opt into task election via [`Self::ext_task_tool`] /
+    /// [`Self::ext_task_tool_required`].
+    #[cfg(feature = "ext-tasks")]
+    pub fn with_ext_tasks(mut self, store: Arc<dyn turul_mcp_ext_tasks::TaskStore>) -> Self {
+        self.ext_task_store = Some(store);
+        self
+    }
+
+    /// Register a tool that runs as a task when the request's declared
+    /// `clientCapabilities.extensions` activates the Tasks extension, and
+    /// synchronously otherwise (progressive enhancement).
+    #[cfg(feature = "ext-tasks")]
+    pub fn ext_task_tool<T: McpTool + 'static>(mut self, tool: T) -> Self {
+        self.ext_task_tools.insert(tool.name().to_string(), false);
+        self.tool(tool)
+    }
+
+    /// Register a tool that REQUIRES task execution: calls from clients that
+    /// did not declare the Tasks extension are rejected with `-32021` and
+    /// `data.requiredCapabilities.extensions`.
+    #[cfg(feature = "ext-tasks")]
+    pub fn ext_task_tool_required<T: McpTool + 'static>(mut self, tool: T) -> Self {
+        self.ext_task_tools.insert(tool.name().to_string(), true);
+        self.tool(tool)
     }
 
     /// Register a function tool created with `#[mcp_tool]` macro
@@ -362,7 +478,7 @@ impl McpServerBuilder {
     ///             props.insert("a".to_string(), JsonSchema::number().with_description("First number"));
     ///             props.insert("b".to_string(), JsonSchema::number().with_description("Second number"));
     ///             turul_mcp_protocol::ToolSchema::object()
-    ///                 .with_properties(props)
+    ///                 .with_properties(turul_mcp_builders::tool_props(props))
     ///                 .with_required(vec!["a".to_string(), "b".to_string()])
     ///         })
     ///     }
@@ -849,6 +965,7 @@ impl McpServerBuilder {
     }
 
     /// Register an elicitation provider with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitation<E: McpElicitation + 'static>(mut self, elicitation: E) -> Self {
         let key = format!("elicitation_{}", self.elicitations.len());
         self.elicitations.insert(key, Arc::new(elicitation));
@@ -856,6 +973,7 @@ impl McpServerBuilder {
     }
 
     /// Register multiple elicitation providers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitations<E: McpElicitation + 'static, I: IntoIterator<Item = E>>(
         mut self,
         elicitations: I,
@@ -867,13 +985,14 @@ impl McpServerBuilder {
     }
 
     /// Register a sampling provider with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_provider<S: McpSampling + 'static>(mut self, sampling: S) -> Self {
-        let key = format!("sampling_{}", self.sampling.len());
-        self.sampling.insert(key, Arc::new(sampling));
+        self.sampling.push(Arc::new(sampling));
         self
     }
 
     /// Register multiple sampling providers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_providers<S: McpSampling + 'static, I: IntoIterator<Item = S>>(
         mut self,
         sampling: I,
@@ -886,8 +1005,7 @@ impl McpServerBuilder {
 
     /// Register a completion provider with the server
     pub fn completion_provider<C: McpCompletion + 'static>(mut self, completion: C) -> Self {
-        let key = format!("completion_{}", self.completions.len());
-        self.completions.insert(key, Arc::new(completion));
+        self.completions.push(Arc::new(completion));
         self
     }
 
@@ -903,6 +1021,7 @@ impl McpServerBuilder {
     }
 
     /// Register a logger with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn logger<L: McpLogger + 'static>(mut self, logger: L) -> Self {
         let key = format!("logger_{}", self.loggers.len());
         self.loggers.insert(key, Arc::new(logger));
@@ -910,30 +1029,13 @@ impl McpServerBuilder {
     }
 
     /// Register multiple loggers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn loggers<L: McpLogger + 'static, I: IntoIterator<Item = L>>(
         mut self,
         loggers: I,
     ) -> Self {
         for logger in loggers {
             self = self.logger(logger);
-        }
-        self
-    }
-
-    /// Register a root provider with the server
-    pub fn root_provider<R: McpRoot + 'static>(mut self, root: R) -> Self {
-        let key = format!("root_{}", self.root_providers.len());
-        self.root_providers.insert(key, Arc::new(root));
-        self
-    }
-
-    /// Register multiple root providers
-    pub fn root_providers<R: McpRoot + 'static, I: IntoIterator<Item = R>>(
-        mut self,
-        roots: I,
-    ) -> Self {
-        for root in roots {
-            self = self.root_provider(root);
         }
         self
     }
@@ -1009,6 +1111,7 @@ impl McpServerBuilder {
 
     /// Register a sampler - convenient alias for sampling_provider
     /// Automatically uses "sampling/createMessage" method
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampler<S: McpSampling + 'static>(self, sampling: S) -> Self {
         self.sampling_provider(sampling)
     }
@@ -1048,10 +1151,8 @@ impl McpServerBuilder {
 
     /// Add completion support
     pub fn with_completion(mut self) -> Self {
-        self.capabilities.completions = Some(CompletionsCapabilities {
-            enabled: Some(true),
-        });
-        self.handler(CompletionHandler)
+        self.capabilities.completions = Some(CompletionsCapabilities::default());
+        self.handler(CompletionHandler::new())
     }
 
     /// Add prompts support
@@ -1072,12 +1173,20 @@ impl McpServerBuilder {
     /// You only need to call this explicitly if you want to enable resource capabilities
     /// without registering any resources.
     pub fn with_resources(mut self) -> Self {
-        // Enable notifications if we have resources
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
 
+        // 2026: per-URI `resources/updated` subscriptions are served by the
+        // transport's `subscriptions/listen` stream — the capability is real.
+        // 2025: the `resources/subscribe` RPC has no handler here.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let supports_subscribe = true;
+        #[cfg(feature = "protocol-2025-11-25")]
+        let supports_subscribe = false;
         self.capabilities.resources = Some(ResourcesCapabilities {
-            subscribe: Some(false), // TODO: Implement resource subscriptions
-            list_changed: Some(has_resources),
+            subscribe: Some(supports_subscribe),
+            // build() owns the final listChanged value (true only when the
+            // live registry is wired) — any value set here is overwritten.
+            list_changed: None,
         });
 
         // Create ResourcesListHandler and add all registered resources
@@ -1123,25 +1232,36 @@ impl McpServerBuilder {
     }
 
     /// Add logging support
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_logging(mut self) -> Self {
-        self.capabilities.logging = Some(LoggingCapabilities::default());
+        #[allow(deprecated)] // SEP-2577 migration window
+        {
+            self.capabilities.logging = Some(LoggingCapabilities::default());
+        }
         self.handler(LoggingHandler)
     }
 
-    /// Add roots support
+    /// Add roots support.
+    ///
+    /// 2025-11-25 only: `roots/list` is not a member of the 2026-07-28
+    /// client-to-server request union, where roots are requested from the client
+    /// through an MRTR input request instead. Hosting it inbound on a 2026 build
+    /// would answer a method the spec requires to be a 404 with `-32601`.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_roots(self) -> Self {
-        // Note: roots is not part of standard server capabilities yet
-        // Could be added to experimental if needed
         self.handler(RootsHandler::new())
     }
 
     /// Add a single root directory
+    #[allow(deprecated)]
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn root(mut self, root: turul_mcp_protocol::roots::Root) -> Self {
         self.roots.push(root);
         self
     }
 
     /// Add sampling support
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_sampling(self) -> Self {
         self.handler(SamplingHandler)
     }
@@ -1150,6 +1270,7 @@ impl McpServerBuilder {
     ///
     /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
     /// The server requests elicitation from the client; it doesn't advertise it.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_elicitation(self) -> Self {
         self.handler(ElicitationHandler::with_mock_provider())
     }
@@ -1158,6 +1279,7 @@ impl McpServerBuilder {
     ///
     /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
     /// The server requests elicitation from the client; it doesn't advertise it.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(self, provider: P) -> Self {
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
@@ -1287,6 +1409,7 @@ impl McpServerBuilder {
     /// # Ok(())
     /// # }
     /// ```
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_storage(
         mut self,
         storage: Arc<dyn turul_mcp_task_storage::TaskStorage>,
@@ -1300,6 +1423,7 @@ impl McpServerBuilder {
     /// Configure task support with a pre-built `TaskRuntime`.
     ///
     /// Use this when you need fine-grained control over the task runtime configuration.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
         self
@@ -1309,6 +1433,7 @@ impl McpServerBuilder {
     ///
     /// On server startup, tasks in non-terminal states older than this timeout
     /// will be marked as `Failed`. Default: 300,000 ms (5 minutes).
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn task_recovery_timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.task_recovery_timeout_ms = timeout_ms;
         self
@@ -1349,6 +1474,17 @@ impl McpServerBuilder {
     #[cfg(feature = "http")]
     pub fn allow_unauthenticated_ping(mut self, allow: bool) -> Self {
         self.allow_unauthenticated_ping = Some(allow);
+        self
+    }
+
+    /// Set the Origin-header validation policy (DNS-rebinding protection;
+    /// requires "http" feature).
+    ///
+    /// Default: `OriginPolicy::SameOriginOrLoopback` — requests with a
+    /// present-and-invalid `Origin` header are rejected with HTTP 403.
+    #[cfg(feature = "http")]
+    pub fn origin_policy(mut self, policy: turul_http_mcp_server::OriginPolicy) -> Self {
+        self.origin_policy = Some(policy);
         self
     }
 
@@ -1508,6 +1644,7 @@ impl McpServerBuilder {
         // when no explicit server_state_storage is provided.
 
         // Coherence guard: reject taskSupport=required without task runtime
+        #[cfg(feature = "protocol-2025-11-25")]
         if self.task_runtime.is_none() {
             for (name, tool) in &self.tools {
                 let descriptor = tool_to_descriptor(tool.as_ref());
@@ -1523,6 +1660,21 @@ impl McpServerBuilder {
             }
         }
 
+        // A server MUST NOT advertise an invalid tool inputSchema: validate
+        // every registered tool's inputSchema against the JSON Schema 2020-12
+        // dialect/bounds before it can reach `tools/list`.
+        #[cfg(feature = "protocol-2026-07-28")]
+        for (name, tool) in &self.tools {
+            let descriptor = crate::tool::tool_to_descriptor(tool.as_ref());
+            let schema_value = serde_json::to_value(&descriptor.input_schema)
+                .map_err(|e| McpError::configuration(&e.to_string()))?;
+            if let Err(e) = turul_mcp_schema_validation::validate_tool_input_schema(&schema_value) {
+                return Err(McpError::configuration(&format!(
+                    "Tool '{name}' advertises an invalid inputSchema: {e}"
+                )));
+            }
+        }
+
         // Auto-register resource handlers if resources were registered
         // This eliminates the need for manual .with_resources() calls
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
@@ -1534,13 +1686,16 @@ impl McpServerBuilder {
         // Auto-detect and configure server capabilities based on registered components
         let has_tools = !self.tools.is_empty();
         let has_prompts = !self.prompts.is_empty();
+        #[cfg(feature = "protocol-2025-11-25")]
         let has_roots = !self.roots.is_empty();
+        #[cfg(feature = "protocol-2025-11-25")]
         let has_elicitations = !self.elicitations.is_empty();
         let has_completions = !self.completions.is_empty();
-        let has_samplings = !self.sampling.is_empty();
-        tracing::debug!("🔧 Has sampling configured: {}", has_samplings);
-        let has_logging = !self.loggers.is_empty();
-        tracing::debug!("🔧 Has logging configured: {}", has_logging);
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            let has_samplings = !self.sampling.is_empty();
+            tracing::debug!("🔧 Has sampling configured: {}", has_samplings);
+        }
 
         // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
@@ -1574,8 +1729,15 @@ impl McpServerBuilder {
         // - Admin APIs for runtime resource registration
         // - File system watchers that update resource availability
         if has_resources {
+            // 2026: per-URI `resources/updated` subscriptions are served by the
+            // transport's `subscriptions/listen` stream — the capability is real.
+            // 2025: the `resources/subscribe` RPC has no handler here.
+            #[cfg(feature = "protocol-2026-07-28")]
+            let supports_subscribe = true;
+            #[cfg(feature = "protocol-2025-11-25")]
+            let supports_subscribe = false;
             self.capabilities.resources = Some(ResourcesCapabilities {
-                subscribe: Some(false), // TODO: Implement resource subscriptions in Phase 5
+                subscribe: Some(supports_subscribe),
                 // Static framework: no dynamic change sources = no list changes
                 list_changed: Some(false),
             });
@@ -1583,29 +1745,33 @@ impl McpServerBuilder {
 
         // Elicitation is a client-side capability per MCP 2025-11-25.
         // The server doesn't advertise elicitation support; it requests it from the client.
+        #[cfg(feature = "protocol-2025-11-25")]
         let _ = has_elicitations; // suppress unused warning
 
         // Completion capabilities - enable if completion handlers are registered
         if has_completions {
-            self.capabilities.completions = Some(CompletionsCapabilities {
-                enabled: Some(true),
-            });
+            self.capabilities.completions = Some(CompletionsCapabilities::default());
         }
 
-        // Logging capabilities - always enabled with comprehensive level support
-        // Always enable logging for debugging/monitoring
-        self.capabilities.logging = Some(LoggingCapabilities {
-            enabled: Some(true),
-            levels: Some(vec![
-                "debug".to_string(),
-                "info".to_string(),
-                "warning".to_string(),
-                "error".to_string(),
-            ]),
-        });
+        // Logging is advertised unconditionally because it is unconditionally
+        // served on both lanes, and neither route depends on the `loggers` map:
+        // on 2025-11-25 `logging/setLevel` stores the threshold on the session
+        // (`LoggingHandler` never reads `loggers`), and on 2026-07-28, which
+        // removed that method, the threshold arrives per request in `_meta`.
+        // `SessionContext::notify_log` is available to any tool on either lane.
+        // A server that registers no `McpLogger` still honours both, so
+        // advertising it is truthful — `logging_capability_is_truthful.rs` and
+        // `log_gating_2026.rs` drive the whole path against exactly such a
+        // server on each lane.
+        #[allow(deprecated)] // SEP-2577 migration window
+        {
+            self.capabilities.logging = Some(LoggingCapabilities::default());
+        }
 
         // Tasks capabilities — auto-configure when task runtime is set
+        #[cfg(feature = "protocol-2025-11-25")]
         let has_tasks = self.task_runtime.is_some();
+        #[cfg(feature = "protocol-2025-11-25")]
         if has_tasks {
             use turul_mcp_protocol::initialize::*;
 
@@ -1628,9 +1794,12 @@ impl McpServerBuilder {
         tracing::debug!("   - Tools: {}", has_tools);
         tracing::debug!("   - Resources: {}", has_resources);
         tracing::debug!("   - Prompts: {}", has_prompts);
+        #[cfg(feature = "protocol-2025-11-25")]
         tracing::debug!("   - Roots: {}", has_roots);
+        #[cfg(feature = "protocol-2025-11-25")]
         tracing::debug!("   - Elicitation: {}", has_elicitations);
         tracing::debug!("   - Completions: {}", has_completions);
+        #[cfg(feature = "protocol-2025-11-25")]
         tracing::debug!("   - Tasks: {}", has_tasks);
         tracing::debug!("   - Logging: enabled");
 
@@ -1643,14 +1812,26 @@ impl McpServerBuilder {
             implementation = implementation.with_icons(icons);
         }
 
-        // Add RootsHandler if roots were configured
+        // Add RootsHandler if roots were configured. 2025 lane only: on 2026
+        // the server REQUESTS roots from the client via MRTR; it never hosts
+        // an inbound roots/list.
+        #[allow(unused_mut)]
         let mut handlers = self.handlers;
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.roots.is_empty() {
             let mut roots_handler = RootsHandler::new();
             for root in self.roots {
                 roots_handler = roots_handler.add_root(root);
             }
             handlers.insert("roots/list".to_string(), Arc::new(roots_handler));
+        }
+
+        // Route completion/complete through the registered providers.
+        if !self.completions.is_empty() {
+            handlers.insert(
+                "completion/complete".to_string(),
+                Arc::new(CompletionHandler::new().with_providers(self.completions.clone())),
+            );
         }
 
         // Add PromptsHandlers if prompts were configured
@@ -1667,7 +1848,7 @@ impl McpServerBuilder {
             handlers.insert("prompts/get".to_string(), Arc::new(prompts_get_handler));
         }
 
-        // Add ResourceTemplatesHandler if template resources were configured
+        // Replace the empty default with the configured templates.
         if !self.template_resources.is_empty() {
             let resource_templates_handler =
                 ResourceTemplatesHandler::new().with_templates(self.template_resources.clone());
@@ -1680,6 +1861,7 @@ impl McpServerBuilder {
         // Add ProvidedSamplingHandler if sampling providers were configured
         // This replaces the default SamplingHandler with one that actually calls
         // the registered providers' validate_request() and sample() methods
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.sampling.is_empty() {
             handlers.insert(
                 "sampling/createMessage".to_string(),
@@ -1688,6 +1870,7 @@ impl McpServerBuilder {
         }
 
         // Add task handlers if task runtime is configured
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             handlers.insert(
                 "tasks/get".to_string(),
@@ -1723,6 +1906,42 @@ impl McpServerBuilder {
             _ => crate::tool::compute_tool_fingerprint(&self.tools),
         };
 
+        // Tasks extension (SEP-2663): advertise + register handlers only when
+        // a store is configured (capability truthfulness, same rule as 2025).
+        #[cfg(feature = "ext-tasks")]
+        let ext_tasks_runtime = match self.ext_task_store {
+            Some(store) => {
+                let runtime = Arc::new(crate::ext_tasks::ExtTasksRuntime::new(store));
+                handlers.insert(
+                    "tasks/get".to_string(),
+                    Arc::new(crate::ext_tasks::ExtTasksGetHandler::new(Arc::clone(
+                        &runtime,
+                    ))),
+                );
+                handlers.insert(
+                    "tasks/update".to_string(),
+                    Arc::new(crate::ext_tasks::ExtTasksUpdateHandler::new(Arc::clone(
+                        &runtime,
+                    ))),
+                );
+                handlers.insert(
+                    "tasks/cancel".to_string(),
+                    Arc::new(crate::ext_tasks::ExtTasksCancelHandler::new(Arc::clone(
+                        &runtime,
+                    ))),
+                );
+                self.capabilities
+                    .extensions
+                    .get_or_insert_with(std::collections::HashMap::new)
+                    .insert(
+                        turul_mcp_ext_tasks::EXTENSION_IDENTIFIER.to_string(),
+                        turul_mcp_ext_tasks::capability(),
+                    );
+                Some(runtime)
+            }
+            None => None,
+        };
+
         // Create server
         Ok(McpServer::new(
             implementation,
@@ -1733,7 +1952,12 @@ impl McpServerBuilder {
             self.session_timeout_minutes,
             self.session_cleanup_interval_seconds,
             self.session_storage,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.task_runtime,
+            #[cfg(feature = "ext-tasks")]
+            ext_tasks_runtime,
+            #[cfg(feature = "ext-tasks")]
+            Arc::new(self.ext_task_tools),
             self.strict_lifecycle,
             self.middleware_stack,
             self.route_registry,
@@ -1752,6 +1976,8 @@ impl McpServerBuilder {
             self.enable_sse,
             #[cfg(feature = "http")]
             self.allow_unauthenticated_ping,
+            #[cfg(feature = "http")]
+            self.origin_policy,
         ))
     }
 }
@@ -1826,6 +2052,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for TestTool {}
 
     #[async_trait]
@@ -1841,6 +2068,16 @@ mod tests {
         }
     }
 
+    /// Tools §Tool Names SHOULDs: 1–128 chars, A-Z a-z 0-9 _ - . only.
+    #[test]
+    fn tool_name_violations_are_detected() {
+        assert!(McpServerBuilder::tool_name_violation("calc_v2.add-1").is_none());
+        assert!(McpServerBuilder::tool_name_violation("my tool").is_some());
+        assert!(McpServerBuilder::tool_name_violation("a,b").is_some());
+        assert!(McpServerBuilder::tool_name_violation("").is_some());
+        assert!(McpServerBuilder::tool_name_violation(&"x".repeat(129)).is_some());
+    }
+
     #[test]
     fn test_builder_defaults() {
         let builder = McpServerBuilder::new();
@@ -1849,8 +2086,33 @@ mod tests {
         assert!(builder.title.is_none());
         assert!(builder.instructions.is_none());
         assert!(builder.tools.is_empty());
-        assert_eq!(builder.handlers.len(), 21); // MCP 2025-11-25 handlers (spec + legacy compat)
-        assert!(builder.handlers.contains_key("ping"));
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            assert_eq!(builder.handlers.len(), 22); // spec + legacy compat
+            assert!(builder.handlers.contains_key("ping"));
+            assert!(builder.handlers.contains_key("notifications/message"));
+            assert!(builder.handlers.contains_key("notifications/progress"));
+        }
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            // The stateless core drops ping/initialize, the task methods,
+            // and the inbound roots surface (roots/list + its notifications
+            // — roots is requested via MRTR on 2026, never hosted). It also
+            // drops `notifications/message` and `notifications/progress`:
+            // the 2026-07-28 `ClientNotification` union has no
+            // `ProgressNotification` member, and `notifications/message` was
+            // never a member on any pin — 12, not 14.
+            assert_eq!(builder.handlers.len(), 13);
+            assert!(!builder.handlers.contains_key("ping"));
+            assert!(!builder.handlers.contains_key("roots/list"));
+            assert!(!builder.handlers.contains_key("notifications/message"));
+            assert!(!builder.handlers.contains_key("notifications/progress"));
+            assert!(
+                !builder
+                    .handlers
+                    .contains_key("notifications/roots/list_changed")
+            );
+        }
     }
 
     #[test]
@@ -2305,6 +2567,7 @@ mod tests {
     }
 
     /// Coherence guard: taskSupport=required without task runtime must fail at build().
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_coherence_guard_rejects_required_without_runtime() {
         use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};
@@ -2389,6 +2652,7 @@ mod tests {
     }
 
     /// Coherence guard: taskSupport=optional without runtime should succeed (optional is fine).
+    #[cfg(feature = "protocol-2025-11-25")]
     #[test]
     fn test_coherence_guard_allows_optional_without_runtime() {
         use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};

@@ -192,8 +192,8 @@ async fn test_mcp_protocol_version_header_on_requests() {
 // rotate the bearer *before* DELETE without rebuilding the transport (which
 // would drop the connection pool).
 //
-// These are wire-layer tests per CLAUDE.md rule 3: they assert what reqwest
-// actually puts on the wire, not framework-internal state.
+// These are wire-layer tests: they assert what reqwest actually puts on the
+// wire (transport-protocol-boundary bytes), not framework-internal state.
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
@@ -310,9 +310,12 @@ async fn test_clearing_override_falls_back_to_default_headers() {
 // not just the in-process `Value` the helper returns.
 // ============================================================================
 
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 use turul_mcp_client::McpClient;
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 use turul_mcp_client::config::ClientConfig;
 use turul_rpc::{JsonRpcNotification, JsonRpcRequest, RequestId, RequestParams};
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 use wiremock::matchers::body_partial_json;
 
 #[tokio::test]
@@ -350,11 +353,12 @@ async fn test_typed_request_serializes_to_compliant_jsonrpc_envelope_on_wire() {
     // Capture the actual bytes that hit the wire.
     let received = mock_server.received_requests().await.unwrap();
     assert_eq!(received.len(), 1);
-    let body: serde_json::Value = serde_json::from_slice(&received[0].body)
-        .expect("wire body must be valid JSON");
+    let body: serde_json::Value =
+        serde_json::from_slice(&received[0].body).expect("wire body must be valid JSON");
 
     assert_eq!(
-        body["jsonrpc"], serde_json::json!("2.0"),
+        body["jsonrpc"],
+        serde_json::json!("2.0"),
         "typed constructor must emit `jsonrpc: \"2.0\"` envelope field"
     );
     assert_eq!(body["method"], serde_json::json!("tools/list"));
@@ -415,6 +419,10 @@ async fn test_typed_request_with_empty_object_params_preserves_field_on_wire() {
 /// `McpClient::ping → build_request → send_request_internal → HttpTransport
 /// ::send_request → reqwest → wire`, so a regression that bypassed the
 /// typed constructor in any single MCP method would be caught here.
+/// `ping` is a 2025-11-25-only method (removed from 2026-07-28 core), and this
+/// exercises the `initialize` handshake, so it only runs on lanes that link
+/// the legacy wire path.
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 #[tokio::test]
 async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() {
     let mock_server = MockServer::start().await;
@@ -426,9 +434,21 @@ async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() 
         .mount(&mock_server)
         .await;
 
+    // server/discover probe: a 2025-11-25 server answers -32601, driving the
+    // bilingual client to fall back to the initialize handshake.
+    Mock::given(method("POST"))
+        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .respond_with(ResponseTemplate::new(200).insert_header("Content-Type", "application/json").set_body_json(
+            serde_json::json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+        ))
+        .mount(&mock_server)
+        .await;
+
     // initialize: return a session ID and a minimal valid InitializeResult.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "initialize"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "initialize"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -455,9 +475,7 @@ async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() 
         .and(body_partial_json(
             serde_json::json!({"method": "notifications/initialized"}),
         ))
-        .respond_with(
-            ResponseTemplate::new(202).insert_header("Content-Type", "application/json"),
-        )
+        .respond_with(ResponseTemplate::new(202).insert_header("Content-Type", "application/json"))
         .expect(1)
         .mount(&mock_server)
         .await;
@@ -486,7 +504,10 @@ async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() 
     let transport = Box::new(HttpTransport::new(&url).unwrap());
     let client = McpClient::new(transport, ClientConfig::default());
 
-    client.connect().await.expect("connect() must succeed against the wiremock server");
+    client
+        .connect()
+        .await
+        .expect("connect() must succeed against the wiremock server");
     client.ping().await.expect("ping() must succeed");
 
     // Find the `ping` POST among captured requests and assert the envelope.
@@ -500,8 +521,8 @@ async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() 
         })
         .expect("expected to capture a `ping` POST on the wire");
 
-    let body: serde_json::Value = serde_json::from_slice(&ping_req.body)
-        .expect("ping body must be valid JSON");
+    let body: serde_json::Value =
+        serde_json::from_slice(&ping_req.body).expect("ping body must be valid JSON");
 
     assert_eq!(
         body["jsonrpc"],
@@ -527,8 +548,7 @@ async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() 
         .find(|r| {
             let body: serde_json::Value =
                 serde_json::from_slice(&r.body).unwrap_or(serde_json::Value::Null);
-            body.get("method")
-                == Some(&serde_json::json!("notifications/initialized"))
+            body.get("method") == Some(&serde_json::json!("notifications/initialized"))
         })
         .expect("expected to capture a `notifications/initialized` POST");
     let init_body: serde_json::Value = serde_json::from_slice(&init_notif.body).unwrap();
@@ -549,6 +569,9 @@ async fn test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack() 
 /// `RequestParams::Object(HashMap<String, Value>)` does NOT flatten, coerce,
 /// or otherwise mangle nested array values. Distinct from JSON-RPC envelope
 /// positional params (which MCP never uses at the `params` level).
+/// Drives the `initialize` handshake, so it only runs on lanes that link the
+/// legacy wire path.
+#[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 #[tokio::test]
 async fn test_mcp_client_call_tool_preserves_array_argument_values_on_wire() {
     let mock_server = MockServer::start().await;
@@ -558,8 +581,20 @@ async fn test_mcp_client_call_tool_preserves_array_argument_values_on_wire() {
         .mount(&mock_server)
         .await;
 
+    // server/discover probe: a 2025-11-25 server answers -32601, driving the
+    // bilingual client to fall back to the initialize handshake.
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "initialize"})))
+        .and(body_partial_json(serde_json::json!({"method": "server/discover"})))
+        .respond_with(ResponseTemplate::new(200).insert_header("Content-Type", "application/json").set_body_json(
+            serde_json::json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+        ))
+        .mount(&mock_server)
+        .await;
+
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            serde_json::json!({"method": "initialize"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -591,7 +626,9 @@ async fn test_mcp_client_call_tool_preserves_array_argument_values_on_wire() {
         .await;
 
     Mock::given(method("POST"))
-        .and(body_partial_json(serde_json::json!({"method": "tools/call"})))
+        .and(body_partial_json(
+            serde_json::json!({"method": "tools/call"}),
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -682,10 +719,7 @@ async fn test_typed_notification_omits_id_field_on_wire() {
     let mock_server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .respond_with(
-            ResponseTemplate::new(202)
-                .insert_header("Content-Type", "application/json"),
-        )
+        .respond_with(ResponseTemplate::new(202).insert_header("Content-Type", "application/json"))
         .expect(1)
         .mount(&mock_server)
         .await;
@@ -708,7 +742,10 @@ async fn test_typed_notification_omits_id_field_on_wire() {
     let body: serde_json::Value = serde_json::from_slice(&received[0].body).unwrap();
 
     assert_eq!(body["jsonrpc"], serde_json::json!("2.0"));
-    assert_eq!(body["method"], serde_json::json!("notifications/initialized"));
+    assert_eq!(
+        body["method"],
+        serde_json::json!("notifications/initialized")
+    );
     assert!(
         body.get("id").is_none(),
         "JSON-RPC 2.0 §4.1 — notifications MUST NOT contain an `id` field on the wire"

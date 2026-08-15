@@ -1,0 +1,34 @@
+# Uses the bilingual turul-mcp-client for its client bin, so it stays out of
+# default-members (like streamable-http-client) and is built by an explicit
+# gate step.
+[package]
+name = "mrtr-elicitation-server"
+version = "0.4.0"
+edition.workspace = true
+# Two bins in this package; without this, the documented
+# `cargo run -p mrtr-elicitation-server` cannot pick one and fails.
+default-run = "mrtr-elicitation-server"
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
+async-trait.workspace = true
+turul-mcp-client.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "mrtr-elicitation-server"
+path = "src/main.rs"
+test = false
+
+[[bin]]
+name = "mrtr-elicitation-client"
+path = "src/client.rs"
+test = false

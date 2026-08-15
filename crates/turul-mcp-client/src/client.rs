@@ -14,12 +14,15 @@ use crate::streaming::StreamHandler;
 use crate::transport::BoxedTransport;
 
 // Re-export protocol types for convenience
-use turul_mcp_protocol::meta::Cursor;
-use turul_mcp_protocol::resources::{ListResourceTemplatesResult, ResourceTemplate};
-use turul_mcp_protocol::tasks::{
+use turul_mcp_protocol_2025_11_25::completion::{
+    CompleteArgument, CompleteResult, CompletionContext, CompletionReference,
+};
+use turul_mcp_protocol_2025_11_25::meta::Cursor;
+use turul_mcp_protocol_2025_11_25::resources::{ListResourceTemplatesResult, ResourceTemplate};
+use turul_mcp_protocol_2025_11_25::tasks::{
     CancelTaskResult, CreateTaskResult, GetTaskResult, ListTasksResult, Task,
 };
-use turul_mcp_protocol::{
+use turul_mcp_protocol_2025_11_25::{
     CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
     ListToolsResult, Prompt, ReadResourceResult, Resource, Tool,
 };
@@ -31,6 +34,10 @@ use turul_mcp_protocol::{
 pub type NotificationCallback = Arc<dyn Fn(&str, Option<&Value>) + Send + Sync>;
 
 /// Main MCP client
+/// Per-tool SEP-2243 bindings: tool name → `(header name, argument JSON
+/// pointer, declared type)` per `x-mcp-header` annotation.
+type ParamBindingMap = std::collections::HashMap<String, Vec<(String, String, String)>>;
+
 pub struct McpClient {
     /// Transport layer — `Arc<BoxedTransport>` (no Mutex) so concurrent
     /// `call_tool`/`list_tools`/etc. go through the transport in parallel.
@@ -48,12 +55,83 @@ pub struct McpClient {
     response_consumer_handle: Arc<parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>>,
     /// Cached tool list (invalidated by `notifications/tools/list_changed`)
     cached_tools: Arc<RwLock<Option<Vec<Tool>>>>,
+    /// SEP-2243 `Mcp-Param-*` bindings per tool, from the raw 2026 `tools/list`
+    /// result. The public `Tool` vocabulary (2025 types) cannot carry the
+    /// `x-mcp-header` annotation, so the bindings are captured before the
+    /// type remap.
+    cached_param_bindings: Arc<RwLock<ParamBindingMap>>,
+    /// Raw 2026 `inputSchema` per tool, from the raw `tools/list` result. The
+    /// public `Tool` vocabulary cannot hold every JSON Schema 2020-12 construct
+    /// a 2026 server may advertise, so the untruncated schema is kept here.
+    cached_tool_schemas: Arc<RwLock<std::collections::HashMap<String, Value>>>,
     /// Cached resource list (invalidated by `notifications/resources/list_changed`)
     cached_resources: Arc<RwLock<Option<Vec<Resource>>>>,
     /// Cached prompt list (invalidated by `notifications/prompts/list_changed`)
     cached_prompts: Arc<RwLock<Option<Vec<Prompt>>>>,
+    /// The `server/discover` result captured during 2026 negotiation —
+    /// capabilities, instructions, serverInfo, supportedVersions.
+    discovered: Arc<RwLock<Option<DiscoveredServer>>>,
     /// User-supplied notification callback
     notification_callback: Option<NotificationCallback>,
+    /// Wire spec negotiated at `connect()`, locked for this client's lifetime.
+    protocol_version: Arc<RwLock<Option<crate::version::McpVersion>>>,
+}
+
+/// The body of a successful `server/discover` response, retained for the
+/// lifetime of the connection. Field shapes are kept as raw JSON — the
+/// public client vocabulary is version-neutral.
+#[derive(Debug, Clone)]
+pub struct DiscoveredServer {
+    /// `serverInfo` (name/version/title…), read from the result's `_meta`.
+    /// Self-reported and unverified — never key behavior or trust on it.
+    pub server_info: Option<Value>,
+    /// The server's declared capabilities object.
+    pub capabilities: Option<Value>,
+    /// Optional usage instructions ("can be used by clients to improve an
+    /// LLM's understanding of available tools").
+    pub instructions: Option<String>,
+    /// Protocol versions the server supports.
+    pub supported_versions: Vec<String>,
+}
+
+impl DiscoveredServer {
+    /// Only the 2026-07-28 lane produces a `server/discover` result to parse;
+    /// the narrowed 2025-11-25 build does not link the crate this reads from.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    fn from_result(result: &Value) -> Self {
+        Self {
+            server_info: result
+                .get("_meta")
+                .and_then(|m| m.get(turul_mcp_protocol_2026_07_28::meta::META_KEY_SERVER_INFO))
+                .cloned(),
+            capabilities: result.get("capabilities").cloned(),
+            instructions: result
+                .get("instructions")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            supported_versions: result
+                .get("supportedVersions")
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// `error.data.supported` from an UnsupportedProtocolVersionError object.
+fn extract_supported_versions(error: &Value) -> Option<Vec<String>> {
+    error
+        .pointer("/data/supported")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
 }
 
 impl Drop for McpClient {
@@ -126,9 +204,13 @@ impl McpClient {
             request_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             response_consumer_handle: Arc::new(parking_lot::Mutex::new(None)),
             cached_tools: Arc::new(RwLock::new(None)),
+            cached_param_bindings: Arc::new(RwLock::new(std::collections::HashMap::new())),
+            cached_tool_schemas: Arc::new(RwLock::new(std::collections::HashMap::new())),
             cached_resources: Arc::new(RwLock::new(None)),
             cached_prompts: Arc::new(RwLock::new(None)),
+            discovered: Arc::new(RwLock::new(None)),
             notification_callback,
+            protocol_version: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -141,10 +223,32 @@ impl McpClient {
             handle.abort();
         }
 
-        // Connect transport
-        {
-            self.transport.connect().await?;
+        self.transport.connect().await?;
 
+        // Negotiate the wire spec and run the version-appropriate handshake.
+        // The listener is started AFTER this: on 2026-07-28 there is no GET SSE
+        // stream to open at all, and on 2025-11-25 the GET must carry the
+        // session id the handshake produces.
+        self.negotiate_protocol().await?;
+
+        self.start_server_event_listener().await?;
+
+        info!("Successfully connected to MCP server");
+        Ok(())
+    }
+
+    /// Open the transport's server-initiated event stream and wire it to the
+    /// stream handler. No-op when the transport has no such stream, and skipped
+    /// on 2026-07-28 — that revision removed the GET SSE stream from Streamable
+    /// HTTP, so opening one only earns an HTTP 405.
+    async fn start_server_event_listener(&self) -> McpClientResult<()> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            debug!("Skipping the GET SSE listener: 2026-07-28 has no GET stream");
+            return Ok(());
+        }
+
+        {
             // Start event listener if supported
             if self.transport.capabilities().server_events {
                 let receiver = self.transport.start_event_listener().await?;
@@ -226,11 +330,155 @@ impl McpClient {
             }
         }
 
-        // Initialize session
-        self.initialize_session().await?;
-
-        info!("Successfully connected to MCP server");
         Ok(())
+    }
+
+    /// The wire spec negotiated for this connection, or `None` before `connect()`.
+    pub async fn negotiated_version(&self) -> Option<crate::version::McpVersion> {
+        *self.protocol_version.read().await
+    }
+
+    async fn lock_version(&self, v: crate::version::McpVersion) -> McpClientResult<()> {
+        *self.protocol_version.write().await = Some(v);
+        // Advertise the negotiated spec on the MCP-Protocol-Version header (and, for
+        // the 2026-07-28 stateless core, stop sending the removed Mcp-Session-Id).
+        self.transport.set_protocol_version(v.as_str());
+        // 2026-07-28 is stateless — there is no initialize handshake to mark the
+        // session ready, so do it here. (A 2025-11-25 connection is already Active
+        // via initialize_session() before this is reached.)
+        if v == crate::version::McpVersion::V2026_07_28 {
+            self.session
+                .set_state(crate::session::SessionState::Active)
+                .await;
+        }
+        info!(version = %v, "Negotiated MCP wire version");
+        Ok(())
+    }
+
+    /// Bilingual negotiation: explicit hint wins; otherwise probe `server/discover`
+    /// and apply the [`classify_probe`](crate::version::classify_probe) rule.
+    #[cfg(feature = "client-bilingual")]
+    async fn negotiate_protocol(&self) -> McpClientResult<()> {
+        use crate::version::{McpVersion, ProbeDecision, classify_probe};
+
+        if let Some(hint) = self.config.mcp_protocol_version {
+            match hint {
+                McpVersion::V2025_11_25 => self.initialize_session().await?,
+                // 2026-07-28 stateless core: no initialize handshake.
+                McpVersion::V2026_07_28 => {}
+            }
+            return self.lock_version(hint).await;
+        }
+
+        let probe = self.probe_discover().await?;
+        match classify_probe(probe, self.config.allow_legacy_gateway_fallback) {
+            ProbeDecision::Use2026 => self.lock_version(McpVersion::V2026_07_28).await,
+            ProbeDecision::FallbackTo2025 => {
+                // The probe advertised 2026-07-28 on the wire; restore the legacy
+                // version header before the initialize handshake.
+                self.transport
+                    .set_protocol_version(McpVersion::V2025_11_25.as_str());
+                self.initialize_session().await?;
+                self.lock_version(McpVersion::V2025_11_25).await
+            }
+            ProbeDecision::Abort(reason) => {
+                Err(crate::error::ProtocolError::NegotiationFailed(reason).into())
+            }
+        }
+    }
+
+    #[cfg(feature = "client-2025-11-25-only")]
+    async fn negotiate_protocol(&self) -> McpClientResult<()> {
+        self.initialize_session().await?;
+        self.lock_version(crate::version::McpVersion::V2025_11_25)
+            .await
+    }
+
+    #[cfg(feature = "client-2026-07-28-only")]
+    async fn negotiate_protocol(&self) -> McpClientResult<()> {
+        match self.probe_discover().await? {
+            crate::version::DiscoverProbe::Discovered => {
+                self.lock_version(crate::version::McpVersion::V2026_07_28).await
+            }
+            _ => Err(crate::error::ProtocolError::UnsupportedVersion(
+                "client-2026-07-28-only: server did not answer server/discover — not a 2026-07-28 server"
+                    .to_string(),
+            )
+            .into()),
+        }
+    }
+
+    /// Probe the server with a `server/discover` request and classify the outcome
+    /// into a [`DiscoverProbe`](crate::version::DiscoverProbe). A valid result =>
+    /// 2026; a JSON-RPC error => carries the code; an HTTP non-2xx => carries the status.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn probe_discover(&self) -> McpClientResult<crate::version::DiscoverProbe> {
+        use crate::error::TransportError;
+        use crate::version::DiscoverProbe;
+        use turul_mcp_protocol_2026_07_28 as p2026;
+
+        let meta = p2026::meta::RequestMetaObject::new(
+            p2026::MCP_VERSION,
+            p2026::initialize::Implementation::new(
+                self.config.client_info.name.clone(),
+                self.config.client_info.version.clone(),
+            ),
+            p2026::initialize::ClientCapabilities::default(),
+        );
+        let discover = p2026::discover::DiscoverRequest::new(meta);
+        let params = serde_json::to_value(&discover.params).map_err(|e| {
+            McpClientError::generic(format!("Failed to serialize server/discover params: {}", e))
+        })?;
+        let envelope = self.build_request("server/discover", params);
+
+        // The probe is a 2026-era request: its `_meta` says 2026-07-28, and the
+        // MCP-Protocol-Version header MUST match the body (a 2026 server rejects
+        // the disagreement with 400). Advertise 2026-07-28 for the probe; the
+        // FallbackTo2025 arm restores the legacy header before `initialize`.
+        self.transport.set_protocol_version(p2026::MCP_VERSION);
+
+        match timeout(
+            self.config.timeouts.initialization,
+            self.send_request_with_headers_internal(envelope),
+        )
+        .await
+        {
+            Err(_) => Err(McpClientError::Timeout),
+            Ok(Ok(resp)) => {
+                if let Some(err) = resp.body.get("error") {
+                    let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
+                    Ok(DiscoverProbe::JsonRpcError(
+                        code,
+                        extract_supported_versions(err),
+                    ))
+                } else if let Some(result) = resp.body.get("result") {
+                    // Retain the DiscoverResult body — capabilities,
+                    // instructions, serverInfo, supportedVersions — for the
+                    // accessors ("Both parties must respect declared
+                    // capabilities throughout the interaction").
+                    *self.discovered.write().await = Some(DiscoveredServer::from_result(result));
+                    Ok(DiscoverProbe::Discovered)
+                } else {
+                    Err(crate::error::ProtocolError::InvalidResponse(
+                        "server/discover response carried neither result nor error".to_string(),
+                    )
+                    .into())
+                }
+            }
+            Ok(Err(McpClientError::Transport(TransportError::HttpStatus { status, message }))) => {
+                // A 400 whose body is a recognized modern JSON-RPC error is a
+                // negotiation signal, not a transport failure — surface the code
+                // (e.g. -32022 UnsupportedProtocolVersionError) to the classifier.
+                if let Ok(body) = serde_json::from_str::<serde_json::Value>(&message)
+                    && let Some(code) = body.pointer("/error/code").and_then(|c| c.as_i64())
+                {
+                    let supported = body.get("error").and_then(extract_supported_versions);
+                    return Ok(DiscoverProbe::JsonRpcError(code, supported));
+                }
+                Ok(DiscoverProbe::HttpStatus(status))
+            }
+            Ok(Err(other)) => Err(other),
+        }
     }
 
     /// Disconnect from the MCP server
@@ -449,8 +697,15 @@ impl McpClient {
                 Err(e) => {
                     warn!(attempt = attempt, error = %e, "Request failed");
 
-                    // MCP spec: 404 means session unknown — must re-initialize
-                    if e.is_session_expired() {
+                    // 404 means "session unknown, re-initialize" only where
+                    // sessions exist. On 2026-07-28 it is the mapping for an
+                    // unknown method, so recovering here would answer a method
+                    // the peer does not implement by sending `initialize` — a
+                    // method that revision removed. Surface the 404 instead.
+                    if e.is_session_expired()
+                        && self.negotiated_version().await
+                            != Some(crate::version::McpVersion::V2026_07_28)
+                    {
                         warn!("Session expired (HTTP 404) — attempting re-initialization");
                         self.session.reset().await;
                         // Clear stale session ID from transport so initialize
@@ -595,9 +850,24 @@ impl McpClient {
 
     /// List available tools (returns cached result if available)
     ///
+    /// Returns the FIRST page only — pagination spec: "Treat a missing
+    /// nextCursor as the end of results". Use
+    /// [`list_tools_paginated`](Self::list_tools_paginated) to walk all pages.
+    ///
     /// The cache is automatically invalidated when the server sends a
     /// `notifications/tools/list_changed` notification. Use [`refresh_tools`](Self::refresh_tools)
     /// to force a fresh fetch.
+    ///
+    /// # Schema fidelity on a 2026-07-28 connection
+    ///
+    /// The returned [`Tool`] models each `inputSchema` property as a closed enum
+    /// keyed on `"type"`, so a property expressed with a JSON Schema 2020-12
+    /// composition keyword (`oneOf`/`anyOf`/`allOf`/`$ref` — legal per SEP-2106)
+    /// cannot be carried. Such a property is dropped from the returned schema and
+    /// a `tracing::warn!` naming the tool and the dropped paths is emitted; the
+    /// tool itself is still listed and still callable. Read
+    /// [`tool_input_schema`](Self::tool_input_schema) for the untruncated schema
+    /// the server actually advertised.
     pub async fn list_tools(&self) -> McpClientResult<Vec<Tool>> {
         // Return cached tools if available
         {
@@ -619,7 +889,25 @@ impl McpClient {
         Ok(tools)
     }
 
+    /// The untruncated `inputSchema` the server advertised for `tool_name`, as
+    /// raw JSON — populated by [`list_tools`](Self::list_tools) /
+    /// [`refresh_tools`](Self::refresh_tools) on a 2026-07-28 connection.
+    ///
+    /// This is the full-fidelity route for the JSON Schema 2020-12 constructs
+    /// the public [`Tool`] type cannot hold (see
+    /// [`list_tools`](Self::list_tools)). `None` on a 2025-11-25 connection, or
+    /// before any tool listing has been fetched.
+    pub async fn tool_input_schema(&self, tool_name: &str) -> Option<Value> {
+        self.cached_tool_schemas
+            .read()
+            .await
+            .get(tool_name)
+            .cloned()
+    }
+
     /// Force a fresh fetch of tools from the server, bypassing and updating the cache.
+    ///
+    /// Same 2026-07-28 schema-fidelity caveat as [`list_tools`](Self::list_tools).
     pub async fn refresh_tools(&self) -> McpClientResult<Vec<Tool>> {
         let tools = self.fetch_tools().await?;
 
@@ -634,7 +922,16 @@ impl McpClient {
 
     /// Fetch tools from the server (no cache interaction).
     async fn fetch_tools(&self) -> McpClientResult<Vec<Tool>> {
-        debug!("Fetching tools from server");
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self.fetch_tools_2026_07_28().await;
+        }
+        self.fetch_tools_2025_11_25().await
+    }
+
+    /// `tools/list` for a 2025-11-25 connection (the historical alias path).
+    async fn fetch_tools_2025_11_25(&self) -> McpClientResult<Vec<Tool>> {
+        debug!("Fetching tools from server (2025-11-25)");
 
         let request = self.build_request("tools/list", json!({}));
 
@@ -646,12 +943,64 @@ impl McpClient {
         Ok(tools_response.tools)
     }
 
+    /// `tools/list` for a 2026-07-28 connection: request carries `_meta`, and the
+    /// 2026-shaped result (`resultType`/`ttlMs`/`cacheScope` + tools) is parsed
+    /// via the [`protocol::v2026`](crate::protocol::v2026_07_28) module.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn fetch_tools_2026_07_28(&self) -> McpClientResult<Vec<Tool>> {
+        debug!("Fetching tools from server (2026-07-28)");
+
+        let meta = crate::protocol::v2026_07_28::request_meta(
+            &self.config.client_info.name,
+            &self.config.client_info.version,
+            &self.config.declared_capabilities,
+        );
+        let request = self.build_request(
+            "tools/list",
+            crate::protocol::v2026_07_28::params_with_meta(&meta, json!({})),
+        );
+
+        let response = self.send_request_internal(request).await?;
+        let raw_result = response.get("result").cloned().unwrap_or(Value::Null);
+        let tools = crate::protocol::v2026_07_28::parse_list_tools(&raw_result)?;
+
+        // Capture the SEP-2243 Mcp-Param bindings and the untruncated
+        // inputSchemas before the vocabulary remap drops the x-mcp-header
+        // annotations and any 2020-12 construct the public type cannot hold.
+        {
+            let bindings = crate::protocol::v2026_07_28::collect_param_bindings(&raw_result);
+            *self.cached_param_bindings.write().await = bindings;
+            let schemas = crate::protocol::v2026_07_28::collect_input_schemas(&raw_result);
+            *self.cached_tool_schemas.write().await = schemas;
+        }
+
+        debug!(count = tools.len(), "Retrieved tools");
+        Ok(tools)
+    }
+
     /// List available tools with pagination support
+    ///
+    /// Same 2026-07-28 schema-fidelity caveat as [`list_tools`](Self::list_tools).
     pub async fn list_tools_paginated(
         &self,
         cursor: Option<Cursor>,
     ) -> McpClientResult<ListToolsResult> {
         debug!("Listing tools with pagination");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra = match cursor {
+                Some(ref c) => json!({ "cursor": c.as_str() }),
+                None => json!({}),
+            };
+            return self
+                .send_2026_07_28(
+                    "tools/list",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_list_tools_result,
+                )
+                .await;
+        }
 
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
@@ -673,9 +1022,142 @@ impl McpClient {
         Ok(tools_response)
     }
 
+    /// Issue a 2026-07-28 operation: build the request with the required per-request
+    /// `_meta`, send it, and parse the 2026-shaped result via the supplied parser.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn send_2026_07_28<T>(
+        &self,
+        method: &str,
+        extra: Value,
+        parse: impl Fn(&Value) -> McpClientResult<T>,
+    ) -> McpClientResult<T> {
+        let meta = crate::protocol::v2026_07_28::request_meta(
+            &self.config.client_info.name,
+            &self.config.client_info.version,
+            &self.config.declared_capabilities,
+        );
+        let request = self.build_request(
+            method,
+            crate::protocol::v2026_07_28::params_with_meta(&meta, extra),
+        );
+        let response = self.send_request_internal(request).await?;
+        parse(&response.get("result").cloned().unwrap_or(Value::Null))
+    }
+
+    /// SEP-2243: the `Mcp-Param-*` headers for a `tools/call`, from the cached
+    /// bindings. Empty when the tool schema has not been fetched yet — per the
+    /// spec the call then goes out without custom headers, and a rejecting
+    /// server prompts the application to `list_tools()` and retry.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn mcp_param_headers_for(
+        &self,
+        tool_name: &str,
+        arguments: &Value,
+    ) -> Vec<(String, String)> {
+        let cache = self.cached_param_bindings.read().await;
+        match cache.get(tool_name) {
+            Some(bindings) => {
+                crate::protocol::v2026_07_28::encode_param_headers(bindings, arguments)
+            }
+            None => Vec::new(),
+        }
+    }
+
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+    async fn send_2026_07_28_with_extra_headers<T>(
+        &self,
+        method: &str,
+        extra: Value,
+        extra_headers: &[(String, String)],
+        parse: impl Fn(&Value) -> McpClientResult<T>,
+    ) -> McpClientResult<T> {
+        let meta = crate::protocol::v2026_07_28::request_meta(
+            &self.config.client_info.name,
+            &self.config.client_info.version,
+            &self.config.declared_capabilities,
+        );
+        let request = self.build_request(
+            method,
+            crate::protocol::v2026_07_28::params_with_meta(&meta, extra),
+        );
+        if !self.session.is_ready().await {
+            return Err(crate::error::SessionError::NotInitialized.into());
+        }
+        let response = tokio::time::timeout(
+            self.config.timeouts.request,
+            self.transport
+                .send_request_with_extra_headers(request, extra_headers),
+        )
+        .await
+        .map_err(|_| McpClientError::Timeout)??;
+        if let Some(error) = response.get("error") {
+            let code = error.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
+            let message = error
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown error");
+            let data = error.get("data").cloned();
+            return Err(McpClientError::server_error(code, message, data));
+        }
+        parse(&response.get("result").cloned().unwrap_or(Value::Null))
+    }
+
+    /// Reject an operation whose method was removed from the 2026-07-28 core when the
+    /// connection negotiated 2026. The method remains available on a 2025-11-25 connection.
+    async fn reject_if_2026_07_28(&self, _method: &str) -> McpClientResult<()> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return Err(crate::error::ProtocolError::MethodNotFound(format!(
+                "`{_method}` is not part of MCP 2026-07-28 (removed from core); this connection negotiated 2026"
+            ))
+            .into());
+        }
+        Ok(())
+    }
+
     /// Call a tool
     pub async fn call_tool(&self, name: &str, arguments: Value) -> McpClientResult<CallToolResult> {
         debug!(tool = name, "Calling tool");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra_headers = self.mcp_param_headers_for(name, &arguments).await;
+            let first = self
+                .send_2026_07_28_with_extra_headers(
+                    "tools/call",
+                    json!({ "name": name, "arguments": arguments.clone() }),
+                    &extra_headers,
+                    crate::protocol::v2026_07_28::parse_call_tool,
+                )
+                .await;
+            // SEP-2243 §Client Behavior: on a header-mismatch rejection "the
+            // client SHOULD call tools/list to obtain the current inputSchema,
+            // then retry the original request with the appropriate headers."
+            // One refresh + one retry; a second mismatch error surfaces to
+            // the caller.
+            let is_header_mismatch = matches!(
+                &first,
+                Err(McpClientError::ServerError { code, .. })
+                    if *code == turul_mcp_protocol_2026_07_28::headers::ERROR_CODE_HEADER_MISMATCH as i32
+            );
+            if is_header_mismatch {
+                debug!(
+                    tool = name,
+                    "Mcp-Param mismatch — refreshing tools/list and retrying once"
+                );
+                let _ = self.refresh_tools().await?;
+                let extra_headers = self.mcp_param_headers_for(name, &arguments).await;
+                return self
+                    .send_2026_07_28_with_extra_headers(
+                        "tools/call",
+                        json!({ "name": name, "arguments": arguments.clone() }),
+                        &extra_headers,
+                        crate::protocol::v2026_07_28::parse_call_tool,
+                    )
+                    .await;
+            }
+            return first;
+        }
 
         let request = self.build_request(
             "tools/call",
@@ -697,7 +1179,386 @@ impl McpClient {
         Ok(call_response)
     }
 
+    /// Open a `subscriptions/listen` stream (2026-07-28 connections only).
+    ///
+    /// `filter` is the wire `SubscriptionFilter` object (e.g.
+    /// `{"toolsListChanged": true, "resourceSubscriptions": ["file:///a"]}`).
+    /// Returns the stream AFTER consuming and validating the mandatory first
+    /// message (`notifications/subscriptions/acknowledged`); the returned
+    /// [`SubscriptionStream`] exposes the honored filter and the subscription
+    /// id, then yields each subsequent notification. Dropping the stream
+    /// closes it, which per Streamable HTTP cancels the subscription.
+    pub async fn subscriptions_listen(&self, filter: Value) -> McpClientResult<SubscriptionStream> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let meta = crate::protocol::v2026_07_28::request_meta(
+                &self.config.client_info.name,
+                &self.config.client_info.version,
+                &self.config.declared_capabilities,
+            );
+            let request = self.build_request(
+                "subscriptions/listen",
+                crate::protocol::v2026_07_28::params_with_meta(
+                    &meta,
+                    json!({ "notifications": filter }),
+                ),
+            );
+            let request_id = request
+                .get("id")
+                .and_then(|id| id.as_str())
+                .map(String::from);
+            let mut receiver = self.transport.send_request_streaming(request).await?;
+
+            // The server MUST send the acknowledgement first.
+            let ack = tokio::time::timeout(self.config.timeouts.request, receiver.recv())
+                .await
+                .map_err(|_| McpClientError::Timeout)?
+                .ok_or_else(|| {
+                    crate::error::ProtocolError::InvalidResponse(
+                        "subscriptions/listen stream closed before the acknowledgement".to_string(),
+                    )
+                })?;
+            if ack.get("method").and_then(|m| m.as_str())
+                != Some("notifications/subscriptions/acknowledged")
+            {
+                return Err(crate::error::ProtocolError::InvalidResponse(format!(
+                    "first listen-stream message must be the acknowledgement, got: {ack}"
+                ))
+                .into());
+            }
+            let honored = ack
+                .pointer("/params/notifications")
+                .cloned()
+                .unwrap_or(Value::Null);
+            let subscription_id = ack
+                .pointer("/params/_meta/io.modelcontextprotocol~1subscriptionId")
+                .or_else(|| {
+                    ack.get("params")
+                        .and_then(|p| p.get("_meta"))
+                        .and_then(|m| m.get("io.modelcontextprotocol/subscriptionId"))
+                })
+                .and_then(|v| v.as_str())
+                .map(String::from);
+            return Ok(SubscriptionStream {
+                honored,
+                subscription_id,
+                request_id,
+                receiver,
+            });
+        }
+
+        let _ = filter;
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "subscriptions/listen requires a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
+    /// The `server/discover` result captured at connect time (2026
+    /// connections): server capabilities, instructions, supported versions.
+    /// `None` before connect or on a 2025-11-25 connection.
+    pub async fn discovered_server(&self) -> Option<DiscoveredServer> {
+        self.discovered.read().await.clone()
+    }
+
+    /// The server's declared capabilities from `server/discover` —
+    /// "Both parties must respect declared capabilities throughout the
+    /// interaction".
+    pub async fn server_capabilities(&self) -> Option<Value> {
+        self.discovered
+            .read()
+            .await
+            .as_ref()
+            .and_then(|d| d.capabilities.clone())
+    }
+
+    /// The server's `instructions` from `server/discover`, for priming an
+    /// LLM with usage guidance.
+    pub async fn server_instructions(&self) -> Option<String> {
+        self.discovered
+            .read()
+            .await
+            .as_ref()
+            .and_then(|d| d.instructions.clone())
+    }
+
+    /// Call a tool with a request-scoped progress feed (2026-07-28
+    /// connections only). The `progress_token` (string or number) rides
+    /// `_meta.progressToken`; each `notifications/progress` arriving on the
+    /// request's SSE stream is handed to `on_progress` before the final
+    /// result is returned.
+    pub async fn call_tool_with_progress(
+        &self,
+        name: &str,
+        arguments: Value,
+        progress_token: Value,
+        mut on_progress: impl FnMut(Value) + Send,
+    ) -> McpClientResult<CallToolResult> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let meta = crate::protocol::v2026_07_28::request_meta(
+                &self.config.client_info.name,
+                &self.config.client_info.version,
+                &self.config.declared_capabilities,
+            );
+            let mut params = crate::protocol::v2026_07_28::params_with_meta(
+                &meta,
+                json!({ "name": name, "arguments": arguments }),
+            );
+            if let Some(m) = params.get_mut("_meta").and_then(|m| m.as_object_mut()) {
+                m.insert("progressToken".to_string(), progress_token);
+            }
+            let request = self.build_request("tools/call", params);
+            let mut receiver = self.transport.send_request_streaming(request).await?;
+
+            let deadline = tokio::time::Instant::now() + self.config.timeouts.request;
+            loop {
+                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+                let frame = tokio::time::timeout(remaining, receiver.recv())
+                    .await
+                    .map_err(|_| McpClientError::Timeout)?
+                    .ok_or_else(|| {
+                        crate::error::ProtocolError::InvalidResponse(
+                            "request stream closed before the final response".to_string(),
+                        )
+                    })?;
+                if frame.get("method").and_then(|m| m.as_str()) == Some("notifications/progress") {
+                    on_progress(frame.get("params").cloned().unwrap_or(Value::Null));
+                    continue;
+                }
+                if let Some(err) = frame.get("error") {
+                    return Err(McpClientError::server_error(
+                        err.get("code").and_then(|c| c.as_i64()).unwrap_or(0) as i32,
+                        err.get("message")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("server error"),
+                        err.get("data").cloned(),
+                    ));
+                }
+                if frame.get("result").is_some() {
+                    return crate::protocol::v2026_07_28::parse_call_tool(
+                        frame.get("result").unwrap_or(&Value::Null),
+                    );
+                }
+                // Other request-scoped notifications (e.g. notifications/message)
+                // are not progress — skip.
+            }
+        }
+
+        let _ = (name, arguments, progress_token, &mut on_progress);
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "per-request progress requires a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
+    /// Retry a `tools/call` after an `InputRequired` outcome (MRTR, SEP-2322):
+    /// re-issues the ORIGINAL request (same name/arguments) with the gathered
+    /// `input_responses` and the server's `request_state` echoed verbatim,
+    /// under a fresh JSON-RPC id. 2026-07-28 connections only.
+    pub async fn call_tool_with_input_responses(
+        &self,
+        name: &str,
+        arguments: Value,
+        input_responses: Value,
+        request_state: Option<String>,
+    ) -> McpClientResult<CallToolResult> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let mut extra = json!({
+                "name": name,
+                "arguments": arguments,
+                "inputResponses": input_responses,
+            });
+            if let (Some(obj), Some(state)) = (extra.as_object_mut(), request_state) {
+                obj.insert("requestState".to_string(), Value::String(state));
+            }
+            return self
+                .send_2026_07_28(
+                    "tools/call",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_call_tool,
+                )
+                .await;
+        }
+
+        let _ = (name, arguments, input_responses, request_state);
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "MRTR input responses require a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
+    /// Retry a `resources/read` after an `InputRequired` outcome (MRTR,
+    /// SEP-2322): re-issues the ORIGINAL request (same uri) with the gathered
+    /// `input_responses` and the server's `request_state` echoed verbatim,
+    /// under a fresh JSON-RPC id. 2026-07-28 connections only.
+    pub async fn read_resource_with_input_responses(
+        &self,
+        uri: &str,
+        input_responses: Value,
+        request_state: Option<String>,
+    ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::ResourceContent>> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let mut extra = json!({
+                "uri": uri,
+                "inputResponses": input_responses,
+            });
+            if let (Some(obj), Some(state)) = (extra.as_object_mut(), request_state) {
+                obj.insert("requestState".to_string(), Value::String(state));
+            }
+            let r = self
+                .send_2026_07_28(
+                    "resources/read",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_read_resource,
+                )
+                .await?;
+            return Ok(r.contents);
+        }
+
+        let _ = (uri, input_responses, request_state);
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "MRTR input responses require a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
+    /// Retry a `prompts/get` after an `InputRequired` outcome (MRTR,
+    /// SEP-2322): re-issues the ORIGINAL request (same name/arguments) with
+    /// the gathered `input_responses` and the server's `request_state` echoed
+    /// verbatim, under a fresh JSON-RPC id. 2026-07-28 connections only.
+    pub async fn get_prompt_with_input_responses(
+        &self,
+        name: &str,
+        arguments: Option<Value>,
+        input_responses: Value,
+        request_state: Option<String>,
+    ) -> McpClientResult<GetPromptResult> {
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let mut extra = json!({
+                "name": name,
+                "inputResponses": input_responses,
+            });
+            if let (Some(obj), Some(args)) = (extra.as_object_mut(), arguments.clone()) {
+                obj.insert("arguments".to_string(), args);
+            }
+            if let (Some(obj), Some(state)) = (extra.as_object_mut(), request_state) {
+                obj.insert("requestState".to_string(), Value::String(state));
+            }
+            return self
+                .send_2026_07_28(
+                    "prompts/get",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_get_prompt,
+                )
+                .await;
+        }
+
+        let _ = (name, arguments, input_responses, request_state);
+        Err(crate::error::ProtocolError::MethodNotFound(
+            "MRTR input responses require a 2026-07-28 connection".to_string(),
+        )
+        .into())
+    }
+
+    /// `tools/call` that accepts EITHER a synchronous completion or a
+    /// `CreateTaskResult` (`resultType: "task"`, SEP-2663). Requires a
+    /// 2026-07-28 connection and `declared_capabilities.ext_tasks = true`
+    /// (servers MUST NOT return task handles to clients that did not declare
+    /// the extension).
+    #[cfg(feature = "ext-tasks")]
+    pub async fn call_tool_or_task(
+        &self,
+        name: &str,
+        arguments: Value,
+    ) -> McpClientResult<ToolCallOutcome> {
+        if self.negotiated_version().await != Some(crate::version::McpVersion::V2026_07_28) {
+            return Err(crate::error::ProtocolError::MethodNotFound(
+                "the Tasks extension requires a 2026-07-28 connection".to_string(),
+            )
+            .into());
+        }
+        let extra = json!({ "name": name, "arguments": arguments });
+        // No explicit Mcp-Name: the transport's apply_request_metadata_headers
+        // derives it from params.name for tools/call and Base64-sentinel-encodes
+        // it. Passing a raw one here would emit a second, unencoded Mcp-Name
+        // header (reqwest appends rather than replaces).
+        self.send_2026_07_28_with_extra_headers("tools/call", extra, &[], |result| {
+            if result.get("resultType").and_then(|v| v.as_str())
+                == Some(turul_mcp_ext_tasks::RESULT_TYPE_TASK)
+            {
+                let task: turul_mcp_ext_tasks::CreateTaskResult =
+                    serde_json::from_value(result.clone())?;
+                return Ok(ToolCallOutcome::Task(task));
+            }
+            crate::protocol::v2026_07_28::parse_call_tool(result).map(ToolCallOutcome::Completed)
+        })
+        .await
+    }
+
+    /// `tasks/get` — poll one task's state (SEP-2663).
+    #[cfg(feature = "ext-tasks")]
+    pub async fn task_get(
+        &self,
+        task_id: &str,
+    ) -> McpClientResult<turul_mcp_ext_tasks::DetailedTask> {
+        self.send_2026_07_28("tasks/get", json!({ "taskId": task_id }), |result| {
+            let r: turul_mcp_ext_tasks::GetTaskResult = serde_json::from_value(result.clone())?;
+            Ok(r.task)
+        })
+        .await
+    }
+
+    /// `tasks/update` — deliver input responses to an `input_required` task
+    /// (SEP-2663). `input_responses` is the `{key: InputResponse}` map whose
+    /// keys answer the task's outstanding `inputRequests`.
+    #[cfg(feature = "ext-tasks")]
+    pub async fn task_update(&self, task_id: &str, input_responses: Value) -> McpClientResult<()> {
+        self.send_2026_07_28(
+            "tasks/update",
+            json!({ "taskId": task_id, "inputResponses": input_responses }),
+            |_| Ok(()),
+        )
+        .await
+    }
+
+    /// `tasks/cancel` — cooperative cancellation (SEP-2663); the ack does not
+    /// guarantee a `cancelled` terminal status.
+    #[cfg(feature = "ext-tasks")]
+    pub async fn task_cancel(&self, task_id: &str) -> McpClientResult<()> {
+        self.send_2026_07_28("tasks/cancel", json!({ "taskId": task_id }), |_| Ok(()))
+            .await
+    }
+
+    /// Poll `tasks/get` until the task reaches a terminal status, honoring
+    /// the server's `pollIntervalMs` hint (clamped to [50ms, 30s]; default
+    /// 500ms when the server sends none).
+    #[cfg(feature = "ext-tasks")]
+    pub async fn task_wait(
+        &self,
+        task_id: &str,
+    ) -> McpClientResult<turul_mcp_ext_tasks::DetailedTask> {
+        loop {
+            let task = self.task_get(task_id).await?;
+            if task.status().is_terminal() {
+                return Ok(task);
+            }
+            let interval_ms = task
+                .fields()
+                .poll_interval_ms
+                .unwrap_or(500.0)
+                .clamp(50.0, 30_000.0);
+            tokio::time::sleep(std::time::Duration::from_millis(interval_ms as u64)).await;
+        }
+    }
+
     /// List available resources (returns cached result if available)
+    ///
+    /// Returns the FIRST page only — use
+    /// [`list_resources_paginated`](Self::list_resources_paginated) to walk all pages.
     ///
     /// The cache is automatically invalidated when the server sends a
     /// `notifications/resources/list_changed` notification. Use
@@ -733,6 +1594,17 @@ impl McpClient {
     async fn fetch_resources(&self) -> McpClientResult<Vec<Resource>> {
         debug!("Fetching resources from server");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "resources/list",
+                    json!({}),
+                    crate::protocol::v2026_07_28::parse_list_resources,
+                )
+                .await;
+        }
+
         let request = self.build_request("resources/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
@@ -752,6 +1624,21 @@ impl McpClient {
         cursor: Option<Cursor>,
     ) -> McpClientResult<ListResourcesResult> {
         debug!("Listing resources with pagination");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra = match cursor {
+                Some(ref c) => json!({ "cursor": c.as_str() }),
+                None => json!({}),
+            };
+            return self
+                .send_2026_07_28(
+                    "resources/list",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_list_resources_result,
+                )
+                .await;
+        }
 
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
@@ -777,8 +1664,20 @@ impl McpClient {
     pub async fn read_resource(
         &self,
         uri: &str,
-    ) -> McpClientResult<Vec<turul_mcp_protocol::ResourceContent>> {
+    ) -> McpClientResult<Vec<turul_mcp_protocol_2025_11_25::ResourceContent>> {
         debug!(uri = uri, "Reading resource");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let r = self
+                .send_2026_07_28(
+                    "resources/read",
+                    json!({ "uri": uri }),
+                    crate::protocol::v2026_07_28::parse_read_resource,
+                )
+                .await?;
+            return Ok(r.contents);
+        }
 
         let request = self.build_request("resources/read", json!({ "uri": uri }));
 
@@ -797,6 +1696,17 @@ impl McpClient {
     /// List available resource templates
     pub async fn list_resource_templates(&self) -> McpClientResult<Vec<ResourceTemplate>> {
         debug!("Listing resource templates");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "resources/templates/list",
+                    json!({}),
+                    crate::protocol::v2026_07_28::parse_list_resource_templates,
+                )
+                .await;
+        }
 
         let request = self.build_request("resources/templates/list", json!({}));
 
@@ -817,6 +1727,21 @@ impl McpClient {
         cursor: Option<Cursor>,
     ) -> McpClientResult<ListResourceTemplatesResult> {
         debug!("Listing resource templates with pagination");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra = match cursor {
+                Some(ref c) => json!({ "cursor": c.as_str() }),
+                None => json!({}),
+            };
+            return self
+                .send_2026_07_28(
+                    "resources/templates/list",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_list_resource_templates_result,
+                )
+                .await;
+        }
 
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
@@ -839,6 +1764,9 @@ impl McpClient {
     }
 
     /// List available prompts (returns cached result if available)
+    ///
+    /// Returns the FIRST page only — use
+    /// [`list_prompts_paginated`](Self::list_prompts_paginated) to walk all pages.
     ///
     /// The cache is automatically invalidated when the server sends a
     /// `notifications/prompts/list_changed` notification. Use
@@ -874,6 +1802,17 @@ impl McpClient {
     async fn fetch_prompts(&self) -> McpClientResult<Vec<Prompt>> {
         debug!("Fetching prompts from server");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "prompts/list",
+                    json!({}),
+                    crate::protocol::v2026_07_28::parse_list_prompts,
+                )
+                .await;
+        }
+
         let request = self.build_request("prompts/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
@@ -890,6 +1829,21 @@ impl McpClient {
         cursor: Option<Cursor>,
     ) -> McpClientResult<ListPromptsResult> {
         debug!("Listing prompts with pagination");
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let extra = match cursor {
+                Some(ref c) => json!({ "cursor": c.as_str() }),
+                None => json!({}),
+            };
+            return self
+                .send_2026_07_28(
+                    "prompts/list",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_list_prompts_result,
+                )
+                .await;
+        }
 
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
@@ -919,6 +1873,21 @@ impl McpClient {
     ) -> McpClientResult<GetPromptResult> {
         debug!(prompt = name, "Getting prompt");
 
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            let mut extra = json!({ "name": name });
+            if let Some(ref args) = arguments {
+                extra["arguments"] = args.clone();
+            }
+            return self
+                .send_2026_07_28(
+                    "prompts/get",
+                    extra,
+                    crate::protocol::v2026_07_28::parse_get_prompt,
+                )
+                .await;
+        }
+
         let mut params = json!({
             "name": name
         });
@@ -941,9 +1910,85 @@ impl McpClient {
         Ok(prompt_response)
     }
 
+    /// Ask the server to complete an argument value (`completion/complete`).
+    ///
+    /// `reference` names the prompt (`ref/prompt`) or resource template
+    /// (`ref/resource`) the argument belongs to; `context` carries the values
+    /// already resolved for the other arguments, which the server MAY use to
+    /// narrow its suggestions.
+    pub async fn complete(
+        &self,
+        reference: CompletionReference,
+        argument: CompleteArgument,
+        context: Option<CompletionContext>,
+    ) -> McpClientResult<CompleteResult> {
+        debug!(argument = %argument.name, "Requesting completions");
+
+        let mut params = json!({
+            "ref": serde_json::to_value(&reference)?,
+            "argument": serde_json::to_value(&argument)?,
+        });
+        if let Some(ref context) = context {
+            params["context"] = serde_json::to_value(context)?;
+        }
+
+        #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
+        if self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28) {
+            return self
+                .send_2026_07_28(
+                    "completion/complete",
+                    params,
+                    crate::protocol::v2026_07_28::parse_complete,
+                )
+                .await;
+        }
+
+        let request = self.build_request("completion/complete", params);
+        let response = self.send_request_internal(request).await?;
+        let result: CompleteResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(
+            count = result.completion.values.len(),
+            "Completions received"
+        );
+        Ok(result)
+    }
+
+    /// Tell the server to stop working on an in-flight request
+    /// (`notifications/cancelled`).
+    ///
+    /// `request_id` MUST be the JSON-RPC id of a request this client previously
+    /// issued and that SHOULD still be in flight — e.g.
+    /// [`SubscriptionStream::request_id`](SubscriptionStream::request_id) for a
+    /// live `subscriptions/listen` stream. The notification is fire-and-forget:
+    /// the server MAY still answer the original request if the cancellation
+    /// arrives too late.
+    ///
+    /// Dropping a request future also closes its stream, which the server
+    /// treats as cancellation; this is the explicit form, and the only one that
+    /// can carry a `reason`.
+    pub async fn cancel_request(
+        &self,
+        request_id: &str,
+        reason: Option<&str>,
+    ) -> McpClientResult<()> {
+        debug!(request_id, "Cancelling request");
+
+        let mut params = json!({ "requestId": request_id });
+        if let Some(reason) = reason {
+            params["reason"] = json!(reason);
+        }
+
+        self.send_notification_internal(Self::build_notification("notifications/cancelled", params))
+            .await
+    }
+
     /// Send a ping to test connectivity
     pub async fn ping(&self) -> McpClientResult<()> {
         debug!("Sending ping");
+
+        self.reject_if_2026_07_28("ping").await?;
 
         let request = self.build_request("ping", json!({}));
 
@@ -958,6 +2003,8 @@ impl McpClient {
     pub async fn get_task(&self, task_id: &str) -> McpClientResult<Task> {
         debug!(task_id = task_id, "Getting task");
 
+        self.reject_if_2026_07_28("tasks/get").await?;
+
         let request = self.build_request("tasks/get", json!({ "taskId": task_id }));
 
         let response = self.send_request_internal(request).await?;
@@ -971,6 +2018,8 @@ impl McpClient {
     /// List tasks
     pub async fn list_tasks(&self) -> McpClientResult<Vec<Task>> {
         debug!("Listing tasks");
+
+        self.reject_if_2026_07_28("tasks/list").await?;
 
         let request = self.build_request("tasks/list", json!({}));
 
@@ -988,6 +2037,8 @@ impl McpClient {
         cursor: Option<Cursor>,
     ) -> McpClientResult<ListTasksResult> {
         debug!("Listing tasks with pagination");
+
+        self.reject_if_2026_07_28("tasks/list").await?;
 
         let request_params = if let Some(cursor) = cursor {
             json!({ "cursor": cursor.as_str() })
@@ -1013,6 +2064,8 @@ impl McpClient {
     pub async fn cancel_task(&self, task_id: &str) -> McpClientResult<Task> {
         debug!(task_id = task_id, "Cancelling task");
 
+        self.reject_if_2026_07_28("tasks/cancel").await?;
+
         let request = self.build_request("tasks/cancel", json!({ "taskId": task_id }));
 
         let response = self.send_request_internal(request).await?;
@@ -1029,6 +2082,8 @@ impl McpClient {
     /// response until it completes. Use a longer timeout for this operation.
     pub async fn get_task_result(&self, task_id: &str) -> McpClientResult<Value> {
         debug!(task_id = task_id, "Getting task result");
+
+        self.reject_if_2026_07_28("tasks/result").await?;
 
         let request = self.build_request("tasks/result", json!({ "taskId": task_id }));
 
@@ -1056,6 +2111,9 @@ impl McpClient {
         ttl_ms: Option<i64>,
     ) -> McpClientResult<ToolCallResponse> {
         debug!(tool = name, "Calling tool with task augmentation");
+
+        self.reject_if_2026_07_28("tasks (task-augmented tools/call)")
+            .await?;
 
         let mut params = json!({
             "name": name,
@@ -1277,6 +2335,7 @@ impl McpClientBuilder {
                 crate::transport::TransportType::Sse => {
                     // SSE is a legacy transport — ConnectionConfig not wired (no with_config)
                     Box::new(
+                        #[allow(deprecated)] // ≤2024-11-05 fallback (SEP-2596)
                         crate::transport::sse::SseTransport::new(url)
                             .expect("URL was validated in with_url() but SSE construction failed"),
                     )
@@ -1311,6 +2370,48 @@ fn value_to_request_params(params: Value) -> Option<RequestParams> {
             "MCP client requests use object or null params; got scalar: {:?}",
             other
         ),
+    }
+}
+
+/// Outcome of [`McpClient::call_tool_or_task`] (SEP-2663): the server is the
+/// sole decider of task materialization.
+#[cfg(feature = "ext-tasks")]
+#[derive(Debug)]
+pub enum ToolCallOutcome {
+    /// The call completed synchronously with an ordinary tool result.
+    Completed(CallToolResult),
+    /// The server elected a task — poll with
+    /// [`McpClient::task_wait`]/[`McpClient::task_get`].
+    Task(turul_mcp_ext_tasks::CreateTaskResult),
+}
+
+/// A live `subscriptions/listen` stream: the acknowledged filter subset, the
+/// server-assigned subscription id, and the ordered notification feed.
+/// Dropping this closes the stream (= cancels the subscription).
+pub struct SubscriptionStream {
+    /// The filter subset the server agreed to honor (the acknowledgement's
+    /// `params.notifications`, verbatim).
+    pub honored: Value,
+    /// `io.modelcontextprotocol/subscriptionId` from the acknowledgement.
+    pub subscription_id: Option<String>,
+    /// JSON-RPC id of the `subscriptions/listen` request that opened this
+    /// stream — the id [`McpClient::cancel_request`] takes to close it
+    /// explicitly.
+    request_id: Option<String>,
+    receiver: tokio::sync::mpsc::UnboundedReceiver<Value>,
+}
+
+impl SubscriptionStream {
+    /// Next notification on the stream (`None` when the server closes it).
+    pub async fn next(&mut self) -> Option<Value> {
+        self.receiver.recv().await
+    }
+
+    /// JSON-RPC id of the `subscriptions/listen` request that opened this
+    /// stream. Pass it to [`McpClient::cancel_request`] to close the stream
+    /// with a reason instead of dropping it.
+    pub fn request_id(&self) -> Option<&str> {
+        self.request_id.as_deref()
     }
 }
 
@@ -1356,6 +2457,10 @@ mod tests {
     /// Mock transport that records send_notification() calls and provides
     /// a controllable event channel for injecting ServerEvents.
     struct MockTransport {
+        #[cfg_attr(
+            not(any(feature = "client-bilingual", feature = "client-2025-11-25-only")),
+            allow(dead_code)
+        )]
         event_tx: mpsc::UnboundedSender<ServerEvent>,
         event_rx: parking_lot::Mutex<Option<mpsc::UnboundedReceiver<ServerEvent>>>,
         notifications: Arc<tokio::sync::Mutex<Vec<Value>>>,
@@ -1380,12 +2485,14 @@ mod tests {
         }
 
         /// Get the event sender for injecting server events from the test
+        #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
         fn event_sender(&self) -> mpsc::UnboundedSender<ServerEvent> {
             self.event_tx.clone()
         }
 
         /// Pre-clone the DELETE-count handle so a test can observe it after the
         /// transport has been boxed and moved into the client.
+        #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
         fn delete_count_handle(&self) -> Arc<std::sync::atomic::AtomicU32> {
             Arc::clone(&self.delete_count)
         }
@@ -1428,8 +2535,16 @@ mod tests {
 
         async fn send_request_with_headers(
             &self,
-            _request: Value,
+            request: Value,
         ) -> McpClientResult<TransportResponse> {
+            // A real 2025-11-25 server answers `server/discover` with JSON-RPC
+            // -32601, which drives the bilingual client to fall back to `initialize`.
+            if request.get("method").and_then(|m| m.as_str()) == Some("server/discover") {
+                return Ok(TransportResponse::new(
+                    json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+                    HashMap::new(),
+                ));
+            }
             // Return a valid initialize response with session ID
             let mut headers = HashMap::new();
             headers.insert("mcp-session-id".to_string(), "mock-session-123".to_string());
@@ -1498,6 +2613,7 @@ mod tests {
 
     /// Verifies the full McpClient pipeline: server request → StreamHandler callback
     /// → response channel → consumer task → transport.send_notification().
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_client_response_consumer_pipeline() {
         let (mock, notifications) = MockTransport::new();
@@ -1570,6 +2686,7 @@ mod tests {
     }
 
     /// Same pipeline but with an error callback — verifies error responses reach transport.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_client_response_consumer_pipeline_error() {
         let (mock, notifications) = MockTransport::new();
@@ -1628,6 +2745,7 @@ mod tests {
     /// idempotency the client fires two DELETEs (one from disconnect, one from
     /// Drop) — the second lands on a server with the session already gone, and
     /// in OAuth deployments may arrive after the bearer token has expired.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_disconnect_clears_session_so_drop_is_noop() {
         let (mock, _notifications) = MockTransport::new();
@@ -1663,6 +2781,7 @@ mod tests {
     /// must still get the DELETE sent by Drop. Locking this in protects against
     /// future "always clear session_id eagerly" refactors that would silently
     /// break server-side session cleanup for the implicit-drop path.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_drop_without_disconnect_still_fires_delete() {
         let (mock, _notifications) = MockTransport::new();
@@ -1844,8 +2963,16 @@ mod tests {
 
         async fn send_request_with_headers(
             &self,
-            _request: Value,
+            request: Value,
         ) -> McpClientResult<TransportResponse> {
+            // Answer the version probe like a 2025-11-25 server (-32601) without
+            // consuming a queued init response, so fallback drives initialize.
+            if request.get("method").and_then(|m| m.as_str()) == Some("server/discover") {
+                return Ok(TransportResponse::new(
+                    json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+                    HashMap::new(),
+                ));
+            }
             self.init_responses
                 .lock()
                 .unwrap()
@@ -1915,11 +3042,15 @@ mod tests {
 
     // ── Session lifecycle tests ─────────────────────────────────────────
 
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     use crate::config::RetryConfig;
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     use std::sync::atomic::Ordering;
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     use std::time::Duration;
 
     /// Helper: build a fast-retry config (1 ms delays) with the given max_attempts.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     fn fast_retry_config(max_attempts: u32) -> ClientConfig {
         ClientConfig {
             retry: RetryConfig {
@@ -1934,6 +3065,7 @@ mod tests {
 
     /// Test 2.1 — 404 recovery path resets session, clears stale transport session ID,
     /// re-initializes with a fresh session, and retries the original request.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_404_reinitialize_clears_stale_session_id() {
         let mut transport = StatefulMockTransport::new();
@@ -1997,6 +3129,7 @@ mod tests {
 
     /// Test 2.1a — 404 on last retry attempt still recovers (re-init doesn't count
     /// as a "retry" — the loop continues after successful re-init).
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_404_on_last_retry_attempt_still_recovers() {
         let mut transport = StatefulMockTransport::new();
@@ -2038,6 +3171,7 @@ mod tests {
 
     /// Test 2.1b — When re-initialization after 404 fails, the original 404 error
     /// is surfaced (not the re-init error).
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_404_reinit_failure_surfaces_original_error() {
         let mut transport = StatefulMockTransport::new();
@@ -2076,6 +3210,7 @@ mod tests {
 
     /// Test 2.2 — Server may omit Mcp-Session-Id header (stateless mode).
     /// connect() must succeed and client must be ready.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_optional_session_id_no_hard_failure() {
         let mut transport = StatefulMockTransport::new();
@@ -2108,6 +3243,7 @@ mod tests {
 
     /// Test 2.3 — Server returns an unsupported protocol version.
     /// connect() must fail with an error mentioning both versions.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_unsupported_protocol_version_rejected() {
         let mut transport = StatefulMockTransport::new();
@@ -2142,6 +3278,7 @@ mod tests {
     // ── Error propagation tests ────────────────────────────────────────
 
     /// Test 4.1 — JSON-RPC error response surfaces as `ServerError` with code, message, and data.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_jsonrpc_error_surfaces_as_server_error_with_code_message_data() {
         let mut transport = StatefulMockTransport::new();
@@ -2177,6 +3314,7 @@ mod tests {
     }
 
     /// Test 4.2 — JSON-RPC error without `data` field: `data` must be `None`.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_jsonrpc_error_without_data_field() {
         let mut transport = StatefulMockTransport::new();
@@ -2209,6 +3347,7 @@ mod tests {
     }
 
     /// Test 4.3 — `call_tool` with a malformed response returns an error rather than panicking.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_call_tool_malformed_response_returns_error() {
         let mut transport = StatefulMockTransport::new();
@@ -2233,6 +3372,7 @@ mod tests {
     }
 
     /// Test 4.4 — `get_prompt` with a malformed response returns an error rather than panicking.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_get_prompt_malformed_response_returns_error() {
         let mut transport = StatefulMockTransport::new();
@@ -2259,6 +3399,7 @@ mod tests {
     // ── Cache and notification tests ─────────────────────────────────────
 
     /// Test: list_tools() caches results and returns cached data on second call.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_list_tools_caches_result() {
         let mut transport = StatefulMockTransport::new();
@@ -2296,6 +3437,7 @@ mod tests {
     }
 
     /// Test: notifications/tools/list_changed invalidates the tool cache.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_tools_list_changed_notification_invalidates_cache() {
         let (mock, _notifications) = MockTransport::new();
@@ -2335,6 +3477,7 @@ mod tests {
     }
 
     /// Test: notifications/resources/list_changed invalidates the resource cache.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_resources_list_changed_notification_invalidates_cache() {
         let (mock, _notifications) = MockTransport::new();
@@ -2370,6 +3513,7 @@ mod tests {
     }
 
     /// Test: notifications/prompts/list_changed invalidates the prompt cache.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_prompts_list_changed_notification_invalidates_cache() {
         let (mock, _notifications) = MockTransport::new();
@@ -2405,6 +3549,7 @@ mod tests {
     }
 
     /// Test: User notification callback is invoked on server notifications.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_user_notification_callback_fires() {
         let (mock, _notifications) = MockTransport::new();
@@ -2455,6 +3600,7 @@ mod tests {
     }
 
     /// Test: refresh_tools() bypasses cache.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_refresh_tools_bypasses_cache() {
         let mut transport = StatefulMockTransport::new();
@@ -2506,8 +3652,10 @@ mod tests {
     //
     // A mock that supports multiple connect()/disconnect() cycles by
     // advertising server_events: false (skips event listener in connect()).
-    // Used for testing the -32031 session retry path.
+    // Used for testing the -32031 session retry path, which is a
+    // 2025-11-25-only handshake/session concept.
 
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     struct ReconnectableMockTransport {
         init_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<TransportResponse>>>>,
         request_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<Value>>>>,
@@ -2518,6 +3666,7 @@ mod tests {
         connected: AtomicBool,
     }
 
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     impl ReconnectableMockTransport {
         fn new() -> Self {
             Self {
@@ -2540,6 +3689,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[async_trait]
     impl crate::transport::Transport for ReconnectableMockTransport {
         fn transport_type(&self) -> TransportType {
@@ -2588,8 +3738,16 @@ mod tests {
 
         async fn send_request_with_headers(
             &self,
-            _request: Value,
+            request: Value,
         ) -> McpClientResult<TransportResponse> {
+            // Answer the version probe like a 2025-11-25 server (-32601) without
+            // consuming a queued init response, so fallback drives initialize.
+            if request.get("method").and_then(|m| m.as_str()) == Some("server/discover") {
+                return Ok(TransportResponse::new(
+                    json!({"jsonrpc": "2.0", "id": "req_0", "error": {"code": -32601, "message": "Method not found"}}),
+                    HashMap::new(),
+                ));
+            }
             self.init_responses
                 .lock()
                 .unwrap()
@@ -2643,6 +3801,7 @@ mod tests {
     /// Test: -32031 error triggers disconnect + reconnect + single retry.
     /// Simulates the race condition where notifications/initialized hasn't
     /// been processed when the first tool call arrives.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_session_not_initialized_triggers_reconnect_and_retry() {
         let mut transport = ReconnectableMockTransport::new();
@@ -2721,6 +3880,7 @@ mod tests {
 
     /// Test: -32031 reconnect only retries once — if retry also fails,
     /// the retry error is returned (not the original -32031).
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_session_not_initialized_retry_fails_returns_retry_error() {
         let mut transport = ReconnectableMockTransport::new();
@@ -2772,6 +3932,7 @@ mod tests {
     }
 
     /// Test: -32031 when reconnect itself fails — original error is returned.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_session_not_initialized_reconnect_fails_returns_original_error() {
         let mut transport = ReconnectableMockTransport::new();
@@ -2810,6 +3971,7 @@ mod tests {
     }
 
     /// Test: "Session not initialized" message without code -32031 is still detected.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_session_not_initialized_detected_by_message() {
         let mut transport = ReconnectableMockTransport::new();
@@ -2855,6 +4017,7 @@ mod tests {
     }
 
     /// Test: Non-session errors (e.g. -32602) do NOT trigger reconnect.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_non_session_error_does_not_trigger_reconnect() {
         let mut transport = ReconnectableMockTransport::new();
@@ -2893,6 +4056,7 @@ mod tests {
 
     /// Test: call_tool_with_task also benefits from -32031 retry
     /// (it uses send_request_internal internally).
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_call_tool_with_task_also_retries_on_session_error() {
         let mut transport = ReconnectableMockTransport::new();
@@ -2943,6 +4107,7 @@ mod tests {
     }
 
     /// Test: invalidate_caches() clears all caches.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
     #[tokio::test]
     async fn test_invalidate_caches_clears_all() {
         let mut transport = StatefulMockTransport::new();
@@ -3127,8 +4292,7 @@ mod tests {
 
     #[test]
     fn test_build_notification_envelope_shape() {
-        let envelope =
-            McpClient::build_notification("notifications/initialized", json!({}));
+        let envelope = McpClient::build_notification("notifications/initialized", json!({}));
 
         assert_eq!(envelope["jsonrpc"], json!("2.0"));
         assert_eq!(envelope["method"], json!("notifications/initialized"));
@@ -3183,6 +4347,43 @@ mod tests {
         assert_eq!(
             typed, legacy,
             "build_request envelope must be semantically equivalent to the prior hand-rolled form"
+        );
+    }
+
+    /// "The request ID MUST NOT match the ID of any other request the sender
+    /// has issued and not yet received a response for" (basic §Requests).
+    /// Concurrent callers on a shared client must never observe the same id —
+    /// this is the actual guarantee the atomic counter provides, distinct from
+    /// the sequential-call case already covered by
+    /// `test_build_request_id_increments_per_call`.
+    #[tokio::test]
+    async fn test_concurrent_build_request_ids_are_unique() {
+        let (mock, _notifications) = MockTransport::new();
+        let client = Arc::new(McpClient::new(Box::new(mock), ClientConfig::default()));
+
+        let mut handles = Vec::new();
+        for _ in 0..64 {
+            let client = Arc::clone(&client);
+            handles.push(tokio::spawn(async move {
+                client.build_request("ping", json!({}))["id"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            }));
+        }
+
+        let mut ids = std::collections::HashSet::new();
+        for handle in handles {
+            let id = handle.await.unwrap();
+            assert!(
+                ids.insert(id.clone()),
+                "duplicate request id observed: {id}"
+            );
+        }
+        assert_eq!(
+            ids.len(),
+            64,
+            "every concurrent request must get a distinct id"
         );
     }
 }

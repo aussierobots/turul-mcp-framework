@@ -260,9 +260,9 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 fn new() -> Self {
                     use std::collections::HashMap;
                     let input_schema = turul_mcp_protocol::ToolSchema::object()
-                        .with_properties(HashMap::from([
+                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                             #(#schema_properties),*
-                        ]))
+                        ])))
                         .with_required(vec![
                             #(#required_fields),*
                         ]);

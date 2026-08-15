@@ -1,5 +1,7 @@
 # MCP Framework E2E Testing Suite
 
+> **Spec lane:** This crate is the pinned **MCP 2025-11-25 regression suite** (opt-in). It validates the sessionful 2025-11-25 lifecycle (`initialize` → `notifications/initialized` → `Mcp-Session-Id`) against real HTTP/SSE transport. The default **MCP 2026-07-28** stateless E2E (`server/discover`, per-request `_meta`, no `Mcp-Session-Id`) lives in the default-members `turul-mcp-server` crate (`tests/discover_stateless_2026.rs`), not here.
+
 This directory contains comprehensive End-to-End (E2E) testing infrastructure for the MCP Framework, validating complete MCP 2025-11-25 specification compliance with real HTTP/SSE transport.
 
 ## Overview

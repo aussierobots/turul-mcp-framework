@@ -1,4 +1,4 @@
-//! MCP 2025-11-25 Icon Support Showcase
+//! MCP 2026-07-28 Icon Support Showcase
 //!
 //! Demonstrates the `icons` field available on Tool, Resource, Prompt,
 //! ResourceTemplate, and Implementation types. Icons use the `Icon` struct
@@ -11,16 +11,16 @@ use turul_mcp_protocol::{
 };
 
 fn main() {
-    println!("=== MCP 2025-11-25 Icon Support Showcase ===\n");
+    println!("=== MCP 2026-07-28 Icon Support Showcase ===\n");
 
     // --- Tool with an HTTPS icon ---
     let calculator_tool = Tool::new(
         "calculator",
         ToolSchema::object()
-            .with_properties(HashMap::from([
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                 ("a".to_string(), JsonSchema::number()),
                 ("b".to_string(), JsonSchema::number()),
-            ]))
+            ])))
             .with_required(vec!["a".to_string(), "b".to_string()]),
     )
     .with_title("Calculator")
@@ -39,7 +39,10 @@ fn main() {
     let search_tool = Tool::new(
         "search",
         ToolSchema::object()
-            .with_properties(HashMap::from([("query".to_string(), JsonSchema::string())]))
+            .with_properties(turul_mcp_builders::tool_props(HashMap::from([(
+                "query".to_string(),
+                JsonSchema::string(),
+            )])))
             .with_required(vec!["query".to_string()]),
     )
     .with_title("Search")

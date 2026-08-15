@@ -120,13 +120,18 @@ cargo lambda invoke middleware-auth-lambda \
   --output-format json | jq .
 ```
 
+The event body is a stateless 2026-07-28 `server/discover` request — no
+`initialize` handshake, no `Mcp-Session-Id`, and the per-request `_meta`
+(protocolVersion, clientInfo, clientCapabilities) inside `params`.
+
 **Expected response**:
 ```json
 {
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "protocolVersion": "2025-11-25",
+    "resultType": "complete",
+    "supportedVersions": ["2026-07-28"],
     "capabilities": {},
     "serverInfo": {
       "name": "middleware-auth-lambda",
@@ -204,7 +209,7 @@ Both test events include:
 - [ ] **V1 flat extraction works**: Same fields as V1 nested (internal fields filtered)
 - [ ] **Field sanitization**: camelCase → snake_case (`userId` → `user_id`)
 - [ ] **Defensive behavior**: No crashes on missing/invalid data
-- [ ] **Initialize succeeds**: Returns valid MCP initialize response
+- [ ] **Discover succeeds**: `server/discover` returns serverInfo and capabilities
 
 ### 🔍 What to Look For
 
@@ -284,7 +289,7 @@ cat /tmp/lambda-output.log | grep "Authorizer context"
 
 ## Streamable HTTP Compatibility
 
-This example uses the MCP 2025-11-25 **Streamable HTTP** transport via REST API (V1). REST API supports standard HTTP POST with full request/response control, making it compatible with Streamable HTTP. The Lambda adapter converts the API Gateway event into a standard `hyper::Request`, which the framework's `StreamableHttpHandler` processes normally.
+This example uses the MCP 2026-07-28 **Streamable HTTP** transport via REST API (V1). REST API supports standard HTTP POST with full request/response control, making it compatible with Streamable HTTP. The Lambda adapter converts the API Gateway event into a standard `hyper::Request`, which the framework's `StreamableHttpHandler` processes normally. The 2026 core is stateless: each request carries its own `_meta`; there is no `initialize`/`notifications/initialized` handshake and no `Mcp-Session-Id`.
 
 **Note**: All three authorizer context shapes (V1 nested, V1 flat, V2) are supported for extraction. However, Streamable HTTP transport requires REST API (V1).
 

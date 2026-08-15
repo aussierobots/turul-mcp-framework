@@ -37,6 +37,17 @@ pub enum McpClientError {
     #[error("JSON error: {0}")]
     Json(#[from] serde_json::Error),
 
+    /// MRTR (SEP-2322): the server returned `resultType: "input_required"`.
+    /// Gather the requested inputs and retry the original call with
+    /// `call_tool_with_input_responses`, echoing `request_state` verbatim.
+    #[error("Input required: the server needs client input before completing")]
+    InputRequired {
+        /// The server's `inputRequests` map (id → elicit/sampling/roots request).
+        input_requests: Option<serde_json::Value>,
+        /// Opaque state to echo verbatim on the retry.
+        request_state: Option<String>,
+    },
+
     /// Timeout errors
     #[error("Operation timed out")]
     Timeout,
@@ -151,6 +162,32 @@ impl McpClientError {
             message: message.into(),
             data,
         }
+    }
+
+    /// Is this a resource-not-found error from `resources/read`, on a
+    /// connection negotiated at the given wire version?
+    ///
+    /// Resources §Error Handling: servers answer a nonexistent resource with
+    /// `-32602`; "For backwards compatibility, clients SHOULD also accept
+    /// -32002 as a resource not found error, as earlier protocol versions
+    /// used this code." That backwards-compat acceptance is scoped to peers
+    /// still speaking 2025-11-25 or earlier, where `-32002` is legitimately
+    /// resource-not-found. On a connection negotiated at 2026-07-28, the
+    /// [Error Codes](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes)
+    /// section lists `-32002` among the codes implementations of this
+    /// version MUST NOT emit — so on that lane it carries no not-found
+    /// meaning and must not be classified as one, regardless of what a
+    /// non-compliant peer sends.
+    pub fn is_resource_not_found(&self, version: crate::version::McpVersion) -> bool {
+        use crate::version::McpVersion;
+        matches!(
+            (self, version),
+            (Self::ServerError { code: -32602, .. }, _)
+                | (
+                    Self::ServerError { code: -32002, .. },
+                    McpVersion::V2025_11_25
+                )
+        )
     }
 
     /// Check if the error is retryable
@@ -282,5 +319,51 @@ mod tests {
             message: "Internal".to_string(),
         });
         assert!(!err.is_session_not_initialized());
+    }
+}
+
+#[cfg(test)]
+mod resource_not_found_tests {
+    use super::*;
+    use crate::version::McpVersion;
+
+    /// Resources §Error Handling backwards-compat: on a 2025-11-25 connection,
+    /// both -32602 and the pre-2026 -32002 classify as resource-not-found.
+    #[test]
+    fn resource_not_found_accepts_both_codes_on_2025_11_25() {
+        assert!(
+            McpClientError::server_error(-32602, "no such resource", None)
+                .is_resource_not_found(McpVersion::V2025_11_25)
+        );
+        assert!(
+            McpClientError::server_error(-32002, "no such resource", None)
+                .is_resource_not_found(McpVersion::V2025_11_25)
+        );
+        assert!(
+            !McpClientError::server_error(-32601, "no such method", None)
+                .is_resource_not_found(McpVersion::V2025_11_25)
+        );
+        assert!(!McpClientError::Timeout.is_resource_not_found(McpVersion::V2025_11_25));
+    }
+
+    /// On a 2026-07-28 connection, `-32602` is the only resource-not-found
+    /// code. `-32002` is a code this spec version MUST NOT emit, so a peer
+    /// sending it is non-compliant rather than reporting a legitimate miss —
+    /// the client must not paper over that by classifying it as not-found.
+    #[test]
+    fn resource_not_found_rejects_legacy_code_on_2026_07_28() {
+        assert!(
+            McpClientError::server_error(-32602, "no such resource", None)
+                .is_resource_not_found(McpVersion::V2026_07_28)
+        );
+        assert!(
+            !McpClientError::server_error(-32002, "no such resource", None)
+                .is_resource_not_found(McpVersion::V2026_07_28)
+        );
+        assert!(
+            !McpClientError::server_error(-32601, "no such method", None)
+                .is_resource_not_found(McpVersion::V2026_07_28)
+        );
+        assert!(!McpClientError::Timeout.is_resource_not_found(McpVersion::V2026_07_28));
     }
 }

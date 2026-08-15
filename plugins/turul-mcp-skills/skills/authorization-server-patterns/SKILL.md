@@ -17,6 +17,8 @@ description: >
 
 # Authorization Server Patterns — Demo / Reference
 
+**Spec lane: applies to both 2026-07-28 and 2025-11-25**, with two 2026-07-28-specific notes: DCR is now deprecated (12-month window) in favor of Client ID Metadata Documents (CIMD, SEP-991), and DCR-obtained/pre-registered client credentials must now be bound to the issuing authorization server (SEP-2352) — CIMD client IDs are explicitly exempted from that binding requirement. See the DCR and CIMD sections below.
+
 > **This skill teaches demo-grade patterns only.** The examples here are
 > useful for local development, demos, PoCs, and interoperability testing.
 > They are **not** production identity infrastructure. For production,
@@ -102,6 +104,8 @@ let clients = HashMap::from([(
 
 ### Dynamic Client Registration (DCR)
 
+> **Deprecated in MCP 2026-07-28** (12-month window). DCR (RFC 7591) remains functional but is no longer the recommended client-identification path — CIMD is the standards-preferred direction (see below). If you keep DCR, 2026-07-28 additionally requires registration requests to specify an `application_type` at all (SEP-837, MUST) — the choice between `"native"` and `"web"` is only a SHOULD; this skill's example does not implement either yet. Don't present DCR as the recommended choice for new work.
+
 Clients register themselves at runtime via `POST /register` (RFC 7591):
 
 ```rust
@@ -114,13 +118,13 @@ Clients register themselves at runtime via `POST /register` (RFC 7591):
 
 ### Client Identification via Metadata Document (CIMD)
 
-CIMD inverts the model: instead of registering at the AS, clients publish their own metadata document at a well-known URL, and the AS fetches it during authorization. MCP 2025-11-25 specifies CIMD as a supported client identification mechanism alongside DCR.
+CIMD inverts the model: instead of registering at the AS, clients publish their own metadata document at a stable HTTPS URL — that URL *is* the `client_id`, not a `.well-known` discovery path — and the AS fetches it during authorization. CIMD is governed by its own SEP (SEP-991, "Enable URL-based Client Registration using OAuth Client ID Metadata Documents", Final); it is not a byproduct of SEP-2351 or SEP-2352, both of which govern unrelated things: SEP-2351 confirms MCP's *authorization-server* metadata discovery uses the default RFC 8414 `oauth-authorization-server` well-known suffix, and SEP-2352 requires *DCR-obtained or pre-registered* client credentials to be bound to the issuing authorization server. The 2026-07-28 spec explicitly exempts CIMD from that binding requirement — CIMD client IDs are "portable across authorization servers, since they are self-hosted HTTPS URLs resolved by the authorization server on demand. No re-registration is needed when the authorization server changes." The genuine 2026-07-28-relevant gap for this skill's examples is CIMD's own security hardening (SSRF protection, localhost-impersonation warnings, size/cache limits — see Security considerations below), not a well-known suffix or issuer-binding change.
 
 ```
 Client models (simplest → most dynamic):
 ├─ Pre-registered ── hardcoded or config-loaded (this skill)
-├─ DCR ──────────── client self-registers at /register endpoint (this skill, optional)
-└─ CIMD ─────────── client publishes metadata, AS fetches it (this skill, optional)
+├─ DCR ──────────── client self-registers at /register endpoint (this skill, optional — deprecated in 2026-07-28)
+└─ CIMD ─────────── client publishes metadata, AS fetches it (this skill, optional — standards-preferred for 2026-07-28)
 ```
 
 **When to use:** production deployments where clients manage their own identity, or environments where a central registration endpoint is undesirable. CIMD and DCR can coexist — an AS can support both with a resolution precedence (e.g., pre-registered → CIMD → DCR fallback).
@@ -378,7 +382,7 @@ The RS validates tokens using JWKS from the demo AS. The audience in issued toke
 
 5. **Skipping resource/audience validation at /authorize and /token** — The `resource` parameter tells the AS which RS the token is for. The AS must validate this against its known resources and set the `aud` claim accordingly. Without this, tokens issued by your AS could be valid for unintended resource servers. This is especially important for MCP interop where multiple RS instances may share an AS.
 
-6. **Assuming DCR is the only client model** — Pre-registered clients are simpler and sufficient for most demos. DCR adds complexity. CIMD is the emerging standards-preferred direction. Choose the model that fits your scenario.
+6. **Reaching for DCR as the default on new 2026-07-28 work** — Pre-registered clients are simpler and sufficient for most demos. DCR is deprecated (12-month window) as of 2026-07-28; CIMD is the standards-preferred direction going forward. Choose the model that fits your scenario, but don't present DCR as the recommended path for new builds.
 
 7. **Generating signing keys at startup without documenting the consequence** — If you generate a new RSA key pair on every startup, all previously issued tokens become invalid. Either use a static demo key or clearly document this behavior.
 

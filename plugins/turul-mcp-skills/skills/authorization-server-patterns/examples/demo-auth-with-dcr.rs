@@ -3,6 +3,8 @@
 // ============================================================================
 //
 // Extends demo-auth-server.rs with Dynamic Client Registration (RFC 7591).
+// DCR is deprecated in MCP 2026-07-28 (12-month window) in favor of CIMD —
+// see ../SKILL.md's Client Models section.
 //
 // This file shows ONLY the DCR additions. In practice, you would add these
 // to the base demo-auth-server.rs example.

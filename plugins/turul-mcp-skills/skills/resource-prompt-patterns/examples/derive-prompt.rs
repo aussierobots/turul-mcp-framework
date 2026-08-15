@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Prompt Pattern 1: Derive Macro #[derive(McpPrompt)]
 // Derive generates metadata + argument traits only — McpPrompt::render() is manual.
 // render() has no session parameter.

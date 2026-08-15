@@ -1,7 +1,7 @@
 {
   "name": "turul-mcp-skills",
-  "version": "0.6.3",
-  "description": "Skills and tools for building MCP servers and clients with the Turul MCP Framework (Rust). Guides tool creation, resource/prompt patterns, output schemas, client patterns, middleware, error handling, task support, Lambda deployment, testing, elicitation, session storage, storage backend selection, authentication/authorization (OAuth 2.1 RS, JWT, API key), authorization server patterns (demo PKCE, JWKS, DCR), project scaffolding, and validation.",
+  "version": "0.7.0",
+  "description": "Skills and tools for building MCP servers and clients with the Turul MCP Framework (Rust), targeting MCP 2026-07-28 with frozen 2025-11-25 opt-in coverage. Guides tool creation, resource/prompt patterns, output schemas, client patterns (bilingual negotiation), middleware, error handling, the 2026-07-28 Tasks extension, Lambda deployment, testing, MRTR elicitation, storage backend selection, authentication/authorization (OAuth 2.1 RS, JWT, API key), authorization server patterns (demo PKCE, JWKS, DCR/CIMD), project scaffolding, and validation.",
   "author": {
     "name": "Aussie Robots",
     "url": "https://github.com/aussierobots"

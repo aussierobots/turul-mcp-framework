@@ -237,7 +237,7 @@ impl McpResource for MemoryResource {
             }
         });
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             "file:///memory/data.json",
             safe_json_serialize(&data)?,
         )])
@@ -434,7 +434,7 @@ impl McpResource for TemplateResource {
             }
         });
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             format!("file:///template/items/{}.json", id),
             safe_json_serialize(&item_data)?,
         )])
@@ -563,7 +563,7 @@ impl McpResource for LargeResource {
             "items": items
         });
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             "file:///large/dataset.json",
             &serde_json::to_string(&large_data).map_err(|e| {
                 McpError::resource_execution(&format!("Large data serialization failed: {}", e))
@@ -719,7 +719,7 @@ impl McpResource for SessionResource {
             })
         };
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             "file:///session/info.json",
             safe_json_serialize(&session_data)?,
         )])
@@ -794,7 +794,7 @@ impl McpResource for SubscribableResource {
             }
         });
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             "file:///subscribe/updates.json",
             safe_json_serialize(&subscription_data)?,
         )])
@@ -895,7 +895,7 @@ impl McpResource for NotifyingResource {
             "architecture_note": "In production, this notification is sent via StreamManager to all SSE connections"
         });
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             "file:///notify/trigger.json",
             safe_json_serialize(&response_data)?,
         )])
@@ -1063,7 +1063,7 @@ impl McpResource for PaginatedResource {
             }
         });
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             "file:///paginated/items.json",
             safe_json_serialize(&paginated_data)?,
         )])
@@ -1277,7 +1277,7 @@ impl McpResource for MetaDynamicResource {
             }),
         };
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             "file:///meta/dynamic.json",
             safe_json_serialize(&response)?,
         )])
@@ -1360,7 +1360,7 @@ impl McpResource for UserTemplateResource {
             }
         });
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             format!("file:///template/users/{}.json", user_id),
             safe_json_serialize(&user_data)?,
         )])
@@ -1565,7 +1565,7 @@ impl McpResource for CompleteResource {
             }
         });
 
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::json(
             "file:///complete/all-fields.json",
             safe_json_serialize(&complete_data)?,
         )])
@@ -1603,7 +1603,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("resource-test-server")
-        .version("0.3.47")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("MCP Resource Test Server")
         .instructions(
             "Comprehensive test server providing various types of resources for E2E testing.\n\

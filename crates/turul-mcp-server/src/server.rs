@@ -10,9 +10,12 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tracing::{debug, error, info, warn};
+#[cfg(any(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
+use tracing::warn;
+use tracing::{debug, error, info};
 
 use crate::handlers::McpHandler;
+use crate::handlers::extract_request_meta_extra;
 use crate::session::SessionEventDispatcher;
 
 /// Event dispatcher backed by StreamManager for guaranteed persistence + live delivery.
@@ -49,7 +52,7 @@ struct SessionManagerToolNotifier {
 #[async_trait]
 impl turul_http_mcp_server::ToolChangeNotifier for SessionManagerToolNotifier {
     async fn notify_tools_changed(&self, session_id: &str) -> std::result::Result<(), String> {
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
         );
         let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
@@ -65,7 +68,7 @@ impl turul_http_mcp_server::ToolChangeNotifier for SessionManagerToolNotifier {
 
 use crate::session::{SessionContext, SessionManager};
 use crate::{McpServerBuilder, McpTool, Result, tool::tool_to_descriptor};
-use turul_mcp_json_rpc_server::JsonRpcHandler;
+use turul_rpc::JsonRpcHandler;
 
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::*;
@@ -91,7 +94,12 @@ pub struct McpServer {
     /// Middleware stack for request/response processing
     middleware_stack: crate::middleware::MiddlewareStack,
     /// Task runtime for long-running operations (None = tasks not supported)
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+    #[cfg(feature = "ext-tasks")]
+    ext_tasks_runtime: Option<Arc<crate::ext_tasks::ExtTasksRuntime>>,
+    #[cfg(feature = "ext-tasks")]
+    ext_task_tools: Arc<HashMap<String, bool>>,
     /// Custom HTTP route registry
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Stable fingerprint of the registered tool set for session versioning
@@ -114,6 +122,8 @@ pub struct McpServer {
     enable_sse: bool,
     #[cfg(feature = "http")]
     allow_unauthenticated_ping: Option<bool>,
+    #[cfg(feature = "http")]
+    origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
 }
 
 impl McpServer {
@@ -128,7 +138,13 @@ impl McpServer {
         session_timeout_minutes: Option<u64>,
         session_cleanup_interval_seconds: Option<u64>,
         session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
-        task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+        #[cfg(feature = "protocol-2025-11-25")] task_runtime: Option<
+            Arc<crate::task::runtime::TaskRuntime>,
+        >,
+        #[cfg(feature = "ext-tasks")] ext_tasks_runtime: Option<
+            Arc<crate::ext_tasks::ExtTasksRuntime>,
+        >,
+        #[cfg(feature = "ext-tasks")] ext_task_tools: Arc<HashMap<String, bool>>,
         strict_lifecycle: bool,
         middleware_stack: crate::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
@@ -142,6 +158,7 @@ impl McpServer {
         #[cfg(feature = "http")] enable_cors: bool,
         #[cfg(feature = "http")] enable_sse: bool,
         #[cfg(feature = "http")] allow_unauthenticated_ping: Option<bool>,
+        #[cfg(feature = "http")] origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
     ) -> Self {
         // Create session manager with server capabilities, custom timeouts, and storage
         let session_manager = match &session_storage {
@@ -217,7 +234,12 @@ impl McpServer {
             handlers,
             session_manager,
             session_storage,
+            #[cfg(feature = "protocol-2025-11-25")]
             task_runtime,
+            #[cfg(feature = "ext-tasks")]
+            ext_tasks_runtime,
+            #[cfg(feature = "ext-tasks")]
+            ext_task_tools,
             instructions,
             strict_lifecycle,
             middleware_stack,
@@ -237,6 +259,8 @@ impl McpServer {
             enable_sse,
             #[cfg(feature = "http")]
             allow_unauthenticated_ping,
+            #[cfg(feature = "http")]
+            origin_policy,
         }
     }
 
@@ -320,8 +344,21 @@ impl McpServer {
     }
 
     /// Get the task runtime, if task support is configured.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn task_runtime(&self) -> Option<&Arc<crate::task::runtime::TaskRuntime>> {
         self.task_runtime.as_ref()
+    }
+
+    /// Whether a task runtime is configured (always false when tasks are not part of the spec).
+    fn has_task_runtime(&self) -> bool {
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            self.task_runtime.is_some()
+        }
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        {
+            false
+        }
     }
 
     /// Run the server with the default transport (HTTP if available)
@@ -337,6 +374,153 @@ impl McpServer {
                 "No transport available. Enable the 'http' feature to use HTTP transport.",
             ))
         }
+    }
+
+    /// Build the HTTP server builder with every MCP method handler
+    /// registered for the active protocol lane, WITHOUT binding or running.
+    /// Single source of method registration shared by `run_http` and
+    /// `run_with_sse_access` so the two entry points cannot register divergent
+    /// method sets, and reused by [`registered_methods`](Self::registered_methods).
+    #[cfg(feature = "http")]
+    fn build_configured_http_builder(&self) -> turul_http_mcp_server::HttpMcpServerBuilder {
+        // Create session-aware tool handler (with optional task runtime for async execution)
+        #[cfg_attr(
+            not(any(feature = "protocol-2025-11-25", feature = "dynamic-tools")),
+            allow(unused_mut)
+        )]
+        let mut tool_handler = SessionAwareToolHandler::new(
+            self.tools.clone(),
+            self.session_manager.clone(),
+            self.strict_lifecycle,
+        );
+        #[cfg(feature = "protocol-2025-11-25")]
+        if let Some(ref runtime) = self.task_runtime {
+            tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
+        }
+        #[cfg(feature = "ext-tasks")]
+        if let Some(ref runtime) = self.ext_tasks_runtime {
+            tool_handler =
+                tool_handler.with_ext_tasks(Arc::clone(runtime), Arc::clone(&self.ext_task_tools));
+        }
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
+        }
+
+        // Create session-aware initialize handler (2025-11-25 stateful handshake;
+        // the 2026-07-28 stateless core has no `initialize` method).
+        #[cfg(feature = "protocol-2025-11-25")]
+        #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
+        let mut init_handler = SessionAwareInitializeHandler::new(
+            self.implementation.clone(),
+            self.capabilities.clone(),
+            self.instructions.clone(),
+            self.session_manager.clone(),
+            self.strict_lifecycle,
+            self.tool_fingerprint.clone(),
+        );
+        #[cfg(all(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
+        if let Some(ref registry) = self.tool_registry {
+            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
+        }
+
+        // Build HTTP server with shared session storage from SessionManager
+        let session_storage = self.session_manager.get_storage();
+        debug!("Configuring HTTP MCP server with session storage backend");
+        #[allow(deprecated)] // get_sse: 2026-lane-deprecated; pass-through stays for the 2025 lane
+        let mut builder =
+            turul_http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
+                .bind_address(self.bind_address)
+                .mcp_path(&self.mcp_path)
+                .cors(self.enable_cors)
+                .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
+                // POST SSE remains at default (false) for compatibility
+                .server_capabilities(self.capabilities.clone()) // Pass server capabilities
+                .server_info(self.implementation.clone())
+                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
+                .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
+                .tool_fingerprint(self.tool_fingerprint.clone())
+                .tool_notifier(Arc::new(SessionManagerToolNotifier {
+                    session_manager: Arc::clone(&self.session_manager),
+                }))
+                .register_handler(vec!["tools/list".to_string()], {
+                    #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
+                    let mut lth = ListToolsHandler::new_with_session_manager(
+                        self.tools.clone(),
+                        self.session_manager.clone(),
+                        self.strict_lifecycle,
+                        self.has_task_runtime(),
+                    );
+                    #[cfg(feature = "dynamic-tools")]
+                    if let Some(ref registry) = self.tool_registry {
+                        lth = lth.with_tool_registry(Arc::clone(registry));
+                    }
+                    lth
+                })
+                .register_handler(vec!["tools/call".to_string()], tool_handler);
+
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            builder = builder.register_handler(vec!["initialize".to_string()], init_handler);
+        }
+
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            builder = builder.register_handler(
+                vec![SERVER_DISCOVER_METHOD.to_string()],
+                DiscoverHandler::new(self.capabilities.clone(), self.instructions.clone()),
+            );
+        }
+
+        // Pass allow_unauthenticated_ping config to HTTP layer
+        if let Some(allow) = self.allow_unauthenticated_ping {
+            builder = builder.allow_unauthenticated_ping(allow);
+        }
+        if let Some(policy) = self.origin_policy.clone() {
+            builder = builder.origin_policy(policy);
+        }
+
+        // Register all MCP handlers with session awareness
+        for (method, handler) in &self.handlers {
+            let bridge_handler = SessionAwareMcpHandlerBridge::new(
+                handler.clone(),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+            );
+            builder = builder.register_handler(vec![method.clone()], bridge_handler);
+        }
+
+        // notifications/initialized exists only in the 2025-11-25 lifecycle; the
+        // 2026-07-28 stateless core has no initialize/initialized handshake.
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            use crate::handlers::InitializedNotificationHandler;
+            let initialized_handler =
+                InitializedNotificationHandler::new(self.session_manager.clone());
+            let initialized_bridge = SessionAwareMcpHandlerBridge::new(
+                Arc::new(initialized_handler),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+            );
+            builder = builder.register_handler(
+                vec!["notifications/initialized".to_string()],
+                initialized_bridge,
+            );
+        }
+
+        builder
+    }
+
+    /// The JSON-RPC method names this server registers for the active protocol
+    /// lane. Mirrors `LambdaMcpServerBuilder`'s handler accessor of the same
+    /// name so a cross-builder parity test can assert both register an identical
+    /// set — catching the class of bug where one transport silently omits a
+    /// method (e.g. `server/discover`).
+    #[cfg(feature = "http")]
+    pub fn registered_methods(&self) -> Vec<String> {
+        self.build_configured_http_builder()
+            .build()
+            .registered_methods()
     }
 
     /// Run the server with HTTP transport (requires "http" feature)
@@ -356,6 +540,7 @@ impl McpServer {
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
         // Recover stuck tasks on startup (tasks stuck in Working/InputRequired after unclean shutdown)
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             match runtime.recover_stuck_tasks().await {
                 Ok(recovered) if !recovered.is_empty() => {
@@ -406,98 +591,7 @@ impl McpServer {
             );
         }
 
-        // Create session-aware tool handler (with optional task runtime for async execution)
-        let mut tool_handler = SessionAwareToolHandler::new(
-            self.tools.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        if let Some(ref runtime) = self.task_runtime {
-            tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
-        }
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry {
-            tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
-        }
-
-        // Create session-aware initialize handler
-        #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-        let mut init_handler = SessionAwareInitializeHandler::new(
-            self.implementation.clone(),
-            self.capabilities.clone(),
-            self.instructions.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-            self.tool_fingerprint.clone(),
-        );
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry {
-            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
-        }
-
-        // Build HTTP server with shared session storage from SessionManager
-        let session_storage = self.session_manager.get_storage();
-        debug!("Configuring HTTP MCP server with session storage backend");
-        let mut builder =
-            turul_http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
-                .bind_address(self.bind_address)
-                .mcp_path(&self.mcp_path)
-                .cors(self.enable_cors)
-                .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
-                // POST SSE remains at default (false) for compatibility
-                .server_capabilities(self.capabilities.clone()) // Pass server capabilities
-                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
-                .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
-                .tool_fingerprint(self.tool_fingerprint.clone())
-                .tool_notifier(Arc::new(SessionManagerToolNotifier {
-                    session_manager: Arc::clone(&self.session_manager),
-                }))
-                .register_handler(vec!["initialize".to_string()], init_handler)
-                .register_handler(vec!["tools/list".to_string()], {
-                    #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-                    let mut lth = ListToolsHandler::new_with_session_manager(
-                        self.tools.clone(),
-                        self.session_manager.clone(),
-                        self.strict_lifecycle,
-                        self.task_runtime.is_some(),
-                    );
-                    #[cfg(feature = "dynamic-tools")]
-                    if let Some(ref registry) = self.tool_registry {
-                        lth = lth.with_tool_registry(Arc::clone(registry));
-                    }
-                    lth
-                })
-                .register_handler(vec!["tools/call".to_string()], tool_handler);
-
-        // Pass allow_unauthenticated_ping config to HTTP layer
-        if let Some(allow) = self.allow_unauthenticated_ping {
-            builder = builder.allow_unauthenticated_ping(allow);
-        }
-
-        // Register all MCP handlers with session awareness
-        for (method, handler) in &self.handlers {
-            let bridge_handler = SessionAwareMcpHandlerBridge::new(
-                handler.clone(),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-            );
-            builder = builder.register_handler(vec![method.clone()], bridge_handler);
-        }
-
-        // Register special initialized notification handler that can mark sessions as initialized
-        use crate::handlers::InitializedNotificationHandler;
-        let initialized_handler = InitializedNotificationHandler::new(self.session_manager.clone());
-        let initialized_bridge = SessionAwareMcpHandlerBridge::new(
-            Arc::new(initialized_handler),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        builder = builder.register_handler(
-            vec!["notifications/initialized".to_string()],
-            initialized_bridge,
-        );
-
-        let http_server = builder.build();
+        let http_server = self.build_configured_http_builder().build();
 
         // SSE is now integrated directly into the session management
         if self.enable_sse {
@@ -601,6 +695,7 @@ impl McpServer {
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
         // Recover stuck tasks on startup (tasks stuck in Working/InputRequired after unclean shutdown)
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             match runtime.recover_stuck_tasks().await {
                 Ok(recovered) if !recovered.is_empty() => {
@@ -651,99 +746,7 @@ impl McpServer {
             );
         }
 
-        // Create session-aware tool handler (with optional task runtime for async execution)
-        let mut tool_handler = SessionAwareToolHandler::new(
-            self.tools.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        if let Some(ref runtime) = self.task_runtime {
-            tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
-        }
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry {
-            tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
-        }
-
-        // Create session-aware initialize handler
-        #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-        let mut init_handler = SessionAwareInitializeHandler::new(
-            self.implementation.clone(),
-            self.capabilities.clone(),
-            self.instructions.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-            self.tool_fingerprint.clone(),
-        );
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry {
-            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
-        }
-
-        // Build HTTP server with shared session storage from SessionManager
-        let session_storage = self.session_manager.get_storage();
-        debug!("Configuring HTTP MCP server with session storage backend");
-        let mut builder =
-            turul_http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
-                .bind_address(self.bind_address)
-                .mcp_path(&self.mcp_path)
-                .cors(self.enable_cors)
-                .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
-                // POST SSE remains at default (false) for compatibility
-                .server_capabilities(self.capabilities.clone()) // Pass server capabilities
-                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
-                .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
-                .tool_fingerprint(self.tool_fingerprint.clone())
-                .tool_notifier(Arc::new(SessionManagerToolNotifier {
-                    session_manager: Arc::clone(&self.session_manager),
-                }))
-                .register_handler(vec!["initialize".to_string()], init_handler)
-                .register_handler(vec!["tools/list".to_string()], {
-                    #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-                    let mut lth = ListToolsHandler::new_with_session_manager(
-                        self.tools.clone(),
-                        self.session_manager.clone(),
-                        self.strict_lifecycle,
-                        self.task_runtime.is_some(),
-                    );
-                    #[cfg(feature = "dynamic-tools")]
-                    if let Some(ref registry) = self.tool_registry {
-                        lth = lth.with_tool_registry(Arc::clone(registry));
-                    }
-                    lth
-                })
-                .register_handler(vec!["tools/call".to_string()], tool_handler);
-
-        // Pass allow_unauthenticated_ping config to HTTP layer
-        if let Some(allow) = self.allow_unauthenticated_ping {
-            builder = builder.allow_unauthenticated_ping(allow);
-        }
-
-        // TODO investigate if this also adds the tools/list and tools/call handlers
-        // Register all MCP handlers with session awareness
-        for (method, handler) in &self.handlers {
-            let bridge_handler = SessionAwareMcpHandlerBridge::new(
-                handler.clone(),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-            );
-            builder = builder.register_handler(vec![method.clone()], bridge_handler);
-        }
-
-        // Register special initialized notification handler that can mark sessions as initialized
-        use crate::handlers::InitializedNotificationHandler;
-        let initialized_handler = InitializedNotificationHandler::new(self.session_manager.clone());
-        let initialized_bridge = SessionAwareMcpHandlerBridge::new(
-            Arc::new(initialized_handler),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        builder = builder.register_handler(
-            vec!["notifications/initialized".to_string()],
-            initialized_bridge,
-        );
-
-        let http_server = builder.build();
+        let http_server = self.build_configured_http_builder().build();
 
         // Run server in background task
         let server_task = {
@@ -800,8 +803,8 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
     async fn handle(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request via session-aware bridge", method);
 
@@ -826,8 +829,11 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
             }
         };
 
-        // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
-        if self.strict_lifecycle
+        // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled).
+        // The 2026-07-28 stateless core has no initialize/initialized handshake, so there is no
+        // "uninitialized" state to guard against — the check applies only to the 2025-11-25 lifecycle.
+        if cfg!(feature = "protocol-2025-11-25")
+            && self.strict_lifecycle
             && method != "initialize"
             && method != "notifications/initialized"
             && let Some(ref session_ctx) = mcp_session_context
@@ -867,8 +873,8 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
     async fn handle_notification(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<(), McpError> {
         debug!("Handling {} notification via session-aware bridge", method);
 
@@ -882,7 +888,8 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
 
         // MCP Lifecycle Guard for notifications: Allow notifications/initialized to pass through
         // but enforce lifecycle for other notifications if strict mode is enabled
-        if self.strict_lifecycle
+        if cfg!(feature = "protocol-2025-11-25")
+            && self.strict_lifecycle
             && method != "notifications/initialized"
             && let Some(ref session_ctx) = mcp_session_context
         {
@@ -925,15 +932,14 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
 }
 
 /// Extract session ID from request parameters (placeholder implementation)
-fn extract_session_id_from_params(
-    _params: &Option<turul_mcp_json_rpc_server::RequestParams>,
-) -> Option<String> {
+fn extract_session_id_from_params(_params: &Option<turul_rpc::RequestParams>) -> Option<String> {
     // In a real implementation, this would extract session ID from HTTP headers
     // For now, return None as we'll implement proper session extraction later
     None
 }
 
 /// Session-aware handler for initialize requests
+#[cfg(feature = "protocol-2025-11-25")]
 pub struct SessionAwareInitializeHandler {
     implementation: Implementation,
     capabilities: ServerCapabilities,
@@ -948,6 +954,7 @@ pub struct SessionAwareInitializeHandler {
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 impl SessionAwareInitializeHandler {
     pub fn new(
         implementation: Implementation,
@@ -1083,6 +1090,7 @@ impl SessionAwareInitializeHandler {
     }
 }
 
+#[cfg(feature = "protocol-2025-11-25")]
 #[async_trait]
 impl JsonRpcHandler for SessionAwareInitializeHandler {
     type Error = McpError;
@@ -1090,8 +1098,8 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request with session support", method);
 
@@ -1319,11 +1327,72 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
     }
 }
 
+/// Stateless handler for the `server/discover` method.
+///
+/// The 2026-07-28 core has no `initialize`/`initialized` handshake: a client
+/// discovers server capabilities on demand via `server/discover` and negotiates
+/// the protocol version per request through `_meta`. This handler creates no
+/// session and reads no session state — it answers from the server's static
+/// implementation info and capabilities.
+#[cfg(feature = "protocol-2026-07-28")]
+pub struct DiscoverHandler {
+    capabilities: ServerCapabilities,
+    instructions: Option<String>,
+    supported_versions: Vec<String>,
+}
+
+#[cfg(feature = "protocol-2026-07-28")]
+impl DiscoverHandler {
+    pub fn new(capabilities: ServerCapabilities, instructions: Option<String>) -> Self {
+        Self {
+            capabilities,
+            instructions,
+            supported_versions: vec![McpVersion::V2026_07_28.as_str().to_string()],
+        }
+    }
+}
+
+#[cfg(feature = "protocol-2026-07-28")]
+#[async_trait]
+impl JsonRpcHandler for DiscoverHandler {
+    type Error = McpError;
+
+    async fn handle(
+        &self,
+        method: &str,
+        _params: Option<turul_rpc::RequestParams>,
+        _session_context: Option<turul_rpc::r#async::SessionContext>,
+    ) -> std::result::Result<serde_json::Value, McpError> {
+        if method != SERVER_DISCOVER_METHOD {
+            return Err(McpError::InvalidParameters(format!(
+                "Method not supported: {}",
+                method
+            )));
+        }
+
+        // `serverInfo` is not set here: the transport stamps it into every
+        // successful result's `_meta`, so setting it per-handler would give the
+        // key two producers.
+        let mut result =
+            DiscoverResult::new(self.supported_versions.clone(), self.capabilities.clone());
+        if let Some(instructions) = &self.instructions {
+            result = result.with_instructions(instructions.clone());
+        }
+
+        serde_json::to_value(result).map_err(McpError::SerializationError)
+    }
+
+    fn supported_methods(&self) -> Vec<String> {
+        vec![SERVER_DISCOVER_METHOD.to_string()]
+    }
+}
+
 /// Handler for tools/list requests
 pub struct ListToolsHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
     session_manager: Option<Arc<SessionManager>>,
     strict_lifecycle: bool,
+    #[cfg_attr(not(feature = "protocol-2025-11-25"), allow(dead_code))]
     has_tasks: bool,
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
@@ -1372,15 +1441,16 @@ impl JsonRpcHandler for ListToolsHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
-        use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
+        use turul_mcp_protocol::meta::Cursor;
 
         debug!("Handling {} request", method);
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
-        if self.strict_lifecycle
+        if cfg!(feature = "protocol-2025-11-25")
+            && self.strict_lifecycle
             && let (Some(session_manager), Some(session_ctx)) =
                 (&self.session_manager, &session_context)
         {
@@ -1405,22 +1475,27 @@ impl JsonRpcHandler for ListToolsHandler {
             )));
         }
 
-        // Parse typed parameters for cursor and meta propagation
-        use turul_mcp_protocol::tools::{ListToolsParams, ListToolsResult};
-        let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListToolsParams>(params_value.to_value()).map_err(|e| {
-                McpError::InvalidParameters(format!("Invalid parameters for tools/list: {}", e))
-            })?
-        } else {
-            ListToolsParams::new()
-        };
+        // Read cursor, limit, and caller `_meta` extras loosely from raw params:
+        // `limit` is a framework DoS-protection extension, not a typed param field.
+        use turul_mcp_protocol::tools::ListToolsResult;
+        let params_value: Option<serde_json::Value> = params.map(|p| p.to_value());
 
-        let cursor = list_params.cursor;
+        let cursor = params_value
+            .as_ref()
+            .and_then(|p| p.get("cursor"))
+            .and_then(|c| c.as_str())
+            .map(Cursor::from);
+        let requested_limit = params_value
+            .as_ref()
+            .and_then(|p| p.get("limit"))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as u32);
         debug!("Listing tools with cursor: {:?}", cursor);
 
         // Convert tools to descriptors and sort by name for stable pagination.
         // In Dynamic mode, read from live registry instead of static snapshot.
         #[cfg(feature = "dynamic-tools")]
+        #[cfg_attr(not(feature = "protocol-2025-11-25"), allow(unused_mut))]
         let mut tools: Vec<Tool> = if let Some(ref registry) = self.tool_registry {
             registry.list_active_tools().await
         } else {
@@ -1433,6 +1508,7 @@ impl JsonRpcHandler for ListToolsHandler {
             t
         };
         #[cfg(not(feature = "dynamic-tools"))]
+        #[cfg_attr(not(feature = "protocol-2025-11-25"), allow(unused_mut))]
         let mut tools: Vec<Tool> = {
             let mut t: Vec<Tool> = self
                 .tools
@@ -1444,6 +1520,7 @@ impl JsonRpcHandler for ListToolsHandler {
         };
 
         // Strip execution field when server has no task capability (truthful advertisement)
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.has_tasks {
             for tool in &mut tools {
                 tool.execution = None;
@@ -1455,7 +1532,7 @@ impl JsonRpcHandler for ListToolsHandler {
         const MAX_LIMIT: u32 = 100; // Framework-specific DoS protection
 
         // Validate limit parameter - MCP spec requires positive integer
-        if let Some(limit) = list_params.limit
+        if let Some(limit) = requested_limit
             && limit == 0
         {
             return Err(McpError::InvalidParameters(
@@ -1464,8 +1541,7 @@ impl JsonRpcHandler for ListToolsHandler {
         }
 
         // Apply limit clamping for DoS protection (framework extension)
-        let page_size = list_params
-            .limit
+        let page_size = requested_limit
             .map(|l| std::cmp::min(l, MAX_LIMIT) as usize)
             .unwrap_or(DEFAULT_PAGE_SIZE);
 
@@ -1473,6 +1549,15 @@ impl JsonRpcHandler for ListToolsHandler {
         let start_index = if let Some(cursor) = &cursor {
             // Cursor contains the last tool name from previous page
             let cursor_name = cursor.as_str();
+            // Pagination §Error Handling: "Invalid cursors SHOULD result in an
+            // error with code -32602" — a cursor must be one this server
+            // issued (the last tool name of a previously served page).
+            if !tools.iter().any(|t| t.name.as_str() == cursor_name) {
+                return Err(McpError::InvalidParameters(format!(
+                    "invalid pagination cursor {:?}",
+                    cursor_name
+                )));
+            }
             // Find the position after the cursor name (first tool > cursor)
             tools
                 .iter()
@@ -1511,31 +1596,53 @@ impl JsonRpcHandler for ListToolsHandler {
         let mut base_response = ListToolsResult::new(page_tools);
         let total = Some(tools.len() as u64);
 
-        // Set top-level nextCursor field on the result before wrapping
         if let Some(ref cursor) = next_cursor {
             base_response = base_response.with_next_cursor(cursor.clone());
         }
 
-        let next_cursor_clone = next_cursor.clone();
-        let mut paginated_response =
-            PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
+        let request_meta_extra = extract_request_meta_extra(&params_value);
 
-        // Propagate optional _meta from request to response (MCP 2025-11-25 compliance)
-        if let Some(request_meta) = list_params.meta {
-            // Get existing meta from PaginatedResponse or use pagination defaults
-            let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
-                turul_mcp_protocol::meta::Meta::with_pagination(next_cursor_clone, total, has_more)
-            });
-
-            // Merge request's _meta fields into extra without clobbering pagination
-            for (key, value) in request_meta {
-                response_meta.extra.insert(key, value);
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            let _ = &total;
+            let mut paginated_response =
+                turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
+                    base_response,
+                    next_cursor,
+                    total,
+                    has_more,
+                );
+            if !request_meta_extra.is_empty() {
+                use turul_mcp_protocol::meta::WithMeta;
+                let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
+                    turul_mcp_protocol::meta::Meta::with_pagination(None, total, has_more)
+                });
+                for (key, value) in request_meta_extra {
+                    response_meta.extra.insert(key, value);
+                }
+                paginated_response = paginated_response.with_meta(response_meta);
             }
-
-            paginated_response = paginated_response.with_meta(response_meta);
+            serde_json::to_value(paginated_response).map_err(McpError::SerializationError)
         }
-
-        serde_json::to_value(paginated_response).map_err(McpError::SerializationError)
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        {
+            let _ = (&next_cursor, &total, &has_more);
+            let mut value =
+                serde_json::to_value(base_response).map_err(McpError::SerializationError)?;
+            if !request_meta_extra.is_empty()
+                && let Some(obj) = value.as_object_mut()
+            {
+                let meta = obj
+                    .entry("_meta")
+                    .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+                if let Some(meta_obj) = meta.as_object_mut() {
+                    for (key, val) in request_meta_extra {
+                        meta_obj.insert(key, val);
+                    }
+                }
+            }
+            Ok(value)
+        }
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -1544,13 +1651,23 @@ impl JsonRpcHandler for ListToolsHandler {
 }
 
 /// Session-aware handler for tool execution
+/// Runtime + the task-election tool map (`name → required`).
+#[cfg(feature = "ext-tasks")]
+type ExtTasksWiring = (
+    Arc<crate::ext_tasks::ExtTasksRuntime>,
+    Arc<HashMap<String, bool>>,
+);
+
 pub struct SessionAwareToolHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
     session_manager: Arc<SessionManager>,
     strict_lifecycle: bool,
     /// Optional task runtime — when present AND request has `params.task`,
     /// the handler creates a task and executes asynchronously.
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+    #[cfg(feature = "ext-tasks")]
+    ext_tasks: Option<ExtTasksWiring>,
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
 }
@@ -1565,14 +1682,28 @@ impl SessionAwareToolHandler {
             tools,
             session_manager,
             strict_lifecycle,
+            #[cfg(feature = "protocol-2025-11-25")]
             task_runtime: None,
+            #[cfg(feature = "ext-tasks")]
+            ext_tasks: None,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
+        self
+    }
+
+    #[cfg(feature = "ext-tasks")]
+    pub fn with_ext_tasks(
+        mut self,
+        runtime: Arc<crate::ext_tasks::ExtTasksRuntime>,
+        task_tools: Arc<HashMap<String, bool>>,
+    ) -> Self {
+        self.ext_tasks = Some((runtime, task_tools));
         self
     }
 
@@ -1591,8 +1722,8 @@ impl JsonRpcHandler for SessionAwareToolHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        params: Option<turul_rpc::RequestParams>,
+        session_context: Option<turul_rpc::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request with session support", method);
 
@@ -1604,7 +1735,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         }
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing tool operations (if strict mode enabled)
-        if self.strict_lifecycle {
+        if cfg!(feature = "protocol-2025-11-25") && self.strict_lifecycle {
             if let Some(ref session_ctx) = session_context {
                 let session_initialized = self
                     .session_manager
@@ -1631,13 +1762,31 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             );
         }
 
+        // SEP-2243: the transport mirrors the request headers into the rpc
+        // session metadata; capture the Mcp-Param-* subset before the context
+        // is consumed below.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let mcp_param_headers: std::collections::HashMap<String, String> = session_context
+            .as_ref()
+            .map(|ctx| {
+                ctx.metadata
+                    .iter()
+                    .filter(|(k, _)| k.starts_with("mcp-param-"))
+                    .filter_map(|(k, v)| v.as_str().map(|s| (k.clone(), s.to_string())))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let params =
             params.ok_or_else(|| McpError::MissingParameter("CallToolRequest".to_string()))?;
 
         // Use the parameter extraction pattern from the other project
         use turul_mcp_protocol::param_extraction::extract_params;
 
+        #[cfg(feature = "protocol-2025-11-25")]
         let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)?;
+        #[cfg(not(feature = "protocol-2025-11-25"))]
+        let call_params: turul_mcp_protocol::tools::CallToolRequestParams = extract_params(params)?;
 
         // Find the tool — from live registry in Dynamic mode, or static map otherwise.
         // In both cases, we clone the Arc and release any lock before the await boundary.
@@ -1676,6 +1825,67 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             None
         };
 
+        // MRTR retry leg (SEP-2322): surface the client's inputResponses and
+        // echoed requestState to the tool via the session extensions —
+        // SessionContext::input_responses() / mrtr_request_state().
+        #[cfg(feature = "protocol-2026-07-28")]
+        let mcp_session_context = {
+            let mut ctx = mcp_session_context;
+            if let Some(ref mut session) = ctx {
+                if let Some(ref responses) = call_params.input_responses
+                    && let Ok(v) = serde_json::to_value(responses)
+                {
+                    session
+                        .extensions
+                        .insert("mcp:mrtr:inputResponses".to_string(), v);
+                }
+                if let Some(ref state) = call_params.request_state {
+                    session.extensions.insert(
+                        "mcp:mrtr:requestState".to_string(),
+                        serde_json::Value::String(state.clone()),
+                    );
+                }
+                // Per-request log opt-in: notifications/message is emitted only
+                // for requests whose _meta declares a logLevel.
+                #[allow(deprecated)]
+                if let Some(ref level) = call_params.meta.log_level
+                    && let Ok(v) = serde_json::to_value(level)
+                {
+                    session.extensions.insert("mcp:logLevel".to_string(), v);
+                }
+                // Progress opt-in: surface the request's progressToken so the
+                // tool can emit notifications/progress referencing it
+                // (SessionContext::notify_request_progress).
+                if let Some(ref token) = call_params.meta.progress_token
+                    && let Ok(v) = serde_json::to_value(token)
+                {
+                    session
+                        .extensions
+                        .insert("mcp:progressToken".to_string(), v);
+                }
+            }
+            ctx
+        };
+
+        // Progress opt-in on 2025-11-25: same `_meta.progressToken` concept, but
+        // that spec snapshot types `CallToolParams::meta` as an untyped map, so
+        // the token is read by key rather than off a typed field.
+        #[cfg(feature = "protocol-2025-11-25")]
+        let mcp_session_context = {
+            let mut ctx = mcp_session_context;
+            if let Some(ref mut session) = ctx
+                && let Some(token) = call_params
+                    .meta
+                    .as_ref()
+                    .and_then(|meta| meta.get("progressToken"))
+            {
+                session
+                    .extensions
+                    .insert("mcp:progressToken".to_string(), token.clone());
+            }
+            ctx
+        };
+
         // Build arguments Value
         let args = call_params
             .arguments
@@ -1684,6 +1894,109 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                     .unwrap_or(serde_json::Value::Object(serde_json::Map::new()))
             })
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
+
+        // SEP-2243 Mcp-Param-* validation: with the tool schema in hand, verify
+        // every annotated parameter's mirrored header against the body argument
+        // (Base64 sentinel decoded; integers compared numerically). A value in
+        // the body without its header, a header without its value, or a
+        // decoded mismatch → -32020 HeaderMismatch at HTTP 400.
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            let header_mismatch = |detail: String| McpError::JsonRpcError {
+                code: turul_mcp_protocol::headers::ERROR_CODE_HEADER_MISMATCH,
+                message: format!("Header mismatch: {detail}"),
+                data: None,
+            };
+            let input_schema_value = serde_json::to_value(tool.input_schema()).unwrap_or_default();
+            match turul_mcp_protocol::headers::scan_x_mcp_headers(&input_schema_value) {
+                Err(reason) => {
+                    // The server's own tool definition is malformed; a conforming
+                    // client will have excluded this tool from tools/list already.
+                    tracing::warn!(
+                        "tool '{}' has invalid x-mcp-header annotations ({reason}); skipping Mcp-Param validation",
+                        call_params.name
+                    );
+                }
+                Ok(bindings) => {
+                    for binding in bindings {
+                        let header_key =
+                            format!("mcp-param-{}", binding.header_name.to_ascii_lowercase());
+                        let header_value = mcp_param_headers.get(&header_key);
+                        let body_value = args
+                            .pointer(&binding.argument_pointer)
+                            .filter(|v| !v.is_null());
+                        match (header_value, body_value) {
+                            (None, None) => {}
+                            (None, Some(_)) => {
+                                return Err(header_mismatch(format!(
+                                    "Mcp-Param-{} header omitted but the parameter is present in the request body",
+                                    binding.header_name
+                                )));
+                            }
+                            (Some(_), None) => {
+                                return Err(header_mismatch(format!(
+                                    "Mcp-Param-{} header present but the parameter is absent from the request body",
+                                    binding.header_name
+                                )));
+                            }
+                            (Some(raw), Some(body)) => {
+                                let decoded = turul_mcp_protocol::headers::decode_param_value(raw)
+                                    .map_err(|e| {
+                                        header_mismatch(format!(
+                                            "Mcp-Param-{}: {e}",
+                                            binding.header_name
+                                        ))
+                                    })?;
+                                let matches = if binding.schema_type == "integer" {
+                                    // Compare numerically (42.0 == 42 per spec note).
+                                    decoded
+                                        .trim()
+                                        .parse::<f64>()
+                                        .ok()
+                                        .zip(body.as_f64())
+                                        .map(|(h, b)| h == b)
+                                        .unwrap_or(false)
+                                } else {
+                                    let body_str = match body {
+                                        serde_json::Value::String(s) => s.clone(),
+                                        serde_json::Value::Bool(b) => b.to_string(),
+                                        other => other.to_string(),
+                                    };
+                                    decoded == body_str
+                                };
+                                if !matches {
+                                    return Err(header_mismatch(format!(
+                                        "Mcp-Param-{} header value '{decoded}' does not match the request body value",
+                                        binding.header_name
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Task election (2026-07-28 Tasks extension, SEP-2663): the server is
+        // the sole decider. A tool marked for election runs as a task when
+        // this request's declared `clientCapabilities.extensions` activates
+        // the extension; otherwise it runs synchronously (progressive
+        // enhancement) — unless the tool REQUIRES tasks, which answers
+        // -32021 with `data.requiredCapabilities.extensions`.
+        #[cfg(feature = "ext-tasks")]
+        if let Some((runtime, task_tools)) = self.ext_tasks.as_ref()
+            && let Some(&required) = task_tools.get(&call_params.name)
+        {
+            if crate::ext_tasks::declared(&call_params.meta.client_capabilities) {
+                let result = runtime
+                    .create_and_spawn(Arc::clone(&tool), args, mcp_session_context)
+                    .await?;
+                return serde_json::to_value(result).map_err(McpError::SerializationError);
+            }
+            if required {
+                return Err(crate::ext_tasks::missing_capability_error());
+            }
+        }
 
         // Task-augmented request detection (MCP 2025-11-25):
         // If params.task is present AND task_runtime is configured, create a task
@@ -1694,6 +2007,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // - Required + task absent: reject (clients MUST use task augmentation)
         // - Optional: either path is valid
         // - None (no declaration): reject task-augmented calls (experimental; no declaration = no support)
+        #[cfg(feature = "protocol-2025-11-25")]
         {
             use turul_mcp_protocol::tools::TaskSupport;
             let tool_descriptor = tool.to_tool();
@@ -1719,6 +2033,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         }
 
         // Reject task-augmented calls when no task runtime is configured
+        #[cfg(feature = "protocol-2025-11-25")]
         if call_params.task.is_some() && self.task_runtime.is_none() {
             return Err(McpError::InvalidParameters(
                 "Task-augmented tool calls require the server to have task support configured"
@@ -1726,6 +2041,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             ));
         }
 
+        #[cfg(feature = "protocol-2025-11-25")]
         if let (Some(task_meta), Some(runtime)) = (call_params.task, self.task_runtime.as_ref()) {
             use turul_mcp_protocol::tasks::{CreateTaskResult, Task};
             use turul_mcp_task_storage::{TaskOutcome, TaskRecord};
@@ -1822,17 +2138,35 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                 meta: None,
             };
             let result = CreateTaskResult { task, meta: None };
-            serde_json::to_value(result).map_err(McpError::SerializationError)
-        } else {
-            // Synchronous execution (no task augmentation or no runtime)
-            match tool.call(args, mcp_session_context).await {
-                Ok(response) => {
-                    serde_json::to_value(response).map_err(McpError::SerializationError)
-                }
-                Err(error_msg) => {
-                    error!("Tool execution error: {}", error_msg);
-                    Err(error_msg)
-                }
+            return serde_json::to_value(result).map_err(McpError::SerializationError);
+        }
+
+        // Synchronous execution (no task augmentation or no runtime)
+        let call_result = tool.call(args, mcp_session_context).await;
+
+        // MRTR production (SEP-2322): a tool returning McpError::InputRequired
+        // is NOT an error — convert via the shared helper (capability gate +
+        // InputRequiredResult), the same path resources/read and prompts/get use.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let call_result = match call_result {
+            Err(McpError::InputRequired {
+                input_requests,
+                request_state,
+            }) => {
+                return crate::handlers::input_required_to_result(
+                    input_requests,
+                    request_state,
+                    &call_params.meta.client_capabilities,
+                );
+            }
+            other => other,
+        };
+
+        match call_result {
+            Ok(response) => serde_json::to_value(response).map_err(McpError::SerializationError),
+            Err(error_msg) => {
+                error!("Tool execution error: {}", error_msg);
+                Err(error_msg)
             }
         }
     }
@@ -1916,6 +2250,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for TestTool {}
 
     #[async_trait]
@@ -1966,10 +2301,11 @@ mod tests {
         let session_manager = Arc::new(SessionManager::new(ServerCapabilities::default()));
         let handler = SessionAwareToolHandler::new(tools, session_manager, false);
         // Create params matching the CallToolParams structure
-        let params = turul_mcp_json_rpc_server::RequestParams::Object(
+        let params = turul_rpc::RequestParams::Object(
             [
                 ("name".to_string(), serde_json::json!("test")),
                 ("arguments".to_string(), serde_json::json!({})),
+                ("_meta".to_string(), crate::tests::request_meta()),
             ]
             .into_iter()
             .collect(),

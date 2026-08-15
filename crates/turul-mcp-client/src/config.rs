@@ -20,6 +20,52 @@ pub struct ClientConfig {
 
     /// Logging configuration
     pub logging: LoggingConfig,
+
+    /// Explicit wire-spec hint. When set, `connect()` skips auto-detection and
+    /// drives the handshake for this version directly. `None` (default) =
+    /// try `server/discover` then fall back to `initialize` on JSON-RPC -32601.
+    pub mcp_protocol_version: Option<crate::version::McpVersion>,
+
+    /// When `true`, broadens the version-downgrade fallback to also accept HTTP
+    /// 404/405 from `server/discover` (for gateways that return those for unknown
+    /// methods). Off by default; enabling it weakens protocol-downgrade resistance.
+    pub allow_legacy_gateway_fallback: bool,
+
+    /// Capabilities this client declares to servers — in the 2025 `initialize`
+    /// handshake and in every 2026 request's `_meta` `clientCapabilities`.
+    /// All off by default: declare only what the application actually handles,
+    /// since servers may send MRTR input requests for declared capabilities.
+    pub declared_capabilities: DeclaredCapabilities,
+}
+
+/// Client-side capability declarations (see [`ClientConfig::declared_capabilities`]).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct DeclaredCapabilities {
+    /// Can answer `elicitation/create` input requests (MRTR, SEP-2322).
+    /// Declares form-mode support ("an empty capabilities object is
+    /// equivalent to declaring support for form mode only").
+    pub elicitation: bool,
+    /// Also supports URL-mode elicitation (`elicitation.url`). Servers MUST
+    /// NOT send URL-mode requests unless this is declared. Implies
+    /// `elicitation` when set.
+    pub elicitation_url: bool,
+    /// Can answer `sampling/createMessage` input requests (deprecated per SEP-2577).
+    pub sampling: bool,
+    /// Also supports tool-enabled sampling (`sampling.tools`). Servers MUST
+    /// NOT send `tools`/`toolChoice` unless this is declared. Implies
+    /// `sampling` when set.
+    pub sampling_tools: bool,
+    /// Also supports `includeContext: "thisServer"/"allServers"` in sampling
+    /// (`sampling.context`). Implies `sampling` when set.
+    pub sampling_context: bool,
+    /// Can answer `roots/list` input requests (deprecated per SEP-2577).
+    pub roots: bool,
+    /// Declares the Tasks extension (`io.modelcontextprotocol/tasks`,
+    /// SEP-2663) in every 2026 request's `_meta` `clientCapabilities.extensions`
+    /// — servers may then answer task-electing calls with a `CreateTaskResult`
+    /// instead of the normal result. Use the `call_tool_or_task`/`task_*`
+    /// client APIs (requires the `ext-tasks` cargo feature).
+    pub ext_tasks: bool,
 }
 
 /// Client identification information

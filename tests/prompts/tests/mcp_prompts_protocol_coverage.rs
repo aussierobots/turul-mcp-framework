@@ -450,7 +450,8 @@ async fn test_resource_reference_complete_fields() {
 #[tokio::test]
 async fn test_prompt_annotations() {
     // Test PromptAnnotations
-    let annotations = PromptAnnotations::new().with_title("Custom Prompt Title");
+    let annotations =
+        turul_mcp_builders::traits::PromptAnnotations::new().with_title("Custom Prompt Title");
 
     assert_eq!(annotations.title, Some("Custom Prompt Title".to_string()));
 }

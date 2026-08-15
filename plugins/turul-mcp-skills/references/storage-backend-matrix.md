@@ -1,6 +1,6 @@
 # Storage Backend Matrix
 
-Decision matrix for session and task storage backends in the Turul MCP Framework. All backends share the same builder API (`.with_session_storage()` / `.with_task_storage()`); only the config struct and feature flags differ.
+Decision matrix for session and task storage backends in the Turul MCP Framework. Backends share a builder API, but the method name differs by target: `turul-mcp-server` uses `.with_session_storage()` / `.with_task_storage()`, while `turul-mcp-aws-lambda`'s builder uses `.storage()`. Only the config struct and feature flags differ beyond that.
 
 All backends pass the same parity test suite ensuring session isolation, TTL enforcement, and state machine correctness. See: [CLAUDE.md — Session Management](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#session-management)
 
@@ -64,7 +64,7 @@ Default features: `["http", "sse"]` — in-memory only, no backend deps compiled
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.3"
+turul-mcp-server = "0.4"
 # Default features: http + sse + in-memory storage. No backend deps compiled.
 ```
 
@@ -72,8 +72,8 @@ turul-mcp-server = "0.3"
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["sqlite"] }
-turul-mcp-session-storage = { version = "0.3", features = ["sqlite"] }
+turul-mcp-server = { version = "0.4", features = ["sqlite"] }
+turul-mcp-session-storage = { version = "0.4", features = ["sqlite"] }
 ```
 
 The `sqlite` feature on `turul-mcp-server` enables SQLite for both session and task storage automatically.
@@ -84,8 +84,8 @@ See: [examples/simple-sqlite-session](https://github.com/aussierobots/turul-mcp-
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["postgres"] }
-turul-mcp-session-storage = { version = "0.3", features = ["postgres"] }
+turul-mcp-server = { version = "0.4", features = ["postgres"] }
+turul-mcp-session-storage = { version = "0.4", features = ["postgres"] }
 ```
 
 See: [examples/simple-postgres-session](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/simple-postgres-session)
@@ -94,8 +94,8 @@ See: [examples/simple-postgres-session](https://github.com/aussierobots/turul-mc
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["dynamodb"] }
-turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-server = { version = "0.4", features = ["dynamodb"] }
+turul-mcp-session-storage = { version = "0.4", features = ["dynamodb"] }
 ```
 
 See: [examples/simple-dynamodb-session](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/simple-dynamodb-session)
@@ -104,9 +104,9 @@ See: [examples/simple-dynamodb-session](https://github.com/aussierobots/turul-mc
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
-turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
-turul-mcp-server-state-storage = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-server = { version = "0.4", features = ["dynamodb", "dynamic-tools"] }
+turul-mcp-session-storage = { version = "0.4", features = ["dynamodb"] }
+turul-mcp-server-state-storage = { version = "0.4", features = ["dynamodb"] }
 ```
 
 ## Environment Variables

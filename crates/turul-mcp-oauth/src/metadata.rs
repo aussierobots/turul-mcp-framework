@@ -109,7 +109,28 @@ impl ProtectedResourceMetadata {
     }
 
     /// Set supported scopes
+    /// Set the advertised scopes (`scopes_supported`, echoed into the
+    /// `WWW-Authenticate` challenge's `scope` parameter).
+    ///
+    /// `offline_access` is filtered out with a warning — Authorization
+    /// §Refresh Tokens: "MCP Servers (Protected Resources) SHOULD NOT include
+    /// offline_access in WWW-Authenticate scope or Protected Resource
+    /// Metadata scopes_supported."
     pub fn with_scopes(mut self, scopes: Vec<String>) -> Self {
+        let scopes: Vec<String> = scopes
+            .into_iter()
+            .filter(|s| {
+                if s == "offline_access" {
+                    tracing::warn!(
+                        "dropping offline_access from advertised scopes — resource servers \
+                         SHOULD NOT advertise it (Authorization §Refresh Tokens)"
+                    );
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
         self.scopes_supported = Some(scopes);
         self
     }
@@ -210,6 +231,46 @@ mod tests {
         // Fields not set should be absent
         assert!(json.get("bearer_methods_supported").is_none());
         assert!(json.get("resource_documentation").is_none());
+    }
+
+    #[test]
+    fn protected_resource_metadata_carries_no_client_registration_surface() {
+        // Role posture: client registration (CIMD / deprecated DCR) is an
+        // authorization-server + client concern. The RFC 9728 document this
+        // resource server publishes must not grow registration keys — a
+        // client discovering this RS gets ONLY resource metadata and the AS
+        // list, and performs registration against the AS.
+        let metadata = ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .unwrap()
+        .with_jwks_uri("https://auth.example.com/.well-known/jwks.json")
+        .with_scopes(vec!["mcp:read".to_string()]);
+
+        let json = serde_json::to_value(&metadata).unwrap();
+        let keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(|k| k.as_str())
+            .collect();
+        for forbidden in [
+            "registration_endpoint",
+            "client_id_metadata_document_supported",
+            "client_id",
+            "client_secret",
+            "redirect_uris",
+        ] {
+            assert!(
+                !keys.contains(&forbidden),
+                "RFC 9728 resource metadata must not carry the registration \
+                 key '{forbidden}' (AS/client concern), got keys: {keys:?}"
+            );
+        }
+        // The RS-role MUSTs stay present.
+        assert!(keys.contains(&"resource"));
+        assert!(keys.contains(&"authorization_servers"));
     }
 
     #[test]
@@ -452,6 +513,31 @@ mod tests {
                 ],
             )
             .is_ok()
+        );
+    }
+}
+
+#[cfg(test)]
+mod offline_access_tests {
+    use super::*;
+
+    /// Authorization §Refresh Tokens: resource servers SHOULD NOT advertise
+    /// offline_access — with_scopes filters it with a warning.
+    #[test]
+    fn offline_access_is_filtered_from_scopes() {
+        let metadata = ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .unwrap()
+        .with_scopes(vec![
+            "mcp:read".to_string(),
+            "offline_access".to_string(),
+            "mcp:write".to_string(),
+        ]);
+        assert_eq!(
+            metadata.scopes_supported,
+            Some(vec!["mcp:read".to_string(), "mcp:write".to_string()])
         );
     }
 }

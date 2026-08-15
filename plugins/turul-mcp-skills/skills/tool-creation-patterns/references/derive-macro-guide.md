@@ -5,7 +5,7 @@ The derive macro generates MCP tool boilerplate from a struct definition. It sup
 ## Basic Usage
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, SessionContext};
 
@@ -170,7 +170,7 @@ impl Calculator {
 }
 ```
 
-See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
+See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/rules/notification-architecture.md#critical-error-handling-rules)
 
 ## Complete Example
 

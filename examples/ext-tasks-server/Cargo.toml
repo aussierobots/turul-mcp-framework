@@ -1,0 +1,34 @@
+# Uses the ext-tasks features of both server and client, so it stays out of
+# default-members (like the other client-using examples) and is built by an
+# explicit gate step.
+[package]
+name = "ext-tasks-server"
+version = "0.4.0"
+# Two [[bin]] targets, so a bare `cargo run -p ext-tasks-server` is ambiguous
+# without this — which is the form both README.md:9 and src/main.rs:18 document.
+default-run = "ext-tasks-server"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+turul-mcp-server = { workspace = true, features = ["ext-tasks"] }
+turul-mcp-protocol.workspace = true
+turul-mcp-builders.workspace = true
+turul-mcp-ext-tasks.workspace = true
+turul-mcp-client = { workspace = true, features = ["ext-tasks"] }
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "ext-tasks-server"
+path = "src/main.rs"
+test = false
+
+[[bin]]
+name = "ext-tasks-client"
+path = "src/client.rs"
+test = false

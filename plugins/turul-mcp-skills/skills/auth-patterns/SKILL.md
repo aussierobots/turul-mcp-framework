@@ -16,6 +16,8 @@ description: >
   building an Authorization Server — see authorization-server-patterns.
 ---
 
+**Spec lane: applies to both 2026-07-28 and 2025-11-25.** The RS-side OAuth 2.1 mechanics below (RFC 9728 PRM, RFC 8707 resource binding, JWT/JWKS validation) are unchanged by the 2026-07-28 spec revision and `turul-mcp-oauth` is not spec-version-gated. **2026-07-28 also adds several auth-hardening requirements this crate does not fully implement yet** — RFC 9207 `iss` validation, OIDC `application_type` on DCR, authorization-server binding of persisted client credentials, scope accumulation, and the `.well-known` discovery suffix change for authorization-server metadata. (Refresh-token request guidance is a partial exception — this crate already implements the resource-server-facing half.) See [2026-07-28 Auth Hardening — Not Yet Implemented](#2026-07-28-auth-hardening--not-yet-implemented) near the end before relying on this crate for a 2026-07-28-compliant deployment.
+
 # Auth Patterns — Turul MCP Framework
 
 Add authentication to MCP servers. In OAuth terms, your MCP server plays the **Resource Server (RS)** role — it validates tokens, it doesn't issue them. But how you implement that validation depends on your deployment topology:
@@ -47,7 +49,7 @@ How do you want to authenticate MCP clients?
 The convenience function for the most common case: one AS, audience = resource URL.
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_oauth::{ProtectedResourceMetadata, oauth_resource_server};
 use turul_mcp_server::prelude::*;
 
@@ -75,7 +77,7 @@ let server = builder.build()?;
 ```
 
 **What `oauth_resource_server()` does for you:**
-- Creates a `JwtValidator` with audience = resource URL, issuer = first AS
+- Creates a hardened `JwtValidator` (via `hardened_validator`) with audience = resource URL, issuer = first AS
 - Wraps it in `OAuthResourceMiddleware` (pre-session, so 401s don't allocate sessions)
 - Registers `WellKnownOAuthHandler` for both root-form and path-form endpoints
 - Returns `(Arc<OAuthResourceMiddleware>, Vec<RouteEntry>)` ready to wire in
@@ -87,14 +89,14 @@ let server = builder.build()?;
 When you need custom audience, multiple ASes, or algorithm restrictions:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use std::sync::Arc;
-use turul_mcp_oauth::{JwtValidator, OAuthResourceMiddleware, ProtectedResourceMetadata,
+use turul_mcp_oauth::{hardened_validator, OAuthResourceMiddleware, ProtectedResourceMetadata,
                        WellKnownOAuthHandler};
 
 // Custom audience (not the resource URL)
 let validator = Arc::new(
-    JwtValidator::new(
+    hardened_validator(
         "https://auth.example.com/.well-known/jwks.json",
         "my-custom-audience",  // Audience is ALWAYS required
     )
@@ -168,7 +170,7 @@ The RS publishes the AS URL via PRM; clients then fetch the AS metadata themselv
      │   4. Run PKCE flow against AS, then call RS with bearer
 ```
 
-**Normative requirements** (MCP 2025-11-25 § Authorization):
+**Normative requirements** (MCP 2025-11-25 § Authorization — not on the Branch Lock's list of 2026-07-28 changes, so treat these as carrying forward unchanged; re-verify against the 2026-07-28 spec text directly before treating that as settled):
 
 - "MCP servers **MUST** implement OAuth 2.0 Protected Resource Metadata (RFC 9728)" — the RS publishes its identity and the AS list.
 - "MCP clients **MUST** use OAuth 2.0 Protected Resource Metadata for authorization server discovery."
@@ -223,7 +225,7 @@ The AS uses `resource` to set the token's `aud` claim. The RS later validates th
 
 1. Pick a single canonical resource URI for your MCP server (e.g. `https://api.example.com/mcp`).
 2. Pass that exact URI as the first argument to `ProtectedResourceMetadata::new(...)`.
-3. Pass that exact URI as the audience argument to `JwtValidator::new(...)` (or let `oauth_resource_server()` propagate it for you).
+3. Pass that exact URI as the audience argument to `hardened_validator(...)` / `JwtValidator::new(...)` (or let `oauth_resource_server()` propagate it for you).
 4. Document the URI so client integrators know what to send as `resource` and `aud`.
 
 ## Accessing Auth Claims in Tools
@@ -231,7 +233,7 @@ The AS uses `resource` to set the token's `aud` claim. The RS later validates th
 The middleware injects `TokenClaims` into request extensions. Tools read them via `SessionContext`:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_oauth::TokenClaims;
 
 #[derive(McpTool, Clone, Default)]
@@ -292,7 +294,7 @@ impl WhoAmITool {
 For simple API key authentication without OAuth:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_server::prelude::*;
 
 struct ApiKeyMiddleware {
@@ -362,7 +364,7 @@ The Lambda adapter converts camelCase authorizer fields to snake_case headers (`
 Wire `turul-mcp-oauth` into a Lambda server. Register well-known routes via `.route()` on the builder — `handle_streaming()` checks the route registry before MCP dispatch, so no custom dispatch logic is needed:
 
 ```rust
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 use turul_mcp_aws_lambda::{LambdaMcpServerBuilder, run_streaming};
 use turul_mcp_oauth::{ProtectedResourceMetadata, oauth_resource_server};
 
@@ -399,11 +401,11 @@ run_streaming(handler).await
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3" }
-turul-mcp-oauth = { version = "0.3" }
+turul-mcp-server = { version = "0.4" }
+turul-mcp-oauth = { version = "0.4" }
 
 # For Lambda deployment:
-turul-mcp-aws-lambda = { version = "0.3", features = ["streaming", "dynamodb"] }
+turul-mcp-aws-lambda = { version = "0.4", features = ["streaming", "dynamodb"] }
 ```
 
 The `turul-mcp-oauth` crate has no feature flags — all functionality is always available.
@@ -434,7 +436,7 @@ When `scopes_supported` is configured, `scope="mcp:read mcp:write"` is included 
 
 1. **Forgetting audience validation is mandatory** — `JwtValidator::new()` requires an audience string. There's no way to skip it. This is by design per OAuth 2.1.
 
-2. **Using `oauth_resource_server()` with multiple ASes** — The convenience function takes only the first AS from `authorization_servers`. For multi-AS setups, construct `JwtValidator` and `OAuthResourceMiddleware` manually.
+2. **Using `oauth_resource_server()` with multiple ASes** — The convenience function takes only the first AS from `authorization_servers`. For multi-AS setups, build the validator with `hardened_validator(jwks_uri, audience)` and wire `OAuthResourceMiddleware` manually. Do **not** reach for `JwtValidator::new` here: it leaves key max-age, stale window and retry disabled, so the multi-AS path would be the only unhardened one.
 
 3. **Wrong extension key for claims** — Claims are currently stored at `"__turul_internal.auth_claims"` (no public constant yet). Use this exact string. If the framework introduces a public constant, prefer that.
 
@@ -446,9 +448,24 @@ When `scopes_supported` is configured, `scope="mcp:read mcp:write"` is included 
 
 7. **Manually dispatching well-known routes in `run_streaming_with()`** — You don't need custom dispatch for `.well-known` routes. Register them via `.route()` on `LambdaMcpServerBuilder` — `handle_streaming()` checks the route registry before MCP dispatch. Use `run_streaming_with()` only when you need pre-dispatch logic that isn't route-based (e.g., request logging, custom health checks).
 
-8. **Resource / audience URI mismatch between RS and what clients send** — The single most common interop failure. If your `ProtectedResourceMetadata::new("https://api.example.com/mcp", ...)` declares one URI but clients send `resource=https://api.example.com` (no `/mcp` path), the AS issues `aud=https://api.example.com` and your RS rejects with `invalid audience`. Fix: pick one canonical URI, use it verbatim in `ProtectedResourceMetadata::new`, `JwtValidator::new`, and document it so client integrators send the exact same string as `resource` in both `/authorize` and `/token`.
+8. **Resource / audience URI mismatch between RS and what clients send** — The single most common interop failure. If your `ProtectedResourceMetadata::new("https://api.example.com/mcp", ...)` declares one URI but clients send `resource=https://api.example.com` (no `/mcp` path), the AS issues `aud=https://api.example.com` and your RS rejects with `invalid audience`. Fix: pick one canonical URI, use it verbatim in `ProtectedResourceMetadata::new`, `hardened_validator`, and document it so client integrators send the exact same string as `resource` in both `/authorize` and `/token`.
 
 9. **Expecting the RS to serve `/.well-known/oauth-authorization-server`** — That endpoint lives on the AS, not the RS. The RS only serves `/.well-known/oauth-protected-resource` (RFC 9728); it advertises the AS URL via the `authorization_servers` field and clients fetch RFC 8414 metadata from the AS directly.
+
+## 2026-07-28 Auth Hardening — Not Yet Implemented
+
+Verified by grep against `crates/turul-mcp-oauth/src/`: most of the following 2026-07-28 auth-hardening additions don't appear in the crate today. Don't assume a deployment built on this skill satisfies them — they need separate work (in your own middleware layer, or upstream in `turul-mcp-oauth`) before you can call a 2026-07-28 deployment compliant on these points. One exception is called out below.
+
+| Addition | SEP | What it requires |
+|---|---|---|
+| RFC 9207 `iss` validation | SEP-2468 | MCP clients validate the authorization response's `iss` parameter against the expected issuer, to prevent mix-up attacks across multiple ASes — client-side, out of scope for this RS-only crate |
+| OIDC `application_type` on DCR | SEP-837 | MCP clients MUST specify an `application_type` during Dynamic Client Registration (SHOULD applies only to the choice of `"native"` vs `"web"`) — client-side, out of scope for this RS-only crate |
+| Authorization server binding | SEP-2352 | Clients MUST bind *persisted client credentials* (client_id/secret from pre-registration or DCR) to the issuing authorization server, keyed by its issuer identifier — client-side, out of scope for this RS-only crate |
+| Refresh token requests | SEP-2207 | **Partially implemented.** The Refresh Tokens section places requirements on both MCP Clients and MCP Servers (Protected Resources). This crate implements the RS-facing half: `ProtectedResourceMetadata::with_scopes()` filters `offline_access` out of advertised scopes with a warning (`metadata.rs`, `offline_access_is_filtered_from_scopes` test) — resource servers SHOULD NOT advertise it. The client-facing requirements (advertising `refresh_token` in `grant_types`, requesting `offline_access`) are out of scope for this RS-only crate |
+| Scope accumulation | SEP-2350 | Rules for how scopes accumulate across incremental authorization — client-side, out of scope for this RS-only crate |
+| `.well-known` discovery suffix | SEP-2351 | Confirms MCP uses the default `oauth-authorization-server` well-known URI suffix (RFC 8414 §3.1) for authorization-server metadata discovery — AS-side, out of scope for this RS-only crate |
+
+`turul-mcp-oauth` has no feature flags gating any of this in or out.
 
 ## Beyond This Skill
 

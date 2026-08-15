@@ -1,6 +1,9 @@
 [package]
 name = "turul-mcp-protocol-2025-11-25"
-version.workspace = true
+# Frozen historical spec snapshot — last 0.3.x publish, never bumped or edited
+# again. Literal `version` pinned because the workspace adopted per-crate
+# independent versioning at 0.4.0 and this crate does NOT move to that line.
+version = "0.3.47"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true

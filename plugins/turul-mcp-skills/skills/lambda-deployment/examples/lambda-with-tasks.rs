@@ -1,12 +1,16 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Lambda MCP server with DynamoDB task storage for long-running tools
 //
+// Spec lane: 2025-11-25 in-core tasks only (--no-default-features --features protocol-2025-11-25).
+// LambdaMcpServerBuilder has no Tasks-extension (SEP-2663) wiring yet for 2026-07-28 —
+// see the task-patterns skill.
+//
 // Cargo.toml dependencies:
-//   turul-mcp-aws-lambda = { version = "0.3", features = ["dynamodb"] }
-//   turul-mcp-server = { version = "0.3" }
-//   turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
-//   turul-mcp-task-storage = { version = "0.3", features = ["dynamodb"] }
-//   turul-mcp-derive = { version = "0.3" }
+//   turul-mcp-aws-lambda = { version = "0.4", features = ["dynamodb"] }
+//   turul-mcp-server = { version = "0.4" }
+//   turul-mcp-session-storage = { version = "0.4", features = ["dynamodb"] }
+//   turul-mcp-task-storage = { version = "0.4", features = ["dynamodb"] }
+//   turul-mcp-derive = { version = "0.4" }
 //   lambda_http = "0.13"
 //   tokio = { version = "1", features = ["full"] }
 

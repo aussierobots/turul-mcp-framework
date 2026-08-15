@@ -7,6 +7,7 @@
 //! - Real-time notification delivery and SSE integration
 //! - Error handling and edge cases for notification systems
 
+#![allow(deprecated)] // exercises SEP-2577-deprecated surfaces through the migration window
 use std::sync::Arc;
 
 use serde_json::json;
@@ -94,7 +95,12 @@ mod session_notification_tests {
         let manager = Arc::new(SessionManager::new(capabilities));
 
         let session_id = manager.create_session().await;
-        let context = manager.create_session_context(&session_id).unwrap();
+        let mut context = manager.create_session_context(&session_id).unwrap();
+        // Progress references the token the request supplied; the tools/call
+        // handler injects it as this extension, so a unit test must seed it.
+        context
+            .extensions
+            .insert("mcp:progressToken".to_string(), json!("test-token"));
 
         // Test different context notification methods
         context
@@ -105,10 +111,8 @@ mod session_notification_tests {
                 None,
             )
             .await;
-        context.notify_progress("test-token", 25).await;
-        context
-            .notify_progress_with_total("test-token", 50, 100)
-            .await;
+        assert!(context.notify_request_progress(25.0, None).await);
+        assert!(context.notify_request_progress(50.0, Some(100.0)).await);
         context.notify_resources_changed().await;
         context.notify_resource_updated("test://resource").await;
         context.notify_tools_changed().await;
@@ -213,27 +217,26 @@ mod mcp_notification_tests {
         let manager = Arc::new(SessionManager::new(capabilities));
 
         let session_id = manager.create_session().await;
-        let context = manager.create_session_context(&session_id).unwrap();
+        let mut context = manager.create_session_context(&session_id).unwrap();
 
-        // Test progress notifications with different patterns
-        let progress_tokens = ["upload", "download", "processing", "analysis"];
+        // One token per request, as the wire contract has it: the token is
+        // fixed by the caller, and it is the progress values that vary.
+        context
+            .extensions
+            .insert("mcp:progressToken".to_string(), json!("upload"));
 
-        for (i, token) in progress_tokens.iter().enumerate() {
-            let progress = (i as u64 + 1) * 25;
-            context.notify_progress(*token, progress).await;
-
-            // Also test with total
-            context
-                .notify_progress_with_total(*token, progress, 100)
-                .await;
+        for i in 0..4u64 {
+            let progress = (i + 1) as f64 * 25.0;
+            assert!(context.notify_request_progress(progress, None).await);
+            assert!(context.notify_request_progress(progress, Some(100.0)).await);
         }
 
         // Test edge cases
-        context.notify_progress("zero-progress", 0).await;
-        context
-            .notify_progress_with_total("complete", 100, 100)
-            .await;
-        context.notify_progress("over-100", 150).await; // Should still work
+        assert!(context.notify_request_progress(0.0, None).await);
+        assert!(context.notify_request_progress(100.0, Some(100.0)).await);
+        // Over 100 with no total is legal: the schema says progress "should
+        // increase every time progress is made, even if the total is unknown".
+        assert!(context.notify_request_progress(150.0, None).await);
     }
 
     #[tokio::test]
@@ -464,7 +467,7 @@ mod notification_error_tests {
         let manager = Arc::new(SessionManager::new(capabilities));
 
         let session_id = manager.create_session().await;
-        let context = manager.create_session_context(&session_id).unwrap();
+        let mut context = manager.create_session_context(&session_id).unwrap();
 
         // These should not panic even with unusual inputs
         context
@@ -483,7 +486,11 @@ mod notification_error_tests {
                 None,
             )
             .await;
-        context.notify_progress("", 0).await;
+        // An empty token is what the caller sent; the tool echoes it verbatim.
+        context
+            .extensions
+            .insert("mcp:progressToken".to_string(), json!(""));
+        assert!(context.notify_request_progress(0.0, None).await);
         context.notify_resource_updated("").await;
 
         // Test with very long strings
@@ -496,7 +503,10 @@ mod notification_error_tests {
                 None,
             )
             .await;
-        context.notify_progress(&long_string, 50).await;
+        context
+            .extensions
+            .insert("mcp:progressToken".to_string(), json!(long_string.clone()));
+        assert!(context.notify_request_progress(50.0, None).await);
     }
 
     #[tokio::test]
@@ -505,7 +515,7 @@ mod notification_error_tests {
         let manager = Arc::new(SessionManager::new(capabilities));
 
         let session_id = manager.create_session().await;
-        let context = manager.create_session_context(&session_id).unwrap();
+        let mut context = manager.create_session_context(&session_id).unwrap();
 
         // Remove session to simulate expiry
         manager.remove_session(&session_id).await;
@@ -519,7 +529,10 @@ mod notification_error_tests {
                 None,
             )
             .await;
-        context.notify_progress("test", 50).await;
+        context
+            .extensions
+            .insert("mcp:progressToken".to_string(), json!("test"));
+        context.notify_request_progress(50.0, None).await;
 
         // These should not panic, even though session may be expired
     }
@@ -547,7 +560,7 @@ mod notification_error_tests {
                         None,
                     )
                     .await;
-                context_clone.notify_progress("concurrent", i as u64).await;
+                context_clone.notify_request_progress(i as f64, None).await;
 
                 let custom_event = SessionEvent::Custom {
                     event_type: "concurrent_test".to_string(),

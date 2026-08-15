@@ -1,8 +1,12 @@
 //! # SQLite Pagination Server Example
 //!
-//! This example demonstrates comprehensive MCP pagination functionality using SQLite database
-//! for realistic large dataset handling. It shows proper database pagination patterns,
-//! connection management, and setup/teardown lifecycle.
+//! Cursor pagination *inside a tool's own result payload*, backed by a SQLite
+//! table of 10,000 rows. The cursor is an offset the tool mints and the caller
+//! echoes back in the next `tools/call`.
+//!
+//! This is not the protocol-level `cursor`/`nextCursor` that paginates
+//! `tools/list` and `resources/list` — those are framework-owned and appear on
+//! list results, not on tool payloads.
 
 use chrono::{DateTime, Utc};
 use clap::Parser;
@@ -14,7 +18,6 @@ use std::sync::{Arc, OnceLock};
 use tempfile::TempDir;
 use tracing::{error, info};
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::meta::{Cursor, Meta};
 use turul_mcp_protocol::{McpError, McpResult};
 use turul_mcp_server::prelude::*;
 use turul_mcp_server::{McpServer, SessionContext};
@@ -241,20 +244,20 @@ impl DatabaseManager {
         department: Option<&str>,
         active_only: bool,
     ) -> Result<(Vec<User>, Option<String>, i64), sqlx::Error> {
-        // Build dynamic query without lifetime issues
+        // Build dynamic query; user-supplied values are always bound as parameters
         let mut where_conditions = Vec::new();
+        let mut binds: Vec<String> = Vec::new();
 
         if let Some(filter_text) = filter {
-            let escaped_filter = filter_text.replace("'", "''"); // Basic SQL injection prevention
-            where_conditions.push(format!(
-                "(name LIKE '%{}%' OR email LIKE '%{}%')",
-                escaped_filter, escaped_filter
-            ));
+            where_conditions.push("(name LIKE ? OR email LIKE ?)".to_string());
+            let pattern = format!("%{}%", filter_text);
+            binds.push(pattern.clone());
+            binds.push(pattern);
         }
 
         if let Some(dept) = department {
-            let escaped_dept = dept.replace("'", "''");
-            where_conditions.push(format!("department = '{}'", escaped_dept));
+            where_conditions.push("department = ?".to_string());
+            binds.push(dept.to_string());
         }
 
         if active_only {
@@ -269,7 +272,11 @@ impl DatabaseManager {
 
         // Get total count
         let count_query = format!("SELECT COUNT(*) FROM users {}", where_clause);
-        let total: (i64,) = sqlx::query_as(&count_query).fetch_one(&self.pool).await?;
+        let mut count_q = sqlx::query_as(sqlx::AssertSqlSafe(count_query));
+        for b in &binds {
+            count_q = count_q.bind(b);
+        }
+        let total: (i64,) = count_q.fetch_one(&self.pool).await?;
 
         // Parse cursor for offset
         let offset = cursor.and_then(|c| c.parse::<i64>().ok()).unwrap_or(0);
@@ -283,11 +290,11 @@ impl DatabaseManager {
             where_clause
         );
 
-        let rows = sqlx::query(&users_query)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?;
+        let mut q = sqlx::query(sqlx::AssertSqlSafe(users_query));
+        for b in &binds {
+            q = q.bind(b);
+        }
+        let rows = q.bind(limit).bind(offset).fetch_all(&self.pool).await?;
 
         let users: Vec<User> = rows
             .into_iter()
@@ -511,16 +518,12 @@ impl ListUsersTool {
                     })
                 }).collect();
 
-                let meta = Meta::with_pagination(
-                    next_cursor.as_ref().map(|c| Cursor::new(c.clone())),
-                    Some(total as u64),
-                    next_cursor.is_some(),
-                );
+                let has_more = next_cursor.is_some();
 
                 let pagination_info = json!({
                     "users": users_data,
                     "pagination": {
-                        "has_more": meta.has_more,
+                        "has_more": has_more,
                         "next_cursor": next_cursor,
                         "total": total,
                         "current_page_size": users.len(),
@@ -540,7 +543,7 @@ impl ListUsersTool {
                     self.filter.as_deref().unwrap_or("None"),
                     self.department.as_deref().unwrap_or("All"),
                     active_only,
-                    meta.has_more.unwrap_or(false),
+                    has_more,
                     next_cursor.unwrap_or_else(|| "None".to_string()),
                     total
                 );
@@ -606,17 +609,13 @@ impl SearchUsersTool {
                     })
                 }).collect();
 
-                let meta = Meta::with_pagination(
-                    next_cursor.as_ref().map(|c| Cursor::new(c.clone())),
-                    Some(total as u64),
-                    next_cursor.is_some(),
-                );
+                let has_more = next_cursor.is_some();
 
                 let response_data = json!({
                     "query": self.query,
                     "results": search_results,
                     "pagination": {
-                        "has_more": meta.has_more,
+                        "has_more": has_more,
                         "next_cursor": next_cursor,
                         "total_matches": total,
                         "current_page_size": users.len()
@@ -633,7 +632,7 @@ impl SearchUsersTool {
                         &search_results.iter().take(3).collect::<Vec<_>>()
                     )
                     .unwrap_or_else(|_| "Error formatting results".to_string()),
-                    meta.has_more.unwrap_or(false),
+                    has_more,
                     next_cursor.unwrap_or_else(|| "None".to_string())
                 );
 
@@ -773,9 +772,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("pagination-server")
-        .version("2.0.0")
-        .title("SQLite MCP Pagination Server")
-        .instructions("This server demonstrates comprehensive MCP pagination functionality using SQLite database with realistic large dataset handling, connection management, and dynamic operations.")
+        .version(env!("CARGO_PKG_VERSION"))
+        .title("SQLite Pagination Server")
+        .instructions("Tools that paginate their own SQLite-backed result sets. Pass the pagination.next_cursor value from one call as the cursor argument of the next.")
         .tool(ListUsersTool::default())
         .tool(SearchUsersTool::default())
         .tool(RefreshDataTool::default())

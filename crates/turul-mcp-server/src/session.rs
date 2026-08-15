@@ -70,7 +70,7 @@ pub struct SessionContext {
 impl SessionContext {
     /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration
     pub(crate) fn from_json_rpc_with_broadcaster(
-        json_rpc_ctx: turul_mcp_json_rpc_server::SessionContext,
+        json_rpc_ctx: turul_rpc::SessionContext,
         storage: Arc<dyn SessionStorage<Error = SessionStorageError>>,
     ) -> Self {
         let session_id = json_rpc_ctx.session_id.clone();
@@ -251,7 +251,7 @@ impl SessionContext {
     /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration (test helper)
     #[cfg(feature = "test-utils")]
     pub fn from_json_rpc_with_broadcaster_for_tests(
-        json_rpc_ctx: turul_mcp_json_rpc_server::SessionContext,
+        json_rpc_ctx: turul_rpc::SessionContext,
         storage: Arc<dyn SessionStorage<Error = SessionStorageError>>,
     ) -> Self {
         Self::from_json_rpc_with_broadcaster(json_rpc_ctx, storage)
@@ -336,6 +336,98 @@ impl SessionContext {
         }
     }
 
+    /// MRTR (SEP-2322): the `inputResponses` the client attached when retrying
+    /// the original request after an `InputRequiredResult`. Present only on
+    /// the retry leg of a 2026 `tools/call`; the tools/call handler populates
+    /// it from `CallToolRequestParams.input_responses`.
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub fn input_responses(&self) -> Option<turul_mcp_protocol::input_required::InputResponses> {
+        self.extensions
+            .get("mcp:mrtr:inputResponses")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    }
+
+    /// MRTR (SEP-2322): the `requestState` echoed verbatim by the client on
+    /// the retry. Treat as attacker-controlled — verify integrity (e.g. HMAC)
+    /// before letting it influence authorization decisions.
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub fn mrtr_request_state(&self) -> Option<String> {
+        self.extensions
+            .get("mcp:mrtr:requestState")
+            .and_then(|v| v.as_str().map(String::from))
+    }
+
+    /// The request's `_meta.progressToken`, when the caller opted in to
+    /// `notifications/progress` (populated by the tools/call and resources/read
+    /// handlers on both lanes).
+    ///
+    /// Returns `None` for a numeric token on 2025-11-25: that spec snapshot's
+    /// `ProgressToken` is a newtype over `String` and the crate is frozen, so a
+    /// number cannot be represented. `notify_request_progress` is unaffected —
+    /// it echoes the stored JSON value verbatim, preserving the client's type.
+    pub fn progress_token(&self) -> Option<turul_mcp_protocol::meta::ProgressToken> {
+        self.extensions
+            .get("mcp:progressToken")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    }
+
+    /// Emit a request-scoped `notifications/progress` referencing the
+    /// REQUEST's `_meta.progressToken`, preserving its JSON type (string or
+    /// number). No-op (returns `false`) when the request declared no token —
+    /// "Progress notifications MUST only reference tokens that were provided
+    /// in an active request."
+    pub async fn notify_request_progress(&self, progress: f64, total: Option<f64>) -> bool {
+        let Some(token) = self.extensions.get("mcp:progressToken").cloned() else {
+            return false;
+        };
+        let mut params = std::collections::HashMap::new();
+        params.insert("progressToken".to_string(), token);
+        params.insert("progress".to_string(), serde_json::json!(progress));
+        if let Some(total) = total {
+            params.insert("total".to_string(), serde_json::json!(total));
+        }
+        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
+            "notifications/progress".to_string(),
+            params,
+        );
+        self.notify(SessionEvent::Notification(
+            serde_json::to_value(notification).unwrap(),
+        ))
+        .await;
+        true
+    }
+
+    /// Send a request-scoped progress notification carrying an optional
+    /// human-readable status message (Progress §Behavior: `message` is the
+    /// optional progress text). No-op without a request token — see
+    /// [`notify_request_progress`](Self::notify_request_progress).
+    pub async fn notify_request_progress_with_message(
+        &self,
+        progress: f64,
+        total: Option<f64>,
+        message: impl Into<String>,
+    ) -> bool {
+        let Some(token) = self.extensions.get("mcp:progressToken").cloned() else {
+            return false;
+        };
+        let mut params = std::collections::HashMap::new();
+        params.insert("progressToken".to_string(), token);
+        params.insert("progress".to_string(), serde_json::json!(progress));
+        if let Some(total) = total {
+            params.insert("total".to_string(), serde_json::json!(total));
+        }
+        params.insert("message".to_string(), serde_json::json!(message.into()));
+        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
+            "notifications/progress".to_string(),
+            params,
+        );
+        self.notify(SessionEvent::Notification(
+            serde_json::to_value(notification).unwrap(),
+        ))
+        .await;
+        true
+    }
+
     /// Send a custom notification to this session (async)
     pub async fn notify(&self, event: SessionEvent) {
         debug!(
@@ -346,63 +438,11 @@ impl SessionContext {
         debug!("🚀 SessionContext.notify() send_notification closure completed");
     }
 
-    /// Send a progress notification
-    pub async fn notify_progress(&self, progress_token: impl Into<String>, progress: u64) {
-        if self.has_broadcaster() {
-            debug!(
-                "🔔 notify_progress using NotificationBroadcaster for session: {}",
-                self.session_id
-            );
-            // TODO: Use broadcaster for MCP-compliant notifications
-        } else {
-            debug!(
-                "🔔 notify_progress using OLD SessionManager for session: {}",
-                self.session_id
-            );
-        }
-        let mut other = std::collections::HashMap::new();
-        other.insert(
-            "progressToken".to_string(),
-            serde_json::json!(progress_token.into()),
-        );
-        other.insert("progress".to_string(), serde_json::json!(progress));
-
-        let params = turul_mcp_protocol::RequestParams { meta: None, other };
-        let notification =
-            turul_mcp_protocol::JsonRpcNotification::new("notifications/progress".to_string())
-                .with_params(params);
-        self.notify(SessionEvent::Notification(
-            serde_json::to_value(notification).unwrap(),
-        ))
-        .await;
-    }
-
-    /// Send a progress notification with total
-    pub async fn notify_progress_with_total(
-        &self,
-        progress_token: impl Into<String>,
-        progress: u64,
-        total: u64,
-    ) {
-        let mut other = std::collections::HashMap::new();
-        other.insert(
-            "progressToken".to_string(),
-            serde_json::json!(progress_token.into()),
-        );
-        other.insert("progress".to_string(), serde_json::json!(progress));
-        other.insert("total".to_string(), serde_json::json!(total));
-
-        let params = turul_mcp_protocol::RequestParams { meta: None, other };
-        let notification =
-            turul_mcp_protocol::JsonRpcNotification::new("notifications/progress".to_string())
-                .with_params(params);
-        self.notify(SessionEvent::Notification(
-            serde_json::to_value(notification).unwrap(),
-        ))
-        .await;
-    }
-
     /// Send a logging message notification (with session-aware level filtering)
+    // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
+    // remains a valid feature the framework supports.
+    #[allow(deprecated)]
+    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn notify_log(
         &self,
         level: turul_mcp_protocol::logging::LoggingLevel,
@@ -413,7 +453,37 @@ impl SessionContext {
         // Use the provided LoggingLevel directly
         let message_level = level;
 
-        // Check if this message should be sent to this session based on its logging level
+        // 2026-07-28: notifications/message is opt-in PER REQUEST — the server
+        // MUST NOT emit it for a request whose _meta lacks
+        // io.modelcontextprotocol/logLevel. The declared level is the threshold
+        // (replaces the removed logging/setLevel session threshold).
+        #[cfg(feature = "protocol-2026-07-28")]
+        {
+            let request_threshold = self.extensions.get("mcp:logLevel").and_then(|v| {
+                serde_json::from_value::<turul_mcp_protocol::logging::LoggingLevel>(v.clone()).ok()
+            });
+            match request_threshold {
+                None => {
+                    debug!(
+                        "🔕 notifications/message suppressed for session {}: the request                          declared no logLevel",
+                        self.session_id
+                    );
+                    return;
+                }
+                Some(threshold) => {
+                    if !message_level.should_log(threshold) {
+                        debug!(
+                            "🔕 Filtering {:?} message for session {} (request threshold {:?})",
+                            message_level, self.session_id, threshold
+                        );
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 2025-11-25: filter against the logging/setLevel session threshold.
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.should_log(message_level).await {
             let threshold = self.get_logging_level().await;
             debug!(
@@ -422,12 +492,6 @@ impl SessionContext {
             );
             return;
         }
-
-        let threshold = self.get_logging_level().await;
-        debug!(
-            "📢 Sending {:?} level message to session {} (threshold: {:?})",
-            message_level, self.session_id, threshold
-        );
 
         // Create proper LoggingMessageNotification struct once
         use turul_mcp_protocol::notifications::LoggingMessageNotification;
@@ -470,7 +534,7 @@ impl SessionContext {
 
     /// Send a resource list changed notification
     pub async fn notify_resources_changed(&self) {
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/resources/list_changed".to_string(),
         );
         self.notify(SessionEvent::Notification(
@@ -484,11 +548,10 @@ impl SessionContext {
         let mut other = std::collections::HashMap::new();
         other.insert("uri".to_string(), serde_json::json!(uri.into()));
 
-        let params = turul_mcp_protocol::RequestParams { meta: None, other };
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_rpc::JsonRpcNotification::new_with_object_params(
             "notifications/resources/updated".to_string(),
-        )
-        .with_params(params);
+            other,
+        );
         self.notify(SessionEvent::Notification(
             serde_json::to_value(notification).unwrap(),
         ))
@@ -497,7 +560,7 @@ impl SessionContext {
 
     /// Send a tools list changed notification
     pub async fn notify_tools_changed(&self) {
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
         );
         self.notify(SessionEvent::Notification(
@@ -511,6 +574,7 @@ impl SessionContext {
     // ============================================================================
 
     /// Get the current logging level for this session (async)
+    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn get_logging_level(&self) -> turul_mcp_protocol::logging::LoggingLevel {
         use turul_mcp_protocol::logging::LoggingLevel;
 
@@ -537,6 +601,7 @@ impl SessionContext {
     }
 
     /// Set the logging level for this session (async)
+    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn set_logging_level(&self, level: turul_mcp_protocol::logging::LoggingLevel) {
         use turul_mcp_protocol::logging::LoggingLevel;
 
@@ -559,6 +624,7 @@ impl SessionContext {
     }
 
     /// Check if a log message at the given level should be sent to this session (async)
+    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn should_log(
         &self,
         message_level: turul_mcp_protocol::logging::LoggingLevel,
@@ -568,6 +634,7 @@ impl SessionContext {
     }
 
     /// Synchronous version of should_log for trait compatibility
+    #[allow(deprecated)] // SEP-2577 migration window
     pub fn should_log_sync(
         &self,
         message_level: turul_mcp_protocol::logging::LoggingLevel,
@@ -621,6 +688,7 @@ impl SessionView for SessionContext {
 // ============================================================================
 
 /// Implement LoggingTarget trait from turul-mcp-builders to enable session-aware logging
+#[cfg(feature = "protocol-2025-11-25")]
 impl turul_mcp_builders::logging::LoggingTarget for SessionContext {
     fn should_log(&self, level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
         self.should_log_sync(level)
@@ -642,6 +710,9 @@ impl turul_mcp_builders::logging::LoggingTarget for SessionContext {
 }
 
 /// Parse notification JSON and send via actual NotificationBroadcaster to StreamManager using proper notification structs
+// `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
+// remains a valid feature the framework supports.
+#[allow(deprecated)]
 async fn parse_and_send_notification_with_broadcaster(
     session_id: &str,
     json_value: &Value,
@@ -724,10 +795,13 @@ async fn parse_and_send_notification_with_broadcaster(
                     }
                 }
                 "notifications/progress" => {
+                    // ProgressToken is string-or-number — deserialize the raw
+                    // value so numeric tokens round-trip as JSON numbers.
                     if let Some(params) = json_value.get("params")
-                        && let Some(token) = params.get("progressToken").and_then(|v| v.as_str())
+                        && let Some(raw_token) = params.get("progressToken")
+                        && let Ok(progress_token) = serde_json::from_value(raw_token.clone())
                     {
-                        debug!("📊 Progress notification detected: token={}", token);
+                        debug!("📊 Progress notification detected: token={}", raw_token);
 
                         // Get progress value
                         let progress = params
@@ -739,7 +813,7 @@ async fn parse_and_send_notification_with_broadcaster(
                         let notification = ProgressNotification {
                             method: "notifications/progress".to_string(),
                             params: turul_mcp_protocol::notifications::ProgressNotificationParams {
-                                progress_token: token.to_string().into(),
+                                progress_token,
                                 progress,
                                 total: params.get("total").and_then(|v| v.as_f64()),
                                 message: params
@@ -795,7 +869,7 @@ async fn parse_and_send_notification_with_broadcaster(
                             .map(|(k, v)| (k.clone(), v.clone()))
                             .collect();
                     let json_rpc_notification =
-                        turul_mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+                        turul_rpc::JsonRpcNotification::new_with_object_params(
                             method.to_string(),
                             params_map,
                         );
@@ -1516,7 +1590,7 @@ impl SessionManager {
         session_id: &str,
         event: SessionEvent,
     ) -> std::result::Result<(), String> {
-        // Phase 1: Fire in-memory listener (session must exist)
+        // Step 1: fire the in-memory listener (session must exist).
         {
             let sessions = self.sessions.read().await;
             match sessions.get(session_id) {
@@ -1529,7 +1603,7 @@ impl SessionManager {
             }
         }
 
-        // Phase 2: Awaited dispatcher for Custom events (mandatory persistence)
+        // Step 2: awaited dispatcher for Custom events (mandatory persistence).
         if let SessionEvent::Custom {
             ref event_type,
             ref data,
@@ -1543,7 +1617,7 @@ impl SessionManager {
             }
         }
 
-        // Phase 3: Global channel (observer-only)
+        // Step 3: global channel (observer-only).
         let _ = self
             .global_event_sender
             .send((session_id.to_string(), event));
@@ -1594,7 +1668,7 @@ impl SessionManager {
     ///
     /// For non-Custom events: uses in-memory cache only, best-effort, always returns `Ok(())`.
     pub async fn broadcast_event(&self, event: SessionEvent) -> std::result::Result<(), String> {
-        // Phase 1: In-memory listeners (cache-local, best-effort)
+        // Step 1: in-memory listeners (cache-local, best-effort).
         let cached_ids: Vec<String> = {
             let sessions = self.sessions.read().await;
             let mut ids = Vec::with_capacity(sessions.len());
@@ -1605,7 +1679,7 @@ impl SessionManager {
             ids
         };
 
-        // Phase 2: Storage-backed targeting for Custom events
+        // Step 2: storage-backed targeting for Custom events.
         let mut dispatch_errors: Vec<String> = Vec::new();
         if let SessionEvent::Custom {
             ref event_type,
@@ -1642,7 +1716,7 @@ impl SessionManager {
             }
         }
 
-        // Phase 3: Global broadcast channel — observer-only (cache-local, tests/debugging)
+        // Step 3: global broadcast channel — observer-only (cache-local, tests/debugging).
         for session_id in &cached_ids {
             if let Err(e) = self
                 .global_event_sender
@@ -1814,6 +1888,7 @@ pub trait SessionAware {
 }
 
 #[cfg(test)]
+#[allow(deprecated)] // exercises the SEP-2577-deprecated logging surface
 mod tests {
     use super::*;
     use serde_json::json;
@@ -1859,7 +1934,7 @@ mod tests {
         let manager = Arc::new(SessionManager::new(capabilities));
 
         let session_id = manager.create_session().await;
-        let ctx = manager.create_session_context(&session_id).unwrap();
+        let mut ctx = manager.create_session_context(&session_id).unwrap();
 
         // Test state operations through context
         (ctx.set_state)("test", json!("value")).await;
@@ -1877,7 +1952,11 @@ mod tests {
             None,
         )
         .await;
-        ctx.notify_progress("test-token", 50).await;
+        ctx.extensions.insert(
+            "mcp:progressToken".to_string(),
+            serde_json::json!("test-token"),
+        );
+        assert!(ctx.notify_request_progress(50.0, None).await);
     }
 
     #[tokio::test]
@@ -1965,7 +2044,7 @@ mod tests {
             .await
             .unwrap();
 
-        let mut json_rpc_ctx = turul_mcp_json_rpc_server::SessionContext {
+        let mut json_rpc_ctx = turul_rpc::SessionContext {
             session_id: "test-session".to_string(),
             metadata: HashMap::new(),
             broadcaster: None,

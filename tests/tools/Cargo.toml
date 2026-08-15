@@ -1,6 +1,6 @@
 [package]
 name = "mcp-tools-tests"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 autotests = false
 description = "MCP Tools Protocol Integration Tests"
@@ -12,21 +12,15 @@ publish = false
 reqwest.workspace = true
 
 # JSON handling
-serde_json.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 
 # Async runtime
 tokio.workspace = true
 
-# Test utilities
-anyhow.workspace = true
-
 # Logging
 tracing.workspace = true
 tracing-subscriber.workspace = true
-
-# Time utilities
-chrono.workspace = true
 
 # Async utilities
 futures.workspace = true
@@ -34,22 +28,14 @@ futures.workspace = true
 # Shared E2E test utilities
 mcp-e2e-shared.workspace = true
 
-# Additional dependencies for test server binary
-turul-mcp-server.workspace = true
-turul-mcp-protocol.workspace = true
-turul-mcp-derive.workspace = true
-turul-mcp-builders.workspace = true
-clap.workspace = true
-async-trait.workspace = true
-uuid = { workspace = true, features = ["v7", "serde"] }
-schemars.workspace = true
+# 2025-11-25 E2E regression crate; framework deps pinned to the 2025 opt-in independent of the workspace 2026 default.
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 
 [dev-dependencies]
 serial_test.workspace = true
-
-[[bin]]
-name = "tools-test-server-e2e"
-path = "bin/main.rs"
 
 [[test]]
 name = "all"

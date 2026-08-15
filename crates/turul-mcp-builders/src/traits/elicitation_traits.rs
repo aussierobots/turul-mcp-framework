@@ -4,7 +4,10 @@
 
 use serde_json::Value;
 use std::collections::HashMap;
-use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitationSchema};
+use turul_mcp_protocol::elicitation::ElicitationSchema;
+
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::elicitation::ElicitCreateRequest;
 
 pub trait HasElicitationMetadata {
     /// The message to present to the user
@@ -64,7 +67,11 @@ pub trait HasElicitationHandling {
 ///
 /// Implement these three traits on your struct:
 ///
-/// ```rust
+// The example constructs the 2025-11-25 ElicitationSchema shape and calls
+// to_create_request(), both of which the stateless 2026-07-28 core removed; run it
+// only under 2025-11-25.
+#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
+#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
 /// # use turul_mcp_protocol::elicitation::*;
 /// # use turul_mcp_builders::prelude::*;
 /// # use serde_json::Value;
@@ -79,13 +86,10 @@ pub trait HasElicitationHandling {
 /// impl UserPreferencesForm {
 ///     fn new(context: String) -> Self {
 ///         let mut properties = HashMap::new();
-///         properties.insert("theme".to_string(), PrimitiveSchemaDefinition::Enum(EnumSchema {
-///             schema_type: "string".to_string(),
-///             title: None,
-///             description: Some("UI theme preference".to_string()),
-///             enum_values: vec!["dark".to_string(), "light".to_string()],
-///             enum_names: None,
-///         }));
+///         properties.insert("theme".to_string(), PrimitiveSchemaDefinition::Enum(
+///             EnumSchema::new(vec!["dark".to_string(), "light".to_string()])
+///                 .with_description("UI theme preference"),
+///         ));
 ///         properties.insert("notifications".to_string(), PrimitiveSchemaDefinition::Boolean(BooleanSchema {
 ///             schema_type: "boolean".to_string(),
 ///             title: None,
@@ -167,6 +171,7 @@ pub trait ElicitationDefinition:
     HasElicitationMetadata + HasElicitationSchema + HasElicitationHandling
 {
     /// Convert this elicitation definition to a protocol ElicitCreateRequest
+    #[cfg(feature = "protocol-2025-11-25")]
     fn to_create_request(&self) -> ElicitCreateRequest {
         ElicitCreateRequest::new(self.message(), self.requested_schema().clone())
     }

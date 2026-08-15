@@ -1,304 +1,83 @@
-# Derive Macro Server Example
+# Derive Macro Server
 
-This example demonstrates how to use the `#[derive(McpTool)]` macro for simplified tool creation with automatic schema generation from struct fields. Part of the **MCP Framework - Rust Implementation** with support for enhanced parameter constraints and defaults.
+A five-tool server built entirely with `#[derive(McpTool)]` — the scale-up from
+`calculator-add-simple-server-derive`'s single tool. It registers itself as
+`code-generation-server`; the crate name is the authoring style it demonstrates.
 
-## 🚀 What This Example Shows
+## Tools (as registered by `src/main.rs`)
 
-- **Derive Macro Usage**: Using `#[derive(McpTool)]` for automatic implementation
-- **Schema Generation**: Automatic JSON schema creation from struct fields
-- **Parameter Attributes**: Using `#[param]` attributes for parameter descriptions
-- **Optional Parameters**: Handling optional fields with `Option<T>`
-- **Error Handling**: Proper error handling in tool implementations
-- **Complex Data Types**: Working with various parameter types (strings, numbers, booleans)
-- **MCP 2025-11-25 Compliance**: Full specification compliance with proper `_meta` field handling
+| Tool | Purpose |
+|---|---|
+| `generate_code` | Render a named template (`rust_struct`, `rust_enum`, `api_endpoint`, `database_model`) with parameter substitution |
+| `validate_project` | Check a project directory's structure and config against per-language rules |
+| `transform_code` | Apply a transformation (`naming_convention`, `add_documentation`, `add_derives`, `error_handling`) |
+| `validate_config` | Validate a config document (`database_config`, `api_config`, …) |
+| `generate_tests` | Generate `unit_tests` / `integration_tests` / `property_tests` scaffolding |
 
-## 🛠️ Available Tools
+Every tool's `execute` returns `McpResult<String>` and none declares
+`#[tool(output = Type)]`, so **none of them advertises an `outputSchema`** and
+none returns `structuredContent` — the JSON each tool builds is serialized to a
+string and lands under the derive macro's default `output` field. For typed
+outputs reaching `tools/list`, see `calculator-add-simple-server-derive`.
 
-### 1. Text Transform (`text_transform`)
-Transform text in various ways:
-- **uppercase**: Convert to uppercase
-- **lowercase**: Convert to lowercase  
-- **reverse**: Reverse the text
-- **wordcount**: Count words in the text
+## What this demonstrates
 
-**Parameters:**
-- `text` (string): Input text to transform
-- `transform` (string): Transformation type
+- `#[derive(McpTool)]` at realistic scale — five structs, four or five fields each
+- `#[param(description = ...)]` and `#[param(..., optional)]` over `Option<T>`
+  fields, so most arguments stay out of `required`
+- Typed deserialization of external data files into Rust structs, with the
+  files embedded via `include_str!` rather than read from a relative path — a
+  CWD-relative read silently finds nothing under
+  `cargo run -p derive-macro-server` from the workspace root
+- Domain errors (`McpError::tool_execution`, `McpError::invalid_param_type`)
+  reaching the client as JSON-RPC errors without the handler ever constructing
+  a `JsonRpcError`
 
-### 2. Math Operations (`math_operations`)
-Perform mathematical operations:
-- **add**: Addition
-- **subtract**: Subtraction
-- **multiply**: Multiplication
-- **divide**: Division (with zero-check)
-- **power**: Exponentiation
+## Data files
 
-**Parameters:**
-- `a` (number): First number
-- `b` (number): Second number
-- `operation` (string): Operation type
+| File | Deserialized into | Used by |
+|---|---|---|
+| `data/code_templates.json` | `CodeTemplates` (serde_json) | `generate_code`, `transform_code` |
+| `data/validation_schemas.yaml` | `ValidationSchemas` (serde_yml) | `validate_config`, `validate_project` |
+| `data/transformation_rules.md` | not loaded — prose reference only | — |
 
-### 3. Data Validation (`validate_data`)
-Validate different types of data:
-- **email**: Basic email validation
-- **url**: URL format validation
-- **phone**: Phone number validation
-- **json**: JSON format validation
-- **uuid**: UUID format validation
+## Spec lane
 
-**Parameters:**
-- `data` (string): Data to validate
-- `validation_type` (string): Type of validation
-- `format_output` (boolean, optional): Whether to format output as JSON
+MCP **2026-07-28** (the workspace default). Stateless core: no
+`initialize`/`notifications/initialized` handshake and no `Mcp-Session-Id`.
 
-### 4. Counter (`counter`)
-Simple counter tool (demonstrates limitations with session state in derive macros):
-
-**Parameters:**
-- `increment` (number): Amount to increment
-
-### 5. Geometry (`geometry`)
-Calculate geometric properties for different shapes:
-- **circle**: Area and circumference
-- **rectangle**: Area and perimeter
-- **triangle**: Area calculation
-
-**Parameters:**
-- `shape` (string): Shape type
-- `dimension1` (number): Primary dimension
-- `dimension2` (number, optional): Secondary dimension
-- `calculate_area` (boolean, optional): Whether to calculate area
-- `calculate_perimeter` (boolean, optional): Whether to calculate perimeter
-
-## 🏃 Running the Example
+## Run
 
 ```bash
 cargo run -p derive-macro-server
+# → http://127.0.0.1:8765/mcp
 ```
 
-The server starts on `http://127.0.0.1:8765/mcp` by default.
+## Try it
 
-You can specify a custom bind address:
 ```bash
-cargo run -p derive-macro-server -- 0.0.0.0:9000
+META='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientInfo":{"name":"curl","version":"1.0"},"io.modelcontextprotocol/clientCapabilities":{}}'
+call() { curl -s -X POST http://127.0.0.1:8765/mcp \
+  -H 'Content-Type: application/json' -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/call' -H "Mcp-Name: $1" \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{$META,\"name\":\"$1\",\"arguments\":$2}}"; }
+
+curl -s -X POST http://127.0.0.1:8765/mcp \
+  -H 'Content-Type: application/json' -H 'MCP-Protocol-Version: 2026-07-28' \
+  -H 'Mcp-Method: tools/list' \
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\",\"params\":{$META}}"
+
+# `parameters` is a JSON *string*, hence the escaping inside the arguments object
+call generate_code '{"template_type":"rust_struct","parameters":"{\"name\":\"User\",\"visibility\":\"pub\",\"attributes\":[\"derive(Debug)\"],\"fields\":[{\"name\":\"id\",\"type\":\"u64\"}]}"}'
+
+call generate_tests '{"source_code":"pub fn add(a: i32, b: i32) -> i32 { a + b }","test_type":"unit_tests"}'
+call transform_code '{"source_code":"fn foo() { let x = 1; }","transformation":"add_documentation"}'
+call validate_config '{"config_input":"{\"host\":\"db\"}","config_type":"database_config","format":"json"}'
+call validate_project '{"project_type":"rust_project","project_path":"."}'
 ```
 
-## 🧪 Testing the Tools
+## See also
 
-### Text Transform Example
-```bash
-curl -X POST http://127.0.0.1:8765/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "text_transform",
-      "arguments": {
-        "text": "Hello World",
-        "transform": "uppercase"
-      }
-    },
-    "id": "1"
-  }'
-```
-
-### Math Operations Example
-```bash
-curl -X POST http://127.0.0.1:8765/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "math_operations",
-      "arguments": {
-        "a": 15.5,
-        "b": 4.2,
-        "operation": "multiply"
-      }
-    },
-    "id": "2"
-  }'
-```
-
-### Data Validation Example
-```bash
-curl -X POST http://127.0.0.1:8765/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "validate_data",
-      "arguments": {
-        "data": "user@example.com",
-        "validation_type": "email",
-        "format_output": true
-      }
-    },
-    "id": "3"
-  }'
-```
-
-### Geometry Example
-```bash
-curl -X POST http://127.0.0.1:8765/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tools/call",
-    "params": {
-      "name": "geometry",
-      "arguments": {
-        "shape": "rectangle",
-        "dimension1": 10.0,
-        "dimension2": 5.0,
-        "calculate_area": true,
-        "calculate_perimeter": true
-      }
-    },
-    "id": "4"
-  }'
-```
-
-## 🔧 Key Features Demonstrated
-
-### 1. Derive Macro Syntax
-```rust
-#[derive(McpTool, Clone)]
-#[tool(name = "tool_name", description = "Tool description")]
-struct MyTool {
-    #[param(description = "Parameter description")]
-    param1: String,
-    
-    #[param(description = "Optional parameter", optional)]
-    param2: Option<i32>,
-}
-```
-
-### 2. Automatic Schema Generation
-The macro automatically generates JSON schema based on field types:
-- `String` → JSON string schema
-- `f64`/`i32` → JSON number/integer schema
-- `bool` → JSON boolean schema
-- `Option<T>` → Optional parameter with type T
-
-### 3. Parameter Validation
-The macro handles:
-- Required vs optional parameters
-- Type validation and conversion
-- Descriptive error messages
-- Parameter documentation
-
-### 4. Implementation Pattern
-```rust
-impl MyTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        // Tool logic here with session access
-        Ok("result".to_string())
-    }
-}
-```
-
-## ⚡ Advantages of Derive Macros
-
-1. **Less Boilerplate**: Automatic trait implementation
-2. **Type Safety**: Compile-time type checking
-3. **Auto Schema**: JSON schema generated from types
-4. **Documentation**: Parameter descriptions in the code
-5. **Maintainability**: Changes to struct automatically update schema
-
-## 🚨 Current Limitations
-
-1. **Complex Schemas**: Limited support for complex nested schemas
-2. **Custom Validation**: No built-in support for custom parameter validation
-3. **Advanced Features**: Some advanced MCP features require manual implementation
-
-**Note**: Session context is fully supported in derive macros as of 0.2.0.
-
-## 🔄 Comparison with Manual Implementation
-
-| Feature | Derive Macro | Manual Implementation |
-|---------|--------------|----------------------|
-| Code Length | Short | Longer |
-| Type Safety | High | High |
-| Schema Generation | Automatic | Manual |
-| Session Support | Full | Full |
-| Customization | Limited | Full |
-| Learning Curve | Easy | Moderate |
-
-## 📚 Next Steps
-
-After understanding derive macros, explore:
-
-1. **[function-macro-server](../function-macro-server/)**: Function-style tool definitions using `#[mcp_tool]`
-2. **[enhanced-tool-macro-test](../enhanced-tool-macro-test/)**: Enhanced `tool!` macro with constraints and defaults
-3. **[stateful-server](../stateful-server/)**: Session management and state
-4. **[comprehensive-server](../comprehensive-server/)**: All MCP features including real-time notifications
-
-## 🛠️ Extending This Example
-
-### Adding New Tools
-```rust
-#[derive(McpTool, Clone)]
-#[tool(name = "new_tool", description = "My new tool")]
-struct NewTool {
-    #[param(description = "Input parameter")]
-    input: String,
-}
-
-impl NewTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        // Your logic here
-        Ok(format!("Processed: {}", self.input))
-    }
-}
-
-// Add to server builder
-.tool(NewTool { input: String::new() })
-```
-
-### Custom Parameter Types
-```rust
-#[derive(McpTool, Clone)]
-#[tool(name = "complex_tool", description = "Tool with complex types")]
-struct ComplexTool {
-    #[param(description = "List of values")]
-    values: Vec<f64>,
-    
-    #[param(description = "Configuration object")]
-    config: serde_json::Value,
-}
-```
-
-### Error Handling Patterns
-```rust
-impl MyTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        // Validate input
-        if self.input.is_empty() {
-            return Err("Input cannot be empty".to_string());
-        }
-        
-        // Perform operation
-        match self.operation.as_str() {
-            "valid_op" => Ok("Success".to_string()),
-            _ => Err(format!("Unknown operation: {}", self.operation)),
-        }
-    }
-}
-```
-
-## 🤝 Best Practices
-
-1. **Clear Descriptions**: Write descriptive tool and parameter descriptions
-2. **Input Validation**: Always validate inputs in the execute method
-3. **Error Messages**: Provide helpful error messages
-4. **Type Selection**: Choose appropriate types for parameters
-5. **Optional Parameters**: Use `Option<T>` for optional parameters
-6. **Documentation**: Document complex tools and their behavior
-
----
-
-This example demonstrates the power and simplicity of the derive macro approach while highlighting when you might need more advanced manual implementations.
+- `calculator-add-simple-server-derive` — the same macro on one tool, with
+  `output = Type` and a schemars-generated `outputSchema`
+- `function-macro-server` — the `#[mcp_tool]` async-fn alternative

@@ -2,12 +2,18 @@
 //!
 //! This module defines the high-level trait for implementing MCP roots functionality.
 
+// Implements the SEP-2577-deprecated-but-present roots feature; the roots protocol types are
+// deprecated in 2026-07-28 but still valid and intentionally supported here.
+#![allow(deprecated)]
+
 use async_trait::async_trait;
 use std::path::PathBuf;
 use turul_mcp_builders::prelude::*;
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_protocol::roots::RootsListChangedNotification;
 use turul_mcp_protocol::{
     McpResult,
-    roots::{ListRootsRequest, ListRootsResult, RootsListChangedNotification},
+    roots::{ListRootsRequest, ListRootsResult},
 };
 
 /// File information for root directory listings
@@ -112,6 +118,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
     ///
     /// This method should be called when the list of roots changes
     /// to notify clients about the update.
+    #[cfg(feature = "protocol-2025-11-25")]
     async fn notify_roots_changed(&self) -> McpResult<RootsListChangedNotification> {
         Ok(RootsListChangedNotification::new())
     }
@@ -333,6 +340,8 @@ mod tests {
         );
     }
 
+    // `notifications/roots/list_changed` was removed from the 2026-07-28 core.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_roots_changed_notification() {
         let root = TestRoot {

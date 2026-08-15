@@ -10,18 +10,10 @@ use crate::error::{McpClientResult, TransportError};
 pub mod http;
 pub mod sse;
 
-// Stdio transport is planned for future implementation
-
-// #[cfg(feature = "stdio")]
-// pub mod stdio;
-
 // Re-export transport implementations
 pub use http::HttpTransport;
+#[allow(deprecated)] // re-exported for unmigrated ≤2024-11-05 servers (SEP-2596)
 pub use sse::SseTransport;
-
-// Re-exports for future transport implementations
-// #[cfg(feature = "stdio")]
-// pub use stdio::StdioTransport;
 
 /// Transport type enumeration
 #[derive(Debug, Clone, PartialEq)]
@@ -30,8 +22,6 @@ pub enum TransportType {
     Http,
     /// Server-Sent Events transport (HTTP+SSE)
     Sse,
-    // Future transport types:
-    // Stdio,
 }
 
 impl std::fmt::Display for TransportType {
@@ -118,6 +108,32 @@ pub trait Transport: Send + Sync {
     /// Send a request and wait for response
     async fn send_request(&self, request: Value) -> McpClientResult<Value>;
 
+    /// Open a long-lived streaming request (2026 `subscriptions/listen`):
+    /// POST the request and return a channel of the JSON payloads arriving on
+    /// the response's SSE stream, in order. Dropping the receiver closes the
+    /// stream (Streamable HTTP: closing the response stream IS cancellation).
+    /// Default: unsupported (only the Streamable HTTP transport implements it).
+    async fn send_request_streaming(
+        &self,
+        _request: Value,
+    ) -> McpClientResult<tokio::sync::mpsc::UnboundedReceiver<Value>> {
+        Err(crate::error::TransportError::Http(
+            "this transport does not support streaming requests".to_string(),
+        )
+        .into())
+    }
+
+    /// Send a request with additional per-request HTTP headers (SEP-2243
+    /// `Mcp-Param-*` mirrors). Non-HTTP transports MAY ignore the annotations
+    /// entirely, so the default delegates to [`Self::send_request`].
+    async fn send_request_with_extra_headers(
+        &self,
+        request: Value,
+        _extra_headers: &[(String, String)],
+    ) -> McpClientResult<Value> {
+        self.send_request(request).await
+    }
+
     /// Send a request and return response with headers (for initialization)
     async fn send_request_with_headers(&self, request: Value)
     -> McpClientResult<TransportResponse>;
@@ -164,6 +180,13 @@ pub trait Transport: Send + Sync {
     async fn update_auth_header(&self, _value: Option<String>) {
         // No-op for transports without per-request HTTP auth.
     }
+
+    /// Set the negotiated MCP spec version, sent as `MCP-Protocol-Version`.
+    ///
+    /// The client calls this after negotiation so the transport advertises the
+    /// agreed spec (and, for the 2026-07-28 stateless core, stops sending the
+    /// removed `Mcp-Session-Id`). No-op for transports that don't carry the header.
+    fn set_protocol_version(&self, _version: &str) {}
 
     /// Start listening for server events (if supported).
     ///
@@ -294,6 +317,7 @@ impl TransportFactory {
 
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(url)?)),
+            #[allow(deprecated)] // factory keeps serving ≤2024-11-05 servers (SEP-2596)
             TransportType::Sse => Ok(Box::new(SseTransport::new(url)?)),
         }
     }
@@ -305,6 +329,7 @@ impl TransportFactory {
     ) -> McpClientResult<BoxedTransport> {
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(endpoint)?)),
+            #[allow(deprecated)] // factory keeps serving ≤2024-11-05 servers (SEP-2596)
             TransportType::Sse => Ok(Box::new(SseTransport::new(endpoint)?)),
         }
     }

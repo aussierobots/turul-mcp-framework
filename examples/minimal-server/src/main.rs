@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create the simplest possible MCP server - just name, version, and one function tool
     let server = McpServer::builder()
         .name("minimal-server") // Required: Server name
-        .version("1.0.0") // Required: Server version
+        .version(env!("CARGO_PKG_VERSION")) // Required: Server version
         .tool_fn(echo) // Use function name directly
         .bind_address(bind_address)
         .build()?;

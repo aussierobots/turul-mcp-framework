@@ -9,10 +9,9 @@ use std::sync::Arc;
 use turul_http_mcp_server::{ServerConfig, StreamConfig};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
 use turul_mcp_server::handlers::{McpHandler, *};
-use turul_mcp_server::{
-    McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpResource, McpRoot,
-    McpSampling, McpTool,
-};
+use turul_mcp_server::{McpCompletion, McpNotification, McpPrompt, McpResource, McpTool};
+#[cfg(feature = "protocol-2025-11-25")]
+use turul_mcp_server::{McpElicitation, McpLogger, McpSampling};
 use turul_mcp_session_storage::BoxedSessionStorage;
 
 use crate::error::Result;
@@ -58,7 +57,6 @@ use crate::cors::CorsConfig;
 ///         .version("1.0.0")
 ///         .tool(ExampleTool::default())
 ///         .storage(Arc::new(InMemorySessionStorage::new()))
-///         .cors_allow_all_origins()
 ///         .build()
 ///         .await?;
 ///
@@ -92,19 +90,21 @@ pub struct LambdaMcpServerBuilder {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 
     /// Elicitations registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     elicitations: HashMap<String, Arc<dyn McpElicitation>>,
 
     /// Sampling providers registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     sampling: HashMap<String, Arc<dyn McpSampling>>,
 
     /// Completion providers registered with the server
-    completions: HashMap<String, Arc<dyn McpCompletion>>,
+    completions: Vec<Arc<dyn McpCompletion>>,
 
     /// Loggers registered with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
 
     /// Root providers registered with the server
-    root_providers: HashMap<String, Arc<dyn McpRoot>>,
 
     /// Notification providers registered with the server
     notifications: HashMap<String, Arc<dyn McpNotification>>,
@@ -113,6 +113,8 @@ pub struct LambdaMcpServerBuilder {
     handlers: HashMap<String, Arc<dyn McpHandler>>,
 
     /// Roots configured for the server
+    // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
+    #[allow(deprecated)]
     roots: Vec<turul_mcp_protocol::roots::Root>,
 
     /// Optional instructions for clients
@@ -141,8 +143,10 @@ pub struct LambdaMcpServerBuilder {
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
     /// Optional task runtime for MCP task support
+    #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
     /// Recovery timeout for stuck tasks (milliseconds)
+    #[cfg(feature = "protocol-2025-11-25")]
     task_recovery_timeout_ms: u64,
 
     /// Tool change detection and notification mode
@@ -155,6 +159,7 @@ pub struct LambdaMcpServerBuilder {
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
+    origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
 }
 
 impl LambdaMcpServerBuilder {
@@ -166,11 +171,14 @@ impl LambdaMcpServerBuilder {
 
         // Initialize handlers with defaults (same as McpServerBuilder)
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
+        // ping (no PingRequest in the schema) was removed from the 2026-07-28
+        // core, so it is 2025-only.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
-        handlers.insert(
-            "completion/complete".to_string(),
-            Arc::new(CompletionHandler),
-        );
+        // completion/complete is NOT a default handler: "Servers SHOULD
+        // return -32601 when completion is unsupported" — it is registered
+        // by build() when providers exist, so an unconfigured server answers
+        // 404 + -32601 like any unknown method.
         handlers.insert(
             "resources/list".to_string(),
             Arc::new(ResourcesHandler::new()),
@@ -178,6 +186,14 @@ impl LambdaMcpServerBuilder {
         handlers.insert(
             "resources/read".to_string(),
             Arc::new(ResourcesReadHandler::new().without_security()),
+        );
+        // Registered unconditionally, like the other two resource methods: a
+        // server that declares the resources capability but happens to have no
+        // templates must answer with an empty list, not -32601. build() swaps in
+        // a populated handler when templates were configured.
+        handlers.insert(
+            "resources/templates/list".to_string(),
+            Arc::new(ResourceTemplatesHandler::new()),
         );
         handlers.insert(
             "prompts/list".to_string(),
@@ -187,14 +203,18 @@ impl LambdaMcpServerBuilder {
             "prompts/get".to_string(),
             Arc::new(PromptsGetHandler::new()),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
+        // roots/list is a server→client request on 2026 (carried inside MRTR
+        // input requests) — only the 2025 stateful lane hosts it inbound.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "sampling/createMessage".to_string(),
             Arc::new(SamplingHandler),
         );
-        // Note: resources/templates/list is NOT registered here — only added in
-        // build() when template resources exist, matching HTTP server behavior.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "elicitation/create".to_string(),
             Arc::new(ElicitationHandler::with_mock_provider()),
@@ -202,13 +222,30 @@ impl LambdaMcpServerBuilder {
 
         // Add notification handlers
         let notifications_handler = Arc::new(NotificationsHandler);
+        // `ClientNotification` (2026-07-28 schema) dropped `ProgressNotification`
+        // from the client→server union, and `notifications/message` was never a
+        // member of that union on any pin — both are inbound-accepted only on the
+        // 2025-11-25 lane.
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/message".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/progress".to_string(),
             notifications_handler.clone(),
+        );
+        // CancelledNotification has a schema binding on both lanes. On
+        // Streamable HTTP the cancellation MECHANISM is closing the request's
+        // response stream; an inbound notifications/cancelled is accepted and
+        // ignored — request ids are per-client on the stateless lane and
+        // cannot be correlated across connections ("Invalid cancellation
+        // notifications SHOULD be ignored"). The dedicated handler logs
+        // requestId + reason.
+        handlers.insert(
+            "notifications/cancelled".to_string(),
+            Arc::new(CancelledNotificationHandler),
         );
         // MCP 2025-11-25 spec-correct underscore form
         handlers.insert(
@@ -227,6 +264,7 @@ impl LambdaMcpServerBuilder {
             "notifications/prompts/list_changed".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/roots/list_changed".to_string(),
             notifications_handler.clone(),
@@ -244,10 +282,12 @@ impl LambdaMcpServerBuilder {
             "notifications/prompts/listChanged".to_string(),
             notifications_handler.clone(),
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         handlers.insert(
             "notifications/roots/listChanged".to_string(),
-            notifications_handler,
+            notifications_handler.clone(),
         );
+        let _ = notifications_handler;
 
         Self {
             name: "turul-mcp-aws-lambda".to_string(),
@@ -259,11 +299,13 @@ impl LambdaMcpServerBuilder {
             resources: HashMap::new(),
             template_resources: Vec::new(),
             prompts: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             elicitations: HashMap::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             sampling: HashMap::new(),
-            completions: HashMap::new(),
+            completions: Vec::new(),
+            #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
-            root_providers: HashMap::new(),
             notifications: HashMap::new(),
             handlers,
             roots: Vec::new(),
@@ -274,10 +316,13 @@ impl LambdaMcpServerBuilder {
             strict_lifecycle: true, // MCP 2025-11-25: require notifications/initialized
             enable_sse: cfg!(feature = "sse"),
             server_config: ServerConfig::default(),
+            origin_policy: None,
             stream_config: StreamConfig::default(),
             middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack::new(),
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            #[cfg(feature = "protocol-2025-11-25")]
             task_runtime: None,
+            #[cfg(feature = "protocol-2025-11-25")]
             task_recovery_timeout_ms: 300_000, // 5 minutes
             tool_change_mode: turul_mcp_server::ToolChangeMode::Static,
             #[cfg(feature = "dynamic-tools")]
@@ -411,6 +456,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register an elicitation provider with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitation<E: McpElicitation + 'static>(mut self, elicitation: E) -> Self {
         let key = format!("elicitation_{}", self.elicitations.len());
         self.elicitations.insert(key, Arc::new(elicitation));
@@ -418,6 +464,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register multiple elicitation providers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitations<E: McpElicitation + 'static, I: IntoIterator<Item = E>>(
         mut self,
         elicitations: I,
@@ -429,6 +476,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register a sampling provider with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_provider<S: McpSampling + 'static>(mut self, sampling: S) -> Self {
         let key = format!("sampling_{}", self.sampling.len());
         self.sampling.insert(key, Arc::new(sampling));
@@ -436,6 +484,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register multiple sampling providers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_providers<S: McpSampling + 'static, I: IntoIterator<Item = S>>(
         mut self,
         sampling: I,
@@ -448,8 +497,7 @@ impl LambdaMcpServerBuilder {
 
     /// Register a completion provider with the server
     pub fn completion_provider<C: McpCompletion + 'static>(mut self, completion: C) -> Self {
-        let key = format!("completion_{}", self.completions.len());
-        self.completions.insert(key, Arc::new(completion));
+        self.completions.push(Arc::new(completion));
         self
     }
 
@@ -465,6 +513,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register a logger with the server
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn logger<L: McpLogger + 'static>(mut self, logger: L) -> Self {
         let key = format!("logger_{}", self.loggers.len());
         self.loggers.insert(key, Arc::new(logger));
@@ -472,30 +521,13 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register multiple loggers
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn loggers<L: McpLogger + 'static, I: IntoIterator<Item = L>>(
         mut self,
         loggers: I,
     ) -> Self {
         for logger in loggers {
             self = self.logger(logger);
-        }
-        self
-    }
-
-    /// Register a root provider with the server
-    pub fn root_provider<R: McpRoot + 'static>(mut self, root: R) -> Self {
-        let key = format!("root_{}", self.root_providers.len());
-        self.root_providers.insert(key, Arc::new(root));
-        self
-    }
-
-    /// Register multiple root providers
-    pub fn root_providers<R: McpRoot + 'static, I: IntoIterator<Item = R>>(
-        mut self,
-        roots: I,
-    ) -> Self {
-        for root in roots {
-            self = self.root_provider(root);
         }
         self
     }
@@ -523,6 +555,7 @@ impl LambdaMcpServerBuilder {
     // =============================================================================
 
     /// Register a sampler - convenient alias for sampling_provider
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampler<S: McpSampling + 'static>(self, sampling: S) -> Self {
         self.sampling_provider(sampling)
     }
@@ -559,6 +592,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add a single root directory
+    #[allow(deprecated)]
     pub fn root(mut self, root: turul_mcp_protocol::roots::Root) -> Self {
         self.roots.push(root);
         self
@@ -571,10 +605,8 @@ impl LambdaMcpServerBuilder {
     /// Add completion support
     pub fn with_completion(mut self) -> Self {
         use turul_mcp_protocol::initialize::CompletionsCapabilities;
-        self.capabilities.completions = Some(CompletionsCapabilities {
-            enabled: Some(true),
-        });
-        self.handler(CompletionHandler)
+        self.capabilities.completions = Some(CompletionsCapabilities::default());
+        self.handler(CompletionHandler::new())
     }
 
     /// Add prompts support
@@ -624,9 +656,13 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add logging support
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_logging(mut self) -> Self {
         use turul_mcp_protocol::initialize::LoggingCapabilities;
-        self.capabilities.logging = Some(LoggingCapabilities::default());
+        #[allow(deprecated)] // SEP-2577 migration window
+        {
+            self.capabilities.logging = Some(LoggingCapabilities::default());
+        }
         self.handler(LoggingHandler)
     }
 
@@ -636,20 +672,26 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add sampling support
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_sampling(self) -> Self {
         self.handler(SamplingHandler)
     }
 
     /// Add elicitation support with default mock provider
+    ///
+    /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
+    /// The server requests elicitation from the client; it doesn't advertise it.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_elicitation(self) -> Self {
-        // Elicitation is a client-side capability per MCP 2025-11-25
-        // Server just registers the handler, no capability advertisement needed
         self.handler(ElicitationHandler::with_mock_provider())
     }
 
     /// Add elicitation support with custom provider
+    ///
+    /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
+    /// The server requests elicitation from the client; it doesn't advertise it.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(self, provider: P) -> Self {
-        // Elicitation is a client-side capability per MCP 2025-11-25
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
@@ -672,6 +714,7 @@ impl LambdaMcpServerBuilder {
     ///
     /// **Lambda note**: Use a durable backend (DynamoDB recommended) since Lambda
     /// invocations are stateless. `InMemoryTaskStorage` will lose state between invocations.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_storage(
         mut self,
         storage: Arc<dyn turul_mcp_server::task_storage::TaskStorage>,
@@ -685,6 +728,7 @@ impl LambdaMcpServerBuilder {
     /// Configure task support with a pre-built `TaskRuntime`.
     ///
     /// Use this when you need fine-grained control over the task runtime configuration.
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_task_runtime(mut self, runtime: Arc<turul_mcp_server::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
         self
@@ -694,6 +738,7 @@ impl LambdaMcpServerBuilder {
     ///
     /// On Lambda cold start, tasks in non-terminal states older than this timeout
     /// will be marked as `Failed`. Default: 300,000 ms (5 minutes).
+    #[cfg(feature = "protocol-2025-11-25")]
     pub fn task_recovery_timeout_ms(mut self, timeout_ms: u64) -> Self {
         self.task_recovery_timeout_ms = timeout_ms;
         self
@@ -761,6 +806,9 @@ impl LambdaMcpServerBuilder {
         self.enable_sse = enable;
 
         // Update SSE endpoints in ServerConfig based on enable flag
+        // (enable_get_sse is 2026-lane-deprecated; the setter remains the
+        // 2025-lane control and a harmless no-op on 2026)
+        #[allow(deprecated)]
         if enable {
             self.server_config.enable_get_sse = true;
             self.server_config.enable_post_sse = true;
@@ -873,6 +921,16 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Configure server settings
+    /// Set the Origin-header validation policy explicitly (DNS-rebinding
+    /// protection). When not set, the policy is derived from the CORS
+    /// configuration at build time (ADR-031): `cors_allow_all_origins()` →
+    /// `Disabled`, an explicit origin list → `AllowList`, no CORS config →
+    /// the `SameOriginOrLoopback` default.
+    pub fn origin_policy(mut self, policy: turul_http_mcp_server::OriginPolicy) -> Self {
+        self.origin_policy = Some(policy);
+        self
+    }
+
     pub fn server_config(mut self, config: ServerConfig) -> Self {
         self.server_config = config;
         self
@@ -950,8 +1008,29 @@ impl LambdaMcpServerBuilder {
     /// Build the Lambda MCP server
     ///
     /// Returns a server that can create handlers when needed.
-    pub async fn build(self) -> Result<LambdaMcpServer> {
+    pub async fn build(mut self) -> Result<LambdaMcpServer> {
         use turul_mcp_session_storage::InMemorySessionStorage;
+
+        // Origin validation policy (ADR-031): an explicit `.origin_policy()`
+        // wins; otherwise an explicit CORS configuration is the operator's
+        // declaration of allowed origins and the policy follows it. With no
+        // CORS config, the `SameOriginOrLoopback` default stands.
+        if let Some(policy) = self.origin_policy.take() {
+            self.server_config.origin_policy = policy;
+        } else {
+            // `cors_config` only exists when the `cors` feature is on; without it
+            // there is no operator origin declaration to derive a policy from and
+            // the SameOriginOrLoopback default stands.
+            #[cfg(feature = "cors")]
+            if let Some(cors) = &self.cors_config {
+                self.server_config.origin_policy = if cors.allowed_origins.iter().any(|o| o == "*")
+                {
+                    turul_http_mcp_server::OriginPolicy::Disabled
+                } else {
+                    turul_http_mcp_server::OriginPolicy::AllowList(cors.allowed_origins.clone())
+                };
+            }
+        }
 
         // Validate configuration (same as MCP server)
         if self.name.is_empty() {
@@ -991,10 +1070,14 @@ impl LambdaMcpServerBuilder {
         let has_tools = !self.tools.is_empty();
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
         let has_prompts = !self.prompts.is_empty();
+        #[cfg(feature = "protocol-2025-11-25")]
         let has_elicitations = !self.elicitations.is_empty();
         let has_completions = !self.completions.is_empty();
-        let has_logging = !self.loggers.is_empty();
-        tracing::debug!("🔧 Has logging configured: {}", has_logging);
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            let has_logging = !self.loggers.is_empty();
+            tracing::debug!("🔧 Has logging configured: {}", has_logging);
+        }
 
         // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
@@ -1024,29 +1107,25 @@ impl LambdaMcpServerBuilder {
 
         // Elicitation is a client-side capability per MCP 2025-11-25
         // Server does NOT advertise elicitation capabilities
+        #[cfg(feature = "protocol-2025-11-25")]
         let _ = has_elicitations; // Acknowledge the variable without using it
 
         // Completion capabilities - truthful reporting (only set if completions are registered)
         if has_completions {
             capabilities.completions =
-                Some(turul_mcp_protocol::initialize::CompletionsCapabilities {
-                    enabled: Some(true),
-                });
+                Some(turul_mcp_protocol::initialize::CompletionsCapabilities::default());
         }
 
-        // Logging capabilities - always enabled for debugging/monitoring (same as McpServer)
-        // Always enable logging for debugging/monitoring
-        capabilities.logging = Some(turul_mcp_protocol::initialize::LoggingCapabilities {
-            enabled: Some(true),
-            levels: Some(vec![
-                "debug".to_string(),
-                "info".to_string(),
-                "warning".to_string(),
-                "error".to_string(),
-            ]),
-        });
+        // Logging capability: presence of the (opaque) object means the server
+        // can send notifications/message (same as McpServer).
+        #[allow(deprecated)] // SEP-2577 migration window
+        {
+            capabilities.logging =
+                Some(turul_mcp_protocol::initialize::LoggingCapabilities::default());
+        }
 
         // Tasks capabilities — auto-configure when task runtime is set
+        #[cfg(feature = "protocol-2025-11-25")]
         if self.task_runtime.is_some() {
             use turul_mcp_protocol::initialize::*;
             capabilities.tasks = Some(TasksCapabilities {
@@ -1063,8 +1142,19 @@ impl LambdaMcpServerBuilder {
             });
         }
 
-        // Add RootsHandler if roots were configured (same pattern as MCP server)
         let mut handlers = self.handlers;
+
+        // Route completion/complete through the registered providers.
+        if !self.completions.is_empty() {
+            handlers.insert(
+                "completion/complete".to_string(),
+                Arc::new(CompletionHandler::new().with_providers(self.completions.clone())),
+            );
+        }
+        // Add RootsHandler if roots were configured. 2025 lane only: on 2026
+        // the server REQUESTS roots from the client via MRTR; it never hosts
+        // an inbound roots/list.
+        #[cfg(feature = "protocol-2025-11-25")]
         if !self.roots.is_empty() {
             let mut roots_handler = RootsHandler::new();
             for root in &self.roots {
@@ -1074,6 +1164,7 @@ impl LambdaMcpServerBuilder {
         }
 
         // Add task handlers if task runtime is configured
+        #[cfg(feature = "protocol-2025-11-25")]
         if let Some(ref runtime) = self.task_runtime {
             use turul_mcp_server::{
                 TasksCancelHandler, TasksGetHandler, TasksListHandler, TasksResultHandler,
@@ -1137,11 +1228,13 @@ impl LambdaMcpServerBuilder {
             self.tools,
             self.resources,
             self.prompts,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.elicitations,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.sampling,
             self.completions,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.loggers,
-            self.root_providers,
             self.notifications,
             handlers,
             self.roots,
@@ -1155,6 +1248,7 @@ impl LambdaMcpServerBuilder {
             self.cors_config,
             self.middleware_stack,
             self.route_registry,
+            #[cfg(feature = "protocol-2025-11-25")]
             self.task_runtime,
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
@@ -1359,6 +1453,107 @@ mod tests {
         );
     }
 
+    // ── Registered-method parity with the non-Lambda McpServerBuilder gates ──
+    //
+    // Builds a server through the production path (builder → build() →
+    // handler()) and asserts the dispatcher's registered method set matches
+    // an explicit, spec-derived literal — not a diff against the non-Lambda
+    // builder, which could share a bug.
+
+    #[cfg(feature = "protocol-2026-07-28")]
+    #[tokio::test]
+    async fn test_registered_methods_parity_2026_07_28() {
+        use std::collections::BTreeSet;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("parity-test")
+            .version("1.0.0")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+        let handler = server.handler().await.unwrap();
+
+        let expected: BTreeSet<String> = [
+            "tools/list",
+            "tools/call",
+            "server/discover",
+            "resources/list",
+            "resources/read",
+            "resources/templates/list",
+            "prompts/list",
+            "prompts/get",
+            "notifications/cancelled",
+            "notifications/resources/list_changed",
+            "notifications/resources/updated",
+            "notifications/tools/list_changed",
+            "notifications/prompts/list_changed",
+            "notifications/resources/listChanged",
+            "notifications/tools/listChanged",
+            "notifications/prompts/listChanged",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+        let actual: BTreeSet<String> = handler.registered_methods().into_iter().collect();
+        assert_eq!(actual, expected);
+    }
+
+    #[cfg(feature = "protocol-2025-11-25")]
+    #[tokio::test]
+    async fn test_registered_methods_parity_2025_11_25() {
+        use std::collections::BTreeSet;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("parity-test")
+            .version("1.0.0")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+        let handler = server.handler().await.unwrap();
+
+        let expected: BTreeSet<String> = [
+            "initialize",
+            "tools/list",
+            "tools/call",
+            "ping",
+            "resources/list",
+            "resources/read",
+            "resources/templates/list",
+            "prompts/list",
+            "prompts/get",
+            "logging/setLevel",
+            "roots/list",
+            "sampling/createMessage",
+            "elicitation/create",
+            "notifications/message",
+            "notifications/progress",
+            "notifications/cancelled",
+            "notifications/resources/list_changed",
+            "notifications/resources/updated",
+            "notifications/tools/list_changed",
+            "notifications/prompts/list_changed",
+            "notifications/roots/list_changed",
+            "notifications/resources/listChanged",
+            "notifications/tools/listChanged",
+            "notifications/prompts/listChanged",
+            "notifications/roots/listChanged",
+            "notifications/initialized",
+        ]
+        .into_iter()
+        .map(String::from)
+        .collect();
+
+        let actual: BTreeSet<String> = handler.registered_methods().into_iter().collect();
+        assert_eq!(actual, expected);
+    }
+
     #[cfg(feature = "cors")]
     #[tokio::test]
     async fn test_cors_configuration() {
@@ -1457,6 +1652,48 @@ mod tests {
             );
         }
 
+        /// CORS origin list derives the origin-validation AllowList
+        /// (ADR-031): the listed origin reaches dispatch; an unlisted
+        /// cross-origin request is rejected 403 before anything else runs.
+        #[tokio::test]
+        async fn cors_origin_list_derives_origin_allowlist() {
+            let server = LambdaMcpServerBuilder::new()
+                .cors_allow_origins(vec!["https://client.example.test".to_string()])
+                .storage(Arc::new(InMemorySessionStorage::new()))
+                .sse(false)
+                .build()
+                .await
+                .unwrap();
+            let handler = server.handler().await.unwrap();
+
+            // Listed origin: passes the origin gate (reaches protocol handling).
+            let resp = handler.handle_streaming(post_request()).await.unwrap();
+            assert_ne!(
+                resp.status(),
+                403,
+                "allowlisted origin must pass the origin gate"
+            );
+
+            // Unlisted origin: rejected by the origin gate.
+            let req = Request::builder()
+                .method("POST")
+                .uri("/mcp")
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/event-stream")
+                .header("MCP-Protocol-Version", "2025-11-25")
+                .header("Origin", "https://other.example.test")
+                .body(LambdaBody::Text(
+                    r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+                ))
+                .unwrap();
+            let resp = handler.handle_streaming(req).await.unwrap();
+            assert_eq!(
+                resp.status(),
+                403,
+                "unlisted cross-origin request must get 403 Forbidden"
+            );
+        }
+
         /// Non-preflight: a middleware-emitted 401 through the builder-path
         /// streaming handler must also carry CORS — this is the production
         /// failure mode that previously masquerade-ed as a CORS bug.
@@ -1548,6 +1785,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(deprecated)] // asserts the 2025-lane enable_get_sse plumbing
     async fn test_sse_toggle_functionality() {
         // Test that SSE can be toggled on/off/on correctly
         let mut builder =
@@ -1602,6 +1840,9 @@ mod tests {
     // Task support tests
     // =========================================================================
 
+    // Tasks moved to the turul-mcp-ext-tasks extension in 2026-07-28; the task
+    // runtime/storage builder surface and the capabilities.tasks field are 2025-only.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_builder_without_tasks_no_capability() {
         let server = LambdaMcpServerBuilder::new()
@@ -1619,6 +1860,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_builder_with_task_storage_advertises_capability() {
         use turul_mcp_server::task_storage::InMemoryTaskStorage;
@@ -1654,6 +1896,7 @@ mod tests {
         assert!(tools.call.is_some(), "tools.call capability should be set");
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_builder_with_task_runtime_advertises_capability() {
         let runtime = Arc::new(turul_mcp_server::TaskRuntime::in_memory());
@@ -1674,6 +1917,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_task_recovery_timeout_configuration() {
         use turul_mcp_server::task_storage::InMemoryTaskStorage;
@@ -1695,6 +1939,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_backward_compatibility_no_tasks() {
         // Existing builder pattern still works unchanged
@@ -1717,21 +1962,26 @@ mod tests {
     }
 
     /// Slow tool that sleeps for 2 seconds — used to prove non-blocking behavior.
+    /// Declares task support, which exists only in the 2025-11-25 spec.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[derive(Clone, Default)]
     struct SlowTool;
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasBaseMetadata for SlowTool {
         fn name(&self) -> &str {
             "slow_tool"
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasDescription for SlowTool {
         fn description(&self) -> Option<&str> {
             Some("A slow tool for testing")
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasInputSchema for SlowTool {
         fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
             use turul_mcp_protocol::ToolSchema;
@@ -1740,25 +1990,30 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasOutputSchema for SlowTool {
         fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
             None
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasAnnotations for SlowTool {
         fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
             None
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasToolMeta for SlowTool {
         fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
             None
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasIcons for SlowTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl HasExecution for SlowTool {
         fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
             Some(turul_mcp_protocol::tools::ToolExecution {
@@ -1767,6 +2022,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[async_trait::async_trait]
     impl McpTool for SlowTool {
         async fn call(
@@ -1781,11 +2037,12 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_nonblocking_tools_call_with_task() {
-        use turul_mcp_json_rpc_server::r#async::JsonRpcHandler;
         use turul_mcp_server::SessionAwareToolHandler;
         use turul_mcp_server::task_storage::InMemoryTaskStorage;
+        use turul_rpc::r#async::JsonRpcHandler;
 
         let task_storage = Arc::new(InMemoryTaskStorage::new());
         let runtime = Arc::new(turul_mcp_server::TaskRuntime::with_default_executor(
@@ -1814,7 +2071,7 @@ mod tests {
             "arguments": {},
             "task": {}
         });
-        let request_params = turul_mcp_json_rpc_server::RequestParams::Object(
+        let request_params = turul_rpc::RequestParams::Object(
             params
                 .as_object()
                 .unwrap()
@@ -2181,6 +2438,7 @@ mod tests {
         assert_eq!(templates[0]["uriTemplate"], "agent://agents/{agent_id}");
     }
 
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_tasks_get_route_registered() {
         use turul_mcp_server::TasksGetHandler;
@@ -2217,6 +2475,9 @@ mod tests {
     /// HTTP server registers it unconditionally — Lambda must match.
     /// We test by sending a resources/read request through handle() and
     /// verifying we get an MCP error (not "method not found").
+    // Drives the 2025-11-25 initialize handshake to obtain an Mcp-Session-Id;
+    // the 2026-07-28 stateless core has no initialize and returns no session id.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_resources_read_registered_by_default() {
         use lambda_http::Body as LambdaBody;
@@ -2297,11 +2558,11 @@ mod tests {
         );
     }
 
-    /// Verify resources/templates/list is NOT dispatched when no templates exist.
-    /// HTTP server only registers it conditionally — Lambda must match.
-    /// We prove absence by sending a request and verifying "method not found" (-32601).
+    /// resources/templates/list is registered unconditionally, matching the
+    /// local builder: a server with no templates reports an empty list.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
-    async fn test_resources_templates_list_absent_without_templates() {
+    async fn test_resources_templates_list_answers_empty_without_templates() {
         use lambda_http::Body as LambdaBody;
 
         let server = LambdaMcpServerBuilder::new()
@@ -2344,8 +2605,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        // Send resources/templates/list — should get "method not found" (-32601)
-        // because no templates are registered
+        // resources/templates/list with no templates registered
         let tmpl_req = http::Request::builder()
             .method("POST")
             .uri("/mcp")
@@ -2364,15 +2624,18 @@ mod tests {
         let json: serde_json::Value = serde_json::from_str(&body)
             .unwrap_or_else(|e| panic!("Response must be valid JSON: {e}\nBody: {body}"));
 
-        // Must be method not found — handler should NOT be registered without templates
+        // An empty list, not -32601. A server that declares the resources
+        // capability and answers "method not found" tells a client the method
+        // does not exist, which is a different claim from "there are none" —
+        // and it is the one a capability-driven client acts on.
         assert!(
-            json["error"].is_object(),
-            "resources/templates/list should return error without templates: {json}"
+            json.get("error").is_none(),
+            "resources/templates/list must not error without templates: {json}"
         );
         assert_eq!(
-            json["error"]["code"].as_i64().unwrap(),
-            -32601,
-            "resources/templates/list must be method-not-found (-32601) without templates: {json}"
+            json["result"]["resourceTemplates"],
+            serde_json::json!([]),
+            "a server with no templates reports an empty list: {json}"
         );
     }
 }

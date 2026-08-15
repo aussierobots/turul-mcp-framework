@@ -1,5 +1,7 @@
-// turul-mcp-server v0.3
+// turul-mcp-server v0.4
 // Task-enabled server: McpServer with InMemoryTaskStorage + task-supporting tools
+// Spec lane: 2025-11-25 in-core tasks only (--no-default-features --features protocol-2025-11-25).
+// For the 2026-07-28 Tasks extension (SEP-2663), see ../SKILL.md.
 
 use std::sync::Arc;
 use turul_mcp_derive::mcp_tool;

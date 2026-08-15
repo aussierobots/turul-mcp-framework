@@ -14,11 +14,12 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tracing::{debug, error, info, warn};
 
-use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
+use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 
-use crate::streamable_http::{McpProtocolVersion, StreamableHttpHandler};
+use crate::protocol::McpProtocolVersion;
+use crate::streamable_http::StreamableHttpHandler;
 use crate::{CorsLayer, Result, SessionMcpHandler, StreamConfig, StreamManager};
 
 /// Configuration for the HTTP MCP server
@@ -32,7 +33,19 @@ pub struct ServerConfig {
     pub enable_cors: bool,
     /// Maximum request body size
     pub max_body_size: usize,
-    /// Enable GET SSE support (persistent event streams)
+    /// Enable GET SSE support (persistent event streams).
+    ///
+    /// 2025-11-25 stateful lane only. On the 2026-07-28 stateless lane this
+    /// flag has no effect: the MCP endpoint is POST-only (GET returns 405
+    /// Method Not Allowed) and the long-lived notification stream is the
+    /// `subscriptions/listen` POST stream instead.
+    #[cfg_attr(
+        feature = "protocol-2026-07-28",
+        deprecated(
+            since = "0.4.0",
+            note = "no effect on the 2026-07-28 stateless lane (POST-only endpoint; GET = 405) — use subscriptions/listen for the long-lived stream; stateful GET SSE remains on the protocol-2025-11-25 opt-in"
+        )
+    )]
     pub enable_get_sse: bool,
     /// Enable POST SSE support (streaming tool call responses) - disabled by default for compatibility
     pub enable_post_sse: bool,
@@ -46,9 +59,15 @@ pub struct ServerConfig {
     ///
     /// Set to false for hardened deployments that require session for all methods.
     pub allow_unauthenticated_ping: bool,
+    /// Origin-header validation policy (DNS-rebinding protection).
+    ///
+    /// Streamable HTTP §Security: "If the `Origin` header is present and
+    /// invalid, servers MUST respond with HTTP 403 Forbidden."
+    pub origin_policy: crate::origin::OriginPolicy,
 }
 
 impl Default for ServerConfig {
+    #[allow(deprecated)] // enable_get_sse is 2026-lane-deprecated but must default
     fn default() -> Self {
         Self {
             bind_address: "127.0.0.1:8000".parse().unwrap(),
@@ -59,6 +78,7 @@ impl Default for ServerConfig {
             enable_post_sse: false, // Disabled by default for better client compatibility (e.g., MCP Inspector)
             session_expiry_minutes: 30, // 30 minutes default
             allow_unauthenticated_ping: true, // Allow pre-init pings per MCP spec
+            origin_policy: crate::origin::OriginPolicy::default(),
         }
     }
 }
@@ -74,6 +94,7 @@ pub struct HttpMcpServerBuilder {
     route_registry: Arc<crate::routes::RouteRegistry>,
     tool_fingerprint: Option<String>,
     tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
+    server_info: Option<turul_mcp_protocol::Implementation>,
 }
 
 impl HttpMcpServerBuilder {
@@ -88,6 +109,7 @@ impl HttpMcpServerBuilder {
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
             tool_fingerprint: None,
+            server_info: None,
             tool_notifier: None,
         }
     }
@@ -107,6 +129,7 @@ impl HttpMcpServerBuilder {
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
             tool_fingerprint: None,
+            server_info: None,
             tool_notifier: None,
         }
     }
@@ -127,6 +150,12 @@ impl HttpMcpServerBuilder {
     }
 
     /// Set tool fingerprint for session versioning across server restarts
+    /// Identity reported in each 2026-07-28 result's `_meta.serverInfo`.
+    pub fn server_info(mut self, info: turul_mcp_protocol::Implementation) -> Self {
+        self.server_info = Some(info);
+        self
+    }
+
     pub fn tool_fingerprint(mut self, fingerprint: String) -> Self {
         if fingerprint.is_empty() {
             self.tool_fingerprint = None; // Static mode: no fingerprint check
@@ -166,7 +195,17 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Enable or disable GET SSE for persistent event streams
+    /// Enable or disable GET SSE for persistent event streams.
+    ///
+    /// 2025-11-25 stateful lane only — see [`ServerConfig::enable_get_sse`].
+    #[cfg_attr(
+        feature = "protocol-2026-07-28",
+        deprecated(
+            since = "0.4.0",
+            note = "no effect on the 2026-07-28 stateless lane (POST-only endpoint; GET = 405)"
+        )
+    )]
+    #[allow(deprecated)]
     pub fn get_sse(mut self, enable: bool) -> Self {
         self.config.enable_get_sse = enable;
         self
@@ -178,7 +217,10 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Enable or disable both GET and POST SSE (convenience method)
+    /// Enable or disable both GET and POST SSE (convenience method).
+    ///
+    /// The GET half is 2025-11-25-lane-only — see [`ServerConfig::enable_get_sse`].
+    #[allow(deprecated)]
     pub fn sse(mut self, enable: bool) -> Self {
         self.config.enable_get_sse = enable;
         self.config.enable_post_sse = enable;
@@ -195,6 +237,12 @@ impl HttpMcpServerBuilder {
     ///
     /// Default: `true` (sessionless pings allowed per MCP spec).
     /// Set to `false` for hardened deployments requiring session for all methods.
+    /// Set the Origin-header validation policy (DNS-rebinding protection).
+    pub fn origin_policy(mut self, policy: crate::origin::OriginPolicy) -> Self {
+        self.config.origin_policy = policy;
+        self
+    }
+
     pub fn allow_unauthenticated_ping(mut self, allow: bool) -> Self {
         self.config.allow_unauthenticated_ping = allow;
         self
@@ -264,6 +312,9 @@ impl HttpMcpServerBuilder {
         if let Some(ref notifier) = self.tool_notifier {
             streamable_handler = streamable_handler.with_tool_notifier(Arc::clone(notifier));
         }
+        if let Some(ref info) = self.server_info {
+            streamable_handler = streamable_handler.with_server_info(info.clone());
+        }
 
         HttpMcpServer {
             config: self.config,
@@ -323,6 +374,14 @@ impl HttpMcpServer {
     /// Returns reference to the same StreamManager used by HTTP server
     pub fn get_stream_manager(&self) -> Arc<crate::StreamManager> {
         Arc::clone(&self.stream_manager)
+    }
+
+    /// The JSON-RPC method names registered on this server's dispatcher.
+    /// Enables cross-builder parity assertions (e.g. the local server vs the
+    /// AWS Lambda builder) so the two transports cannot silently register
+    /// divergent method sets for a given protocol lane.
+    pub fn registered_methods(&self) -> Vec<String> {
+        self.dispatcher.registered_methods()
     }
 
     /// Run the server with session management
@@ -449,20 +508,23 @@ async fn handle_request(
     );
     let response = if path == handler.session_handler.config.mcp_path {
         debug!("Path match: Request routed to MCP handler");
-        // Extract MCP protocol version from headers
-        let protocol_version_str = req
+        // Absent and unrecognised are distinct: absent falls back to this build's
+        // lane, unrecognised must NOT be silently downgraded to a superseded spec
+        // — it is routed to the streamable handler, which answers with the
+        // spec's UnsupportedProtocolVersion error rather than serving the request.
+        let raw_version = req
             .headers()
             .get("MCP-Protocol-Version")
-            .and_then(|h| h.to_str().ok())
-            .unwrap_or("2025-11-25"); // Default to latest version (we only support the latest protocol)
-        debug!("Protocol version: {}", protocol_version_str);
-
-        let protocol_version = McpProtocolVersion::parse_version(protocol_version_str)
-            .unwrap_or(McpProtocolVersion::V2025_11_25);
+            .and_then(|h| h.to_str().ok());
+        let parsed_version = raw_version.and_then(McpProtocolVersion::parse_version);
+        let unrecognised_version = raw_version.is_some() && parsed_version.is_none();
+        let protocol_version = parsed_version.unwrap_or(McpProtocolVersion::LATEST);
 
         debug!(
-            "MCP request: protocol_version={}, method={}",
+            "MCP request: protocol_version={} (header={:?}, unrecognised={}), method={}",
             protocol_version.as_str(),
+            raw_version,
+            unrecognised_version,
             method
         );
 
@@ -479,8 +541,18 @@ async fn handle_request(
             }
         );
 
-        if protocol_version.supports_streamable_http() {
-            // Use StreamableHttpHandler for MCP 2025-11-25 clients
+        // The 2026 stateless build serves a single spec: every request goes to the
+        // streamable handler, whose Server Validation rejects unsupported
+        // MCP-Protocol-Version values with 400 + -32022. Routing legacy version
+        // headers to the 2025-era session handler would bypass that contract.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let route_streamable = true;
+        // An unrecognised version string is never treated as legacy: the session
+        // handler would serve it, hiding the version error the spec requires.
+        #[cfg(feature = "protocol-2025-11-25")]
+        let route_streamable = unrecognised_version || protocol_version.supports_streamable_http();
+
+        if route_streamable {
             debug!(
                 "Calling streamable handler for protocol {}",
                 protocol_version.as_str()

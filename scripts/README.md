@@ -8,75 +8,66 @@ These scripts test the **actual intent and functionality** of each example, not 
 
 ## Scripts
 
-### Individual Phase Scripts
+### Individual Verification Scripts
 
-- **`verify_phase1.sh`** - Calculator Learning Progression (5 examples)
+- **`verify_calculator_examples.sh`** - Calculator Learning Progression (5 examples)
   - Tests all 4 tool creation patterns (function, derive, builder, manual)
   - Verifies actual math: `5.0 + 3.0 = 8.0`
   - Validates pattern equivalence
 
-- **`verify_phase2.sh`** - Resource Servers (6 examples)
+- **`verify_resource_servers.sh`** - Resource Servers (6 examples)
   - Tests `resources/list` and `resources/read`
   - Verifies template variable substitution
   - Validates session-aware resource behavior
 
-- **`verify_phase3.sh`** - Prompts & Special Features (7 examples)
+- **`verify_prompts_examples.sh`** - Prompts & Special Features (7 examples)
   - Tests `prompts/get` with template substitution
   - Validates completion, sampling, elicitation features
   - Verifies pagination and notification patterns
 
-- **`verify_phase4.sh`** - Session Storage Backends (4 examples)
+- **`verify_storage_backends.sh`** - Session Storage Backends (4 examples)
   - Tests SQLite, PostgreSQL, DynamoDB, stateful operations
   - Verifies session persistence across requests
   - Validates storage-specific behavior
 
-- **`verify_phase5.sh`** - Advanced/Composite Servers (9 examples)
+- **`verify_advanced_servers.sh`** - Advanced/Composite Servers (5 examples)
   - Tests real business logic (alerts, audit, logging)
   - Verifies multi-capability servers
   - Validates complex workflows
 
-- **`verify_phase6.sh`** - Clients & Test Utilities (5 examples)
+- **`verify_client_examples.sh`** - Clients & Test Utilities (5 examples)
   - Tests CLIENT behavior (not servers!)
   - Verifies session management, SSE streaming
   - Validates client-server integration
 
-- **`verify_phase7.sh`** - Lambda Examples (3 examples)
-  - Tests AWS Lambda deployment patterns (compilation only)
-  - Verifies serverless MCP builds correctly
-  - Note: Full testing requires AWS deployment
+Lambda deployment patterns are covered separately by
+`test_lambda_middleware.sh` / `test_lambda_middleware_live.sh` and
+`../scripts/e2e-lambda-*.sh` (wired into `ci-gates.sh`'s `lambda` and
+`examples` lanes), not by a `verify_*_examples.sh` script here.
 
-- **`verify_phase8.sh`** - Meta Examples (3 examples)
-  - Tests builders showcase, performance testing
-  - Verifies demonstration and tutorial examples
-  - Validates educational content
+### Master Scripts
 
-### Master Script
-
-- **`run_all_phases.sh`** - Runs all 8 phases sequentially
-  - Generates comprehensive report
-  - Interactive prompts between phases
-  - Provides pass/fail summary
+- **`verify_all_examples_unattended.sh`** - Runs all 6 verification phases non-interactively
+  - Generates comprehensive report without prompts
+  - Collects results to temporary files
+  - Suitable for CI/CD pipelines (wired into `scripts/ci-gates.sh examples`)
 
 ## Usage
 
-### Run Individual Phase
+### Run Individual Verification
 
 ```bash
-# Run a specific phase
-./scripts/verify_phase1.sh
+# Run a specific verification script
+./scripts/verify_calculator_examples.sh
 
 # Run with output capture
-./scripts/verify_phase1.sh 2>&1 | tee phase1_results.log
+./scripts/verify_calculator_examples.sh 2>&1 | tee calculator_results.log
 ```
 
-### Run All Phases
+### Run All Examples
 
 ```bash
-# Interactive mode (prompts between phases)
-./scripts/run_all_phases.sh
-
-# Non-interactive (remove read prompts first)
-./scripts/run_all_phases.sh 2>&1 | tee full_verification.log
+./scripts/verify_all_examples_unattended.sh 2>&1 | tee full_verification.log
 ```
 
 ### Run Individual Examples Manually
@@ -87,28 +78,37 @@ RUST_LOG=error cargo run --bin minimal-server -- --port 8641 &
 SERVER_PID=$!
 sleep 3
 
-# Initialize and get session ID (from header in lenient mode)
-SESSION_ID=$(curl -i -s -X POST "http://127.0.0.1:8641/mcp" \
+# MCP 2026-07-28 is stateless: no `initialize` handshake and no session header.
+# The protocol version and client capabilities ride in `_meta` on every request.
+
+# Every request carries the MCP-Protocol-Version and Mcp-Method headers, and a
+# params._meta block. `Mcp-Name` is additionally required on named calls
+# (tools/call, prompts/get, resources/read) and MUST equal the name in the body.
+
+# Discover what the server supports (optional — clients MAY call this first)
+curl -s -X POST "http://127.0.0.1:8641/mcp" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
-  | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
-
-echo "Session ID: $SESSION_ID"
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: server/discover" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | jq
 
 # List tools
 curl -s -X POST "http://127.0.0.1:8641/mcp" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
-  -H "MCP-Session-ID: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | jq
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/list" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | jq
 
-# Call tool
+# Call a tool — Mcp-Name must equal params.name
 curl -s -X POST "http://127.0.0.1:8641/mcp" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
-  -H "MCP-Session-ID: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"Hello"}}}' | jq
+  -H "MCP-Protocol-Version: 2026-07-28" \
+  -H "Mcp-Method: tools/call" \
+  -H "Mcp-Name: echo" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"text":"Hello, MCP!"},"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}' | jq
 
 # Cleanup
 kill $SERVER_PID
@@ -116,22 +116,15 @@ kill $SERVER_PID
 
 ## Key Implementation Details
 
-### Session ID Handling
+### Stateless requests (2026-07-28)
 
-The framework uses **lenient mode** where:
-- Session IDs are created automatically on `initialize`
-- Session ID is returned in the `Mcp-Session-Id` response **header** (not JSON body)
-- All subsequent requests must include `MCP-Session-ID: <session-id>` header
+There is no `initialize` handshake and no `Mcp-Session-Id`. Every request carries
+`MCP-Protocol-Version` and `Mcp-Method` headers plus a `params._meta` block; named
+calls (`tools/call`, `prompts/get`, `resources/read`) also carry `Mcp-Name`, which
+must equal the name in the body. See the worked commands above.
 
-**Incorrect** (old approach):
-```bash
-SESSION_ID=$(curl -s ... | jq -r '.result.sessionId')
-```
+On the opt-in 2025-11-25 lane the old session handshake still applies.
 
-**Correct** (current approach):
-```bash
-SESSION_ID=$(curl -i -s ... | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
-```
 
 ### Intent-Based Testing Philosophy
 
@@ -154,17 +147,15 @@ Scripts gracefully skip these with `SKIPPED` status when dependencies are unavai
 
 ## Test Coverage
 
-| Phase | Examples | Status |
+| Suite | Examples | Status |
 |-------|----------|--------|
-| Phase 1 | 5 | ✅ Ready |
-| Phase 2 | 6 | ✅ Ready |
-| Phase 3 | 7 | ✅ Ready |
-| Phase 4 | 4 | ✅ Ready |
-| Phase 5 | 9 | ✅ Ready |
-| Phase 6 | 5 | ✅ Ready |
-| Phase 7 | 3 | ✅ Ready |
-| Phase 8 | 3 | ✅ Ready |
-| **Total** | **42** | ✅ Ready |
+| Calculator progression | 5 | ✅ Ready |
+| Resource servers | 6 | ✅ Ready |
+| Prompts & special features | 7 | ✅ Ready |
+| Session storage backends | 4 | ✅ Ready |
+| Advanced/composite servers | 5 | ✅ Ready |
+| Clients & test utilities | 5 | ✅ Ready |
+| **Total** | **32** | ✅ Ready |
 
 ## Troubleshooting
 
@@ -200,14 +191,13 @@ RUST_LOG=error timeout 30s cargo run --bin ...
 
 ## Next Steps
 
-1. Run all phases: `./scripts/run_all_phases.sh`
-2. Review results and update `EXAMPLE_VERIFICATION_LOG.md`
+1. Run all examples: `./scripts/verify_all_examples_unattended.sh`
+2. Review results
 3. Fix any failing examples
 4. Re-run verification until all pass
 5. Document final results
 
 ## See Also
 
-- `../EXAMPLE_VERIFICATION_LOG.md` - Campaign tracking document
 - `../examples/` - Example source code
 - `../CLAUDE.md` - Development guidelines

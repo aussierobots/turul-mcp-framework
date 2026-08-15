@@ -72,7 +72,7 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
                 use std::collections::HashMap;
                 let mut content = HashMap::new();
                 content.insert("response".to_string(), serde_json::Value::String("User input collected".to_string()));
-                Ok(turul_mcp_protocol::elicitation::ElicitResult::accept(content))
+                Ok(turul_mcp_builders::elicitation::ElicitResultBuilder::accept(content))
             }
         }
     };

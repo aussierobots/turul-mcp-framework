@@ -12,8 +12,9 @@ use clap::Parser;
 use serde_json::Value;
 use tracing::info;
 use turul_mcp_builders::prelude::*; // HasPromptMetadata, HasPromptDescription, etc.
+use turul_mcp_builders::traits::PromptAnnotations;
 use turul_mcp_protocol::McpError;
-use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument, PromptMessage};
+use turul_mcp_protocol::prompts::{PromptArgument, PromptMessage};
 use turul_mcp_server::prompt::McpPrompt;
 use turul_mcp_server::{McpResult, McpServer};
 
@@ -877,7 +878,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("prompts-test-server")
-        .version("0.3.47")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("MCP Prompts Test Server")
         .instructions(
             "Comprehensive test server providing various types of prompts for E2E testing.\n\

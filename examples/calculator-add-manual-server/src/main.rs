@@ -35,10 +35,10 @@ impl HasInputSchema for CalculatorAddTool {
         INPUT_SCHEMA.get_or_init(|| {
             use turul_mcp_protocol::schema::JsonSchema;
             ToolSchema::object()
-                .with_properties(HashMap::from([
+                .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                     ("a".to_string(), JsonSchema::number()),
                     ("b".to_string(), JsonSchema::number()),
-                ]))
+                ])))
                 .with_required(vec!["a".to_string(), "b".to_string()])
         })
     }
@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting calculator_add_manual server (Level 4)");
     let server = McpServer::builder()
         .name("calculator_add_manual")
-        .version("0.3.47")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("Calculator Add Manual Server")
         .instructions(
             "Add two numbers using fully manual implementation (Level 4 - Maximum Control)",

@@ -1,16 +1,19 @@
 [package]
 name = "stateful-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 
 [dependencies]
-turul-mcp-server = { workspace = true }
-turul-mcp-protocol = { workspace = true }
-turul-mcp-builders = { workspace = true }
+# Deliberately pinned to the 2025-11-25 stateful lane: this example's whole
+# teaching is cross-request session state, which does not exist on the 2026
+# stateless core.
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-turul-mcp-derive = { workspace = true }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

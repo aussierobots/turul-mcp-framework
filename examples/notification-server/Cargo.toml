@@ -1,6 +1,6 @@
 [package]
 name = "notification-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -9,6 +9,9 @@ license.workspace = true
 turul-mcp-server.workspace = true
 turul-mcp-protocol.workspace = true
 turul-mcp-builders.workspace = true
+turul-mcp-derive.workspace = true
+turul-http-mcp-server.workspace = true
+turul-rpc = { workspace = true, features = ["async"] }
 async-trait.workspace = true
 tokio.workspace = true
 tracing.workspace = true

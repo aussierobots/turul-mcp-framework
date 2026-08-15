@@ -1,6 +1,6 @@
 [package]
 name = "lambda-turul-mcp-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 description = "AWS Lambda MCP server with SSE snapshots (non-streaming)"
 license = "MIT"
@@ -22,14 +22,16 @@ aws-sdk-sns.workspace = true
 aws-sdk-sqs.workspace = true
 
 # Our MCP framework
-turul-mcp-server = { workspace = true, features = ["dynamodb"] }
-turul-mcp-protocol.workspace = true
-turul-mcp-derive.workspace = true
-turul-mcp-session-storage = { workspace = true, features = ["dynamodb"] }
-turul-mcp-builders.workspace = true
-turul-http-mcp-server.workspace = true
+# 2025-11-25 regression example; framework deps pinned to the 2025 opt-in
+# independent of the workspace 2026 default.
+turul-mcp-server = { path = "../../crates/turul-mcp-server", version = "0.4", default-features = false, features = ["http", "sse", "dynamodb", "protocol-2025-11-25"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", version = "0.4", default-features = false, features = ["in-memory", "dynamodb", "protocol-2025-11-25"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders", version = "0.4", default-features = false, features = ["protocol-2025-11-25"] }
+turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server", version = "0.4", default-features = false, features = ["sse", "protocol-2025-11-25"] }
 turul-mcp-json-rpc-server = { workspace = true }
-turul-mcp-aws-lambda = { workspace = true }
+turul-mcp-aws-lambda = { path = "../../crates/turul-mcp-aws-lambda", version = "0.4", default-features = false, features = ["cors", "sse", "protocol-2025-11-25"] }
 async-trait = { workspace = true }
 
 # Tower middleware for Lambda

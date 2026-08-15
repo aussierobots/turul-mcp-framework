@@ -1,17 +1,19 @@
 # Lambda Streaming Modes Guide
 
+**Spec lane note:** the `GET /mcp` column below reflects 2025-11-25 behavior (a standalone GET SSE listener, togglable via `.sse()`). On 2026-07-28, GET /mcp is **unconditionally 405** in all 4 combinations — the standalone GET SSE endpoint is removed from the stateless core entirely, independent of `.sse()`. The `POST /mcp SSE` column (real-time streaming on the request's own response) is accurate on both lanes.
+
 Deep dive into snapshot vs real-time SSE streaming in Lambda MCP servers.
 
 ## The 4 Combinations
 
 All 4 combinations of `.sse()` and handler method work — none hang or crash. The difference is capability:
 
-| # | `.sse()` | Handler | Runtime | GET /mcp | POST /mcp SSE | Real-time? |
-|---|---|---|---|---|---|---|
-| 1 | `false` | `handle()` | `run()` | 405 | No SSE | No |
-| 2 | `true` | `handle()` | `run()` | Snapshot events | Snapshot SSE | **No** (snapshots) |
-| 3 | `false` | `handle_streaming()` | `run_streaming()` / `run_streaming_with()` | 405 | No SSE | No |
-| 4 | `true` | `handle_streaming()` | `run_streaming()` / `run_streaming_with()` | **Real-time stream** | **Real-time SSE** | **Yes** |
+| # | `.sse()` | Handler | Runtime | GET /mcp (2025-11-25) | GET /mcp (2026-07-28) | POST /mcp SSE | Real-time? |
+|---|---|---|---|---|---|---|---|
+| 1 | `false` | `handle()` | `run()` | 405 | 405 | No SSE | No |
+| 2 | `true` | `handle()` | `run()` | Snapshot events | 405 | Snapshot SSE | **No** (snapshots) |
+| 3 | `false` | `handle_streaming()` | `run_streaming()` / `run_streaming_with()` | 405 | 405 | No SSE | No |
+| 4 | `true` | `handle_streaming()` | `run_streaming()` / `run_streaming_with()` | **Real-time stream** | 405 | **Real-time SSE** | **Yes** |
 
 **Combination 1**: Simplest. No SSE at all. Best for tools that return immediately.
 
@@ -19,7 +21,7 @@ All 4 combinations of `.sse()` and handler method work — none hang or crash. T
 
 **Combination 3**: Streaming runtime available but SSE endpoints are disabled. `handle_streaming()` processes POST requests normally; GET /mcp returns 405.
 
-**Combination 4**: Full real-time SSE. Requires the `streaming` Cargo feature + `run_streaming()` (or `run_streaming_with()`) + `handle_streaming()`.
+**Combination 4**: Full real-time SSE. Requires the `streaming` Cargo feature + `run_streaming()` (or `run_streaming_with()`) + `handle_streaming()`. On 2026-07-28 the real-time behavior lives entirely on the POST /mcp response stream — there is no GET counterpart to combination 4's old "real-time GET stream."
 
 ## Protocol Version Routing
 
@@ -64,7 +66,7 @@ use turul_http_mcp_server::StreamConfig;
 
 let config = StreamConfig {
     channel_buffer_size: 1000,        // SSE channel buffer (default: 1000)
-    max_replay_events: 100,           // Events replayed on reconnect (default: 100)
+    max_replay_events: 100,           // Events replayed on GET reconnect — 2025-11-25 only; the GET SSE listener it applies to is unconditionally 405 on 2026-07-28, so this becomes a no-op on that lane
     keepalive_interval_seconds: 30,   // SSE keepalive interval (default: 30)
     cors_origin: "https://example.com".to_string(),  // CORS origin for SSE
 };
@@ -118,17 +120,17 @@ Use snapshot mode (combination 1 or 2) when:
 ```toml
 # Snapshot mode (default features are sufficient)
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3" }
+turul-mcp-aws-lambda = { version = "0.4" }
 # default = ["cors", "sse"] — SSE enabled but only snapshots without streaming feature
 
 # Real-time streaming mode
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3", features = ["streaming"] }
+turul-mcp-aws-lambda = { version = "0.4", features = ["streaming"] }
 # streaming implies sse
 
 # Snapshot mode, explicitly no SSE
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.3", default-features = false, features = ["cors"] }
+turul-mcp-aws-lambda = { version = "0.4", default-features = false, features = ["cors"] }
 ```
 
 ## CORS and Streaming

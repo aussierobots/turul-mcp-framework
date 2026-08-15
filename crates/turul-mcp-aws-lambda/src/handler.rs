@@ -11,9 +11,9 @@ use tracing::{debug, info};
 use turul_http_mcp_server::{
     ServerConfig, SessionMcpHandler, StreamConfig, StreamManager, StreamableHttpHandler,
 };
-use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 use turul_mcp_protocol::{McpError, ServerCapabilities};
 use turul_mcp_session_storage::BoxedSessionStorage;
+use turul_rpc::JsonRpcDispatcher;
 
 use crate::error::Result;
 
@@ -45,6 +45,11 @@ pub struct LambdaMcpHandler {
     /// Custom route registry (e.g., .well-known endpoints)
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
+    /// Same dispatcher Arc held by session_handler/streamable_handler, kept
+    /// for method-registration introspection. Only read by in-crate tests.
+    #[cfg_attr(not(test), allow(dead_code))]
+    dispatcher: Arc<JsonRpcDispatcher<McpError>>,
+
     /// Dynamic tool registry for request-time change detection
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<turul_mcp_server::ToolRegistry>>,
@@ -55,6 +60,15 @@ pub struct LambdaMcpHandler {
 }
 
 impl LambdaMcpHandler {
+    /// Set the identity reported in each 2026-07-28 result's `_meta.serverInfo`.
+    ///
+    /// Needed as a setter because the production path builds through
+    /// `with_middleware_and_fingerprint`, which takes no `Implementation`.
+    pub fn with_server_info(mut self, info: turul_mcp_protocol::Implementation) -> Self {
+        self.streamable_handler = self.streamable_handler.with_server_info(info);
+        self
+    }
+
     /// Create a new Lambda MCP handler with the framework components
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -63,7 +77,7 @@ impl LambdaMcpHandler {
         stream_manager: Arc<StreamManager>,
         config: ServerConfig,
         stream_config: StreamConfig,
-        _implementation: turul_mcp_protocol::Implementation,
+        implementation: turul_mcp_protocol::Implementation,
         capabilities: ServerCapabilities,
         sse_enabled: bool,
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
@@ -92,13 +106,15 @@ impl LambdaMcpHandler {
             capabilities.clone(),
             middleware_stack,
             None, // No fingerprint in legacy constructor
-        );
+        )
+        .with_server_info(implementation);
 
         Self {
             session_handler,
             streamable_handler,
             sse_enabled,
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            dispatcher,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
             #[cfg(feature = "cors")]
@@ -114,7 +130,7 @@ impl LambdaMcpHandler {
         session_storage: Arc<BoxedSessionStorage>,
         stream_manager: Arc<StreamManager>,
         stream_config: StreamConfig,
-        _implementation: turul_mcp_protocol::Implementation,
+        implementation: turul_mcp_protocol::Implementation,
         capabilities: ServerCapabilities,
         sse_enabled: bool,
     ) -> Self {
@@ -131,6 +147,8 @@ impl LambdaMcpHandler {
             middleware_stack.clone(),
         );
 
+        let dispatcher_for_introspection = dispatcher.clone();
+
         // Create StreamableHttpHandler for MCP 2025-11-25 support
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config),
@@ -140,13 +158,15 @@ impl LambdaMcpHandler {
             capabilities,
             middleware_stack,
             None, // No fingerprint in legacy constructor
-        );
+        )
+        .with_server_info(implementation);
 
         Self {
             session_handler,
             streamable_handler,
             sse_enabled,
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            dispatcher: dispatcher_for_introspection,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
             #[cfg(feature = "cors")]
@@ -206,6 +226,8 @@ impl LambdaMcpHandler {
         )
         .with_tool_fingerprint(tool_fingerprint.clone());
 
+        let dispatcher_for_introspection = dispatcher.clone();
+
         // Create StreamableHttpHandler with custom middleware and fingerprint
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config),
@@ -222,6 +244,7 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry,
+            dispatcher: dispatcher_for_introspection,
             #[cfg(feature = "dynamic-tools")]
             tool_registry: None,
             #[cfg(feature = "cors")]
@@ -253,6 +276,13 @@ impl LambdaMcpHandler {
     pub fn with_cors(mut self, cors_config: CorsConfig) -> Self {
         self.cors_config = Some(cors_config);
         self
+    }
+
+    /// JSON-RPC method names registered on this handler's dispatcher. Mirrors
+    /// `McpServer::registered_methods` so a cross-builder parity test can assert
+    /// the Lambda and local builders register an identical set per protocol lane.
+    pub fn registered_methods(&self) -> Vec<String> {
+        self.dispatcher.registered_methods()
     }
 
     /// Get access to the underlying stream manager for notifications
@@ -313,6 +343,8 @@ impl LambdaMcpHandler {
                     let (parts, body) = hyper_req.into_parts();
                     let boxed_req = hyper::Request::from_parts(parts, body.boxed_unsync());
                     let route_resp = route_handler.handle(boxed_req).await;
+                    // `mut` is only needed when the `cors` feature injects headers below.
+                    #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
                     let mut lambda_resp =
                         crate::adapter::hyper_to_lambda_response(route_resp).await?;
                     #[cfg(feature = "cors")]
@@ -329,6 +361,8 @@ impl LambdaMcpHandler {
                 Err(e) => {
                     debug!("Route validation error: {}", e);
                     let route_resp = e.into_response();
+                    // `mut` is only needed when the `cors` feature injects headers below.
+                    #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
                     let mut lambda_resp =
                         crate::adapter::hyper_to_lambda_response(route_resp).await?;
                     #[cfg(feature = "cors")]
@@ -344,7 +378,18 @@ impl LambdaMcpHandler {
             }
         }
 
-        // 🚀 DELEGATION: Use SessionMcpHandler for all business logic
+        // A protocol-2026-07-28 build serves a single spec: every request goes
+        // to the streamable handler, which mints the stateless core's
+        // per-request session (so middleware-injected state reaches tool
+        // handlers) and enforces Server Validation. SessionMcpHandler would
+        // dispatch without a session and bypass both contracts.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let hyper_resp = self.streamable_handler.handle_request(hyper_req).await;
+
+        // protocol-2025-11-25 buffered lane: SessionMcpHandler owns the
+        // Mcp-Session-Id lifecycle and returns buffered JSON bodies suited to
+        // non-streaming Lambda responses.
+        #[cfg(feature = "protocol-2025-11-25")]
         let hyper_resp = self
             .session_handler
             .handle_mcp_request(hyper_req)
@@ -352,6 +397,8 @@ impl LambdaMcpHandler {
             .map_err(|e| crate::error::LambdaError::McpFramework(e.to_string()))?;
 
         // 🚀 DELEGATION: Convert hyper response back to Lambda response
+        // `mut` is only needed when the `cors` feature injects headers below.
+        #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
         let mut lambda_resp = crate::adapter::hyper_to_lambda_response(hyper_resp).await?;
 
         // Apply CORS headers if configured (Lambda-specific logic)
@@ -424,6 +471,8 @@ impl LambdaMcpHandler {
                     use http_body_util::BodyExt;
                     let (parts, body) = hyper_req.into_parts();
                     let boxed_req = hyper::Request::from_parts(parts, body.boxed_unsync());
+                    // `mut` is only needed when the `cors` feature injects headers below.
+                    #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
                     let mut route_resp = route_handler.handle(boxed_req).await;
                     #[cfg(feature = "cors")]
                     if let Some(ref cors_config) = self.cors_config {
@@ -439,6 +488,8 @@ impl LambdaMcpHandler {
                 Ok(None) => {} // No match, continue to MCP handler
                 Err(e) => {
                     debug!("Route validation error (streaming): {}", e);
+                    // `mut` is only needed when the `cors` feature injects headers below.
+                    #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
                     let mut err_resp = e.into_response();
                     #[cfg(feature = "cors")]
                     if let Some(ref cors_config) = self.cors_config {
@@ -452,26 +503,42 @@ impl LambdaMcpHandler {
 
         // 🚀 PROTOCOL ROUTING: Check protocol version and route to appropriate handler
         use turul_http_mcp_server::protocol::McpProtocolVersion;
-        let protocol_version = hyper_req
+        // Absent and unrecognised are distinct: absent falls back to this build's
+        // lane, unrecognised must NOT be silently downgraded to a superseded spec
+        // — it goes to the streamable handler, which answers with the spec's
+        // UnsupportedProtocolVersion error rather than serving the request.
+        let raw_version = hyper_req
             .headers()
             .get("MCP-Protocol-Version")
-            .and_then(|h| h.to_str().ok())
-            .and_then(McpProtocolVersion::parse_version)
-            .unwrap_or(McpProtocolVersion::V2025_06_18);
+            .and_then(|h| h.to_str().ok());
+        let parsed_version = raw_version.and_then(McpProtocolVersion::parse_version);
+        let unrecognised_version = raw_version.is_some() && parsed_version.is_none();
+        let protocol_version = parsed_version.unwrap_or(McpProtocolVersion::LATEST);
+
+        // A protocol-2026-07-28 build serves a single spec: route everything
+        // to the streamable handler, whose Server Validation rejects
+        // unsupported MCP-Protocol-Version values. Routing legacy version
+        // headers to SessionMcpHandler would bypass that contract and dispatch
+        // without a per-request session.
+        #[cfg(feature = "protocol-2026-07-28")]
+        let route_streamable = true;
+        #[cfg(feature = "protocol-2025-11-25")]
+        let route_streamable = unrecognised_version || protocol_version.supports_streamable_http();
 
         // Route based on protocol version
-        let hyper_resp = if protocol_version.supports_streamable_http() {
-            // Use StreamableHttpHandler for MCP 2025-11-25 (proper headers, chunked SSE)
+        let hyper_resp = if route_streamable {
             debug!(
-                "Using StreamableHttpHandler for protocol {}",
-                protocol_version.to_string()
+                "Using StreamableHttpHandler for protocol {} (header={:?}, unrecognised={})",
+                protocol_version.as_str(),
+                raw_version,
+                unrecognised_version
             );
             self.streamable_handler.handle_request(hyper_req).await
         } else {
             // Legacy protocol: use SessionMcpHandler
             debug!(
                 "Using SessionMcpHandler for legacy protocol {}",
-                protocol_version.to_string()
+                protocol_version.as_str()
             );
             self.session_handler
                 .handle_mcp_request(hyper_req)
@@ -483,6 +550,8 @@ impl LambdaMcpHandler {
         };
 
         // 🚀 DELEGATION: Convert hyper response to Lambda streaming response (preserves streaming!)
+        // `mut` is only needed when the `cors` feature injects headers below.
+        #[cfg_attr(not(feature = "cors"), allow(unused_mut))]
         let mut lambda_resp = crate::adapter::hyper_to_lambda_streaming(hyper_resp);
 
         // Apply CORS headers if configured (Lambda-specific logic)
@@ -495,7 +564,9 @@ impl LambdaMcpHandler {
         Ok(lambda_resp)
     }
 
-    /// Convert Lambda response to streaming format (helper for CORS preflight)
+    /// Convert Lambda response to streaming format (helper for CORS preflight).
+    /// Its only caller is the preflight branch, which is `cors`-gated.
+    #[cfg(feature = "cors")]
     fn convert_lambda_response_to_streaming(
         &self,
         lambda_response: LambdaResponse<LambdaBody>,
@@ -915,6 +986,7 @@ mod tests {
     // ── Strict lifecycle tests over handle_streaming() ────────────────
 
     /// Helper: build a Lambda handler with strict lifecycle and a test tool via the builder.
+    #[cfg(feature = "protocol-2025-11-25")]
     async fn build_strict_streaming_handler() -> LambdaMcpHandler {
         use crate::LambdaMcpServerBuilder;
         use turul_mcp_session_storage::InMemorySessionStorage;
@@ -934,19 +1006,23 @@ mod tests {
     }
 
     // Test tool for lifecycle tests — satisfies all required traits
+    #[cfg(feature = "protocol-2025-11-25")]
     #[derive(Clone, Default)]
     struct LifecycleTestTool;
 
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasBaseMetadata for LifecycleTestTool {
         fn name(&self) -> &str {
             "ping_tool"
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasDescription for LifecycleTestTool {
         fn description(&self) -> Option<&str> {
             Some("test tool")
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasInputSchema for LifecycleTestTool {
         fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
             static SCHEMA: std::sync::OnceLock<turul_mcp_protocol::ToolSchema> =
@@ -954,25 +1030,31 @@ mod tests {
             SCHEMA.get_or_init(turul_mcp_protocol::ToolSchema::object)
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasOutputSchema for LifecycleTestTool {
         fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
             None
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasAnnotations for LifecycleTestTool {
         fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
             None
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasToolMeta for LifecycleTestTool {
         fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
             None
         }
     }
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasIcons for LifecycleTestTool {}
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_builders::traits::HasExecution for LifecycleTestTool {}
 
     #[async_trait::async_trait]
+    #[cfg(feature = "protocol-2025-11-25")]
     impl turul_mcp_server::McpTool for LifecycleTestTool {
         async fn call(
             &self,
@@ -986,6 +1068,7 @@ mod tests {
     }
 
     /// Helper: create a Lambda POST request for handle_streaming()
+    #[cfg(feature = "protocol-2025-11-25")]
     fn streaming_mcp_request(body: &str, session_id: Option<&str>) -> LambdaRequest {
         let mut builder = Request::builder()
             .method("POST")
@@ -1002,6 +1085,7 @@ mod tests {
     }
 
     /// Helper: collect streaming response body into a string
+    #[cfg(feature = "protocol-2025-11-25")]
     async fn collect_streaming_body(
         response: lambda_http::Response<
             http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
@@ -1026,6 +1110,7 @@ mod tests {
     }
 
     /// Helper: extract session ID from a streaming response
+    #[cfg(feature = "protocol-2025-11-25")]
     fn extract_session_id(
         response: &lambda_http::Response<
             http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
@@ -1039,6 +1124,7 @@ mod tests {
     }
 
     /// Helper: parse JSON from a response body (handles SSE "data: " prefix)
+    #[cfg(feature = "protocol-2025-11-25")]
     fn parse_response_json(body: &str) -> serde_json::Value {
         // Strip SSE framing if present
         let json_str = body
@@ -1051,6 +1137,9 @@ mod tests {
     }
 
     /// P0: Full strict lifecycle handshake succeeds on handle_streaming()
+    // The initialize/initialized handshake and strict lifecycle exist only in
+    // 2025-11-25; the 2026-07-28 stateless core has neither.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_strict_handshake_succeeds() {
         let handler = build_strict_streaming_handler().await;
@@ -1136,6 +1225,7 @@ mod tests {
     }
 
     /// P0: Strict lifecycle rejects both tools/list and tools/call before notifications/initialized
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_strict_rejects_before_initialized() {
         let handler = build_strict_streaming_handler().await;
@@ -1218,6 +1308,9 @@ mod tests {
     }
 
     /// P0: tools/list succeeds immediately after notifications/initialized (race fix proof)
+    // The initialize/initialized handshake is 2025-11-25 only; the 2026-07-28 stateless
+    // core has no handshake and requires a per-request _meta on tools/list.
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_initialized_is_effective_immediately() {
         let handler = build_strict_streaming_handler().await;
@@ -1275,6 +1368,7 @@ mod tests {
     }
 
     /// P1: Lenient mode allows operations without notifications/initialized
+    #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_lenient_mode_allows_without_initialized() {
         use crate::LambdaMcpServerBuilder;
@@ -1551,7 +1645,12 @@ mod tests {
             let session_storage = Arc::new(InMemorySessionStorage::new());
             let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
             let dispatcher = Arc::new(JsonRpcDispatcher::new());
-            let config = ServerConfig::default();
+            // Direct construction bypasses the builder's CORS→origin-policy
+            // derivation (ADR-031); allow-all CORS pairs with Disabled.
+            let config = ServerConfig {
+                origin_policy: turul_http_mcp_server::OriginPolicy::Disabled,
+                ..Default::default()
+            };
             let capabilities = ServerCapabilities::default();
 
             let mut middleware = MiddlewareStack::new();

@@ -1,136 +1,23 @@
-//! # Simple PostgreSQL Session Storage Example
+//! # Simple PostgreSQL Storage Backend Example (2026-07-28 lane)
 //!
-//! This example demonstrates PostgreSQL-backed session storage for MCP servers.
-//! It shows how session state persists across server restarts and can be shared
-//! across multiple server instances.
+//! Demonstrates wiring a durable PostgreSQL storage backend into an MCP
+//! server. On the 2026 stateless core there are NO client-visible sessions —
+//! the storage backs the transport's internal per-request contexts and event
+//! streams. The demo tools drive the `SessionStorage` backend API DIRECTLY
+//! against one durable record per run, so the persistence teaching stays
+//! observable and true: `storage_info` counts accumulate across restarts.
 //!
-//! ## Setup
-//!
-//! Start PostgreSQL with Docker:
-//! ```bash
-//! docker run -d --name postgres-session \
-//!   -e POSTGRES_DB=mcp_sessions \
-//!   -e POSTGRES_USER=mcp \
-//!   -e POSTGRES_PASSWORD=mcp_pass \
-//!   -p 5432:5432 \
-//!   postgres:15
-//! ```
-//!
-//! ## Features Demonstrated
-//!
-//! - Session state persistence across server restarts
-//! - Multi-instance session sharing
-//! - PostgreSQL-backed state management
+//! Cross-request APPLICATION state belongs in your own store; the
+//! 2025-11-25 stateful session model lives on the opt-in lane (see
+//! `stateful-server`).
 
 use serde_json::{Value, json};
 use std::sync::Arc;
-use tracing::{debug, error, info};
-use turul_mcp_derive::McpTool;
-use turul_mcp_server::{McpResult, McpServer, SessionContext};
+use tracing::{error, info};
+use turul_mcp_builders::ToolBuilder;
+use turul_mcp_server::McpServer;
+use turul_mcp_session_storage::SessionStorage;
 use turul_mcp_session_storage::{PostgresConfig, PostgresSessionStorage};
-
-/// Tool that stores a key-value pair in this session's PostgreSQL storage
-#[derive(McpTool, Default)]
-#[tool(
-    name = "store_value",
-    description = "Store a value in this session's PostgreSQL storage (session-scoped)"
-)]
-struct StoreValueTool {
-    #[param(description = "Key to store in session")]
-    key: String,
-    #[param(description = "Value to store in session")]
-    value: Value,
-}
-
-impl StoreValueTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| {
-            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
-        })?;
-
-        debug!("Storing value in PostgreSQL: {} = {}", self.key, self.value);
-
-        // Store value in this session's PostgreSQL storage
-        (session.set_state)(&self.key, self.value.clone()).await;
-
-        Ok(json!({
-            "stored": true,
-            "session_id": session.session_id,
-            "key": self.key,
-            "value": self.value,
-            "storage": "PostgreSQL (session-scoped)",
-            "message": format!("Stored '{}' in session {} (PostgreSQL)", self.key, session.session_id),
-            "timestamp": chrono::Utc::now()
-        }))
-    }
-}
-
-/// Tool that retrieves a value from this session's PostgreSQL storage
-#[derive(McpTool, Default)]
-#[tool(
-    name = "get_value",
-    description = "Retrieve a value from this session's PostgreSQL storage (session-scoped)"
-)]
-struct GetValueTool {
-    #[param(description = "Key to retrieve from session")]
-    key: String,
-}
-
-impl GetValueTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| {
-            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
-        })?;
-
-        debug!("Getting value from PostgreSQL: {}", self.key);
-
-        // Retrieve value from this session's PostgreSQL storage
-        let value = (session.get_state)(&self.key).await;
-
-        Ok(json!({
-            "found": value.is_some(),
-            "session_id": session.session_id,
-            "key": self.key,
-            "value": value,
-            "storage": "PostgreSQL (session-scoped)",
-            "message": if value.is_some() {
-                format!("Retrieved '{}' from session {} (PostgreSQL)", self.key, session.session_id)
-            } else {
-                format!("Key '{}' not found in session {} (PostgreSQL)", self.key, session.session_id)
-            },
-            "timestamp": chrono::Utc::now()
-        }))
-    }
-}
-
-/// Tool that shows session information
-#[derive(McpTool, Default)]
-#[tool(
-    name = "session_info",
-    description = "Get information about the PostgreSQL session"
-)]
-struct SessionInfoTool {}
-
-impl SessionInfoTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| {
-            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
-        })?;
-
-        Ok(json!({
-            "session_id": session.session_id,
-            "storage_backend": "PostgreSQL",
-            "features": [
-                "Session state persistence",
-                "Multi-instance sharing",
-                "Automatic cleanup",
-                "Transaction support"
-            ],
-            "message": "Session data isolated per session, backed by PostgreSQL - persists across server restarts",
-            "timestamp": chrono::Utc::now()
-        }))
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -181,16 +68,97 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // One durable demo record per run — the tools below drive the backend
+    // API directly against it.
+    let demo = postgres_storage
+        .create_session(Default::default())
+        .await
+        .map_err(|e| format!("create demo record: {e}"))?;
+    let demo_id = Arc::new(demo.session_id);
+    info!("📌 This run's demo record id: {demo_id}");
+
+    let store_value = {
+        let (storage, id) = (postgres_storage.clone(), demo_id.clone());
+        ToolBuilder::new("store_value")
+            .description("Store a value in this run's durable PostgreSQL demo record")
+            .string_param("key", "Key to store")
+            .string_param("value", "Value to store")
+            .execute(move |args| {
+                let (storage, id) = (storage.clone(), id.clone());
+                async move {
+                    let key = args
+                        .get("key")
+                        .and_then(Value::as_str)
+                        .ok_or("missing key")?;
+                    let value = args.get("value").cloned().unwrap_or(Value::Null);
+                    storage
+                        .set_session_state(&id, key, value.clone())
+                        .await
+                        .map_err(|e| format!("postgres write: {e}"))?;
+                    Ok(json!({ "result": format!("stored {key} in PostgreSQL record {id}") }))
+                }
+            })
+            .build()
+            .expect("store_value tool")
+    };
+
+    let get_value = {
+        let (storage, id) = (postgres_storage.clone(), demo_id.clone());
+        ToolBuilder::new("get_value")
+            .description("Read a value back from this run's PostgreSQL demo record")
+            .string_param("key", "Key to read")
+            .execute(move |args| {
+                let (storage, id) = (storage.clone(), id.clone());
+                async move {
+                    let key = args
+                        .get("key")
+                        .and_then(Value::as_str)
+                        .ok_or("missing key")?;
+                    let value = storage
+                        .get_session_state(&id, key)
+                        .await
+                        .map_err(|e| format!("postgres read: {e}"))?;
+                    Ok(json!({ "result": value }))
+                }
+            })
+            .build()
+            .expect("get_value tool")
+    };
+
+    let storage_info = {
+        let storage = postgres_storage.clone();
+        ToolBuilder::new("storage_info")
+            .description(
+                "Durable-storage stats — counts accumulate across server restarts, \\
+                 which is the persistence proof",
+            )
+            .execute(move |_args| {
+                let storage = storage.clone();
+                async move {
+                    let sessions = storage.session_count().await.unwrap_or(0);
+                    let events = storage.event_count().await.unwrap_or(0);
+                    Ok(json!({ "result": {
+                        "backend": "postgres",
+                        "stored_records": sessions,
+                        "stored_events": events,
+                        "note": "restart the server and call again — prior runs' rows persist"
+                    }}))
+                }
+            })
+            .build()
+            .expect("storage_info tool")
+    };
+
     // Build MCP server with PostgreSQL session storage
     let server = McpServer::builder()
         .name("simple-postgres-session")
-        .version("1.0.0")
+        .version(env!("CARGO_PKG_VERSION"))
         .title("PostgreSQL Session Storage Example")
         .instructions("Demonstrates PostgreSQL-backed session storage for MCP servers. Use the tools to store and retrieve values that persist across server restarts.")
         .with_session_storage(postgres_storage)
-        .tool(StoreValueTool::default())
-        .tool(GetValueTool::default())
-        .tool(SessionInfoTool::default())
+        .tool(store_value)
+        .tool(get_value)
+        .tool(storage_info)
         .bind_address("127.0.0.1:8060".parse()?)
         .sse(true)
         .build()?;
@@ -201,15 +169,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🔄 SSE Notifications: Enabled");
     info!("");
     info!("Available tools:");
-    info!("  • store_value    - Store value in PostgreSQL");
-    info!("  • get_value      - Retrieve value from PostgreSQL");
-    info!("  • session_info   - View session storage information");
+    info!("  • store_value   - write to this run's durable demo record");
+    info!("  • get_value     - read it back (within this run)");
+    info!("  • storage_info  - backend stats; counts accumulate across restarts");
     info!("");
-    info!("Example usage:");
-    info!("  1. store_value(key='theme', value='dark')");
-    info!("  2. Restart the server");
-    info!("  3. get_value(key='theme')  // Returns 'dark' - persisted!");
-    info!("  4. session_info()  // View PostgreSQL backend info");
+    info!("Durability walkthrough:");
+    info!("  1. storage_info()              // note stored_records");
+    info!("  2. store_value(key='theme', value='dark'); get_value(key='theme')");
+    info!("  3. Restart the server");
+    info!("  4. storage_info()              // stored_records grew — prior rows persist");
     info!("");
     info!("🔧 Multi-instance: Start multiple servers with same DATABASE_URL to share sessions");
 

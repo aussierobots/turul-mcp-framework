@@ -4,6 +4,8 @@
 **Date**: 2025-08-30
 **Decision**: Unified session storage architecture across MCP framework components
 
+> **Lane scope**: This ADR describes the stateful 2025-11-25 lane (`Mcp-Session-Id`, `initialize`/`notifications/initialized`, per-session event storage). Under the 2026-07-28 stateless core (default per ADR-027/ADR-029), there is no `Mcp-Session-Id` and no per-request session lookup — see ADR-006 §"DRAFT-2026-v1: Stateless variant" and ADR-023 §"DRAFT-2026-v1: per-request fingerprint persistence". `SessionManager` itself still compiles unconditionally (`turul-mcp-server::session`), but the session-keyed storage model below is exercised only under `--features protocol-2025-11-25`.
+
 ## Context
 
 The MCP framework requires session management for:

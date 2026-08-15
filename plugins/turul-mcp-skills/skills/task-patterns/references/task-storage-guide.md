@@ -1,5 +1,7 @@
 # Task Storage Guide
 
+**Spec lane: 2025-11-25 in-core tasks only** (`--no-default-features --features protocol-2025-11-25`). The `turul-mcp-task-storage` crate and its SQLite/Postgres/DynamoDB backends back the frozen in-core task system, not the 2026-07-28 Tasks extension (which ships only `InMemoryTaskStore` today — see the parent `SKILL.md`).
+
 Reference for the `TaskStorage` trait, `TaskRecord`, `TaskOutcome`, and backend configurations.
 
 ## Import
@@ -151,7 +153,7 @@ let storage = Arc::new(InMemoryTaskStorage::new());
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["sqlite"] }
+turul-mcp-task-storage = { version = "0.4", features = ["sqlite"] }
 ```
 
 ```rust
@@ -171,7 +173,7 @@ let storage = Arc::new(
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["postgres"] }
+turul-mcp-task-storage = { version = "0.4", features = ["postgres"] }
 ```
 
 ```rust
@@ -191,7 +193,7 @@ let storage = Arc::new(
 
 ```toml
 [dependencies]
-turul-mcp-task-storage = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-task-storage = { version = "0.4", features = ["dynamodb"] }
 ```
 
 ```rust
