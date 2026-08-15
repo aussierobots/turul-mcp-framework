@@ -215,6 +215,21 @@ gate_examples() {
     ./scripts/test_lambda_middleware_live.sh
 }
 
+# The only gate whose assertions were authored by the spec maintainers rather
+# than by us. Every suite in tests/ has turul code on both ends of the wire and
+# so cannot catch a shared misreading of the spec; this one has caught three,
+# including a live DNS-rebinding vulnerability. Needs npx; exits 77 (SKIP)
+# without it, so an unrunnable probe cannot read as a pass.
+gate_conformance() {
+  echo "=== upstream conformance suite (scored 2026-07-28 scenarios) ==="
+  ./scripts/conformance-suite.sh
+  rc=$?
+  if [ "$rc" = "0" ]; then echo "  PASS"
+  elif [ "$rc" = "77" ]; then echo "  SKIPPED (npx unavailable)"
+  else echo "  FAIL"; fail=1
+  fi
+}
+
 case "${1:-all}" in
   fmt)          gate_fmt ;;
   default)      gate_default ;;
@@ -223,8 +238,9 @@ case "${1:-all}" in
   mutex)        gate_mutex ;;
   docs)         gate_docs ;;
   examples)     gate_examples ;;
-  all)          gate_fmt; gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs; gate_examples ;;
-  *) echo "usage: $0 [fmt|default|opt-in-2025|lambda|mutex|docs|examples|all]"; exit 2 ;;
+  conformance)  gate_conformance ;;
+  all)          gate_fmt; gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs; gate_examples; gate_conformance ;;
+  *) echo "usage: $0 [fmt|default|opt-in-2025|lambda|mutex|docs|examples|conformance|all]"; exit 2 ;;
 esac
 
 echo; [ "$fail" = "0" ] && echo "ALL GATES PASSED" || echo "ONE OR MORE GATES FAILED"

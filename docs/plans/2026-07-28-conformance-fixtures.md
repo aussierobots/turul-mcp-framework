@@ -19,21 +19,42 @@ strongest compliance instrument available to this project, because the scenarios
 are authored by the spec maintainers rather than by us — unlike every test in
 `tests/`, it can disagree with our reading of the spec.
 
-We are not using it. The blocker is that scenarios expect a *specific fixture
-server*: named tools, prompts and resources returning exact payloads. Pointing
-the suite at `minimal-server` on 2026-08-15 produced 101 passed / 68 failed, and
-that number means nothing — most failures were absent fixtures, and at least one
-(`dns-rebinding-protection`) was a harness artifact whose behaviour we verified
-correct by hand (`Origin: http://localhost` → 200, `Origin: http://evil.com` →
-403).
+> ## STATUS 2026-08-15 — superseded in part. Read this before the rest.
+>
+> The fixture server exists: `examples/conformance-fixture-server`. It passes
+> **37 of 37 scored scenarios** for `--requirements 2026-07-28`. The score is
+> recorded in [`docs/compliance/README.md`](../compliance/README.md), which
+> retires the "do not record a conformance score anywhere" instruction that
+> used to sit here — it was correct until the server existed and is now
+> satisfied.
+>
+> **Three corrections to this file, which is harvested and therefore partial.**
+> Prefer the harness over anything below it:
+>
+> 1. **The inventory of "27 fixtures" is wrong — the harness references 44.**
+>    Extract them with
+>    `grep -o 'test_[a-z_0-9]*' package/dist/index.js | sort -u` after
+>    `npm pack @modelcontextprotocol/conformance@0.2.0-alpha.11`.
+> 2. **Some names below are wrong.** This file says `test_tool_with_logging`;
+>    the harness wants `test_logging_tool`. When a scenario fails with
+>    `Unknown tool: X`, **X is authoritative.**
+> 3. **`dns-rebinding-protection` was NOT a harness artifact.** This file
+>    recorded it as one, on the strength of a hand-check that varied `Origin`
+>    while leaving `Host` truthful — the single combination that was rejected.
+>    Setting *both* to `evil.example.com` returned **200**. It was a real
+>    DNS-rebinding vulnerability, fixed in `683b925`, and the mistaken
+>    all-clear here is exactly why a hand-check is not a substitute for the
+>    suite.
+>
+> **Where the real ground truth lives:** the published package's
+> `dist/index.js` carries every scenario's assertions inline, including for the
+> nine that print no requirements. Read it rather than inferring.
 
-This file is the specification for building that fixture server. Until it exists,
-**do not record a conformance score anywhere.**
+Pointing the suite at `minimal-server` on 2026-08-15 produced 101 passed / 68
+failed, and that number meant nothing — most failures were absent fixtures.
 
-## Fixture inventory
-
-27 distinctly named fixtures are required. `test_missing_capability` appears in
-27 scenarios — it is the shared negative-path fixture, so build it first.
+This file remains useful as the verbatim requirement text for the scenarios
+that print it.
 
 ## Caveat: 9 scenarios print no requirements
 

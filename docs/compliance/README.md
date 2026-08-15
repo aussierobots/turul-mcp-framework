@@ -147,10 +147,62 @@ coverage:
 
 See [`../plans/interop-test-matrix.md`](../plans/interop-test-matrix.md) §4–§5.
 
-A third measure sits behind all of it: **12 of 88 upstream fixture directories are
-modeled** (13.6%). The fixtures are the only externally-authored bytes in the
-compliance harness, and 86% of them are unexamined. A green suite does not
-speak to those.
+### Conformance score — the strongest external signal we have
+
+**37 of 37 scored scenarios pass**, measured **2026-08-15**.
+
+| | |
+|---|---|
+| Harness | `@modelcontextprotocol/conformance@**0.2.0-alpha.11**` |
+| Invocation | `server --requirements 2026-07-28 --url …` |
+| Fixture server | `examples/conformance-fixture-server` |
+| Full run | 143 checks passed, 36 failed |
+| **Scored** | **37 scenarios, 0 failing** |
+
+**The pin is an alpha, and that qualifies the number.** `0.2.0-alpha.11` is the
+newest alpha and the `alpha` dist-tag; npm `latest` is `0.1.16`, which predates
+2026-07-28. So the alpha is the only harness that can score this revision — but
+a pre-release pin is a claim with a short shelf life, and this file has already
+been burned once by exactly that (see the FastMCP `4.0.0b2` note above). Re-run
+before quoting the number.
+
+**Read "scored" precisely.** The harness itself excludes 13 of the 50 scenarios
+it runs, labelling them *"Not scored for 2026-07-28 … These do not affect
+conformance"*:
+
+- **10 `tasks-*`** — the `io.modelcontextprotocol/tasks` extension (SEP-2663),
+  all failing. Fixtures not built. This is not incidental: no SDK implements
+  SEP-2663 client-side, so this suite is the *only* external check that could
+  exist for our tasks wire format. Task #71/#81.
+- **3 `pending`** — `json-schema-2020-12` and
+  `http-custom-header-server-validation` failing, `http-header-validation`
+  passing.
+
+Quoting "37/37" without that denominator would overstate it.
+
+**What the run found.** Three defects, none of which the 3600-test internal
+suite could see, because it has turul code on both ends of every wire:
+
+| Defect | Where |
+|---|---|
+| Macro-authored tools reported a tool's own failure as a JSON-RPC error, not `isError: true` | 0.4.2 |
+| `resources/read` rejected a resource's own declared mimeType | 0.4.2 |
+| **A matching `Host` header defeated Origin validation — DNS rebinding unblocked** | `683b925` |
+
+The third was a live vulnerability, same class as the TypeScript SDK's
+GHSA-w48q-cv73-mx4w, and it had an ADR *specifying* the defective rule. That is
+the case for this suite in one line.
+
+**`--expected-failures` is deliberately not in use.** Nothing is currently
+suppressed; every scored scenario genuinely passes and every unscored failure
+is visible above. Adopt the file only when a failure is provably upstream's,
+with a one-line justification per entry — an unexplained entry is a hidden
+failure, not a known one.
+
+A fourth measure sits behind all of it: **12 of 88 upstream fixture directories
+are modeled** (13.6%). Those are a different artifact from the scenarios scored
+above — the compliance harness's own vendored fixtures — and 86% of them remain
+unexamined. A green suite does not speak to those.
 
 ---
 

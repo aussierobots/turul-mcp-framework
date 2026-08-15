@@ -1,19 +1,31 @@
 //! # Conformance Fixture Server
 //!
-//! First bounded slice of a server exposing the fixtures required by
-//! upstream's `@modelcontextprotocol/conformance@0.2.0-alpha.11` suite
-//! (`docs/plans/2026-07-28-conformance-fixtures.md`). That suite lists 27
-//! distinctly named fixtures; this crate implements 4, chosen to cover the
-//! main shapes (plain-text tool result, error-flagged tool result, a
-//! no-argument prompt, and the shared negative-capability fixture) so the
-//! pattern can be replicated for the rest.
+//! Exists to be driven by upstream's
+//! `@modelcontextprotocol/conformance@0.2.0-alpha.11` suite — it is NOT a
+//! usage example. Nothing here is idiomatic by intent; every payload and key
+//! is dictated by a scenario.
 //!
-//! Payloads here are asserted byte-for-byte by the conformance suite —
-//! changing one without re-checking the corresponding scenario in
-//! `docs/plans/2026-07-28-conformance-fixtures.md` will silently regress a
-//! passing scenario to a failure.
+//! As of 2026-08-15 this passes **37 of 37 scored scenarios** for
+//! `--requirements 2026-07-28`. The scenarios still failing are the ones the
+//! harness marks "Not scored": the 10 `tasks-*` extension scenarios (fixtures
+//! not built — see task #81) and 3 `pending` ones.
 //!
 //!   cargo run -p conformance-fixture-server -- --port 8010
+//!   npx -y @modelcontextprotocol/conformance@0.2.0-alpha.11 server \
+//!       --requirements 2026-07-28 --url http://127.0.0.1:8010/mcp
+//!
+//! `--requirements` REPLACES `--suite`/`--spec-version`; passing it alongside
+//! `--spec-version` is rejected.
+//!
+//! **Fixture names and payload keys are a contract with the harness.**
+//! Changing `"user_name"` to something tidier silently regresses a passing
+//! scenario. When a scenario fails with `Unknown tool: X`, `X` is the
+//! authoritative spelling — `docs/plans/2026-07-28-conformance-fixtures.md`
+//! was harvested from harness output and disagrees in several places (it
+//! lists 27 fixtures; the harness references 44, and gets some names wrong,
+//! e.g. `test_tool_with_logging` where the harness wants `test_logging_tool`).
+//! The scenario source in the published package's `dist/index.js` carries the
+//! exact expectations, including for the scenarios that print no requirements.
 
 use std::collections::HashMap;
 
@@ -115,26 +127,22 @@ impl McpTool for ErrorHandlingTool {
     }
 }
 
-/// The shared negative-path fixture (appears in 27 scenarios per
-/// `docs/plans/2026-07-28-conformance-fixtures.md`): a "structural test tool
-/// requiring explicit capabilities in `_meta`". The harvested doc gives no
-/// distinct success-path payload for it — only the failure contract
-/// (`server-stateless` §4): calling it without the required client
-/// capability declared answers `-32021 MissingRequiredClientCapabilityError`
-/// with `error.data.requiredCapabilities` keyed by capability name, e.g.
-/// `{ "sampling": {} }`.
+/// The shared negative-path fixture: a structural tool requiring explicit
+/// capabilities in `_meta`. Calling it without the required client capability
+/// answers `-32021 MissingRequiredClientCapabilityError` with
+/// `error.data.requiredCapabilities` keyed by capability name.
 ///
-/// KNOWN LIMITATION for a follow-up agent: this always returns that error.
-/// The framework has no generic "tool declares a required client capability,
-/// framework checks the per-request `_meta.clientCapabilities` and enforces
-/// it" mechanism outside the Tasks-extension-specific check in
-/// `turul-mcp-server/src/server.rs` (`ext_tasks::declared`) — the per-request
-/// `client_capabilities` is read in `server.rs` but never surfaced into
-/// `SessionContext` for a tool's own `call()` to inspect. Wiring the positive
-/// branch (declared capability -> some success payload) would require
-/// changing `crates/turul-mcp-server`, which is out of scope for an
-/// examples-only slice. If a later scenario needs the positive branch,
-/// that plumbing is the blocker to solve first.
+/// It only ever returns that error, and that is correct for its role — the
+/// scenarios using it assert the refusal. The tool that exercises the
+/// *positive* branch is `test_input_required_result_capabilities`, which reads
+/// the declaration via `SessionContext::client_capabilities()` and asks only
+/// for what the client offered.
+///
+/// A previous note here recorded that positive branch as blocked on missing
+/// framework plumbing. That was accurate when written and is now resolved:
+/// the accessor was added 2026-08-15 (`server.rs` already parsed
+/// `_meta.clientCapabilities` for the tasks-extension check but never surfaced
+/// it to a tool body).
 #[derive(Clone)]
 struct MissingCapabilityTool;
 
