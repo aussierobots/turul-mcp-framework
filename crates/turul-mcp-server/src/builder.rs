@@ -1287,6 +1287,12 @@ impl McpServerBuilder {
     /// extension this framework does not ship. It advertises and nothing
     /// more: no handlers, no validation. If you advertise an extension you do
     /// not serve, a client will call it and get `-32601`.
+    ///
+    /// 2026-07-28 only: `capabilities.extensions` does not exist in
+    /// 2025-11-25, whose `ServerCapabilities` carries a concrete `tasks`
+    /// field instead of the open extensions map. `experimental_capability`
+    /// above is available on both lanes.
+    #[cfg(feature = "protocol-2026-07-28")]
     pub fn extension_capability(
         mut self,
         identifier: impl Into<String>,

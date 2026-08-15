@@ -7,6 +7,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-08-15
+
+**A security fix, and the compliance work that found it.** `turul-http-mcp-server`
+0.4.0 → 0.4.1, `turul-mcp-ext-tasks` 0.1.0 → 0.1.1, `turul-mcp-server`
+0.4.2 → 0.4.3. No other crate is republished; the frozen trio stays at `0.3.47`.
+
+Release gate: `./scripts/ci-gates.sh all` → **92 gates, 0 failures** after
+isolating one gate that lost a port race to a concurrent run and passes alone
+(`ci-gates.sh lambda` → 10/0, 5/0, 3/0).
+
+### SECURITY: a matching `Host` header no longer admits a foreign `Origin`
+
+DNS-rebinding protection did not fire. `origin.rs` admitted any `Origin` whose
+authority matched the request's `Host`, but `Host` is attacker-controlled: in
+the rebinding attack the browser sends `Host` == the attacker's own name — the
+URL host, rebound to loopback — so the two always agreed.
+
+Measured against the fixture server with an otherwise-valid request:
+
+| Request | Before | After |
+|---|---|---|
+| `Origin: http://evil.example.com` | 403 | 403 |
+| `Host` **and** `Origin` both `evil.example.com` | **200** | **403** |
+
+Same class as the TypeScript SDK's
+[GHSA-w48q-cv73-mx4w](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-w48q-cv73-mx4w).
+Found by the upstream conformance scenario `dns-rebinding-protection`, then
+reproduced by hand.
+
+ADR-031 *specified* the `Host` match, so the code was faithful and the ADR was
+the defect — its own Context section describes precisely the attack its
+Decision then admitted. Revision entry added there.
+
+**Operator impact — the one behaviour change to read before upgrading.** A
+browser app served from a **non-loopback** origin must now declare that origin:
+
+```rust
+.origin_policy(OriginPolicy::AllowList(vec!["https://app.example".into()]))
+```
+
+Unchanged: absent `Origin` (curl and every SDK client), loopback origins,
+`Disabled`, and the Lambda CORS derivation.
+
+A legitimate same-origin deployment and a rebinding attack are
+indistinguishable from `Origin` and `Host` alone, so `Host` cannot be the trust
+anchor at any level of care. `matches_host_header` is deleted rather than
+tightened, and it was redundant wherever it was safe — a loopback deployment's
+origin already passes on the loopback branch.
+
+### `SessionContext::client_capabilities()` — SEP-2322 was unimplementable
+
+The spec requires a server to include `inputRequests` **only** for capabilities
+the client declared. The framework enforced the negative half (`-32021` for an
+undeclared capability) but never surfaced the declaration to a tool body, so a
+tool could not degrade gracefully — ask for sampling when elicitation is absent
+— and no server built on this framework could satisfy the requirement.
+`server.rs` already parsed `_meta.clientCapabilities` for the tasks-extension
+check; it now reaches `SessionContext` alongside `input_responses()`.
+
+### Tasks extension (`io.modelcontextprotocol/tasks`, SEP-2663)
+
+- `tasks/get` / `tasks/update` / `tasks/cancel` answered `-32602` for a client
+  that never declared the extension. SEP-2663 makes that `-32021`: `-32602`
+  told the client its task id was wrong when the real problem was that it had
+  not negotiated the extension.
+- Partial MRTR fulfilment left answered keys in `inputRequests`, so the next
+  `tasks/get` asked the client to re-answer what it had just answered, with no
+  way to tell the difference.
+- `Mcp-Name` was never validated on `tasks/*`: the SEP-2243 dispatch table
+  covered `tools/call`, `prompts/get` and `resources/read`, and everything else
+  fell through unchecked. Extension methods validate the header **when
+  present** rather than requiring it — this transport cannot see whether the
+  extension is registered, so demanding it would answer `-32020` where
+  `-32601`/404 is right, and would leak that the method is recognised.
+
+### Builder: `experimental` and `extensions` are reachable
+
+`.experimental_capability(key, value)` and `.extension_capability(id, value)`
+reach two capability fields the schema models and nothing could set.
+`extension_capability` is 2026-07-28 only — `capabilities.extensions` does not
+exist in 2025-11-25, whose `ServerCapabilities` carries a concrete `tasks`
+field instead.
+
+Both advertise and nothing more: no handlers, no validation. Advertising a
+capability you do not serve is a truthfulness violation the framework cannot
+check for you.
+
+### Tests that catch the class, not the instance
+
+`every_modelled_server_info_field_is_builder_reachable` and
+`every_modelled_capability_field_is_builder_reachable` serialize a fully
+populated protocol struct, take its key set, and assert a configured builder
+puts every key on the wire. Per-field tests could not catch this class:
+`description` and `websiteUrl` were modelled and unreachable for a whole
+release with nothing failing, because a field nobody wrote a case for has no
+case to fail.
+
+### Conformance
+
+`examples/conformance-fixture-server` now passes **37 of 37 scored** scenarios
+for `--requirements 2026-07-28`, plus both previously-failing `pending`
+scenarios. Whole run 118 passed/52 failed → **179/11**; every remaining failure
+is in the unscored tasks extension. Gated by `scripts/conformance-suite.sh`
+(`ci-gates.sh conformance`), which treats a stale harness pin as fatal.
+
+Known remaining, tracked and deliberately not blocking this release: MRTR under
+task election creates the task before resolving the input round trip, where
+SEP-2663 wants it resolved first. Unscored, and the extension is off by default
+under SEP-2133.
+
+
 ## [0.4.2] - 2026-08-15
 
 Two bug fixes found by running upstream's conformance suite, covering tool error
@@ -2184,6 +2295,7 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - 42+ working examples
 
 [Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.2...HEAD
+[0.4.3]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.47...v0.4.0
