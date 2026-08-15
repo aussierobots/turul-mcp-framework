@@ -250,25 +250,48 @@ async fn test_tool_execution_error() {
 
     match result {
         Ok(response) => {
-            // Should be an error response
+            // A tool that ran and failed reports that INSIDE the result with
+            // `isError: true` — it is not a JSON-RPC error. Schema §CallToolResult:
+            // "Any errors that originate from the tool SHOULD be reported inside
+            // the result object, with `isError` set to true, _not_ as an MCP
+            // protocol-level error response. Otherwise, the LLM would not be able
+            // to see that an error occurred and self-correct."
+            //
+            // This test asserted the opposite until 2026-08-15 — it pinned the
+            // pre-fix behaviour, so it passed while the framework did the thing
+            // the spec forbids. Asserting a wrong shape consistently is not
+            // coverage.
             assert!(
-                response.contains_key("error"),
-                "Expected error response for execution error, got: {:?}",
+                !response.contains_key("error"),
+                "a tool's own failure must not become a JSON-RPC error: {:?}",
                 response
             );
 
-            let error = response.get("error").unwrap().as_object().unwrap();
-            let message = error.get("message").unwrap().as_str().unwrap();
-            assert!(
-                message.contains("Test execution error"),
-                "Error message should contain test message: {}",
-                message
+            let result_obj = response
+                .get("result")
+                .and_then(|r| r.as_object())
+                .unwrap_or_else(|| panic!("expected a result object: {:?}", response));
+
+            assert_eq!(
+                result_obj.get("isError").and_then(|v| v.as_bool()),
+                Some(true),
+                "the failure must be flagged with isError: true: {:?}",
+                response
             );
 
-            info!("✅ ToolExecutionError properly returned: {}", message);
+            let text = result_obj["content"][0]["text"]
+                .as_str()
+                .unwrap_or_default();
+            assert!(
+                text.contains("Test execution error"),
+                "the failure description must reach the model as content: {}",
+                text
+            );
+
+            info!("✅ tool failure reported as isError content: {}", text);
         }
         Err(e) => {
-            info!("✅ ToolExecutionError returned as HTTP error: {:?}", e);
+            panic!("tools/call must succeed at the protocol layer, got transport error: {e:?}");
         }
     }
 }

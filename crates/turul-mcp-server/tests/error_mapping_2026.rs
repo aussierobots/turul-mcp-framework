@@ -69,7 +69,15 @@ struct MacroFailingTool {
 
 impl MacroFailingTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        Err(McpError::tool_execution("upstream returned 503"))
+        // Reads `message` so the optional parameter is genuinely exercised
+        // rather than being dead weight the linter flags.
+        Err(McpError::tool_execution(&format!(
+            "upstream returned 503{}",
+            self.message
+                .as_deref()
+                .map(|m| format!(" while handling {m}"))
+                .unwrap_or_default()
+        )))
     }
 }
 

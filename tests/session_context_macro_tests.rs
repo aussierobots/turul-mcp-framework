@@ -240,13 +240,28 @@ mod tests {
 
         assert!(result.is_err());
         match result.unwrap_err() {
-            McpError::ToolExecutionError(msg) => {
-                assert!(msg.contains("Session required"));
+            // The variant now survives instead of being relabelled.
+            //
+            // Until 2026-08-15 the function macro emitted
+            // `Err(e) => Err(McpError::tool_execution(&e.to_string()))`, flattening
+            // EVERY error variant into `ToolExecutionError`. That is why this test
+            // originally expected one. The isError fix removed the blanket
+            // conversion, so a `SessionError` — infrastructure, not a tool's own
+            // domain failure — reaches the caller as itself.
+            //
+            // This is the spec-correct split: schema §CallToolResult reserves
+            // `isError` for "errors that originate from the tool", and keeps
+            // "any other exceptional conditions" on the JSON-RPC error path. A
+            // missing session is the latter.
+            McpError::SessionError(msg) => {
+                assert!(
+                    msg.contains("Session required"),
+                    "session error must say what was missing: {msg}"
+                );
             }
             other => {
-                println!("Got error: {:?}", other);
                 panic!(
-                    "Expected ToolExecutionError containing session error, got: {:?}",
+                    "expected SessionError to pass through unrelabelled, got: {:?}",
                     other
                 )
             }

@@ -2,7 +2,7 @@
 //!
 //! This module provides a builder pattern for creating MCP servers.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -24,6 +24,8 @@ pub struct McpServerBuilder {
     name: String,
     version: String,
     title: Option<String>,
+    description: Option<String>,
+    website_url: Option<String>,
     icons: Option<Vec<Icon>>,
 
     /// Server capabilities
@@ -266,6 +268,8 @@ impl McpServerBuilder {
             name: "turul-mcp-server".to_string(),
             version: "1.0.0".to_string(),
             title: None,
+            description: None,
+            website_url: None,
             icons: None,
             capabilities: ServerCapabilities::default(),
             tools,
@@ -359,6 +363,19 @@ impl McpServerBuilder {
     /// Sets the human-readable server title
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Sets the human-readable server description, surfaced as
+    /// `serverInfo.description`.
+    pub fn description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    /// Sets the server's website, surfaced as `serverInfo.websiteUrl`.
+    pub fn website_url(mut self, url: impl Into<String>) -> Self {
+        self.website_url = Some(url.into());
         self
     }
 
@@ -1492,18 +1509,11 @@ impl McpServerBuilder {
     fn build_resource_security(&self) -> crate::security::SecurityMiddleware {
         use crate::security::{AccessLevel, ResourceAccessControl, SecurityMiddleware};
         use regex::Regex;
-        use std::collections::HashSet;
 
         let mut allowed_patterns = Vec::new();
-        let mut allowed_extensions = HashSet::new();
 
         // Extract patterns from static resources
         for uri in self.resources.keys() {
-            // Extract file extension
-            if let Some(extension) = Self::extract_extension(uri) {
-                allowed_extensions.insert(extension);
-            }
-
             // Generate regex pattern for this URI's base path
             if let Some(base_pattern) = Self::uri_to_base_pattern(uri) {
                 allowed_patterns.push(base_pattern);
@@ -1515,15 +1525,23 @@ impl McpServerBuilder {
             if let Some(pattern) = Self::template_to_regex_pattern(template.pattern()) {
                 allowed_patterns.push(pattern);
             }
-
-            // Extract extension from template if present
-            if let Some(extension) = Self::extract_extension(template.pattern()) {
-                allowed_extensions.insert(extension);
-            }
         }
 
-        // Build allowed MIME types from file extensions
-        let allowed_mime_types = Self::extensions_to_mime_types(&allowed_extensions);
+        // Deliberately NOT deriving an allowed-MIME-type list from URI file
+        // extensions. That is what this did until 2026-08-15, and it made the
+        // server reject its own output: `resources/read` validates the mimeType
+        // the SERVER declared at registration, so a resource registered as
+        // `test://static-binary` + `image/png` was refused with -32602 because
+        // no *other* resource's URI happened to end in `.png`. Whether a
+        // resource could be read depended on unrelated URIs' cosmetics, and the
+        // derived list was strictly narrower than ResourceAccessControl's own
+        // default (which does include image/png).
+        //
+        // There is no security value in validating a MIME type we authored:
+        // anyone who can control the declaration also controls the content. The
+        // checks that DO carry value — URI allow/block patterns, traversal
+        // blocking, size limits — are unchanged below.
+        let allowed_mime_types: Option<Vec<String>> = None;
 
         // Convert pattern strings to Regex objects
         let regex_patterns: Vec<Regex> = allowed_patterns
@@ -1532,9 +1550,8 @@ impl McpServerBuilder {
             .collect();
 
         tracing::debug!(
-            "Auto-generated resource security: {} patterns, {} mime types",
-            regex_patterns.len(),
-            allowed_mime_types.len()
+            "Auto-generated resource security: {} patterns, no MIME restriction",
+            regex_patterns.len()
         );
 
         SecurityMiddleware::new().with_resource_access_control(ResourceAccessControl {
@@ -1546,16 +1563,8 @@ impl McpServerBuilder {
                 Regex::new(r"/proc/").unwrap(),
             ],
             max_size: Some(50 * 1024 * 1024), // 50MB limit for auto-detected resources
-            allowed_mime_types: Some(allowed_mime_types),
+            allowed_mime_types,
         })
-    }
-
-    /// Extract file extension from URI
-    fn extract_extension(uri: &str) -> Option<String> {
-        uri.split('.')
-            .next_back()
-            .filter(|ext| !ext.is_empty() && ext.len() <= 10)
-            .map(|ext| ext.to_lowercase())
     }
 
     /// Convert URI to base regex pattern that allows files in the same directory
@@ -1593,33 +1602,6 @@ impl McpServerBuilder {
         result.push_str(&regex::escape(&template[last_end..]));
 
         Some(format!("^{}$", result))
-    }
-
-    /// Map file extensions to MIME types
-    fn extensions_to_mime_types(extensions: &HashSet<String>) -> Vec<String> {
-        let mut mime_types = Vec::new();
-
-        for ext in extensions {
-            match ext.as_str() {
-                "json" => mime_types.push("application/json".to_string()),
-                "csv" => mime_types.push("text/csv".to_string()),
-                "txt" => mime_types.push("text/plain".to_string()),
-                "html" => mime_types.push("text/html".to_string()),
-                "md" => mime_types.push("text/markdown".to_string()),
-                "xml" => mime_types.push("application/xml".to_string()),
-                "pdf" => mime_types.push("application/pdf".to_string()),
-                "png" => mime_types.push("image/png".to_string()),
-                "jpg" | "jpeg" => mime_types.push("image/jpeg".to_string()),
-                _ => {} // Unknown extensions not explicitly allowed
-            }
-        }
-
-        // Always allow basic text types
-        mime_types.extend_from_slice(&["text/plain".to_string(), "application/json".to_string()]);
-
-        mime_types.sort();
-        mime_types.dedup();
-        mime_types
     }
 
     /// Build the MCP server
@@ -1807,6 +1789,12 @@ impl McpServerBuilder {
         let mut implementation = Implementation::new(&self.name, &self.version);
         if let Some(title) = self.title {
             implementation = implementation.with_title(title);
+        }
+        if let Some(description) = self.description {
+            implementation = implementation.with_description(description);
+        }
+        if let Some(website_url) = self.website_url {
+            implementation = implementation.with_website_url(website_url);
         }
         if let Some(icons) = self.icons {
             implementation = implementation.with_icons(icons);

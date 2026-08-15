@@ -24,7 +24,7 @@ FIXTURE_PORT="$PORT"
 PEER_PORT=$((PORT + 1))
 PROXY_PORT=$((PORT + 2))
 WORK="${TMPDIR:-/tmp}/turul-interop-client"
-FASTMCP_VERSION="4.0.0b2"   # 4.0.0a1/b1 also spoke 2026-07-28; b2 is the beta we measured
+FASTMCP_VERSION="4.0.0b3"   # keep in step with scripts/interop-fastmcp.sh — same peer, one version
 
 # Pin-currency check. A pinned peer is a claim about the outside world that goes
 # stale silently — the TypeScript probe measured a superseded pre-release for

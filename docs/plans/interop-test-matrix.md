@@ -39,7 +39,7 @@ because they asserted the framing we had chosen.
 | Short | Implementation | Role support | Availability | 2026-07-28? |
 |---|---|---|---|---|
 | **R** | turul (this repo, Rust) | client + server | local | yes (default lane) |
-| **P** | FastMCP (Python) | client + server | `fastmcp==4.0.0b2` via `uv`, PyPI pre-release | yes |
+| **P** | FastMCP (Python) | client + server | `fastmcp==4.0.0b3` via `uv`, PyPI pre-release | yes |
 | **P2** | **MCP Python SDK** (reference) | client + server | `mcp==2.0.0` on PyPI | yes — **stable** |
 | **T** | MCP TypeScript SDK | client + server | `@modelcontextprotocol/client@2.0.0` on npm | yes — **stable** |
 | **G** | MCP Go SDK | client + server | `v1.7.0`, released 2026-07-28 | yes — **stable** |

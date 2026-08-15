@@ -67,12 +67,19 @@ both ends of the wire.
 **Externally verified.** Independent implementations that have completed a real
 journey against this framework:
 
-All cells below re-measured **2026-08-08**.
+All cells below re-measured **2026-08-08**, except the two FastMCP rows,
+re-measured **2026-08-15** against `4.0.0b3`.
+
+The FastMCP pin sat on the superseded `4.0.0b2` for two releases while the
+probe's own pin-currency check warned about it on every run. The check worked;
+nothing acted on a warning. Treat a pin on a pre-release as a claim with a short
+shelf life — and note the same version was pinned in two scripts, which drifted
+apart the moment one was updated.
 
 | Peer | Version | Stable? | Direction | Methods | Probe |
 |---|---|---|---|---|---|
-| FastMCP (Python) | 4.0.0b2 | beta | peer → turul | 9 + 5 negatives | `scripts/interop-fastmcp.sh` |
-| FastMCP (Python) | 4.0.0b2 | beta | turul → peer | 9 driven, 8 answered | `scripts/interop-turul-client.sh` |
+| FastMCP (Python) | 4.0.0b3 | beta | peer → turul | 9 + 5 negatives | `scripts/interop-fastmcp.sh` |
+| FastMCP (Python) | 4.0.0b3 | beta | turul → peer | 9 driven, 8 answered | `scripts/interop-turul-client.sh` |
 | **MCP Python SDK** | **2.0.0 (PyPI)** | **stable** | peer → turul | 9 + 5 negatives | `scripts/interop-python-sdk.sh` |
 | MCP Go SDK | v1.7.0 | **stable** | peer → turul | 9 + 5 negatives | `scripts/interop-go-sdk.sh` |
 | MCP TypeScript SDK | 2.0.0 (npm) | **stable** | peer → turul | 9 + 5 negatives | `scripts/interop-typescript-sdk.sh` |

@@ -16,6 +16,58 @@ const MARKDOWN_URI: &str = "file:///fixture/readme.md";
 const MARKDOWN_MIME: &str = "text/markdown";
 const JSON_URI: &str = "file:///fixture/config.json";
 const JSON_MIME: &str = "application/json";
+/// No file extension, on purpose — see [`BinaryResource`].
+const BINARY_URI: &str = "test://sprite";
+const BINARY_MIME: &str = "image/png";
+const BINARY_BLOB: &str = "iVBORw0KGgo=";
+
+/// A resource whose URI carries NO file extension and whose type is binary.
+///
+/// This is the shape that used to be unreadable. `build()` auto-generated a
+/// resource policy whose `allowed_mime_types` was derived from file extensions
+/// found in registered URIs, so `image/png` was only permitted if some URI
+/// happened to end in `.png`. `resources/read` then validated the mimeType the
+/// SERVER itself declared against that list and answered -32602 — the server
+/// refusing its own output, with the outcome depending on unrelated URIs'
+/// cosmetics. Non-file URI schemes (`test://`, `config://`, `ui://`) are normal
+/// in MCP, so this was reachable by ordinary configuration.
+struct BinaryResource;
+
+impl HasResourceMetadata for BinaryResource {
+    fn name(&self) -> &str {
+        "sprite"
+    }
+}
+impl HasResourceUri for BinaryResource {
+    fn uri(&self) -> &str {
+        BINARY_URI
+    }
+}
+impl HasResourceDescription for BinaryResource {}
+impl HasResourceMimeType for BinaryResource {
+    fn mime_type(&self) -> Option<&str> {
+        Some(BINARY_MIME)
+    }
+}
+impl HasResourceSize for BinaryResource {}
+impl HasResourceAnnotations for BinaryResource {}
+impl HasResourceMeta for BinaryResource {}
+impl HasIcons for BinaryResource {}
+
+#[async_trait::async_trait]
+impl McpResource for BinaryResource {
+    async fn read(
+        &self,
+        _params: Option<serde_json::Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
+        Ok(vec![ResourceContent::blob(
+            BINARY_URI,
+            BINARY_BLOB,
+            BINARY_MIME.to_string(),
+        )])
+    }
+}
 
 /// Text content whose type is NOT the `text/plain` that `ResourceContent::text`
 /// defaults to — the case the declared/reported split used to break.
@@ -100,7 +152,45 @@ async fn start_server() -> String {
         .version("0.4.0")
         .resource(MarkdownResource)
         .resource(JsonResource)
+        .resource(BinaryResource)
         .test_mode()
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let client = reqwest::Client::new();
+    for _ in 0..50 {
+        if client.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    url
+}
+
+/// Same fixtures, but WITHOUT `.test_mode()`.
+///
+/// `test_mode()` builds the read handler with `.without_security()`
+/// (builder.rs:1209), so a server started by [`start_server`] never runs the
+/// auto-generated resource policy at all. The MIME defect this file guards
+/// lives *in* that policy, so a test on the test_mode server cannot see it —
+/// verified by re-introducing a restrictive allowlist and watching the test
+/// still pass. This helper exercises the real path.
+async fn start_server_with_security() -> String {
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
+
+    let server = McpServer::builder()
+        .name("resource-mime-2026-secured")
+        .version("0.4.0")
+        .resource(MarkdownResource)
+        .resource(JsonResource)
+        .resource(BinaryResource)
         .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
         .build()
         .expect("build 2026 server");
@@ -169,7 +259,10 @@ async fn read_reports_the_mime_type_that_list_advertises() {
         .as_array()
         .expect("resources array")
         .clone();
-    assert_eq!(resources.len(), 2, "{listed}");
+    // Three: markdown, json, and the extension-less binary added with the
+    // 2026-08-15 MIME-allowlist fix. This loop checks list/read agreement for
+    // every registered resource, so a new fixture belongs in the count.
+    assert_eq!(resources.len(), 3, "{listed}");
 
     for resource in &resources {
         let uri = resource["uri"].as_str().expect("uri");
@@ -204,5 +297,40 @@ async fn read_reports_the_mime_type_that_list_advertises() {
     assert!(
         advertised.contains(&MARKDOWN_MIME) && advertised.contains(&JSON_MIME),
         "fixtures must cover a non-text/plain type: {advertised:?}"
+    );
+}
+
+/// A resource must be readable with the mimeType the server declared for it,
+/// regardless of whether its URI looks like a filename.
+///
+/// Regression guard: this fails with
+/// `-32602 Invalid parameter type for 'mime_type': expected allowed MIME type,
+/// got image/png` against the extension-derived allowlist removed on
+/// 2026-08-15. Found by upstream's conformance suite (`resources-read-binary`);
+/// every resource fixture in this repo used `file:///…ext` URIs, so the one
+/// configuration that broke was the one nothing exercised.
+#[tokio::test]
+async fn a_binary_resource_with_no_file_extension_is_readable() {
+    let url = start_server_with_security().await;
+
+    let body = post(
+        &url,
+        "resources/read",
+        Some(BINARY_URI),
+        serde_json::json!({ "uri": BINARY_URI, "_meta": meta() }),
+    )
+    .await;
+
+    assert!(
+        body.get("error").is_none(),
+        "the server must not reject a mimeType it declared itself: {body}"
+    );
+    assert_eq!(
+        body["result"]["contents"][0]["mimeType"], BINARY_MIME,
+        "read must report the declared mimeType: {body}"
+    );
+    assert_eq!(
+        body["result"]["contents"][0]["blob"], BINARY_BLOB,
+        "the blob payload must survive the read: {body}"
     );
 }

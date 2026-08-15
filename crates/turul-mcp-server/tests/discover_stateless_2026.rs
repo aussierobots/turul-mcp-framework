@@ -39,6 +39,9 @@ async fn start_server() -> String {
     let server = McpServer::builder()
         .name("discover-2026-test")
         .version("0.4.0")
+        .title("Discover Test Server")
+        .description("Fixture server for the 2026 stateless discover suite")
+        .website_url("https://example.com/discover-test")
         .tool(EchoTool::default())
         .with_resources()
         .with_prompts()
@@ -935,4 +938,48 @@ async fn a_default_build_advertises_no_extensions() {
         );
         assert_eq!(out["error"]["code"], -32601, "{method}: {out}");
     }
+}
+
+/// Every optional `serverInfo` field the schema models must reach the client.
+///
+/// `Implementation` (initialize.rs) carries title, description, websiteUrl and
+/// icons, and all four serialize. Until 2026-08-15 `build()` wired only title
+/// and icons, and the builder had no setter for the other two — so description
+/// and websiteUrl were modelled, serializable and unreachable, with no error to
+/// notice. Nothing asserted `serverInfo` completeness, which is exactly why.
+///
+/// Reported by a downstream consumer, not found in-tree; a peer (FastMCP 4)
+/// already exposed `website_url` while this framework silently dropped it.
+#[tokio::test]
+async fn server_info_carries_every_declared_identity_field() {
+    let url = start_server().await;
+    let client = reqwest::Client::new();
+    let body: serde_json::Value = client
+        .post(&url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("server/discover POST")
+        .json()
+        .await
+        .expect("json body");
+
+    let info = &body["result"]["_meta"]["io.modelcontextprotocol/serverInfo"];
+
+    assert_eq!(info["name"], "discover-2026-test", "{body}");
+    assert_eq!(info["title"], "Discover Test Server", "{body}");
+    assert_eq!(
+        info["description"], "Fixture server for the 2026 stateless discover suite",
+        "description is modelled and settable, so it must reach the wire: {body}"
+    );
+    assert_eq!(
+        info["websiteUrl"], "https://example.com/discover-test",
+        "websiteUrl is modelled and settable, so it must reach the wire: {body}"
+    );
 }

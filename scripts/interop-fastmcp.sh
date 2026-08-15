@@ -24,7 +24,7 @@ cd "$(dirname "$0")/.."
 PORT="${1:-8690}"
 PROXY_PORT=$((PORT + 1))
 WORK="${TMPDIR:-/tmp}/turul-interop-fastmcp"
-FASTMCP_VERSION="4.0.0b2"   # 4.0.0a1/b1 also spoke 2026-07-28; b2 is the beta we measured
+FASTMCP_VERSION="4.0.0b3"   # a1/b1/b2 also spoke 2026-07-28; b3 is the beta we measured
 # Preferred first. FastMCP 4.0.0b1 segfaults inside CPython 3.14's asyncio C
 # module after completing the exchange — reproduced with FastMCP's OWN server as
 # the peer, so it is a client/interpreter fault, not a wire-format issue. We try
