@@ -22,6 +22,23 @@ The default build targets **MCP 2026-07-28**, the current specification. The pre
 
 ## 🚀 Quick Start
 
+### Dependencies
+
+> **The macros need six crates, not two.** `#[mcp_tool]` and `#[derive(McpTool)]`
+> expand to code that names `serde_json`, `async_trait`, `turul_mcp_builders` and
+> `turul_mcp_protocol` directly, so all four must be **direct dependencies of your
+> crate** alongside the two obvious ones. Omit them and you get a wall of
+> `E0433 cannot find module or crate …` plus unsatisfied `Has*` trait bounds
+> pointing at macro-generated code. This is a known macro-hygiene wart; a future
+> release will re-export them so only `turul-mcp-server` + `turul-mcp-derive` are
+> needed. In-repo examples do not hit it because workspace **path** dependencies
+> resolve all four transitively.
+
+```bash
+cargo add turul-mcp-server turul-mcp-derive turul-mcp-builders turul-mcp-protocol serde_json async-trait
+cargo add tokio --features macros,rt-multi-thread
+```
+
 ### 1. Function Macros (Simplest - Recommended)
 
 ```rust
@@ -38,14 +55,20 @@ async fn add(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Bind the address through a typed `let` — inlining `.parse()?` into
+    // `.bind_address(...)` makes `?` resolve against McpError, which has no
+    // `From<AddrParseError>`, and fails to compile.
+    let bind_address: std::net::SocketAddr = "127.0.0.1:8641".parse()?;
+
     let server = McpServer::builder()
         .name("calculator-server")
         .version("1.0.0")
         .tool_fn(add)  // Use function name directly
-        .bind_address("127.0.0.1:8641".parse()?)  // Default port; customize as needed
+        .bind_address(bind_address)
         .build()?;
 
-    server.run().await
+    server.run().await?;  // `run()` yields Result<(), McpError>, so `?` then Ok(())
+    Ok(())
 }
 ```
 
@@ -86,14 +109,17 @@ impl Calculator {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let bind_address: std::net::SocketAddr = "127.0.0.1:8642".parse()?;  // Different port
+
     let server = McpServer::builder()
         .name("calculator-server")
         .version("1.0.0")
         .tool(Calculator { a: 0.0, b: 0.0, operation: "+".to_string() })
-        .bind_address("127.0.0.1:8642".parse()?)  // Different port to avoid conflicts
+        .bind_address(bind_address)
         .build()?;
 
-    server.run().await
+    server.run().await?;
+    Ok(())
 }
 ```
 
@@ -147,15 +173,18 @@ async fn get_user_profile(user_id: String) -> McpResult<Vec<ResourceContent>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let bind_address: std::net::SocketAddr = "127.0.0.1:8643".parse()?;  // Different port
+
     let server = McpServer::builder()
         .name("resource-server")
         .version("1.0.0")
         .resource_fn(get_config)       // Static resource
         .resource_fn(get_user_profile) // Template: file:///users/{user_id}.json
-        .bind_address("127.0.0.1:8643".parse()?)  // Different port to avoid conflicts
+        .bind_address(bind_address)
         .build()?;
 
-    server.run().await
+    server.run().await?;
+    Ok(())
 }
 ```
 

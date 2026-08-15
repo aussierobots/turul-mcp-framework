@@ -37,9 +37,22 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 turul-mcp-server = "0.4"
-turul-mcp-derive = "0.4"  # Required for function macros and derive macros
+turul-mcp-derive = "0.4"    # Required for function macros and derive macros
 tokio = { version = "1.0", features = ["full"] }
+
+# Required whenever you use `#[mcp_tool]` or `#[derive(McpTool)]`. The macros
+# expand to code that names these crates directly, so they must be YOUR direct
+# dependencies too. Omit them and you get `E0433 cannot find module or crate …`
+# plus unsatisfied `Has*` bounds, all pointing at macro-generated code.
+turul-mcp-builders = "0.4"
+turul-mcp-protocol = "0.4"
+serde_json = "1"
+async-trait = "0.1"
 ```
+
+> A future release will re-export these four through `turul-mcp-server` so only
+> the first two turul crates are needed. Until then the list above is the
+> minimum that compiles.
 
 ### Level 1: Function Macros (Simplest)
 
@@ -57,14 +70,19 @@ async fn add(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Bind through a typed `let`: inlining `.parse()?` into `.bind_address(...)`
+    // makes `?` resolve against McpError, which has no `From<AddrParseError>`.
+    let bind_address: std::net::SocketAddr = "127.0.0.1:8641".parse()?;
+
     let server = McpServer::builder()
         .name("calculator-server")
         .version("1.0.0")
         .tool_fn(add) // Use original function name
-        .bind_address("127.0.0.1:8641".parse()?)  // Default port
+        .bind_address(bind_address)
         .build()?;
 
-    server.run().await
+    server.run().await?;
+    Ok(())
 }
 ```
 
