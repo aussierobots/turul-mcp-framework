@@ -983,3 +983,134 @@ async fn server_info_carries_every_declared_identity_field() {
         "websiteUrl is modelled and settable, so it must reach the wire: {body}"
     );
 }
+
+// ---- Structural reachability: everything the schema models is settable ----
+//
+// The per-field tests above each assert ONE field. That shape cannot catch the
+// defect it should: `serverInfo.description` and `websiteUrl` were modelled by
+// the protocol crate and unreachable from the builder for a whole release, and
+// nothing failed — a field nobody wrote a case for has no case to fail.
+// `capabilities.experimental` and `capabilities.extensions` were in the same
+// state until 2026-08-15.
+//
+// These enumerate the SERIALIZED shape instead, so a field added to the
+// protocol crate and forgotten in the builder fails here without anyone
+// remembering to add a case.
+
+/// Serialized key set of a fully-populated value.
+fn modelled_keys(v: serde_json::Value) -> Vec<String> {
+    v.as_object().expect("object").keys().cloned().collect()
+}
+
+async fn discover_result(url: &str) -> serde_json::Value {
+    let client = reqwest::Client::new();
+    let resp = client
+        .post(url)
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "server/discover")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0", "id": 1, "method": "server/discover",
+            "params": { "_meta": meta() }
+        }))
+        .send()
+        .await
+        .expect("server/discover POST");
+    resp.json().await.expect("discover json")
+}
+
+/// Every field `Implementation` models must be reachable from the builder.
+#[tokio::test]
+async fn every_modelled_server_info_field_is_builder_reachable() {
+    let modelled = modelled_keys(
+        serde_json::to_value(turul_mcp_protocol::initialize::Implementation {
+            name: "n".into(),
+            version: "v".into(),
+            title: Some("t".into()),
+            description: Some("d".into()),
+            website_url: Some("https://w.example".into()),
+            icons: Some(vec![]),
+        })
+        .expect("serialize Implementation"),
+    );
+
+    // start_server() configures name, version, title, description, website_url.
+    let url = start_server().await;
+    let body = discover_result(&url).await;
+    let info = body["result"]["_meta"]["io.modelcontextprotocol/serverInfo"].clone();
+    let reachable = info.as_object().expect("serverInfo object");
+
+    let missing: Vec<&String> = modelled
+        .iter()
+        // `icons` is reachable via the builder's icon setters; this fixture
+        // registers none, and an empty list is correctly omitted from the wire.
+        .filter(|k| k.as_str() != "icons")
+        .filter(|k| !reachable.contains_key(k.as_str()))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "Implementation models {missing:?} but a configured builder cannot put \
+         them on the wire. Add a setter — do not add an exception here. \
+         serverInfo was: {info}"
+    );
+}
+
+/// Every field `ServerCapabilities` models must be reachable from the builder.
+#[tokio::test]
+async fn every_modelled_capability_field_is_builder_reachable() {
+    let modelled = modelled_keys(
+        serde_json::to_value(turul_mcp_protocol::initialize::ServerCapabilities {
+            experimental: Some(std::collections::HashMap::from([(
+                "x".to_string(),
+                serde_json::json!({}),
+            )])),
+            extensions: Some(std::collections::HashMap::from([(
+                "com.example/ext".to_string(),
+                serde_json::json!({}),
+            )])),
+            ..Default::default()
+        })
+        .expect("serialize ServerCapabilities"),
+    );
+
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
+    let server = McpServer::builder()
+        .name("caps-reachability")
+        .version("0.4.0")
+        .tool(EchoTool::default())
+        .with_resources()
+        .with_prompts()
+        .experimental_capability("x", serde_json::json!({}))
+        .extension_capability("com.example/ext", serde_json::json!({}))
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build 2026 server");
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let probe = reqwest::Client::new();
+    for _ in 0..50 {
+        if probe.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+
+    let body = discover_result(&url).await;
+    let caps = body["result"]["capabilities"].clone();
+    let reachable = caps.as_object().expect("capabilities object");
+
+    let missing: Vec<&String> = modelled
+        .iter()
+        .filter(|k| !reachable.contains_key(k.as_str()))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "ServerCapabilities models {missing:?} but a configured builder cannot \
+         advertise them. capabilities was: {caps}"
+    );
+}

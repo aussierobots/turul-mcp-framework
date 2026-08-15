@@ -1248,6 +1248,57 @@ impl McpServerBuilder {
         self.handler(list_handler).handler(read_handler)
     }
 
+    /// Advertise an entry under `capabilities.experimental`.
+    ///
+    /// The schema models `experimental` as a free-form map, and nothing else
+    /// in this builder could reach it — so a server could not advertise a
+    /// non-standard capability at all, even though the wire format has a slot
+    /// for exactly that.
+    ///
+    /// This is deliberately unopinionated: the framework attaches no meaning
+    /// to the key or value and does not register a handler. Advertising a
+    /// capability you do not implement is a truthfulness violation the
+    /// framework cannot check for you — see AGENTS.md §Capabilities
+    /// Truthfulness.
+    ///
+    /// Prefer [`Self::experimental_capability`]'s successor when a surface
+    /// graduates: a released, reverse-DNS-identified feature belongs in
+    /// [`Self::extension_capability`], not here.
+    pub fn experimental_capability(
+        mut self,
+        key: impl Into<String>,
+        value: serde_json::Value,
+    ) -> Self {
+        self.capabilities
+            .experimental
+            .get_or_insert_with(std::collections::HashMap::new)
+            .insert(key.into(), value);
+        self
+    }
+
+    /// Advertise an entry under `capabilities.extensions`.
+    ///
+    /// Keys are reverse-DNS extension identifiers (e.g.
+    /// `"io.modelcontextprotocol/tasks"`); `{}` means support with no
+    /// settings.
+    ///
+    /// The built-in extensions wire themselves up — `with_ext_tasks` also
+    /// registers the `tasks/*` handlers — so reach for this only for an
+    /// extension this framework does not ship. It advertises and nothing
+    /// more: no handlers, no validation. If you advertise an extension you do
+    /// not serve, a client will call it and get `-32601`.
+    pub fn extension_capability(
+        mut self,
+        identifier: impl Into<String>,
+        settings: serde_json::Value,
+    ) -> Self {
+        self.capabilities
+            .extensions
+            .get_or_insert_with(std::collections::HashMap::new)
+            .insert(identifier.into(), settings);
+        self
+    }
+
     /// Add logging support
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_logging(mut self) -> Self {
