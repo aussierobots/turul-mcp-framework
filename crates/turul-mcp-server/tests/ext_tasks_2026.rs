@@ -153,6 +153,125 @@ impl McpTool for ApprovalTool {
     }
 }
 
+/// SEP-2663 §Composition with Multi Round-Trip Requests: gathers a name over
+/// MRTR **before** any task exists, then does the work. Registered with
+/// `mrtr_first`, so round 1 is answered synchronously and only round 2 mints
+/// a task.
+///
+/// Deliberately identical in shape to [`ApprovalTool`] except for the
+/// registration — the two together prove the flow is chosen by the election,
+/// not by anything the tool does.
+struct GatherThenTaskTool {
+    input_schema: ToolSchema,
+}
+
+impl GatherThenTaskTool {
+    fn new() -> Self {
+        Self {
+            input_schema: ToolSchema::object(),
+        }
+    }
+}
+
+impl HasBaseMetadata for GatherThenTaskTool {
+    fn name(&self) -> &str {
+        "gather_then_task"
+    }
+}
+impl HasDescription for GatherThenTaskTool {
+    fn description(&self) -> Option<&str> {
+        Some("Gathers a name synchronously, then runs as a task")
+    }
+}
+impl HasInputSchema for GatherThenTaskTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+impl HasOutputSchema for GatherThenTaskTool {}
+impl HasAnnotations for GatherThenTaskTool {}
+impl HasToolMeta for GatherThenTaskTool {}
+impl HasIcons for GatherThenTaskTool {}
+
+#[async_trait]
+impl McpTool for GatherThenTaskTool {
+    async fn call(
+        &self,
+        _args: Value,
+        session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        use turul_mcp_protocol::elicitation::{ElicitRequest, ElicitationSchema};
+        use turul_mcp_protocol::input_required::{InputRequest, InputRequests, InputResponse};
+
+        let session = session.ok_or_else(|| McpError::tool_execution("context required"))?;
+        if let Some(responses) = session.input_responses() {
+            let who = responses
+                .get("user_name")
+                .and_then(|r| match r {
+                    InputResponse::Elicit(e) => e
+                        .content
+                        .as_ref()
+                        .and_then(|c| c.get("name"))
+                        .and_then(|v| v.as_str())
+                        .map(str::to_string),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "unknown".to_string());
+            // Slow enough that the CreateTaskResult is answered before the
+            // work finishes — otherwise the test could pass against a server
+            // that ran everything synchronously.
+            tokio::time::sleep(Duration::from_millis(120)).await;
+            return Ok(CallToolResult::success(vec![ToolResult::text(format!(
+                "greetings {who}"
+            ))]));
+        }
+
+        let schema = ElicitationSchema::new().with_property(
+            "name".to_string(),
+            turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string(),
+        );
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "user_name".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("Your name?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("gather-round-1".to_string()),
+        })
+    }
+}
+
+/// Like [`start_server`] but over a caller-supplied store, so two servers can
+/// share one — the whole point of a durable backend.
+async fn start_server_with_store(store: Arc<InMemoryTaskStore>) -> String {
+    let reserved = common::reserve_port().await;
+    let port = reserved.port;
+
+    let server = McpServer::builder()
+        .name("ext-tasks-2026-shared-store")
+        .version("0.4.0")
+        .with_ext_tasks(store)
+        .ext_task_tool(ApprovalTool::new())
+        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .build()
+        .expect("build server");
+
+    tokio::spawn(async move {
+        server.run().await.ok();
+    });
+
+    let url = format!("http://127.0.0.1:{port}/mcp");
+    let client = reqwest::Client::new();
+    for _ in 0..50 {
+        if client.get(&url).send().await.is_ok() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    url
+}
+
 async fn start_server() -> String {
     let reserved = common::reserve_port().await;
     let port = reserved.port;
@@ -164,6 +283,10 @@ async fn start_server() -> String {
         .ext_task_tool(SlowDoubleTool::new())
         .ext_task_tool(ApprovalTool::new())
         .ext_task_tool_required(SlowRequiredTool::new())
+        .ext_task_tool_with(
+            GatherThenTaskTool::new(),
+            ExtTaskElection::required().with_mrtr_first(),
+        )
         .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
         .build()
         .expect("build server");
@@ -470,6 +593,297 @@ async fn poll_until_terminal(url: &str, task_id: &str) -> Value {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     panic!("task {task_id} never reached a terminal status");
+}
+
+/// SEP-2663 §Composition with Multi Round-Trip Requests (vendored SEP line
+/// 304): a server that gathers input BEFORE task creation "SHOULD resolve all
+/// MRTR exchanges _synchronously_ before responding with a
+/// `CreateTaskResult`". This is the SHOULD being satisfied, end to end.
+///
+/// The two phases must stay independently typed for the client (SEP line 940):
+/// round 1 carries no `taskId`, round 2 carries no `requestState` or
+/// `inputRequests`, and the MRTR phase's keys do not leak into the task's own.
+#[tokio::test]
+async fn mrtr_resolves_synchronously_before_the_task_is_minted() {
+    let url = start_server().await;
+
+    // This flow needs BOTH capabilities and cannot use `meta(true)`: the MRTR
+    // phase asks for an elicitation on the original request, so SEP-2322's
+    // gate correctly answers -32021 unless `elicitation` is declared too. The
+    // task-worker flow never hits that gate, which is why the other tests get
+    // away with declaring only the extension.
+    let meta_both = json!({
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": { "name": "ext-tasks-test", "version": "1.0" },
+        "io.modelcontextprotocol/clientCapabilities": {
+            "elicitation": {},
+            "extensions": { EXT: {} }
+        }
+    });
+
+    // --- Round 1: no inputResponses, so election is withheld. -------------
+    let (status, r1) = post(
+        &url,
+        "tools/call",
+        Some("gather_then_task"),
+        json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {
+                "_meta": meta_both, "name": "gather_then_task", "arguments": {}
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "round 1: {r1}");
+    let r1 = &r1["result"];
+    assert_eq!(
+        r1["resultType"], "input_required",
+        "round 1 must be an InputRequiredResult, not a CreateTaskResult: {r1}"
+    );
+    assert!(
+        r1.get("taskId").is_none(),
+        "round 1 must not carry taskId — no task exists yet: {r1}"
+    );
+    assert!(
+        r1["inputRequests"].get("user_name").is_some(),
+        "round 1 must carry the tool's inputRequests: {r1}"
+    );
+    let request_state = r1["requestState"].as_str().map(str::to_string);
+
+    // --- Round 2: the answer arrives, so the task is minted. --------------
+    let mut params = json!({
+        "_meta": meta_both,
+        "name": "gather_then_task",
+        "arguments": {},
+        "inputResponses": {
+            "user_name": { "action": "accept", "content": { "name": "Alice" } }
+        }
+    });
+    if let Some(rs) = request_state {
+        params["requestState"] = json!(rs);
+    }
+    let (status, r2) = post(
+        &url,
+        "tools/call",
+        Some("gather_then_task"),
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": params }),
+    )
+    .await;
+    assert_eq!(status, 200, "round 2: {r2}");
+    let r2 = &r2["result"];
+    assert_eq!(
+        r2["resultType"], "task",
+        "round 2 must be a CreateTaskResult: {r2}"
+    );
+    let task_id = r2["taskId"]
+        .as_str()
+        .unwrap_or_else(|| panic!("round 2 must carry a top-level taskId: {r2}"))
+        .to_string();
+    assert!(
+        r2.get("requestState").is_none(),
+        "the MRTR phase's requestState must not leak into the task envelope: {r2}"
+    );
+    assert!(
+        r2.get("inputRequests").is_none(),
+        "task inputRequests belong on tasks/get, not on CreateTaskResult: {r2}"
+    );
+
+    // --- The task's own state starts clean (SEP line 940). ----------------
+    let pending = tasks_get(&url, &task_id).await;
+    assert!(
+        pending["result"].get("inputRequests").is_none(),
+        "the MRTR phase's keys must not carry into the task's own inputRequests: {pending}"
+    );
+
+    // --- The gathered answer reached the worker. --------------------------
+    let done = poll_until_terminal(&url, &task_id).await;
+    assert_eq!(done["result"]["status"], "completed", "{done}");
+    let text = done["result"]["result"]["content"][0]["text"]
+        .as_str()
+        .unwrap_or_default();
+    assert!(
+        text.contains("Alice"),
+        "the task result must reflect the name gathered during the MRTR phase; got {text:?}"
+    );
+}
+
+/// The counterpart: a task-electing tool registered WITHOUT `mrtr_first` still
+/// mints on the very first call and resolves its input over `tasks/update`.
+/// Both flows are legitimate per SEP-2663; this pins that adding the new one
+/// did not quietly redirect the existing one.
+#[tokio::test]
+async fn without_mrtr_first_a_tool_still_mints_on_the_first_call() {
+    let url = start_server().await;
+    let (status, body) = call_tool(&url, "needs_approval", json!({}), true).await;
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(
+        body["result"]["resultType"], "task",
+        "default election must still mint on round 1: {body}"
+    );
+    assert!(
+        body["result"]["taskId"].is_string(),
+        "default election must still return a taskId: {body}"
+    );
+}
+
+/// Park `needs_approval` in `input_required` and return its task id, so the
+/// `tasks/update` key-handling tests below start from a real outstanding round
+/// rather than a hand-built store state.
+async fn park_needs_approval(url: &str) -> String {
+    let (status, body) = call_tool(url, "needs_approval", json!({}), true).await;
+    assert_eq!(status, 200, "{body}");
+    let task_id = body["result"]["taskId"]
+        .as_str()
+        .expect("taskId")
+        .to_string();
+    for _ in 0..100 {
+        if tasks_get(url, &task_id).await["result"]["status"] == "input_required" {
+            return task_id;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("task {task_id} never parked in input_required");
+}
+
+/// A response for a key the task is NOT waiting on is inert: it cannot change
+/// task state, so `tasks/update` acks and the round stays open.
+///
+/// SEP-2663's ack-only design (vendored SEP line 930) reserves errors for
+/// "clearly invalid requests — such as an unknown `taskId`"; "each key MUST
+/// correspond" binds the client, and answering an error gives it nothing
+/// actionable. Pinned by the conformance check
+/// `tasks-result-type-complete-on-non-task-responses`, which sends exactly
+/// this and requires `resultType: "complete"`.
+#[tokio::test]
+async fn tasks_update_ignores_a_key_the_task_is_not_waiting_on() {
+    let url = start_server().await;
+    let task_id = park_needs_approval(&url).await;
+
+    let (status, ack) = post(
+        &url,
+        "tasks/update",
+        None,
+        json!({
+            "jsonrpc": "2.0", "id": 3, "method": "tasks/update",
+            "params": {
+                "_meta": meta(true),
+                "taskId": task_id,
+                // Not an InputResponse of any variant, under a key that is not
+                // outstanding. Both facts are deliberate.
+                "inputResponses": { "unknown-key": { "ignored": true } }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{ack}");
+    assert!(
+        ack.get("error").is_none(),
+        "an inert key must not produce an error: {ack}"
+    );
+    assert_eq!(ack["result"]["resultType"], "complete", "{ack}");
+
+    // The round is untouched: still waiting on the key it actually asked for.
+    let got = tasks_get(&url, &task_id).await;
+    assert_eq!(got["result"]["status"], "input_required", "{got}");
+    assert!(
+        got["result"]["inputRequests"]["approval"].is_object(),
+        "the outstanding request must survive an ignored key: {got}"
+    );
+}
+
+/// The other half of the same decision: a malformed response for a key the
+/// task IS waiting on genuinely blocks the round, so it is an error — and the
+/// error names the key, which the old whole-params rejection could not do.
+#[tokio::test]
+async fn tasks_update_rejects_a_malformed_response_for_an_outstanding_key() {
+    let url = start_server().await;
+    let task_id = park_needs_approval(&url).await;
+
+    let (_status, body) = post(
+        &url,
+        "tasks/update",
+        None,
+        json!({
+            "jsonrpc": "2.0", "id": 3, "method": "tasks/update",
+            "params": {
+                "_meta": meta(true),
+                "taskId": task_id,
+                "inputResponses": { "approval": { "ignored": true } }
+            }
+        }),
+    )
+    .await;
+    let err = &body["error"];
+    assert_eq!(err["code"], -32602, "{body}");
+    let message = err["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("approval"),
+        "the error must name the offending key so the client can fix the right one; got {message:?}"
+    );
+}
+
+/// The multi-instance claim, proven end to end over HTTP: a task parked by
+/// **server A** is resumed by a `tasks/update` sent to **server B**, which
+/// shares only the store.
+///
+/// Two independent servers on two ports, one `Arc<InMemoryTaskStore>` between
+/// them — the shape a shared Postgres or DynamoDB deployment has. Before the
+/// worker polled the store, resumption went through an in-process `oneshot`,
+/// so a `tasks/update` landing on the wrong instance was simply lost: the
+/// task would sit in `input_required` forever. That is the regression this
+/// pins.
+#[tokio::test]
+async fn a_task_parked_on_one_server_is_resumed_via_another() {
+    let store = Arc::new(InMemoryTaskStore::new());
+    let server_a = start_server_with_store(store.clone()).await;
+    let server_b = start_server_with_store(store.clone()).await;
+    assert_ne!(server_a, server_b, "the two servers must be distinct");
+
+    // Server A runs the tool, which parks for input.
+    let (status, body) = call_tool(&server_a, "needs_approval", json!({}), true).await;
+    assert_eq!(status, 200, "{body}");
+    let task_id = body["result"]["taskId"]
+        .as_str()
+        .expect("taskId")
+        .to_string();
+
+    for _ in 0..100 {
+        if tasks_get(&server_a, &task_id).await["result"]["status"] == "input_required" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+
+    // Server B answers it. Nothing but the store connects the two processes'
+    // worth of state.
+    let (status, ack) = post(
+        &server_b,
+        "tasks/update",
+        None,
+        json!({
+            "jsonrpc": "2.0", "id": 3, "method": "tasks/update",
+            "params": {
+                "_meta": meta(true),
+                "taskId": task_id,
+                "inputResponses": {
+                    "approval": { "action": "accept", "content": { "approved": true } }
+                }
+            }
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "server B must accept the update: {ack}");
+
+    // Server A's worker must observe the change through the store and finish.
+    let done = poll_until_terminal(&server_a, &task_id).await;
+    assert_eq!(
+        done["result"]["status"], "completed",
+        "the worker parked on server A must resume from server B's update: {done}"
+    );
+    assert_eq!(
+        done["result"]["result"]["content"][0]["text"], "approved",
+        "the answer delivered to server B must reach the tool running on server A"
+    );
 }
 
 /// server/discover advertises the extension when a store is configured.

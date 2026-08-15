@@ -50,6 +50,7 @@ use turul_mcp_protocol::resources::ResourceContent;
 // variant for the SEP-2322 migration window — which is precisely what the
 // `input-required-result-basic-list-roots` scenario exercises. Suppressed here
 // rather than avoided: dropping the fixture would drop the coverage.
+use turul_mcp_protocol::elicitation::ElicitResultValue;
 #[allow(deprecated)]
 use turul_mcp_protocol::roots::ListRootsRequest;
 #[allow(deprecated)]
@@ -1520,7 +1521,19 @@ impl MultiInputTool {
     }
 }
 
-/// `test_tool_with_task` — task-supporting, drives `tasks-mrtr-composition`.
+/// `test_tool_with_task` — drives `tasks-mrtr-composition`.
+///
+/// The SEP-2663 composition: gather input over MRTR **synchronously**, then
+/// hand off to a task. Registered with `ExtTaskElection::required()
+/// .with_mrtr_first()`, so the server withholds election until the call
+/// carries `inputResponses` — round 1 answers `InputRequiredResult` with no
+/// `taskId`, round 2 mints the task.
+///
+/// The gathered name must survive into the task's final result: the scenario
+/// asserts the terminal `result.content[0].text` contains what it sent
+/// (`{"action":"accept","content":{"name":"Alice"}}`). Echoing it is the only
+/// thing that proves the MRTR phase's answer actually reached the worker
+/// rather than being dropped at the phase boundary.
 #[derive(McpTool, Clone, Default)]
 #[tool(name = "test_tool_with_task", description = "Task-supporting tool", output = String)]
 struct ToolWithTaskTool {}
@@ -1528,8 +1541,24 @@ struct ToolWithTaskTool {}
 impl ToolWithTaskTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
         let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
-        if session.input_responses().is_some() {
-            return Ok("Task with input complete".to_string());
+        if let Some(responses) = session.input_responses() {
+            // The scenario submits the name under a key of its own choosing
+            // (`content: {name: "Alice"}`) that need not match this tool's
+            // schema property, so take the first string in the accepted
+            // content rather than assuming a field name.
+            let gathered = responses
+                .values()
+                .filter_map(|r| match r {
+                    InputResponse::Elicit(e) => e.content.as_ref(),
+                    _ => None,
+                })
+                .flat_map(|c| c.values())
+                .find_map(|v| match v {
+                    ElicitResultValue::String(s) => Some(s.clone()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "unknown".to_string());
+            return Ok(format!("Task with input complete for {gathered}"));
         }
         let schema = ElicitationSchema::new()
             .with_property("answer".to_string(), PrimitiveSchemaDefinition::string());
@@ -1865,11 +1894,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             turul_mcp_ext_tasks::InMemoryTaskStore::new(),
         ))
         .ext_task_tool(SlowComputeTool::new())
-        .ext_task_tool(FailingJobTool::default())
+        // `required`, not optional: `tasks-required-task-error` uses this tool
+        // as its TaskSupport=required fixture and expects -32021 when the
+        // client did not declare the extension. Every other scenario that
+        // touches it declares the extension, where required and optional
+        // behave identically.
+        .ext_task_tool_required(FailingJobTool::default())
         .ext_task_tool(ProtocolErrorJobTool::default())
         .ext_task_tool(ConfirmDeleteTool::default())
         .ext_task_tool(MultiInputTool::default())
-        .ext_task_tool(ToolWithTaskTool::default())
+        // SEP-2663 §Composition with MRTR: resolve the input round
+        // synchronously, THEN mint the task. `required` matches the scenario's
+        // stated fixture contract (`taskSupport=required`).
+        .ext_task_tool_with(
+            ToolWithTaskTool::default(),
+            ExtTaskElection::required().with_mrtr_first(),
+        )
         .completion_provider(PromptArgumentCompleter)
         .resource(TemplateDataResource)
         .prompt(InputRequiredPrompt)

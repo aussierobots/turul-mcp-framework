@@ -1,6 +1,6 @@
 # turul-mcp-ext-tasks
 
-Rust bindings and an in-memory store for the **MCP Tasks** extension
+Rust bindings and durable storage for the **MCP Tasks** extension
 (`io.modelcontextprotocol/tasks`, SEP-2663) — the durable poll-handle lifecycle
 that MCP 2026-07-28 moved out of the protocol core.
 
@@ -88,3 +88,50 @@ cargo test -p turul-mcp-ext-tasks     # wire-shape + lifecycle tests
 - SEP-2663: <https://modelcontextprotocol.io/seps/2663-tasks-extension>
 - SEP-2133 (extensions, off-by-default): <https://modelcontextprotocol.io/seps/2133-extensions>
 - `docs/adr/028-extensions-strategy.md` — why extensions get their own crates
+
+## Storage backends
+
+| Feature | Backend | Durability |
+|---|---|---|
+| *(default)* | `InMemoryTaskStore` | single process; lost on restart |
+| `sqlite` | `SqliteTaskStore` | survives restart; shared by processes on one file |
+| `postgres` | `PostgresTaskStore` | shared across instances (`SELECT … FOR UPDATE` per task) |
+| `dynamodb` | `DynamoDbTaskStore` | shared across instances, incl. Lambda; optimistic concurrency |
+
+All four implement one `TaskStore` trait and are held to **one** behaviour
+contract — `parity`, 14 invariants, run against every backend by
+`scripts/ext-tasks-backends.sh`. Every status rule, owner check and
+`tasks/update` key decision lives once in `traits.rs` as a pure transition; a
+backend only loads, applies and stores. That is deliberate: the superseded
+2025 store had three backends that no test executed and no gate built.
+
+## Retention
+
+Nothing is swept unless asked. `RetentionPolicy::default()` is a no-op, so a
+server that never configures retention behaves exactly as before:
+
+```rust
+use std::time::Duration;
+use turul_mcp_ext_tasks::RetentionPolicy;
+
+.with_ext_tasks(store)
+.with_ext_tasks_retention(
+    RetentionPolicy {
+        orphan_after_ms: Some(15 * 60_000),          // presumed-dead worker → failed
+        delete_terminal_after_ms: Some(24 * 60 * 60_000),
+        honour_task_ttl: true,                       // per-task `ttlMs`; null = unlimited
+    },
+    Duration::from_secs(60),
+)
+```
+
+That one call configures both the sweep loop **and** DynamoDB's native
+`ttlEpoch` expiry — DynamoDB reclaims items itself, with no sweep job. Its
+deletion is *eventual* (AWS documents up to 48h), so reads also filter on
+expiry; without that this backend would keep serving tasks the others consider
+gone.
+
+SEP-2663 makes all retention OPTIONAL (line 342: servers "MAY mark a task as
+`failed` at any point after the TTL elapses, and subsequently delete it at any
+time"). None of it is required for compliance — it is required for a
+deployment that does not want an unbounded table.

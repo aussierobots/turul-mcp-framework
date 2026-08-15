@@ -56,10 +56,17 @@ pub struct McpServerBuilder {
     /// Tasks-extension store (SEP-2663); presence advertises the extension.
     #[cfg(feature = "ext-tasks")]
     ext_task_store: Option<Arc<dyn turul_mcp_ext_tasks::TaskStore>>,
-    /// Tool names marked for task election; value = required (true → -32021
-    /// when the client did not declare the extension; false → sync fallback).
+    /// Tool names marked for task election, and how each participates —
+    /// whether the extension is required, and whether election waits for an
+    /// MRTR round to be answered first. See
+    /// [`ExtTaskElection`](crate::ext_tasks::ExtTaskElection).
     #[cfg(feature = "ext-tasks")]
-    ext_task_tools: std::collections::HashMap<String, bool>,
+    ext_task_tools: std::collections::HashMap<String, crate::ext_tasks::ExtTaskElection>,
+    /// Retention policy + interval for the background sweep. `None` means no
+    /// sweep task is spawned at all, which is the default: retention is
+    /// opt-in, and an unconfigured server behaves exactly as before.
+    #[cfg(feature = "ext-tasks")]
+    ext_task_retention: Option<(turul_mcp_ext_tasks::RetentionPolicy, std::time::Duration)>,
 
     /// Loggers registered with the server
     #[cfg(feature = "protocol-2025-11-25")]
@@ -285,6 +292,8 @@ impl McpServerBuilder {
             ext_task_store: None,
             #[cfg(feature = "ext-tasks")]
             ext_task_tools: std::collections::HashMap::new(),
+            #[cfg(feature = "ext-tasks")]
+            ext_task_retention: None,
             #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
             notifications: HashMap::new(),
@@ -441,21 +450,82 @@ impl McpServerBuilder {
         self
     }
 
+    /// Run the task retention sweep on a timer.
+    ///
+    /// **Without this call no sweep runs at all**, so orphaned tasks stay
+    /// `working` forever and terminal tasks accumulate. That is the correct
+    /// default for the in-memory store (a restart clears everything) but is
+    /// usually wrong for a durable backend, where the table only grows.
+    ///
+    /// The sweep is a maintenance operation: pick an interval in minutes, not
+    /// seconds. `orphan_after_ms` must exceed the longest legitimate gap
+    /// between a worker's writes, or a slow-but-healthy task is killed — the
+    /// store cannot tell "stuck" from "slow", only how long it has been quiet.
+    ///
+    /// ```ignore
+    /// use std::time::Duration;
+    /// use turul_mcp_ext_tasks::RetentionPolicy;
+    ///
+    /// .with_ext_tasks(store)
+    /// .with_ext_tasks_retention(
+    ///     RetentionPolicy {
+    ///         orphan_after_ms: Some(15 * 60_000),
+    ///         delete_terminal_after_ms: Some(24 * 60 * 60_000),
+    ///         honour_task_ttl: true,
+    ///     },
+    ///     Duration::from_secs(60),
+    /// )
+    /// ```
+    #[cfg(feature = "ext-tasks")]
+    pub fn with_ext_tasks_retention(
+        mut self,
+        policy: turul_mcp_ext_tasks::RetentionPolicy,
+        interval: std::time::Duration,
+    ) -> Self {
+        self.ext_task_retention = Some((policy, interval));
+        self
+    }
+
     /// Register a tool that runs as a task when the request's declared
     /// `clientCapabilities.extensions` activates the Tasks extension, and
     /// synchronously otherwise (progressive enhancement).
     #[cfg(feature = "ext-tasks")]
-    pub fn ext_task_tool<T: McpTool + 'static>(mut self, tool: T) -> Self {
-        self.ext_task_tools.insert(tool.name().to_string(), false);
-        self.tool(tool)
+    pub fn ext_task_tool<T: McpTool + 'static>(self, tool: T) -> Self {
+        self.ext_task_tool_with(tool, crate::ext_tasks::ExtTaskElection::optional())
     }
 
     /// Register a tool that REQUIRES task execution: calls from clients that
     /// did not declare the Tasks extension are rejected with `-32021` and
     /// `data.requiredCapabilities.extensions`.
     #[cfg(feature = "ext-tasks")]
-    pub fn ext_task_tool_required<T: McpTool + 'static>(mut self, tool: T) -> Self {
-        self.ext_task_tools.insert(tool.name().to_string(), true);
+    pub fn ext_task_tool_required<T: McpTool + 'static>(self, tool: T) -> Self {
+        self.ext_task_tool_with(tool, crate::ext_tasks::ExtTaskElection::required())
+    }
+
+    /// Register a task-electing tool with an explicit
+    /// [`ExtTaskElection`](crate::ext_tasks::ExtTaskElection).
+    ///
+    /// Needed for the SEP-2663 MRTR composition, which the two shorthands
+    /// above cannot express:
+    ///
+    /// ```ignore
+    /// use turul_mcp_server::ext_tasks::ExtTaskElection;
+    ///
+    /// // Gathers input synchronously, THEN mints the task.
+    /// .ext_task_tool_with(ConfirmThenRun, ExtTaskElection::required().with_mrtr_first())
+    /// ```
+    ///
+    /// The tool must return [`McpError::InputRequired`] when the call carries
+    /// no `inputResponses`; otherwise it runs synchronously and no task is
+    /// created (logged at `warn`).
+    #[cfg(feature = "ext-tasks")]
+    pub fn ext_task_tool_with<T: McpTool + 'static>(
+        mut self,
+        tool: T,
+        election: crate::ext_tasks::ExtTaskElection,
+    ) -> Self {
+        self.ext_task_tools
+            .insert(tool.name().to_string(), election);
         self.tool(tool)
     }
 
@@ -1975,6 +2045,47 @@ impl McpServerBuilder {
                         &runtime,
                     ))),
                 );
+
+                // The retention sweep only exists if it was asked for. Before
+                // this, `TaskStore::sweep` was implemented by every backend
+                // and called by nothing — the capability was inert, which is
+                // indistinguishable from absent to an operator.
+                if let Some((policy, interval)) = self.ext_task_retention.take() {
+                    // ONE configuration point: this also tells a backend that
+                    // can expire items itself (DynamoDB's `ttlEpoch`) what the
+                    // policy is, so native expiry and the sweep agree instead
+                    // of needing to be configured separately.
+                    runtime.store().configure_retention(&policy);
+                    let swept = Arc::clone(&runtime);
+                    tracing::info!(
+                        interval_secs = interval.as_secs(),
+                        ?policy,
+                        "ext-tasks retention sweep enabled"
+                    );
+                    tokio::spawn(async move {
+                        let mut ticker = tokio::time::interval(interval);
+                        // The first tick fires immediately; skip it so startup
+                        // is not a sweep.
+                        ticker.tick().await;
+                        loop {
+                            ticker.tick().await;
+                            match swept.store().sweep(chrono::Utc::now(), &policy).await {
+                                Ok(report) => {
+                                    if !report.failed.is_empty() || !report.deleted.is_empty() {
+                                        tracing::info!(
+                                            failed = report.failed.len(),
+                                            deleted = report.deleted.len(),
+                                            "ext-tasks retention sweep"
+                                        );
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(error = %e, "ext-tasks retention sweep failed")
+                                }
+                            }
+                        }
+                    });
+                }
                 self.capabilities
                     .extensions
                     .get_or_insert_with(std::collections::HashMap::new)

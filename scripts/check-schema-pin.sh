@@ -142,41 +142,61 @@ done
 # Upstream modelcontextprotocol/ext-tasks has no dated release directory and no
 # tags at all — `schema/draft/` is the only thing that exists, so the dated-path
 # rule above cannot apply here. The check is that the vendored bytes still match
-# what was fetched, and that a commit pin is recorded at all.
+# what the provenance table claims.
 #
-# TEMPORARY: the expected checksums live here rather than in that crate's
-# schema/README.md, which records no checksums. Owner: turul-mcp-ext-tasks.
-# Removal trigger: once that README grows `Content sha256` cells like
-# turul-mcp-ext-apps has, read them from there and delete this table.
+# Two upstream repos are pinned here, not one: ext-tasks carries the schema,
+# and modelcontextprotocol/modelcontextprotocol carries the SEP prose. Several
+# rules this crate must satisfy (MRTR/task sequencing, phase-state separation)
+# exist ONLY in the prose, so the SEP document is a pinned artifact too and is
+# checksummed like any other. See that README's "Rules that live only in the
+# prose".
+#
+# Checksums are read from the crate's schema/README.md table, in the same
+# format as turul-mcp-ext-apps above:
+#   | `file` | upstream/repo | upstream/path | `<40-hex>` | `<64-hex>` | date |
 
 TASKS_DIR=crates/turul-mcp-ext-tasks/schema
 TASKS_README=$TASKS_DIR/README.md
 
-tasks_expected="\
-draft-schema.ts 2203cc75469e32a92a60f4b7b4de949577e25f18fafff69aa92ec06773ab70f6
-draft-schema.json b17cb4a2534379c214b17770bd5d3d54f69fde16a953bfb542c58235a61274bb"
+tasks_rows=$(awk -F'|' '
+  /^\|[^|]*`[^`]+`[^|]*\|/ {
+    n = split($0, c, "|")
+    if (n < 7) next
+    file = c[2]; commit = c[5]; sum = c[6]
+    gsub(/[^a-zA-Z0-9._\/-]/, "", file)
+    if (match(commit, /[0-9a-f]{40}/)) commit = substr(commit, RSTART, RLENGTH); else commit = ""
+    if (match(sum, /[0-9a-f]{64}/))    sum    = substr(sum,    RSTART, RLENGTH); else sum    = ""
+    if (file != "" && commit != "" && sum != "") print file, commit, sum
+  }' "$TASKS_README")
 
-while read -r file sum; do
-  path=$TASKS_DIR/$file
-  if [ ! -f "$path" ]; then
-    bad "ext-tasks $file" "expected vendored file is missing"
-    continue
-  fi
-  disk=$(shasum -a 256 "$path" | cut -d' ' -f1)
-  if [ "$disk" != "$sum" ]; then
-    bad "ext-tasks $file checksum" "on disk $disk != expected $sum"
-  else
-    note "ext-tasks $file checksum" "OK"
-  fi
-done <<EOF
-$tasks_expected
-EOF
-
-tasks_pin=$(grep -oE '[0-9a-f]{40}' "$TASKS_README" | head -1)
-if [ -z "$tasks_pin" ]; then
-  bad "ext-tasks commit pin" "no 40-hex upstream commit recorded in $TASKS_README"
+if [ -z "$tasks_rows" ]; then
+  bad "ext-tasks provenance table" "no complete rows parsed from $TASKS_README"
 else
-  note "ext-tasks commit pin" "OK ($tasks_pin)"
+  while read -r file commit sum; do
+    path=$TASKS_DIR/$file
+    if [ ! -f "$path" ]; then
+      bad "ext-tasks $file" "listed in README but missing on disk"
+      continue
+    fi
+    disk=$(shasum -a 256 "$path" | cut -d' ' -f1)
+    if [ "$disk" != "$sum" ]; then
+      bad "ext-tasks $file checksum" "on disk $disk != README $sum"
+    else
+      note "ext-tasks $file checksum" "OK (${commit:0:12})"
+    fi
+  done <<EOF
+$tasks_rows
+EOF
 fi
+
+# Every vendored file must be accounted for by a table row, so a stray copy
+# cannot sit alongside the pinned ones unchecked.
+for f in "$TASKS_DIR"/*; do
+  base=$(basename "$f")
+  [ "$base" = "README.md" ] && continue
+  if ! printf '%s\n' "$tasks_rows" | cut -d' ' -f1 | grep -qx "$base"; then
+    bad "ext-tasks $base" "on disk but absent from the $TASKS_README table"
+  fi
+done
 
 exit "$fail"

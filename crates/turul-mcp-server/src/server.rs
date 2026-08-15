@@ -10,7 +10,11 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-#[cfg(any(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
+#[cfg(any(
+    feature = "protocol-2025-11-25",
+    feature = "dynamic-tools",
+    feature = "ext-tasks"
+))]
 use tracing::warn;
 use tracing::{debug, error, info};
 
@@ -99,7 +103,7 @@ pub struct McpServer {
     #[cfg(feature = "ext-tasks")]
     ext_tasks_runtime: Option<Arc<crate::ext_tasks::ExtTasksRuntime>>,
     #[cfg(feature = "ext-tasks")]
-    ext_task_tools: Arc<HashMap<String, bool>>,
+    ext_task_tools: Arc<HashMap<String, crate::ext_tasks::ExtTaskElection>>,
     /// Custom HTTP route registry
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Stable fingerprint of the registered tool set for session versioning
@@ -144,7 +148,9 @@ impl McpServer {
         #[cfg(feature = "ext-tasks")] ext_tasks_runtime: Option<
             Arc<crate::ext_tasks::ExtTasksRuntime>,
         >,
-        #[cfg(feature = "ext-tasks")] ext_task_tools: Arc<HashMap<String, bool>>,
+        #[cfg(feature = "ext-tasks")] ext_task_tools: Arc<
+            HashMap<String, crate::ext_tasks::ExtTaskElection>,
+        >,
         strict_lifecycle: bool,
         middleware_stack: crate::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
@@ -1651,11 +1657,11 @@ impl JsonRpcHandler for ListToolsHandler {
 }
 
 /// Session-aware handler for tool execution
-/// Runtime + the task-election tool map (`name → required`).
+/// Runtime + the task-election tool map (`name → election`).
 #[cfg(feature = "ext-tasks")]
 type ExtTasksWiring = (
     Arc<crate::ext_tasks::ExtTasksRuntime>,
-    Arc<HashMap<String, bool>>,
+    Arc<HashMap<String, crate::ext_tasks::ExtTaskElection>>,
 );
 
 pub struct SessionAwareToolHandler {
@@ -1701,7 +1707,7 @@ impl SessionAwareToolHandler {
     pub fn with_ext_tasks(
         mut self,
         runtime: Arc<crate::ext_tasks::ExtTasksRuntime>,
-        task_tools: Arc<HashMap<String, bool>>,
+        task_tools: Arc<HashMap<String, crate::ext_tasks::ExtTaskElection>>,
     ) -> Self {
         self.ext_tasks = Some((runtime, task_tools));
         self
@@ -1987,6 +1993,12 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             }
         }
 
+        // Set when election was withheld for an `mrtr_first` tool, so a tool
+        // that does not actually demand input can be reported rather than
+        // silently running synchronously and minting no task.
+        #[cfg(feature = "ext-tasks")]
+        let mut mrtr_withheld = false;
+
         // Task election (2026-07-28 Tasks extension, SEP-2663): the server is
         // the sole decider. A tool marked for election runs as a task when
         // this request's declared `clientCapabilities.extensions` activates
@@ -1995,15 +2007,32 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // -32021 with `data.requiredCapabilities.extensions`.
         #[cfg(feature = "ext-tasks")]
         if let Some((runtime, task_tools)) = self.ext_tasks.as_ref()
-            && let Some(&required) = task_tools.get(&call_params.name)
+            && let Some(&election) = task_tools.get(&call_params.name)
         {
             if crate::ext_tasks::declared(&call_params.meta.client_capabilities) {
-                let result = runtime
-                    .create_and_spawn(Arc::clone(&tool), args, mcp_session_context)
-                    .await?;
-                return serde_json::to_value(result).map_err(McpError::SerializationError);
-            }
-            if required {
+                // SEP-2663 §Composition with Multi Round-Trip Requests: a tool
+                // that gathers input BEFORE the work begins resolves its MRTR
+                // round synchronously, and the task is minted only once the
+                // client has answered. Falling through runs the tool on the
+                // synchronous path below, where its `InputRequired` becomes an
+                // `InputRequiredResult` carrying no `taskId` — which is what
+                // makes the two phases independently typed for the client.
+                //
+                // `inputResponses` is the discriminator because it is the only
+                // thing on the wire that distinguishes the rounds:
+                // `CallToolRequestParams extends InputResponseRequestParams`
+                // (schema.ts:1863). The client cannot ask for a flow — it does
+                // not know a task is coming — so the server decides, and it
+                // must decide before running the tool.
+                let withhold = election.mrtr_first && call_params.input_responses.is_none();
+                mrtr_withheld = withhold;
+                if !withhold {
+                    let result = runtime
+                        .create_and_spawn(Arc::clone(&tool), args, mcp_session_context)
+                        .await?;
+                    return serde_json::to_value(result).map_err(McpError::SerializationError);
+                }
+            } else if election.required {
                 return Err(crate::ext_tasks::missing_capability_error());
             }
         }
@@ -2171,6 +2200,19 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             }
             other => other,
         };
+
+        // Election was withheld to let this tool resolve an MRTR round, but it
+        // completed instead — so no task was ever minted. A mis-registration,
+        // not a wire violation: the call is answered normally and reported.
+        #[cfg(feature = "ext-tasks")]
+        if mrtr_withheld && call_result.is_ok() {
+            warn!(
+                tool = %call_params.name,
+                "registered with ExtTaskElection::mrtr_first but returned a result instead of \
+                 InputRequired on a call carrying no inputResponses; ran synchronously and no \
+                 task was created"
+            );
+        }
 
         match call_result {
             Ok(response) => serde_json::to_value(response).map_err(McpError::SerializationError),

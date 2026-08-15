@@ -36,9 +36,7 @@ use tracing::{debug, warn};
 use turul_mcp_ext_tasks::v2026_07_28::lifecycle::{
     CancelTaskParams, GetTaskParams, METHOD_NOTIFICATIONS_TASKS, UpdateTaskParams,
 };
-use turul_mcp_ext_tasks::v2026_07_28::store::{
-    InputDelivery, TaskState, TaskStore, TaskStoreError,
-};
+use turul_mcp_ext_tasks::v2026_07_28::traits::{TaskState, TaskStore, TaskStoreError};
 use turul_mcp_ext_tasks::v2026_07_28::types::{
     CreateTaskResult, Nullable, RESULT_TYPE_TASK, Task, TaskFields, TaskStatus,
 };
@@ -53,6 +51,58 @@ use crate::tool::McpTool;
 
 /// Suggested polling interval handed to clients on every task.
 const POLL_INTERVAL_MS: f64 = 500.0;
+
+/// How a registered tool participates in task election.
+///
+/// Election is a registration-time decision, not a property of the tool type:
+/// the same tool may be elected on one server and run synchronously on
+/// another. SEP-2663 makes the server the sole decider precisely because the
+/// client cannot signal which flow it wants — "the client is unaware that the
+/// server will create a task ahead of time".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ExtTaskElection {
+    /// Reject calls from clients that did not declare the extension with
+    /// `-32021` instead of falling back to synchronous execution.
+    pub required: bool,
+    /// Withhold election until the request carries `inputResponses`, so this
+    /// tool's MRTR round resolves synchronously and the first call answers
+    /// `InputRequiredResult` with no `taskId`.
+    ///
+    /// SEP-2663 §Composition with Multi Round-Trip Requests: a server that
+    /// needs client input *before* returning a `CreateTaskResult` "SHOULD
+    /// resolve all MRTR exchanges _synchronously_" and does so via the MRTR
+    /// flow on the original request; a server needing input *during*
+    /// execution uses `inputRequests`/`tasks/update` instead. Both are
+    /// legitimate — this flag picks the first. Default (`false`) is the
+    /// second, which is what every existing registration gets.
+    ///
+    /// Setting this on a tool that never returns [`McpError::InputRequired`]
+    /// means the tool simply runs synchronously and no task is ever minted;
+    /// the mismatch is logged, not rejected, because it is a mis-registration
+    /// rather than a wire violation.
+    pub mrtr_first: bool,
+}
+
+impl ExtTaskElection {
+    /// Elected when the client declared the extension; synchronous otherwise.
+    pub fn optional() -> Self {
+        Self::default()
+    }
+
+    /// Elected, and calls without the declaration are refused with `-32021`.
+    pub fn required() -> Self {
+        Self {
+            required: true,
+            ..Self::default()
+        }
+    }
+
+    /// Resolve the MRTR round synchronously before minting the task.
+    pub fn with_mrtr_first(mut self) -> Self {
+        self.mrtr_first = true;
+        self
+    }
+}
 
 /// The caller's authenticated principal for this request, or `None` when
 /// the request carries no verified identity (no OAuth configured, or the
@@ -69,16 +119,20 @@ fn owner_from_session(session: &Option<SessionContext>) -> Option<String> {
         .filter(|sub| !sub.is_empty())
 }
 
-struct Waiter {
-    sender: tokio::sync::oneshot::Sender<(InputResponses, Option<String>)>,
-}
-
-/// Runtime pairing the durable [`TaskStore`] with in-process workers
-/// (abort handles for cooperative cancel, waiters for input resumption).
+/// Runtime pairing the durable [`TaskStore`] with in-process workers.
+///
+/// Deliberately holds NO channel for input resumption. A parked worker
+/// learns its round completed by reading the store, so the `tasks/update`
+/// that answers it may arrive on any instance — which is the point of a
+/// shared Postgres or DynamoDB store. The only in-process state is abort
+/// handles, a local fast path for cancel.
 pub struct ExtTasksRuntime {
     store: Arc<dyn TaskStore>,
+    /// Abort handles for cooperative cancel, best-effort and instance-local:
+    /// a cancel arriving on another instance still flips the stored status,
+    /// which the worker observes on its next poll. This only makes the local
+    /// case immediate.
     aborts: Mutex<HashMap<String, tokio::task::AbortHandle>>,
-    waiters: Mutex<HashMap<String, Waiter>>,
 }
 
 impl ExtTasksRuntime {
@@ -86,7 +140,6 @@ impl ExtTasksRuntime {
         Self {
             store,
             aborts: Mutex::new(HashMap::new()),
-            waiters: Mutex::new(HashMap::new()),
         }
     }
 
@@ -215,11 +268,6 @@ impl ExtTasksRuntime {
                         .await;
                         return;
                     };
-                    let (tx, rx) = tokio::sync::oneshot::channel();
-                    self.waiters
-                        .lock()
-                        .expect("waiters lock")
-                        .insert(task_id.clone(), Waiter { sender: tx });
                     match self
                         .store
                         .require_input(&task_id, requests, rs.clone())
@@ -228,19 +276,53 @@ impl ExtTasksRuntime {
                         Ok(state) => self.notify(&session, &state).await,
                         Err(e) => {
                             warn!(task_id, error = %e, "require_input rejected (task likely cancelled)");
-                            self.waiters.lock().expect("waiters lock").remove(&task_id);
                             return;
                         }
                     }
-                    match rx.await {
-                        Ok((delivered, state)) => {
-                            responses = Some(delivered);
-                            request_state = state;
-                            continue;
+
+                    // Wait for the round by WATCHING THE STORE, not an
+                    // in-process channel. The `tasks/update` that answers this
+                    // round may land on a different instance entirely — with a
+                    // shared Postgres or DynamoDB store that is the normal
+                    // deployment — and a oneshot only ever reaches the process
+                    // that created it. Polling is also how `SessionStorage`
+                    // already moves SSE events between instances, so this is
+                    // the established shape rather than a new mechanism.
+                    let owner = owner_from_session(&session);
+                    let resumed = loop {
+                        match self.store.get(&task_id, owner.as_deref()).await {
+                            // The round completed: `provide_input` flipped the
+                            // task back to `working` and left the answers in
+                            // place for exactly this read.
+                            Ok(Some(s)) if s.status == TaskStatus::Working => break Some(s),
+                            // Cancelled or failed elsewhere — including by the
+                            // retention sweep. Cooperative cancel across
+                            // instances falls out of this for free.
+                            Ok(Some(s)) if s.status.is_terminal() => {
+                                debug!(task_id, status = ?s.status, "task reached a terminal status while parked");
+                                break None;
+                            }
+                            // Still `input_required`; keep waiting.
+                            Ok(Some(_)) => {}
+                            Ok(None) => {
+                                debug!(task_id, "task disappeared while parked (deleted or swept)");
+                                break None;
+                            }
+                            Err(e) => {
+                                warn!(task_id, error = %e, "task store unreadable while parked");
+                                break None;
+                            }
                         }
-                        // Waiter dropped: cancelled mid-input — nothing to do.
-                        Err(_) => return,
-                    }
+                        tokio::time::sleep(std::time::Duration::from_millis(
+                            POLL_INTERVAL_MS as u64,
+                        ))
+                        .await;
+                    };
+
+                    let Some(state) = resumed else { return };
+                    responses = Some(state.collected_responses.clone());
+                    request_state = state.request_state.clone();
+                    continue;
                 }
                 Err(e) => {
                     let obj = e.to_error_object();
@@ -287,23 +369,13 @@ impl ExtTasksRuntime {
         &self,
         task_id: &str,
         owner: Option<&str>,
-        responses: InputResponses,
+        responses: HashMap<String, Value>,
     ) -> Result<(), TaskStoreError> {
-        match self.store.provide_input(task_id, owner, responses).await? {
-            InputDelivery::Complete {
-                responses,
-                request_state,
-            } => {
-                if let Some(waiter) = self.waiters.lock().expect("waiters lock").remove(task_id) {
-                    // A dropped receiver means the worker died; the store
-                    // already shows `working`, and the task will sit there —
-                    // acceptable for the in-memory store (process-local).
-                    let _ = waiter.sender.send((responses, request_state));
-                }
-                Ok(())
-            }
-            InputDelivery::Partial => Ok(()),
-        }
+        // No in-process signalling: the store IS the signal. Whichever
+        // instance runs the worker sees the transition on its next poll,
+        // including when that is not this one.
+        self.store.provide_input(task_id, owner, responses).await?;
+        Ok(())
     }
 
     /// Cooperative cancel: flips non-terminal tasks to `cancelled`, aborts a
@@ -318,10 +390,13 @@ impl ExtTasksRuntime {
     ) -> Result<Option<TaskState>, TaskStoreError> {
         let cancelled = self.store.cancel(task_id, owner).await?;
         if cancelled.is_some() {
+            // Local fast path only. The store now carries `cancelled`, so a
+            // worker on any instance — including one parked waiting for input
+            // — sees it on its next poll and stops. Aborting here just makes
+            // the same-instance case immediate.
             if let Some(handle) = self.aborts.lock().expect("aborts lock").remove(task_id) {
                 handle.abort();
             }
-            self.waiters.lock().expect("waiters lock").remove(task_id);
         }
         Ok(cancelled)
     }
@@ -430,9 +505,11 @@ impl ExtTasksUpdateHandler {
                 TaskStoreError::NotFound(id) => {
                     McpError::InvalidParameters(format!("unknown task {id:?}"))
                 }
-                TaskStoreError::UnknownInputKey(k) => McpError::InvalidParameters(format!(
-                    "input response key {k:?} does not match an outstanding input request"
-                )),
+                TaskStoreError::InvalidInputResponse { key, detail } => {
+                    McpError::InvalidParameters(format!(
+                        "input response for {key:?} is not a valid InputResponse: {detail}"
+                    ))
+                }
                 TaskStoreError::InvalidStatus { status, .. } => McpError::InvalidParameters(
                     format!("task is {status}; tasks/update requires input_required"),
                 ),
