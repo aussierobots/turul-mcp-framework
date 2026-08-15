@@ -171,6 +171,14 @@ gate_docs() {
   else
     echo "  FAIL"; fail=1
   fi
+  # Builds the README's own Quick Start in a crate OUTSIDE this workspace, with
+  # only the dependencies the README documents. Every other check in this suite
+  # runs inside the workspace, where members inherit [workspace.dependencies] and
+  # are written by people who already know the required dependency set — so none
+  # of them can see a consumer-facing dependency or doc error. On 2026-08-15 the
+  # published Quick Start did not compile for a new user while 3617 tests passed.
+  run "consumer smoke (README Quick Start, outside the workspace)" \
+    ./scripts/consumer-smoke.sh
 }
 
 # Runnable example servers, verified end to end over the real HTTP wire

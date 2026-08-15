@@ -26,13 +26,15 @@ The default build targets **MCP 2026-07-28**, the current specification. The pre
 
 > **The macros need six crates, not two.** `#[mcp_tool]` and `#[derive(McpTool)]`
 > expand to code that names `serde_json`, `async_trait`, `turul_mcp_builders` and
-> `turul_mcp_protocol` directly, so all four must be **direct dependencies of your
-> crate** alongside the two obvious ones. Omit them and you get a wall of
-> `E0433 cannot find module or crate …` plus unsatisfied `Has*` trait bounds
-> pointing at macro-generated code. This is a known macro-hygiene wart; a future
-> release will re-export them so only `turul-mcp-server` + `turul-mcp-derive` are
-> needed. In-repo examples do not hit it because workspace **path** dependencies
-> resolve all four transitively.
+> `turul_mcp_protocol` directly. Generated code is compiled in **your** crate, so
+> those names resolve against **your** dependency list — all four must be your
+> direct dependencies alongside the two obvious ones. Omit them and you get a wall
+> of `E0433 cannot find module or crate …` plus unsatisfied `Has*` trait bounds
+> pointing at macro-generated code.
+>
+> This is how the framework works, not a defect: all 33 macro-using examples in
+> this repo declare the same six. The list below is simply what those examples
+> already do.
 
 ```bash
 cargo add turul-mcp-server turul-mcp-derive turul-mcp-builders turul-mcp-protocol serde_json async-trait

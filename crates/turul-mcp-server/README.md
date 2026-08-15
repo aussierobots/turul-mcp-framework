@@ -40,19 +40,19 @@ turul-mcp-server = "0.4"
 turul-mcp-derive = "0.4"    # Required for function macros and derive macros
 tokio = { version = "1.0", features = ["full"] }
 
-# Required whenever you use `#[mcp_tool]` or `#[derive(McpTool)]`. The macros
-# expand to code that names these crates directly, so they must be YOUR direct
-# dependencies too. Omit them and you get `E0433 cannot find module or crate …`
-# plus unsatisfied `Has*` bounds, all pointing at macro-generated code.
+# Required whenever you use `#[mcp_tool]` or `#[derive(McpTool)]`. Generated code
+# is compiled in YOUR crate, so the names it emits resolve against YOUR dependency
+# list — these must be your direct dependencies too. Omit them and you get
+# `E0433 cannot find module or crate …` plus unsatisfied `Has*` bounds, all
+# pointing at macro-generated code.
 turul-mcp-builders = "0.4"
 turul-mcp-protocol = "0.4"
 serde_json = "1"
 async-trait = "0.1"
 ```
 
-> A future release will re-export these four through `turul-mcp-server` so only
-> the first two turul crates are needed. Until then the list above is the
-> minimum that compiles.
+> This is the framework's normal shape, not a workaround: all 33 macro-using
+> examples in the repository declare exactly these six.
 
 ### Level 1: Function Macros (Simplest)
 

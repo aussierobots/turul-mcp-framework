@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-08-15
+
+Documentation only — no code, wire behaviour or API change. `turul-mcp-server`
+is the sole republish, because its README is what renders on crates.io and that
+README was wrong. Every other crate stays at `0.4.0`.
+
+### The published Quick Start did not compile
+
+Building a fresh `cargo new` project against the published 0.4.0 crates — the
+first time the getting-started path had been walked the way a new user meets it
+— produced **19 errors**. Two independent causes, both in the docs:
+
+- **The dependency list was short by four crates.** `#[mcp_tool]` and
+  `#[derive(McpTool)]` emit code naming `serde_json`, `async_trait`,
+  `turul_mcp_builders` and `turul_mcp_protocol`. Generated code is compiled in
+  the **consumer's** crate, so those names resolve against the consumer's
+  dependency list; the macro crate having them is irrelevant. All 33 macro-using
+  examples in this repo already declare the full six — the READMEs simply listed
+  three.
+- **The `main()` body had two type errors.** `.bind_address("…".parse()?)`
+  inlines `?` where it must convert `AddrParseError` into `McpError`, which has
+  no such `From`; and `server.run().await` as a tail expression yields
+  `Result<(), McpError>` against a `Box<dyn Error>` signature. Corrected to the
+  typed-`let` + `run().await?; Ok(())` shape all 39 examples already use.
+
+Nothing about the framework changed. The code was correct; the instructions for
+reaching it were not.
+
+### New gate: `scripts/consumer-smoke.sh`
+
+Builds the README's **own** Quick Start — extracted from `README.md` at run time,
+not copied — in a crate **outside** this workspace, declaring only the
+dependencies the README documents.
+
+This is the check whose absence let the above ship. Every other gate runs inside
+the workspace, where members inherit `[workspace.dependencies]`, share a lockfile,
+and are written by people who already know the required dependency set. None of
+them can observe a consumer-facing dependency or documentation error: **3617
+tests passed over a Quick Start that did not compile.**
+
+Verified to fail on the defect it exists to catch — reverting the README to its
+pre-fix form makes the gate exit 1. Runs under `ci-gates.sh docs`; pass
+`--published` to resolve from crates.io instead of the working tree.
+
 ## [0.4.0] - 2026-08-15
 
 **Adopts MCP 2026-07-28 as the default specification.** The previous spec,
@@ -2049,7 +2093,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.47...v0.4.0
 [0.3.47]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.46...v0.3.47
 [0.3.46]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.45...v0.3.46
