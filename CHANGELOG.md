@@ -50,8 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in-memory store only, while the *superseded* 2025 crate had SQLite,
   Postgres and DynamoDB. That is now inverted: `turul-mcp-ext-tasks` owns task
   persistence and carries all four backends, laid out like the sibling storage
-  crates (`traits.rs` + one module per backend, features `in-memory` /
-  `sqlite` / `postgres` / `dynamodb`).
+  crates (`traits.rs` + one module per backend). The in-memory store is
+  unconditional — there is no `in-memory` feature; the three durable backends
+  are opt-in behind `sqlite` / `postgres` / `dynamodb`, each of which is what
+  pulls in `sqlx` or the AWS SDK. A dependent that enables none of them (the
+  default, and what `turul-mcp-client`'s `ext-tasks` feature does) links no
+  database driver at all.
 
   Every status rule, owner check and `tasks/update` key decision lives once, in
   `traits.rs`, as pure transitions. A backend only does *load → apply → store*
