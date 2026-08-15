@@ -7,11 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
+## [0.4.0] - 2026-08-15
 
-> Entries are newest-first. The version header stays **Unreleased** until this
-> branch merges to `main`; the release date and comparison links are stamped in
-> that slice, so this file always describes what is actually on `main`.
+**Adopts MCP 2026-07-28 as the default specification.** The previous spec,
+2025-11-25, remains fully supported as an opt-in build
+(`--no-default-features --features protocol-2025-11-25`). A server binary
+speaks one spec or the other — never both — because the two protocol features
+are mutually exclusive at compile time; the client links both and negotiates
+per connection (ADR-030).
+
+Merged to `main` in [#18](https://github.com/aussierobots/turul-mcp-framework/pull/18)
+at `6f35e04`. Release gate: `./scripts/ci-gates.sh all` → **76 gates, 3617
+tests, 0 failures**. Externally verified by three stable peers — the reference
+MCP Python SDK 2.0.0, the Go SDK v1.7.0 and the TypeScript SDK 2.0.0 — each
+driving 9 methods plus 5 negative paths with no wire disagreement.
+
+First publication of `turul-mcp-ext-apps` and `turul-mcp-ext-tasks` at `0.1.0`;
+extension crates version independently of the framework per SEP-2133 §Evolution.
+
+Entries below are newest-first.
 
 ### Pre-0.4.0 documentation accuracy pass (2026-08-15)
 
@@ -2035,7 +2049,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.47...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.47...v0.4.0
 [0.3.47]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.46...v0.3.47
 [0.3.46]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.45...v0.3.46
 [0.3.45]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.44...v0.3.45
