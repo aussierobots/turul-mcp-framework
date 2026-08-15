@@ -365,6 +365,7 @@ impl ExtTasksGetHandler {
 
 impl ExtTasksGetHandler {
     async fn get(&self, params: Option<Value>, owner: Option<&str>) -> McpResult<Value> {
+        require_declared(&params)?;
         let params: GetTaskParams = parse_params(params)?;
         let state = self
             .runtime
@@ -420,6 +421,7 @@ impl ExtTasksUpdateHandler {
 
 impl ExtTasksUpdateHandler {
     async fn update(&self, params: Option<Value>, owner: Option<&str>) -> McpResult<Value> {
+        require_declared(&params)?;
         let params: UpdateTaskParams = parse_params(params)?;
         self.runtime
             .deliver_input(&params.task_id, owner, params.input_responses)
@@ -474,6 +476,7 @@ impl ExtTasksCancelHandler {
 
 impl ExtTasksCancelHandler {
     async fn cancel(&self, params: Option<Value>, owner: Option<&str>) -> McpResult<Value> {
+        require_declared(&params)?;
         let params: CancelTaskParams = parse_params(params)?;
         match self.runtime.cancel(&params.task_id, owner).await {
             Ok(_) => Ok(serde_json::json!({ "resultType": "complete" })),
@@ -524,6 +527,34 @@ pub fn declared(caps: &turul_mcp_protocol::initialize::ClientCapabilities) -> bo
 fn parse_params<T: serde::de::DeserializeOwned>(params: Option<Value>) -> McpResult<T> {
     serde_json::from_value(params.unwrap_or(Value::Null))
         .map_err(|e| McpError::InvalidParameters(format!("invalid task params: {e}")))
+}
+
+/// Refuse `tasks/*` from a client that never declared the extension.
+///
+/// SEP-2663: the task methods exist only for a client that opted in, so
+/// calling one without the declaration is a missing-capability error
+/// (`-32021`), NOT invalid params. All three handlers previously fell through
+/// to whatever the task lookup said — typically `-32602 unknown task` — which
+/// tells the client its task id was wrong when the real problem is that it
+/// never negotiated the extension.
+///
+/// Found by the conformance scenario `tasks-capability-negotiation`:
+/// "tasks/get MUST return -32021; got -32602" (and the same for update and
+/// cancel). Checked BEFORE param parsing so a malformed body cannot mask it.
+fn require_declared(params: &Option<Value>) -> McpResult<()> {
+    let caps = params
+        .as_ref()
+        .and_then(|p| p.get("_meta"))
+        .and_then(|m| m.get(turul_mcp_protocol::meta::META_KEY_CLIENT_CAPABILITIES))
+        .cloned()
+        .map(serde_json::from_value::<turul_mcp_protocol::initialize::ClientCapabilities>)
+        .and_then(Result::ok)
+        .unwrap_or_default();
+    if declared(&caps) {
+        Ok(())
+    } else {
+        Err(missing_capability_error())
+    }
 }
 
 // Keep the wire literal in one place for tests.

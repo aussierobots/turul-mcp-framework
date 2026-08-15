@@ -1391,13 +1391,35 @@ impl StreamableHttpHandler {
                                 "resources/read" => {
                                     params.get("uri").and_then(|v| v.as_str()).map(String::from)
                                 }
+                                // Tasks extension (SEP-2663): the addressed
+                                // entity is the task, so Mcp-Name mirrors
+                                // params.taskId. Omitting these arms let a
+                                // mismatched Mcp-Name through on the whole
+                                // tasks surface while the tools surface
+                                // rejected it — one rule, two behaviours.
+                                // Found by `tasks-request-headers`.
+                                "tasks/get" | "tasks/update" | "tasks/cancel" => params
+                                    .get("taskId")
+                                    .and_then(|v| v.as_str())
+                                    .map(String::from),
                                 _ => None,
                             }
                         } else {
                             None
                         };
+                        // Core methods REQUIRE Mcp-Name. Extension methods are
+                        // validated only when the header is present: this
+                        // transport cannot see whether the tasks extension is
+                        // registered, and demanding the header for a method the
+                        // server does not implement would answer -32020 where
+                        // -32601/404 is correct — it would also leak that the
+                        // method is recognised. Mismatch is still rejected,
+                        // which is what SEP-2243 is protecting against.
+                        let name_required =
+                            !matches!(body_method, "tasks/get" | "tasks/update" | "tasks/cancel");
                         if let Some(expected) = body_name {
                             match header("mcp-name") {
+                                None if !name_required => {}
                                 None => {
                                     failure = Some(format!(
                                         "missing required Mcp-Name header for {body_method}"

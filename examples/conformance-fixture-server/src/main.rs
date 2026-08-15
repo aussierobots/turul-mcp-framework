@@ -1313,16 +1313,53 @@ impl McpResource for TemplateDataResource {
 /// `resultType: "complete"` and NO top-level `taskId`, and that a legacy v1
 /// `task: { ttl, pollInterval }` param does not promote it to a task. Tool
 /// registration is authoritative, not the client's hint.
-#[derive(McpTool, Clone, Default)]
-#[tool(name = "greet", description = "Greet by name", output = String)]
+/// Manual impl, not `#[derive(McpTool)]`: the derive wraps a `String` return
+/// as structured `{"output": "..."}`, and the harness compares
+/// `content[0].text` to the bare `Hello, {name}!`.
 struct GreetTool {
-    #[param(description = "Name to greet")]
-    name: String,
+    input_schema: ToolSchema,
 }
 
 impl GreetTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        Ok(format!("Hello, {}!", self.name))
+    fn new() -> Self {
+        let mut properties = HashMap::new();
+        properties.insert("name".to_string(), serde_json::json!({ "type": "string" }));
+        Self {
+            input_schema: ToolSchema::object()
+                .with_properties(properties)
+                .with_required(vec!["name".to_string()]),
+        }
+    }
+}
+
+impl HasBaseMetadata for GreetTool {
+    fn name(&self) -> &str {
+        "greet"
+    }
+}
+impl HasDescription for GreetTool {
+    fn description(&self) -> Option<&str> {
+        Some("Greet by name")
+    }
+}
+impl HasInputSchema for GreetTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+impl HasOutputSchema for GreetTool {}
+impl HasAnnotations for GreetTool {}
+impl HasToolMeta for GreetTool {}
+impl HasIcons for GreetTool {}
+impl HasExecution for GreetTool {}
+
+#[async_trait]
+impl McpTool for GreetTool {
+    async fn call(&self, args: Value, _s: Option<SessionContext>) -> McpResult<CallToolResult> {
+        let name = args.get("name").and_then(|v| v.as_str()).unwrap_or("world");
+        Ok(CallToolResult::success(vec![ToolResult::text(format!(
+            "Hello, {name}!"
+        ))]))
     }
 }
 
@@ -1649,7 +1686,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(ToolWithProgressTool::default())
         .tool(LoggingTool::default())
         .tool(StreamingElicitationTool::default())
-        .tool(GreetTool::default())
+        .tool(GreetTool::new())
         // SEP-2133: the tasks extension is off unless opted in.
         .with_ext_tasks(std::sync::Arc::new(
             turul_mcp_ext_tasks::InMemoryTaskStore::new(),

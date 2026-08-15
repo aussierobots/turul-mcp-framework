@@ -343,6 +343,15 @@ impl TaskStore for InMemoryTaskStore {
                 request_state: state.request_state.clone(),
             })
         } else {
+            // Partial fulfilment: drop the keys just answered so a following
+            // `tasks/get` advertises only what is STILL outstanding. Leaving
+            // them in told the client to answer questions it had already
+            // answered, and there is no way for it to tell the difference.
+            // Found by `tasks-mrtr-input`: "answered key MUST be removed from
+            // inputRequests; still saw first".
+            if let Some(reqs) = state.input_requests.as_mut() {
+                reqs.retain(|k, _| !state.collected_responses.contains_key(k));
+            }
             Ok(InputDelivery::Partial)
         }
     }
