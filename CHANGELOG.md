@@ -9,6 +9,150 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - Unreleased (feature branch `feat/turul-mcp-protocol-2026-07-28`)
 
+> Entries are newest-first. The version header stays **Unreleased** until this
+> branch merges to `main`; the release date and comparison links are stamped in
+> that slice, so this file always describes what is actually on `main`.
+
+### Pre-0.4.0 documentation accuracy pass (2026-08-15)
+
+- **Every publishable crate now ships a `README.md` and declares
+  `readme = "README.md"`** (was 13 of 15). `turul-mcp-ext-tasks` and
+  `turul-mcp-schema-validation` had no README file at all, so crates.io would
+  have shown them with none. The three crates still omitting the key are the
+  frozen `0.3.47` trio, which correctly do not republish.
+- **`turul-mcp-ext-tasks`'s README leads with its provenance caveat**, because
+  it is the one a consumer most needs before depending on it: upstream
+  `modelcontextprotocol/ext-tasks` is self-labelled *experimental*, publishes
+  only the mutable `schema/draft/` path and cuts no tags. The crate therefore
+  pins commit + content checksum — the strongest provenance a source with no
+  tags admits — and says so where a consumer sees it rather than only in a
+  document they may never open.
+- **README:** the per-lane Task Support detail moved out of Quick Start into
+  §Tasks Architecture, where the surrounding text explains why the lanes differ.
+  In Quick Start it interrupted the five-line "hello world" with a lane caveat.
+- **Seven documented commands named things that do not exist** and are fixed:
+  three test files that are `#[path]`-included by an aggregate target rather
+  than being `--test` targets (`autotests = false`), a schemars filter pointed
+  at the wrong crate, a nonexistent `integration` test target, a nonexistent
+  `integration` feature on `turul-mcp-builders`, and a `cd` into a path that is
+  the *package* name rather than the directory. Lane coherence and port
+  coherence were audited across ~155 documented commands and found **clean** —
+  no doc drives a 2025 handshake at a 2026 server or the reverse.
+- **`CLAUDE.md` pre-release step 2 described work that no longer exists.** It
+  told the operator to edit `.version("x.y.z")` strings in `examples/*/src/main.rs`;
+  all 45 examples that set a version use `env!("CARGO_PKG_VERSION")` and all 55
+  manifests are already `0.4.0`. Replaced with the step that actually moves the
+  wire value, plus a guard grep.
+- **Release-checklist drift recorded.** Of 20 boxes still rendering unchecked,
+  **18 were done and never ticked**, verified against the tree rather than
+  against commit messages. The boxes are left as-is with a dated audit note, so
+  the evidence survives; mass-ticking would have destroyed the trail.
+- **Manual-verification doc corrected.** The load-bearing fix is the A2/D1
+  interop premise, written 2026-07-29 when FastMCP 4 beta was the only peer and
+  the official TypeScript SDK had not shipped 2026-07-28 support. Both claims
+  are now false, so working that document top-to-bottom would have held the
+  release on an objection that no longer exists.
+
+### Single-era server posture, stated rather than implied (2026-08-11)
+
+- The 2026-07-28 spec's §Versioning and Compatibility defines **dual-era** — one
+  implementation serving modern and legacy clients, permitted to run
+  "concurrently on the same endpoint or process" — and makes it a **MAY**.
+  Nothing in the docs said which side of that this framework is on.
+- **turul servers are single-era by construction** and now say so: the two
+  protocol features are mutually exclusive via `compile_error!`, so a binary
+  speaks one spec or the other. Serving both means two instances. The client is
+  the exception and already links both, negotiating per connection (ADR-030).
+- Stated in `README.md` (with the client-era × server-lane outcome table and the
+  live `400` / `-32020` body a legacy client actually receives),
+  `docs/compliance/base-protocol.md` §4, and `AGENTS.md`. The asymmetry worth
+  knowing: per the spec's own matrix a **legacy client → modern server fails**,
+  so a 2026-default server is unreachable to 2025-era clients.
+
+### `turul-mcp-client` driven at a REAL 2025-11-25 server (2026-08-11)
+
+- The 2026-07-28 half of ADR-030's bilingual contract was covered against a real
+  server; the 2025-11-25 half was covered only by `wiremock` stubs. **A mock
+  cannot disagree with the client, because the same author wrote both** — so if
+  the server's 2025 lane and the client's 2025 lane had drifted apart, nothing
+  in the repo would have noticed. `ci-gates.sh` only *built*
+  `client-initialise-server` and never pointed the client at it.
+- Three tests, all on mechanisms 2026-07-28 removed, so this doubles as the
+  regression guard for the opt-in lane: the bilingual client locks 2025-11-25
+  off a real server's `server/discover` rejection and the server mints an
+  `Mcp-Session-Id`; that id survives real traffic rather than being re-handshaked
+  per request; and tools round-trip with the returned payload asserted, not
+  merely `Ok`.
+- Hosted in the integration-tests crate by necessity — its `turul-mcp-server`
+  dep is already pinned to `protocol-2025-11-25` while `turul-mcp-client`
+  arrives bilingual. The client crate cannot host it: its own dev-dep on
+  `turul-mcp-server` takes default (2026) features.
+
+### Six workspace dependency bumps (2026-08-11)
+
+- `syn` 2.0 → 3.0, `serial_test` 3.5 → 4.0, `jsonschema` 0.48 → 0.49 (a `0.x`
+  minor is semver-major by cargo's rules), plus `hyper` 1.10 → 1.11, `http`
+  1.4 → 1.5, `aws-config` 1.9 → 1.10.
+- Verified rather than assumed, because three are major bumps and `syn`
+  underpins `turul-mcp-derive`, which **both** spec lanes depend on: resolution
+  checked with `cargo metadata`, default lane 29 PASS / 0 FAIL, opt-in lane
+  36 PASS / 0 FAIL — the latter matters most, since it carries the derive-macro
+  doctests.
+- `jsonschema` stays `default-features = false`, so remote/local `$ref` fetching
+  remains impossible to compile in; the bump does not widen that surface.
+
+### `subscriptions/listen` driven from a peer (2026-08-08)
+
+- `interop-fixture-server` gained `emit_changes`, broadcasting all four
+  notification flavours. Emitting only the watched type would make "filtered
+  correctly" and "emitted nothing else" indistinguishable.
+- `scripts/interop-python-sdk.sh` opens a listen stream requesting
+  `resourcesListChanged` only, then asserts on proxy-captured frames: the stream
+  acknowledges **first**, delivers only the requested type, and every frame
+  carries a `subscriptionId`.
+- Two proxy defects fixed, the second being the dangerous shape: the buffering
+  `read()` blocked forever on a long-lived stream (a deadline consulted only
+  *after* a line arrives never fires once the server goes idle); and the listen
+  handler's capture entry, appended at the end, raced the assertion pass and
+  reported "no `subscriptions/listen` reached the server" while the client had
+  demonstrably received notifications.
+
+### MRTR and progress covered against a live peer — J3/J4 closed (2026-08-08)
+
+- The two headline 2026-07-28 features were **self-verified only**: every check
+  on MRTR and request-scoped progress had turul code on both ends of the wire.
+  Both are now driven by the reference MCP Python SDK through a logging proxy,
+  with assertions on captured bytes.
+- Fixture `confirm` is an MRTR tool whose leg 2 re-derives the validation schema
+  rather than persisting it — the stateless property J3 exists to prove — and
+  rejects a tampered `requestState`. Fixture `count` emits progress carrying the
+  *client's own* token and reports how many it actually sent, not how many it
+  attempted.
+- **J3a fired unprompted on the first run** against a probe that had simply
+  forgotten to declare `elicitation`: `-32021` naming the capability it needed.
+  The gate works. J3b then completed the round trip with the **SDK driving the
+  retry itself**, so a foreign client finished MRTR unaided.
+
+### Interop peers, toolchain pin, stale-doc reconciliation (2026-08-08)
+
+- **New peer: the reference MCP Python SDK (`mcp==2.0.0`)**, cell P2→R, passing
+  on its first run — 9 methods + 5 negatives, no `initialize`, no session header.
+  Until now "Python interop" meant only FastMCP, a third-party framework; this
+  is the implementation published by the protocol authors.
+- **`interop-go-sdk.sh` had silently stopped running.** Its pin-currency check
+  read `GO_SDK_VERSION` above the line assigning it, so under `set -u` the probe
+  aborted every time while the matrix still recorded "pass". Fixed; the cell now
+  passes for real.
+- **Skips exited 0** in the Go and turul-client probes, making an absent peer
+  indistinguishable from a green cell. Both now exit **77**.
+- FastMCP pin `4.0.0b1` → `4.0.0b2`. R→P drives 9 methods and the peer answers 8
+  (it returns `-32601` for `completion/complete`), recorded as "9 driven, 8
+  answered" rather than as coverage that does not exist.
+- **`rust-toolchain.toml` pins stable**, which is what every CI job uses. Without
+  it the local toolchain floated: on nightly 2026-08-07 `clippy::double_must_use`
+  fired on `async_trait` output and failed `ci-gates.sh opt-in-2025` twice while
+  hosted CI stayed green. No code defect — a toolchain-parity defect.
+
 ### `OUTSTANDING.md` retired (2026-08-02)
 
 - **The 0.4 compliance punch list is folded and deleted**, as the file itself
