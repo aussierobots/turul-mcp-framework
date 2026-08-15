@@ -18,12 +18,26 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use hmac::{Hmac, Mac};
 use serde_json::Value;
-use turul_mcp_derive::mcp_tool;
+use sha2::Sha256;
+use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::content::ResourceContents;
+use turul_mcp_protocol::elicitation::{
+    ElicitRequest, ElicitationSchema, PrimitiveSchemaDefinition,
+};
+use turul_mcp_protocol::input_required::{InputRequest, InputRequests, InputResponse};
 use turul_mcp_protocol::prompts::PromptMessage;
 use turul_mcp_protocol::resources::ResourceContent;
+// `roots/list` is deprecated under SEP-2577, but remains a valid `InputRequest`
+// variant for the SEP-2322 migration window — which is precisely what the
+// `input-required-result-basic-list-roots` scenario exercises. Suppressed here
+// rather than avoided: dropping the fixture would drop the coverage.
+#[allow(deprecated)]
+use turul_mcp_protocol::roots::ListRootsRequest;
+#[allow(deprecated)]
+use turul_mcp_protocol::sampling::{CreateMessageRequest, SamplingMessage};
 use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations, ToolResult, ToolSchema};
 use turul_mcp_server::prelude::*;
 use turul_mcp_server::{McpPrompt, McpResource, McpResult, McpServer, McpTool, SessionContext};
@@ -575,6 +589,472 @@ impl McpPrompt for PromptWithEmbeddedResource {
     }
 }
 
+// ---------------------------------------------------------------------------
+// MRTR (SEP-2322) fixtures — the `input-required-result-*` scenarios.
+//
+// Fixture NAMES here come from the harness itself, not from
+// `docs/plans/2026-07-28-conformance-fixtures.md`: a scenario that cannot find
+// its fixture reports `Unknown tool: <name>`, which is the authoritative
+// spelling. The harvested plan disagrees with it in places.
+//
+// Shape of every one of these: the first leg returns
+// `Err(McpError::InputRequired { .. })`, which the framework renders as an
+// `InputRequiredResult` (`resultType: "input_required"`) — a SUCCESSFUL
+// JSON-RPC response, not an error. The client retries the original call with
+// `inputResponses` + the echoed `requestState`, and `session.input_responses()`
+// surfaces them on the retry leg.
+//
+// This is why 0.4.2 deliberately did NOT convert `InputRequired` into
+// `isError: true` when it made `ToolExecutionError` do so — a blanket
+// conversion broke 7 MRTR wire tests. See `turul-mcp-derive/src/tool_attr.rs`.
+// ---------------------------------------------------------------------------
+
+/// One elicitation, then complete. Serves four scenarios:
+/// `input-required-result-basic-elicitation`, `-ignore-extra-params`,
+/// `-result-type` and `-validate-input`.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_input_required_result_elicitation",
+    description = "Requires an elicitation before completing",
+    output = String
+)]
+struct InputRequiredElicitationTool {}
+
+impl InputRequiredElicitationTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && let Some(responses) = session.input_responses()
+        {
+            let answer = responses
+                .get("user_name")
+                .and_then(|r| match r {
+                    InputResponse::Elicit(e) => e
+                        .content
+                        .as_ref()
+                        .and_then(|c| c.get("name"))
+                        .and_then(|v| v.as_str())
+                        .map(String::from),
+                    _ => None,
+                })
+                .unwrap_or_else(|| "<no answer>".to_string());
+            return Ok(format!("Received input: {answer}"));
+        }
+        // The harness asserts the inputRequests key is exactly "user_name" —
+        // these keys are part of the fixture contract, not free choice.
+        let schema = ElicitationSchema::new()
+            .with_property("name".to_string(), PrimitiveSchemaDefinition::string());
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "user_name".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("What is your name?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("elicitation-state-1".to_string()),
+        })
+    }
+}
+
+/// `input-required-result-basic-list-roots`: asks the client for its roots.
+///
+/// `roots/list` is deprecated under SEP-2577 but remains a valid
+/// `InputRequest` variant for the SEP-2322 migration window, which is exactly
+/// what this scenario exercises.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_input_required_result_list_roots",
+    description = "Requires the client's roots before completing",
+    output = String
+)]
+struct InputRequiredListRootsTool {}
+
+impl InputRequiredListRootsTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && session.input_responses().is_some()
+        {
+            return Ok("Received roots".to_string());
+        }
+        let mut requests = InputRequests::new();
+        #[allow(deprecated)]
+        requests.insert(
+            "roots1".to_string(),
+            InputRequest::ListRoots(ListRootsRequest::new()),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("list-roots-state-1".to_string()),
+        })
+    }
+}
+
+/// `input-required-result-basic-sampling`: asks the client to sample.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_input_required_result_sampling",
+    description = "Requires a sampling result before completing",
+    output = String
+)]
+struct InputRequiredSamplingTool {}
+
+impl InputRequiredSamplingTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && session.input_responses().is_some()
+        {
+            return Ok("Received sampling result".to_string());
+        }
+        #[allow(deprecated)]
+        let request = CreateMessageRequest::new(vec![SamplingMessage::user_text("Say hello")], 64);
+        let mut requests = InputRequests::new();
+        requests.insert("s1".to_string(), InputRequest::CreateMessage(request));
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("sampling-state-1".to_string()),
+        })
+    }
+}
+
+/// `input-required-result-multiple-input-requests`: two distinct requests in
+/// one `InputRequiredResult`, keyed independently.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_input_required_result_multiple_inputs",
+    description = "Requires two inputs in a single round trip",
+    output = String
+)]
+struct InputRequiredMultipleInputsTool {}
+
+impl InputRequiredMultipleInputsTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && let Some(responses) = session.input_responses()
+        {
+            let mut keys: Vec<&String> = responses.keys().collect();
+            keys.sort();
+            let joined = keys
+                .iter()
+                .map(|k| k.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            return Ok(format!("Received inputs: {joined}"));
+        }
+        // The harness requires at least THREE requests spanning three distinct
+        // method types — elicitation/create, sampling/createMessage and
+        // roots/list — not merely three requests.
+        let mut requests = InputRequests::new();
+        let schema = ElicitationSchema::new()
+            .with_property("name".to_string(), PrimitiveSchemaDefinition::string());
+        requests.insert(
+            "user_name".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("What is your name?", schema)),
+        );
+        #[allow(deprecated)]
+        {
+            let request =
+                CreateMessageRequest::new(vec![SamplingMessage::user_text("Say hello")], 64);
+            requests.insert("s1".to_string(), InputRequest::CreateMessage(request));
+            requests.insert(
+                "roots1".to_string(),
+                InputRequest::ListRoots(ListRootsRequest::new()),
+            );
+        }
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("multiple-inputs-state-1".to_string()),
+        })
+    }
+}
+
+/// `input-required-result-request-state`: echoes the `requestState` the server
+/// issued, proving it survived the round trip verbatim.
+///
+/// `input-required-result-tampered-state` also depends on this fixture class:
+/// it first needs a real `InputRequiredResult` carrying `requestState` before
+/// it can tamper with one.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_input_required_result_request_state",
+    description = "Round-trips an opaque requestState",
+    output = String
+)]
+struct InputRequiredRequestStateTool {}
+
+impl InputRequiredRequestStateTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        if let Some(session) = &session
+            && session.input_responses().is_some()
+        {
+            let state = session
+                .mrtr_request_state()
+                .unwrap_or_else(|| "<none>".to_string());
+            return Ok(format!("Received state: {state}"));
+        }
+        let schema = ElicitationSchema::new()
+            .with_property("answer".to_string(), PrimitiveSchemaDefinition::string());
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "q1".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("Confirm?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("request-state-token-1".to_string()),
+        })
+    }
+}
+
+/// `input-required-result-capability-check`: SEP-2322 requires a server to
+/// include `inputRequests` ONLY for capabilities the client declared.
+///
+/// The harness calls this with `clientCapabilities: { sampling: {} }` and
+/// fails the run if any `elicitation/create` request comes back. So the tool
+/// must *adapt* what it asks for rather than asking unconditionally and
+/// letting the framework's `-32021` gate fire — degrading gracefully is the
+/// behaviour under test.
+///
+/// Reading the declaration needs `SessionContext::client_capabilities()`,
+/// added 2026-08-15 for exactly this: the framework already enforced the
+/// negative half, but a tool could not see what was declared, so this
+/// requirement was unimplementable by any server built on the framework.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_input_required_result_capabilities",
+    description = "Requests only the input kinds the client declared",
+    output = String
+)]
+struct InputRequiredCapabilitiesTool {}
+
+impl InputRequiredCapabilitiesTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        if session.input_responses().is_some() {
+            return Ok("Capability satisfied".to_string());
+        }
+        let caps = session.client_capabilities().unwrap_or_default();
+
+        let mut requests = InputRequests::new();
+        if caps.elicitation.is_some() {
+            let schema = ElicitationSchema::new()
+                .with_property("answer".to_string(), PrimitiveSchemaDefinition::string());
+            requests.insert(
+                "user_name".to_string(),
+                InputRequest::Elicit(ElicitRequest::new_form("Capability gated", schema)),
+            );
+        }
+        if caps.sampling.is_some() {
+            #[allow(deprecated)]
+            let request =
+                CreateMessageRequest::new(vec![SamplingMessage::user_text("Say hello")], 64);
+            requests.insert("s1".to_string(), InputRequest::CreateMessage(request));
+        }
+        if requests.is_empty() {
+            return Ok("No supported input capability declared".to_string());
+        }
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("capability-state-1".to_string()),
+        })
+    }
+}
+
+/// `input-required-result-multi-round`: three legs, not two.
+///
+/// Round 1 asks for a name; round 2 must return ANOTHER `InputRequiredResult`
+/// with a *different* `requestState`; round 3 completes. The harness asserts
+/// the state actually changes between rounds, so the fixture keys its
+/// progress off the echoed state rather than a counter.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_input_required_result_multi_round",
+    description = "Requires two rounds of input before completing",
+    output = String
+)]
+struct InputRequiredMultiRoundTool {}
+
+impl InputRequiredMultiRoundTool {
+    fn ask(field: &str, prompt: &str, state: &str) -> McpError {
+        let schema = ElicitationSchema::new()
+            .with_property(field.to_string(), PrimitiveSchemaDefinition::string());
+        let mut requests = InputRequests::new();
+        requests.insert(
+            field.to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form(prompt, schema)),
+        );
+        McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some(state.to_string()),
+        }
+    }
+
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        match session.mrtr_request_state().as_deref() {
+            // Leg 1: nothing echoed yet.
+            None => Err(Self::ask("name", "What is your name?", "multi-round-1")),
+            // Leg 2: round 1 answered — ask again under a NEW state.
+            Some("multi-round-1") => Err(Self::ask(
+                "color",
+                "What is your favourite colour?",
+                "multi-round-2",
+            )),
+            // Leg 3: both answered.
+            Some("multi-round-2") => Ok("Multi-round complete".to_string()),
+            Some(other) => Err(McpError::tool_execution(&format!(
+                "unrecognised requestState: {other}"
+            ))),
+        }
+    }
+}
+
+/// `input-required-result-tampered-state`: `requestState` is
+/// attacker-controlled, so a server MUST detect modification rather than
+/// trusting what comes back.
+///
+/// The harness takes the issued state, appends `-TAMPERED`, and requires a
+/// JSON-RPC error. This fixture signs the state with an HMAC and rejects a
+/// bad tag — the pattern a real server should copy, and the reason
+/// `SessionContext::mrtr_request_state` documents the value as
+/// attacker-controlled.
+///
+/// The key is process-local and random per boot: nothing here is persisted or
+/// verified across restarts, and a fixture must never ship a fixed secret.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "test_input_required_result_tampered_state",
+    description = "Rejects a modified requestState",
+    output = String
+)]
+struct InputRequiredTamperedStateTool {}
+
+impl InputRequiredTamperedStateTool {
+    fn key() -> &'static [u8; 32] {
+        static KEY: std::sync::OnceLock<[u8; 32]> = std::sync::OnceLock::new();
+        KEY.get_or_init(|| {
+            let mut k = [0u8; 32];
+            getrandom::fill(&mut k).expect("OS RNG unavailable");
+            k
+        })
+    }
+
+    /// `payload.hex(HMAC-SHA256(key, payload))`
+    fn sign(payload: &str) -> String {
+        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(Self::key()).expect("any key length");
+        mac.update(payload.as_bytes());
+        let tag = mac.finalize().into_bytes();
+        format!("{payload}.{}", hex_lower(&tag))
+    }
+
+    fn verify(state: &str) -> bool {
+        let Some((payload, tag)) = state.rsplit_once('.') else {
+            return false;
+        };
+        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(Self::key()).expect("any key length");
+        mac.update(payload.as_bytes());
+        // Constant-time compare via the MAC's own verify.
+        match hex_decode(tag) {
+            Some(bytes) => mac.verify_slice(&bytes).is_ok(),
+            None => false,
+        }
+    }
+
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
+        if let Some(state) = session.mrtr_request_state() {
+            if !Self::verify(&state) {
+                // -32602: the client sent a requestState we did not issue.
+                return Err(McpError::param_out_of_range(
+                    "requestState",
+                    &state,
+                    "a requestState issued by this server (integrity check failed)",
+                ));
+            }
+            return Ok("State verified".to_string());
+        }
+        let schema = ElicitationSchema::new()
+            .with_property("answer".to_string(), PrimitiveSchemaDefinition::string());
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "user_name".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("What is the answer?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some(Self::sign("tampered-state-payload")),
+        })
+    }
+}
+
+fn hex_lower(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn hex_decode(s: &str) -> Option<Vec<u8>> {
+    if !s.len().is_multiple_of(2) {
+        return None;
+    }
+    (0..s.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&s[i..i + 2], 16).ok())
+        .collect()
+}
+
+/// `input-required-result-non-tool-request`: MRTR is not tools-only — a
+/// PROMPT must be able to return `InputRequiredResult` too. The harness asks
+/// for a prompt of this name (`expected existing prompt name`), not a tool.
+///
+/// On the retry leg the responses arrive in the render args under the
+/// reserved `io.modelcontextprotocol/inputResponses` key rather than through
+/// `SessionContext`, because `render` takes no session.
+struct InputRequiredPrompt;
+
+impl HasPromptMetadata for InputRequiredPrompt {
+    fn name(&self) -> &str {
+        "test_input_required_result_prompt"
+    }
+}
+impl HasPromptDescription for InputRequiredPrompt {
+    fn description(&self) -> Option<&str> {
+        Some("A prompt that requires input before rendering")
+    }
+}
+impl HasPromptArguments for InputRequiredPrompt {}
+impl HasPromptAnnotations for InputRequiredPrompt {}
+impl HasPromptMeta for InputRequiredPrompt {}
+impl HasIcons for InputRequiredPrompt {}
+
+#[async_trait]
+impl McpPrompt for InputRequiredPrompt {
+    async fn render(
+        &self,
+        args: Option<HashMap<String, serde_json::Value>>,
+    ) -> McpResult<Vec<PromptMessage>> {
+        if let Some(responses) = args
+            .as_ref()
+            .and_then(|a| a.get("io.modelcontextprotocol/inputResponses"))
+        {
+            let answer = responses
+                .pointer("/q1/content/answer")
+                .and_then(|v| v.as_str())
+                .unwrap_or("<no answer>");
+            return Ok(vec![PromptMessage::user_text(format!(
+                "Prompt received input: {answer}"
+            ))]);
+        }
+        let schema = ElicitationSchema::new()
+            .with_property("answer".to_string(), PrimitiveSchemaDefinition::string());
+        let mut requests = InputRequests::new();
+        requests.insert(
+            "q1".to_string(),
+            InputRequest::Elicit(ElicitRequest::new_form("What is the answer?", schema)),
+        );
+        Err(McpError::InputRequired {
+            input_requests: Some(requests),
+            request_state: Some("prompt-state-1".to_string()),
+        })
+    }
+}
+
 /// `resources-read-text`: resource at test://static-text that returns plain text content.
 struct StaticTextResource;
 
@@ -705,6 +1185,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(AudioContentTool)
         .tool(EmbeddedResourceTool)
         .tool(MultipleContentTypesTool)
+        .tool(InputRequiredElicitationTool::default())
+        .tool(InputRequiredListRootsTool::default())
+        .tool(InputRequiredSamplingTool::default())
+        .tool(InputRequiredMultipleInputsTool::default())
+        .tool(InputRequiredRequestStateTool::default())
+        .tool(InputRequiredCapabilitiesTool::default())
+        .tool(InputRequiredMultiRoundTool::default())
+        .tool(InputRequiredTamperedStateTool::default())
+        .prompt(InputRequiredPrompt)
         .prompt(SimplePrompt)
         .prompt(PromptWithArguments)
         .prompt(PromptWithImage)

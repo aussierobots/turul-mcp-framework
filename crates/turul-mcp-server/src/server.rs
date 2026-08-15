@@ -1845,6 +1845,16 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                         serde_json::Value::String(state.clone()),
                     );
                 }
+                // SEP-2322 requires a server to include inputRequests ONLY for
+                // capabilities the client declared. The framework enforces the
+                // negative half itself (-32021 when a tool asks for something
+                // undeclared), but a tool cannot *adapt* what it asks for
+                // without seeing the declaration, so surface it.
+                if let Ok(v) = serde_json::to_value(&call_params.meta.client_capabilities) {
+                    session
+                        .extensions
+                        .insert("mcp:clientCapabilities".to_string(), v);
+                }
                 // Per-request log opt-in: notifications/message is emitted only
                 // for requests whose _meta declares a logLevel.
                 #[allow(deprecated)]

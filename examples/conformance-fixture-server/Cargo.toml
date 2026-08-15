@@ -4,7 +4,7 @@ version = "0.4.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "First-slice fixture server for the upstream @modelcontextprotocol/conformance suite (4 of 27 fixtures)"
+description = "Fixture server for the upstream @modelcontextprotocol/conformance suite"
 
 [dependencies]
 turul-mcp-server.workspace = true
@@ -16,6 +16,13 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 serde_json.workspace = true
+# The `input-required-result-tampered-state` scenario requires the server to
+# detect a modified `requestState`. The framework deliberately passes that
+# value through verbatim (it is attacker-controlled and only the author knows
+# what it means), and offers no signing helper, so the fixture signs it here.
+hmac = "0.12"
+sha2 = "0.10"
+getrandom = "0.3"
 
 [[bin]]
 name = "conformance-fixture-server"

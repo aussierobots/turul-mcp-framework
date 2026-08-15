@@ -357,6 +357,29 @@ impl SessionContext {
             .and_then(|v| v.as_str().map(String::from))
     }
 
+    /// SEP-2322: the `clientCapabilities` the caller declared in this
+    /// request's `_meta`.
+    ///
+    /// A server MUST include `inputRequests` only for capabilities the client
+    /// declared. The framework enforces the negative half on its own — asking
+    /// for an undeclared capability answers `-32021` before the response
+    /// leaves — but a tool that wants to *degrade gracefully* (ask for
+    /// sampling when elicitation is absent, rather than failing the call) has
+    /// to read the declaration, which is what this exposes.
+    ///
+    /// `_meta.clientCapabilities` is REQUIRED on every 2026-07-28 request, so
+    /// this is `Some` for any request that got as far as a tool body; the
+    /// `Option` covers only deserialization failure. Each field *within* is
+    /// optional — an absent `elicitation` is the declaration that matters.
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub fn client_capabilities(
+        &self,
+    ) -> Option<turul_mcp_protocol::initialize::ClientCapabilities> {
+        self.extensions
+            .get("mcp:clientCapabilities")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+    }
+
     /// The request's `_meta.progressToken`, when the caller opted in to
     /// `notifications/progress` (populated by the tools/call and resources/read
     /// handlers on both lanes).
