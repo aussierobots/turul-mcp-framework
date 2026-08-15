@@ -43,6 +43,36 @@ impl EchoTool {
     }
 }
 
+/// The same domain failure as `FailingTool`, but authored with the derive macro
+/// rather than by hand.
+///
+/// This distinction is the whole point of the test below. `FailingTool` proves
+/// the *server* can carry `isError: true`; it says nothing about whether the
+/// macros — the two authoring paths the README recommends — can reach that
+/// shape. Until 2026-08-15 they could not: both mapped a tool's `Err` onto
+/// `McpError::tool_execution`, which leaves as JSON-RPC `-32010`. The gap was
+/// invisible because every assertion about the error path checked the code that
+/// was emitted, never whether that shape was the one the spec asks for.
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "macro_always_fails",
+    description = "A macro-authored tool that always fails",
+    output = String
+)]
+struct MacroFailingTool {
+    // Optional on purpose. A *required* param makes the call fail during
+    // parameter extraction with -32602, before the tool body ever runs — which
+    // is correct behaviour and a different code path from the one under test.
+    #[param(description = "Ignored")]
+    message: Option<String>,
+}
+
+impl MacroFailingTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Err(McpError::tool_execution("upstream returned 503"))
+    }
+}
+
 /// Reports a domain failure the way Server §Tools prescribes: a *successful*
 /// JSON-RPC result carrying `isError: true`, not a JSON-RPC error object.
 #[derive(Clone)]
@@ -104,6 +134,7 @@ async fn start_server() -> String {
         .version("0.4.0")
         .tool(EchoTool::default())
         .tool(FailingTool)
+        .tool(MacroFailingTool::default())
         .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
         .build()
         .expect("build 2026 server");
@@ -361,5 +392,45 @@ async fn removed_notification_methods_are_acked_not_dispatched() {
     assert!(
         body["error"].is_null(),
         "no error expected after removed notifications: {body}"
+    );
+}
+
+/// The same contract as `tool_domain_failure_is_is_error_not_a_json_rpc_error`,
+/// but for a tool written with `#[derive(McpTool)]` — the path the README
+/// recommends and the path almost every user takes.
+///
+/// Schema §CallToolResult.isError: "Any errors that originate from the tool
+/// SHOULD be reported inside the result object, with `isError` set to true,
+/// _not_ as an MCP protocol-level error response. Otherwise, the LLM would not
+/// be able to see that an error occurred and self-correct."
+///
+/// Before 2026-08-15 this returned JSON-RPC `-32010` instead, so a model
+/// driving a macro-authored tool could not see a domain failure at all. The
+/// assertion below fails against that old behaviour, which is what makes it
+/// worth having: `body["error"]` would be present and `body["result"]` absent.
+#[tokio::test]
+async fn macro_authored_tool_failure_is_also_is_error_not_a_json_rpc_error() {
+    let url = start_server().await;
+
+    let (status, body) = call_tool(&url, "macro_always_fails", "macro_always_fails").await;
+
+    assert_eq!(
+        status, 200,
+        "a tool-reported failure is a successful RPC even from a macro-authored tool: {body}"
+    );
+    assert!(
+        body.get("error").is_none(),
+        "the macro must not turn a tool's own failure into a JSON-RPC error: {body}"
+    );
+    assert_eq!(
+        body["result"]["isError"], true,
+        "a macro-authored tool's failure must carry isError: true: {body}"
+    );
+    assert!(
+        body["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("503"),
+        "the failure description must reach the model as content: {body}"
     );
 }

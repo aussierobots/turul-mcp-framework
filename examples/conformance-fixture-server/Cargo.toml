@@ -1,0 +1,23 @@
+[package]
+name = "conformance-fixture-server"
+version = "0.4.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "First-slice fixture server for the upstream @modelcontextprotocol/conformance suite (4 of 27 fixtures)"
+
+[dependencies]
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
+async-trait.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+
+[[bin]]
+name = "conformance-fixture-server"
+path = "src/main.rs"
+test = false

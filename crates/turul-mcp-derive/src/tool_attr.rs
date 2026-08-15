@@ -394,7 +394,26 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                         // Use smart response builder with automatic structured content
                         turul_mcp_protocol::tools::CallToolResult::from_result_with_schema(&schema_result, self.output_schema())
                     }
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e.to_string()))
+                    // `ToolExecutionError` is the one variant that means "the tool ran and
+                    // failed", so it is the one the spec wants reported as a RESULT —
+                    // schema.ts: "Any errors that originate from the tool SHOULD be
+                    // reported inside the result object, with `isError` set to true ...
+                    // Otherwise, the LLM would not be able to see that an error occurred
+                    // and self-correct." `impl From<&str>/From<String>` also lands here,
+                    // so the common `Err("...".into())` is covered.
+                    //
+                    // Every other variant MUST keep flowing as a JSON-RPC error, and the
+                    // set is not cosmetic: `InputRequired` is MRTR control flow (SEP-2322)
+                    // that the server turns into `resultType: "input_required"`, and
+                    // `MissingRequiredClientCapability` is the spec's -32021 gate.
+                    // Swallowing either into `isError` silently breaks the feature — an
+                    // earlier, blanket version of this change failed 7 MRTR wire tests.
+                    Err(turul_mcp_protocol::McpError::ToolExecutionError(msg)) => {
+                        Ok(turul_mcp_protocol::tools::CallToolResult::error(vec![
+                            turul_mcp_protocol::tools::ToolResult::text(msg)
+                        ]))
+                    }
+                    Err(e) => Err(e)
                 }
             }
         }

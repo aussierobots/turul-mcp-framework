@@ -3,11 +3,11 @@
 Every directory under `examples/` appears in this file exactly once, with the
 spec lane it builds on and one line on what it demonstrates.
 
-**56 examples**, by lane:
+**57 examples**, by lane:
 
 | Lane | Count | What it means |
 |---|---|---|
-| **2026-07-28** (default) | 37 | Built by a bare `cargo build` — they are in `[default-members]` |
+| **2026-07-28** (default) | 38 | Built by a bare `cargo build` — they are in `[default-members]` |
 | **2025-11-25** (pinned) | 16 | Manifest pins `protocol-2025-11-25`; unifying them into the default build set trips the spec mutex, so they are built by `scripts/ci-gates.sh opt-in-2025` |
 | **2025-11-25** (wire only) | 3 | Raw `reqwest` clients with no protocol-crate dependency — they compile on any lane but speak the 2025-11-25 wire (`initialize` handshake, `Mcp-Session-Id`) |
 
@@ -131,6 +131,7 @@ Every client pairs with a server **on its own lane** — start the server first.
 | **bilingual-fleet-client** | both | `minimal-server` (8641) + `client-initialise-server` (52950) | One binary sweeping a mixed fleet, negotiating the wire spec per connection |
 | **interop-client-probe** | 2026-07-28 | any foreign 2026-07-28 server | `turul-mcp-client` driven against a server this project did not write; reports `LEG <name> OK\|FAIL` per leg |
 | **interop-fixture-server** | 2026-07-28 | the cross-implementation probes in `scripts/interop-*.sh` | The frozen 2026 surface every foreign client is asserted against (port 8700) |
+| **conformance-fixture-server** | 2026-07-28 | `npx @modelcontextprotocol/conformance server` | First slice (4 of 27) of the fixtures `docs/plans/2026-07-28-conformance-fixtures.md` requires: `test_simple_text`, `test_error_handling`, `test_missing_capability`, `test_simple_prompt` (port 8010) |
 | **client-initialise-server** | 2025-11-25 (pinned) | `client-initialise-report`, `session-management-compliance-test`, `streamable-http-client-2025-11-25` | The 2025 handshake fixture; `--storage-backend` selects the session store and the tools report which one is live |
 | **client-initialise-report** | 2025-11-25 (wire) | `client-initialise-server` | Raw-wire lifecycle probe: handshake, session data readback, DELETE |
 | **streamable-http-client-2025-11-25** | 2025-11-25 (wire) | `client-initialise-server` | Hand-parsed 2025 POST-SSE framing; asserts the server echoes the request's `progressToken` |
