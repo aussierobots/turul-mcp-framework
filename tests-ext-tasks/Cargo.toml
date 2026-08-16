@@ -1,0 +1,54 @@
+[package]
+name = "turul-ext-tasks-backend-e2e"
+version = "0.1.0"
+edition.workspace = true
+autotests = false
+# Test-only crate: `[[test]]` targets, no lib and no bin. Never goes to crates.io.
+#
+# This exists so the four-backend Tasks e2e can link sqlx, aws-sdk-dynamodb and
+# the storage features of `turul-mcp-ext-tasks` WITHOUT any of that landing in a
+# published crate's dependency graph. The suite previously lived in
+# `turul-mcp-client/tests/`, which made an MCP *client* library dev-depend on
+# Postgres and DynamoDB drivers — and coupled `cargo publish -p turul-mcp-client`
+# to `turul-mcp-ext-tasks` having already published those features.
+#
+# Separate from `tests/` (turul-mcp-framework-integration-tests) because that
+# crate pins the 2025-11-25 opt-in lane throughout, and the two protocol
+# features are mutually exclusive — this suite is 2026-07-28 only.
+publish = false
+
+[dev-dependencies]
+turul-mcp-client = { path = "../crates/turul-mcp-client", version = "0.4", features = [
+  "ext-tasks",
+] }
+turul-mcp-server = { path = "../crates/turul-mcp-server", version = "0.4", features = [
+  "ext-tasks",
+] }
+turul-mcp-ext-tasks = { path = "../crates/turul-mcp-ext-tasks", version = "0.1", features = [
+  "sqlite",
+  "postgres",
+  "dynamodb",
+] }
+turul-mcp-derive = { path = "../crates/turul-mcp-derive", version = "0.4" }
+# The derive macros expand to `turul_mcp_protocol::` / `turul_mcp_builders::`
+# paths, so the test target needs both on the 2026 default lane.
+turul-mcp-protocol = { path = "../crates/turul-mcp-protocol", version = "0.4" }
+turul-mcp-builders = { path = "../crates/turul-mcp-builders", version = "0.4" }
+
+# The suite provisions a scratch Postgres database and a DynamoDB Local table
+# directly, rather than trusting the store to have been set up for it.
+sqlx = { workspace = true }
+aws-config = { workspace = true }
+aws-sdk-dynamodb = { workspace = true }
+
+tokio = { workspace = true, features = ["full"] }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+# Raw wire probes, alongside the client — several assertions are about bytes on
+# the wire that no typed client API exposes.
+reqwest = { workspace = true, features = ["json", "stream"] }
+wiremock = { workspace = true }
+
+[[test]]
+name = "ext_tasks_e2e_2026"
+path = "tests/ext_tasks_e2e_2026.rs"

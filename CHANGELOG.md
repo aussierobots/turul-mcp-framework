@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`turul-mcp-client` no longer dev-depends on Postgres and DynamoDB drivers.**
+  The four-backend Tasks e2e added in 0.4.4 was written into
+  `crates/turul-mcp-client/tests/`, which pulled `sqlx`, `aws-config`,
+  `aws-sdk-dynamodb` and `turul-mcp-ext-tasks`'s `sqlite`/`postgres`/`dynamodb`
+  features into an MCP *client* library's dependency graph. It also coupled
+  `cargo publish -p turul-mcp-client` to `turul-mcp-ext-tasks` having already
+  published those features — which is how the 0.4.1 client dry-run failed.
+
+  The suite moved to `tests-ext-tasks/`, a `publish = false` crate. Separate from
+  `tests/` because that crate pins the 2025-11-25 lane throughout and the two
+  protocol features are mutually exclusive. No shipped code changed; the client's
+  runtime dependency set was already correct.
+
+  Verified by absence, not by reading the manifest:
+  `cargo tree -p turul-mcp-client --edges dev -i sqlx` now reports no such
+  package, and likewise for `aws-sdk-dynamodb`.
+
+- **CI ran the Tasks backend e2e with no backends running**, which could only
+  fail — the suite panics rather than skips when a store is unreachable, by
+  design. CI now provisions PostgreSQL and DynamoDB Local the same docker-free
+  way `scripts/ext-tasks-backends.sh` does locally.
+
+- **The Postgres test URL hardcoded one developer's unix username**
+  (`postgres://nick@…`), in two places, so it connected on exactly one machine.
+  There is no default any more: the URL is derived once, by the script that
+  starts the server, and the code fails with an explicit message if it is unset.
+
+- **The moved suite carried a `#![cfg(feature = …)]` guard naming the client's
+  features.** In its new home those features do not exist, so the entire file
+  compiled away and reported a green run of zero tests — the exact failure mode
+  the backend gate exists to prevent. Caught before commit; the guard is gone.
+
+## [0.4.4] - 2026-08-16
+
 ### Added
 
 - **Durable task storage for the 2026-07-28 Tasks extension** —
@@ -14,8 +50,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   in-memory store only, while the *superseded* 2025 crate had SQLite,
   Postgres and DynamoDB. That is now inverted: `turul-mcp-ext-tasks` owns task
   persistence and carries all four backends, laid out like the sibling storage
-  crates (`traits.rs` + one module per backend, features `in-memory` /
-  `sqlite` / `postgres` / `dynamodb`).
+  crates (`traits.rs` + one module per backend). The in-memory store is
+  unconditional — there is no `in-memory` feature; the three durable backends
+  are opt-in behind `sqlite` / `postgres` / `dynamodb`, each of which is what
+  pulls in `sqlx` or the AWS SDK. A dependent that enables none of them (the
+  default, and what `turul-mcp-client`'s `ext-tasks` feature does) links no
+  database driver at all.
 
   Every status rule, owner check and `tasks/update` key decision lives once, in
   `traits.rs`, as pure transitions. A backend only does *load → apply → store*
@@ -2420,7 +2460,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.0...v0.4.1

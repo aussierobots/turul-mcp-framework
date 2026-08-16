@@ -2,8 +2,13 @@
 //! bilingual client with `declared_capabilities.ext_tasks` against an
 //! in-process `turul-mcp-server` built with the `ext-tasks` feature.
 //!
-//! Run with: `cargo test -p turul-mcp-client --features ext-tasks --test ext_tasks_e2e_2026`
-#![cfg(all(feature = "ext-tasks", feature = "client-bilingual", feature = "http"))]
+//! Run with: `cargo test -p turul-ext-tasks-backend-e2e`
+//!
+//! No `#![cfg(feature = ...)]` guard: this crate's manifest turns on everything
+//! the suite needs unconditionally. The guard it used to carry named the
+//! *client's* features (`ext-tasks`, `client-bilingual`, `http`), which do not
+//! exist here — leaving it in place compiled the whole file away and reported
+//! a green run of zero tests.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -432,8 +437,11 @@ impl StoreKind {
             ),
             StoreKind::Postgres => {
                 use sqlx::Executor;
+                // No fallback: the previous default hardcoded one developer's
+                // unix username. `scripts/ext-tasks-backends.sh` derives the
+                // URL and exports it, and is also what starts the server.
                 let base = std::env::var("TURUL_TEST_PG_URL")
-                    .unwrap_or_else(|_| "postgres://nick@%2Fvar%2Frun%2Fpostgresql".to_string());
+                    .expect("TURUL_TEST_PG_URL is unset — run via scripts/ext-tasks-backends.sh");
                 let admin = sqlx::PgPool::connect(&format!("{base}/postgres"))
                     .await
                     .unwrap_or_else(|e| panic!("Postgres unreachable for client e2e: {e}"));
