@@ -52,6 +52,24 @@ keeping because they are good practice rather than branch-specific:
 - **`cargo publish` is irreversible** — crates.io has no unpublish, only yank. See
   §Pre-Release Checklist before any publish.
 
+### Versioning: every change is a `0.0.1` patch bump
+
+**While MCP 2026-07-28 is the spec, `0.4` is fixed and every change ships as a
+patch.** Bug fixes, contract and spec-compliance corrections, dependency updates,
+docs, refactors, new surface — all `0.0.1`. There is no change on this line that
+earns a minor.
+
+- The **minor** moves only when the framework adopts a new MCP spec revision
+  (2026-07-28 → whatever supersedes it), or when the maintainer says so.
+- The **major** moves only on a phase transition or breaking architecture change.
+
+A change that is *technically* semver-breaking is still a patch here. Cargo treats
+all of `0.4.*` as one compatibility range, so removing a `pub` item — an enum
+variant, a method, a type — is formally breaking and would otherwise demand `0.5.0`.
+It does not on this line. **State the classification in the CHANGELOG entry** so the
+trade-off is on the record and reads as a decision rather than an oversight; do not
+quietly relabel it as cleanup, and do not bump the minor to be safe.
+
 ### Check the schema pins BEFORE any 2026-07-28 work
 
 **2026-07-28 has finalized.** The released schema lives at the immutable upstream path

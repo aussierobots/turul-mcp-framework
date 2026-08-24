@@ -10,11 +10,9 @@
 //! - **Enterprise Network Friendly**: No long-lived connections or polling requirements
 
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
 
 use bytes::Bytes;
-use futures::Stream;
 use http_body::Body;
 use http_body_util::{BodyExt, Full};
 use hyper::header::{ACCEPT, CONTENT_TYPE};
@@ -259,8 +257,6 @@ impl SessionValidationError {
 pub enum StreamableResponse {
     /// Single JSON response
     Json(Value),
-    /// Streaming response with multiple JSON messages
-    Stream(Pin<Box<dyn Stream<Item = std::result::Result<Value, String>> + Send>>),
     /// Error response
     Error { status: StatusCode, message: String },
 }
@@ -269,7 +265,6 @@ impl std::fmt::Debug for StreamableResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Json(value) => f.debug_tuple("Json").field(value).finish(),
-            Self::Stream(_) => f.debug_tuple("Stream").field(&"<stream>").finish(),
             Self::Error { status, message } => f
                 .debug_struct("Error")
                 .field("status", status)
@@ -294,21 +289,6 @@ impl StreamableResponse {
                 Response::builder()
                     .status(StatusCode::OK)
                     .body(Full::new(Bytes::from(body)))
-                    .unwrap()
-            }
-
-            StreamableResponse::Stream(_stream) => {
-                // For streaming responses, set appropriate headers
-                response_headers.insert(CONTENT_TYPE, "text/event-stream".parse().unwrap());
-                response_headers.insert("Cache-Control", "no-cache, no-transform".parse().unwrap());
-                response_headers.insert("Connection", "keep-alive".parse().unwrap());
-
-                // TODO: Implement actual streaming body with chunked transfer encoding
-                // Should stream JSON messages over HTTP with proper Content-Type: text/event-stream
-                // For now, return 202 Accepted to indicate streaming would happen
-                Response::builder()
-                    .status(StatusCode::ACCEPTED)
-                    .body(Full::new(Bytes::from("Streaming response accepted")))
                     .unwrap()
             }
 

@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-08-25
+
+`turul-http-mcp-server` 0.4.1 → 0.4.2, `turul-mcp-schema-validation` 0.4.0 → 0.4.1,
+`turul-mcp-ext-tasks` 0.1.4 → 0.1.5.
+
+### Changed
+
+- **`jsonschema` 0.49 → 0.50, `aws-config` 1.10 → 1.11** in
+  `[workspace.dependencies]`. `jsonschema` is a `0.x`, so the minor is the
+  breaking position and this is an incompatible-range bump; its sole consumer is
+  `turul-mcp-schema-validation`, whose API surface there is `Retrieve`, `Uri`,
+  `options()` and `Draft::Draft202012` — all unchanged in 0.50. `default-features
+  = false` still excludes `reqwest`/`resolve-file`/`resolve-http`, so remote and
+  local `$ref` fetching remains impossible to compile in, independent of the
+  in-process `Retrieve` guard the validator installs. `aws-config` is a `1.x`
+  compatible bump, consumed by `turul-mcp-ext-tasks`'s DynamoDB backend.
+
+### Removed
+
+- **`StreamableResponse::Stream` — a variant nothing constructed, whose handler
+  silently discarded the stream.** The arm set SSE headers into a `HeaderMap` it
+  then dropped, ignored its bound stream (`_stream`), and returned `202 Accepted`
+  with the literal body `Streaming response accepted` and no `Content-Type`. It
+  could never have worked as written: `into_response` returns
+  `Response<Full<Bytes>>`, and `Full` is a single-frame body.
+
+  Real streaming never used this enum. Both live paths — the `subscriptions/listen`
+  SSE stream and `create_streaming_response` — build `StreamBody` +
+  `Response::builder()` directly, returning `UnsyncBoxBody<Bytes, hyper::Error>`.
+  The variant predated them and was left behind.
+
+  Removed rather than implemented: giving `into_response` a boxed body would have
+  rebuilt what those two paths already do, i.e. a second streaming implementation
+  to keep in step. Kept as-is it was a trap — it type-checks, so the next
+  streaming path added would reach for the obvious variant and ship a 202.
+
+  **Technically a breaking change**, not merely dead-code removal:
+  `turul_http_mcp_server::streamable_http::StreamableResponse` is a public path
+  (`lib.rs:63`) and the enum is not `#[non_exhaustive]`, and cargo treats all of
+  `0.4.*` as one compatibility range. Shipped as a patch by maintainer decision:
+  the type appears in no other crate, test, or example in the workspace, so any
+  external consumer matching the variant had a dead arm and any consumer
+  constructing it got the non-functional stub.
+
+  No test covered it and none could: with no construction site, no HTTP request of
+  any shape reached the arm. `dead_code` stays silent on `pub` items in a library
+  crate, which is why nothing flagged it.
+
 ## [0.4.5] - 2026-08-16
 
 `turul-mcp-client` 0.4.1 → 0.4.2, `turul-mcp-ext-tasks` 0.1.3 → 0.1.4.
@@ -2465,7 +2513,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.2...v0.4.3
