@@ -342,7 +342,7 @@ git commit        # Only when user explicitly requests a commit
 
 Before publishing a new version:
 
-1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml` AND its pin in `[workspace.dependencies]`. Per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md), `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
+1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml`. The `[workspace.dependencies]` pins are **minor**-level (`turul-http-mcp-server = { version = "0.4", path = ... }`), so a patch bump needs no pin edit — the existing caret range already admits `0.4.2`. Touch a pin only when that crate's minor moves. Per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md), `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
 2. **Example server versions**: nothing to hand-edit — all 45 examples that set a server
    version use `.version(env!("CARGO_PKG_VERSION"))`, so bumping the example's own
    `[package] version` in `examples/<name>/Cargo.toml` is what moves the wire value.
