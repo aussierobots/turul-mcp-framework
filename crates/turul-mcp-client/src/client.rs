@@ -414,7 +414,7 @@ impl McpClient {
     #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
     async fn probe_discover(&self) -> McpClientResult<crate::version::DiscoverProbe> {
         use crate::error::TransportError;
-        use crate::version::DiscoverProbe;
+        use crate::version::{DiscoverProbe, probe_from_jsonrpc_error};
         use turul_mcp_protocol_2026_07_28 as p2026;
 
         let meta = p2026::meta::RequestMetaObject::new(
@@ -447,8 +447,9 @@ impl McpClient {
             Ok(Ok(resp)) => {
                 if let Some(err) = resp.body.get("error") {
                     let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
-                    Ok(DiscoverProbe::JsonRpcError(
+                    Ok(probe_from_jsonrpc_error(
                         code,
+                        err.get("message").and_then(|m| m.as_str()),
                         extract_supported_versions(err),
                     ))
                 } else if let Some(result) = resp.body.get("result") {
@@ -473,7 +474,8 @@ impl McpClient {
                     && let Some(code) = body.pointer("/error/code").and_then(|c| c.as_i64())
                 {
                     let supported = body.get("error").and_then(extract_supported_versions);
-                    return Ok(DiscoverProbe::JsonRpcError(code, supported));
+                    let message = body.pointer("/error/message").and_then(|m| m.as_str());
+                    return Ok(probe_from_jsonrpc_error(code, message, supported));
                 }
                 Ok(DiscoverProbe::HttpStatus(status))
             }

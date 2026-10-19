@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-10-20
+
+`turul-mcp-client` 0.4.2 → 0.4.3.
+
+### Fixed
+
+- **`turul-mcp-client` connects to `turul-mcp-server` 0.3.47 servers.** Before
+  `initialize`, a 0.3.47 server answers the `server/discover` probe with HTTP 400
+  and JSON-RPC `-32001` `"Missing Mcp-Session-Id header. Call initialize first."`.
+  `classify_probe` fell back only on `-32601`, `-32602` or `-32022` listing
+  2025-11-25, so negotiation aborted with `NegotiationFailed`. A `-32001` whose
+  message names `Mcp-Session-Id` now falls back to 2025-11-25: a 2026-07-28 server
+  is stateless and never asks for a session, so only a stateful server sends it.
+  Every other `-32001` still aborts. Verified against the 0.3.47 server run
+  in-process. Client-only; no server change. Patch: bug fix, no public API change.
+
 ## [0.4.6] - 2026-08-25
 
 `turul-http-mcp-server` 0.4.1 → 0.4.2, `turul-mcp-schema-validation` 0.4.0 → 0.4.1,
