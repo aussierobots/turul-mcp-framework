@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-10-20
+
+`turul-mcp-schema-validation` 0.4.1 → 0.4.2.
+
+### Changed
+
+- **`jsonschema` 0.50 → 0.59** in `[workspace.dependencies]`; sole consumer is
+  `turul-mcp-schema-validation`, no source change needed. `default-features = false`
+  is kept, so remote and local `$ref` fetching still cannot compile in.
+- **`hmac` 0.13, `sha2` 0.11, `getrandom` 0.4** for the unpublished
+  `conformance-fixture-server`, now declared in `[workspace.dependencies]` as
+  `docs/rules/crate-versioning.md` requires instead of inline.
+
 ## [0.4.7] - 2026-10-20
 
 `turul-mcp-client` 0.4.2 → 0.4.3.
