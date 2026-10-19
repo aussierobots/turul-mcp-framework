@@ -46,6 +46,10 @@ pub(crate) enum DiscoverProbe {
     /// `error.data.supported` list rides along (None when the server sent no
     /// data).
     JsonRpcError(i64, Option<Vec<String>>),
+    /// A pre-2026 stateful server refused the probe for lack of an
+    /// `Mcp-Session-Id` (JSON-RPC `-32001`). Built only by
+    /// [`probe_from_jsonrpc_error`].
+    MissingSessionId,
     /// The HTTP request itself failed with this non-2xx status.
     HttpStatus(u16),
 }
@@ -84,6 +88,27 @@ const HEADER_MISMATCH: i64 = -32020;
 /// Same modern-server signal as `HEADER_MISMATCH`.
 const MISSING_REQUIRED_CLIENT_CAPABILITY: i64 = -32021;
 
+/// JSON-RPC code a 0.3.x stateful server uses for a request that needs a
+/// session it was not given.
+const SESSION_REQUIRED: i64 = -32001;
+
+/// Build the probe outcome for a JSON-RPC error reply to `server/discover`.
+/// `-32001` becomes [`DiscoverProbe::MissingSessionId`] only when its message
+/// names the `Mcp-Session-Id` header; every other `-32001` stays a plain
+/// error code.
+#[allow(dead_code)]
+pub(crate) fn probe_from_jsonrpc_error(
+    code: i64,
+    message: Option<&str>,
+    supported: Option<Vec<String>>,
+) -> DiscoverProbe {
+    if code == SESSION_REQUIRED && message.is_some_and(|m| m.contains("Mcp-Session-Id")) {
+        DiscoverProbe::MissingSessionId
+    } else {
+        DiscoverProbe::JsonRpcError(code, supported)
+    }
+}
+
 /// Decide the negotiation action from a `server/discover` probe outcome.
 ///
 /// `allow_legacy_gateway_fallback` broadens the fallback trigger to additionally
@@ -106,6 +131,11 @@ pub(crate) fn classify_probe(
         // -32602)".
         DiscoverProbe::JsonRpcError(METHOD_NOT_FOUND, _) => ProbeDecision::FallbackTo2025,
         DiscoverProbe::JsonRpcError(INVALID_PARAMS, _) => ProbeDecision::FallbackTo2025,
+
+        // A 2026 server is stateless and never asks for a session, so a
+        // missing-session refusal can only come from a stateful 2025-11-25
+        // server that does not know `server/discover`.
+        DiscoverProbe::MissingSessionId => ProbeDecision::FallbackTo2025,
 
         // UnsupportedProtocolVersionError = the server validated the probe's
         // requested 2026-07-28 and declined it — the spec's structured
@@ -253,6 +283,26 @@ mod tests {
                 "JSON-RPC error {code} is a recognized modern-server signal and must abort, not downgrade"
             );
         }
+    }
+
+    #[test]
+    fn missing_session_id_32001_falls_back_other_32001_aborts() {
+        let msg = "Missing Mcp-Session-Id header. Call initialize first.";
+        assert_eq!(
+            classify_probe(probe_from_jsonrpc_error(-32001, Some(msg), None), false),
+            ProbeDecision::FallbackTo2025
+        );
+        for other in [Some("Session expired"), None] {
+            assert!(matches!(
+                classify_probe(probe_from_jsonrpc_error(-32001, other, None), false),
+                ProbeDecision::Abort(_)
+            ));
+        }
+        // The message alone is not a signal under any other code.
+        assert!(matches!(
+            classify_probe(probe_from_jsonrpc_error(-32000, Some(msg), None), false),
+            ProbeDecision::Abort(_)
+        ));
     }
 
     #[test]

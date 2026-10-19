@@ -144,7 +144,7 @@ let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 > **This section does not apply to the default build.** `TaskSupport` and
 > `ToolExecution` exist only in `turul-mcp-protocol-2025-11-25` (0 occurrences in
 > `turul-mcp-protocol-2026-07-28/src/`), and `.with_task_storage()` is
-> `#[cfg(feature = "protocol-2025-11-25")]` (`builder.rs:1412`). The derive macros
+> `#[cfg(feature = "protocol-2025-11-25")]`. The derive macros
 > emit the attribute's code unconditionally, so a `task_support = "..."` tool on
 > the 2026-07-28 default lane fails to compile with `cannot find TaskSupport in
 > tools` / `cannot find type ToolExecution`. Removing the attribute clears both.
@@ -343,7 +343,7 @@ git commit        # Only when user explicitly requests a commit
 Before publishing a new version:
 
 1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml`. The `[workspace.dependencies]` pins are **minor**-level (`turul-http-mcp-server = { version = "0.4", path = ... }`), so a patch bump needs no pin edit — the existing caret range already admits `0.4.2`. Touch a pin only when that crate's minor moves. Per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md), `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
-2. **Example server versions**: nothing to hand-edit — all 45 examples that set a server
+2. **Example server versions**: nothing to hand-edit — all examples that set a server
    version use `.version(env!("CARGO_PKG_VERSION"))`, so bumping the example's own
    `[package] version` in `examples/<name>/Cargo.toml` is what moves the wire value.
    Verify no hardcoded string has crept back in:

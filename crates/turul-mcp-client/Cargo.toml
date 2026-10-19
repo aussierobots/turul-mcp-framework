@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-client"
-version = "0.4.2"
+version = "0.4.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -94,3 +94,6 @@ turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4" }
 # server). Dev-only: the published client library links neither.
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4" }
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4" }
+# The frozen 0.3.47 server, in-process, so the legacy-server probe test asserts
+# on the bytes it really sends rather than a hand-written mock.
+turul-mcp-server-legacy = { package = "turul-mcp-server", version = "=0.3.47" }
