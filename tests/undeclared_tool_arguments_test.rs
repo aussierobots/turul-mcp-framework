@@ -320,7 +320,8 @@ async fn type_mismatch_names_declared_and_received_json_type() {
 async fn out_of_range_integer_is_not_reported_as_the_wrong_type() {
     let mut args = valid_typed_args();
     args["u"] = json!(300);
-    let result = serde_json::to_value(TypedParams::default().call(args, None).await.unwrap()).unwrap();
+    let result =
+        serde_json::to_value(TypedParams::default().call(args, None).await.unwrap()).unwrap();
     assert_eq!(result["isError"], json!(true));
     let text = result["content"][0]["text"].as_str().unwrap_or_default();
     assert!(
@@ -333,7 +334,11 @@ async fn out_of_range_integer_is_not_reported_as_the_wrong_type() {
 async fn missing_required_argument_says_missing_not_a_type_error() {
     let mut args = valid_typed_args();
     args.as_object_mut().unwrap().remove("n");
-    let result = serde_json::to_value(TypedParams::default().call(args, None).await.unwrap()).unwrap();
+    let result =
+        serde_json::to_value(TypedParams::default().call(args, None).await.unwrap()).unwrap();
     let text = result["content"][0]["text"].as_str().unwrap_or_default();
-    assert!(text.contains("n") && text.to_lowercase().contains("missing"), "{text}");
+    assert!(
+        text.contains("n") && text.to_lowercase().contains("missing"),
+        "{text}"
+    );
 }
