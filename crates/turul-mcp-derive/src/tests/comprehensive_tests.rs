@@ -470,7 +470,8 @@ mod param_extraction_tests {
         assert!(extraction_str.contains("let message"));
         assert!(contains_pattern(&extraction_str, "as_str()"));
         assert!(contains_pattern(&extraction_str, "to_string()"));
-        assert!(extraction_str.contains("invalid_param_type"));
+        assert!(extraction_str.contains("__mcp_param_type_error"));
+        assert!(extraction_str.contains("missing_param"));
     }
 
     #[test]
@@ -483,7 +484,8 @@ mod param_extraction_tests {
 
         assert!(extraction_str.contains("let value"));
         assert!(contains_pattern(&extraction_str, "as_f64()"));
-        assert!(extraction_str.contains("invalid_param_type"));
+        assert!(extraction_str.contains("__mcp_param_type_error"));
+        assert!(extraction_str.contains("missing_param"));
     }
 
     #[test]

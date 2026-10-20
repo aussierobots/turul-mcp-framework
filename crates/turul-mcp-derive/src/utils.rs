@@ -507,6 +507,31 @@ pub fn generate_argument_errors_as_tool_result() -> TokenStream {
 /// check cannot drift from what `tools/list` advertises.
 pub fn generate_undeclared_arg_check() -> TokenStream {
     quote! {
+        // Type-mismatch error: the declared schema type and the JSON type received.
+        fn __mcp_param_type_error(
+            name: &str,
+            expected: &str,
+            received: &serde_json::Value,
+        ) -> turul_mcp_protocol::McpError {
+            let got = match received {
+                serde_json::Value::Null => "null",
+                serde_json::Value::Bool(_) => "boolean",
+                serde_json::Value::Number(n) if n.is_i64() || n.is_u64() => "integer",
+                serde_json::Value::Number(_) => "number",
+                serde_json::Value::String(_) => "string",
+                serde_json::Value::Array(_) => "array",
+                serde_json::Value::Object(_) => "object",
+            };
+            // An integer that is the right JSON type but out of range for the declared
+            // Rust type (e.g. 300 for a `u8`) must not read "expected integer, got integer".
+            let expected = if expected == "integer" && got == "integer" {
+                "integer in range for the declared type"
+            } else {
+                expected
+            };
+            turul_mcp_protocol::McpError::invalid_param_type(name, expected, got)
+        }
+
         if let Some(supplied) = args.as_object() {
             let declared = turul_mcp_builders::traits::HasInputSchema::input_schema(self)
                 .properties
@@ -586,112 +611,83 @@ fn generate_optional_extraction(
     }
 }
 
-/// Generate extraction code for required fields
+/// The JSON Schema type a parameter of Rust type `ty` is advertised as, for
+/// "expected ..." in a type-mismatch message. Anything that is not a primitive,
+/// `String` or `Vec` is an object (a serde-deserialized struct or map).
+fn json_type_for(ty: &syn::Type) -> &'static str {
+    if let syn::Type::Path(type_path) = ty
+        && type_path.path.segments.len() == 1
+    {
+        match type_path.path.segments[0].ident.to_string().as_str() {
+            "String" => return "string",
+            "bool" => return "boolean",
+            "f32" | "f64" => return "number",
+            "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "u8" | "u16" | "u32" | "u64"
+            | "u128" | "usize" => return "integer",
+            "Vec" => return "array",
+            _ => {}
+        }
+    }
+    "object"
+}
+
+/// Generate extraction code for required fields. A missing key is
+/// `MissingParameter`; a present value that does not convert is
+/// `InvalidParameterType` naming the declared type and the JSON type received.
 fn generate_required_extraction(
     field_name: &syn::Ident,
     field_type: &syn::Type,
     field_name_str: String,
 ) -> TokenStream {
-    match field_type {
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "String") => {
-            quote! {
-                let #field_name = args.get(#field_name_str)
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "string", "other"))?
-                    .to_string();
-            }
+    let expected = json_type_for(field_type);
+    let ident = match field_type {
+        syn::Type::Path(type_path) if type_path.path.segments.len() == 1 => {
+            Some(type_path.path.segments[0].ident.to_string())
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f64") => {
-            quote! {
-                let #field_name = args.get(#field_name_str)
-                    .and_then(|v| v.as_f64())
-                    .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "number", "other"))?;
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i32") => {
-            quote! {
-                let #field_name = args.get(#field_name_str)
-                    .and_then(|v| v.as_i64())
-                    .and_then(|i| i.try_into().ok())
-                    .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i64") => {
-            quote! {
-                let #field_name = args.get(#field_name_str)
-                    .and_then(|v| v.as_i64())
-                    .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "u32") => {
-            quote! {
-                let #field_name = args.get(#field_name_str)
-                    .and_then(|v| v.as_u64())
-                    .and_then(|i| i.try_into().ok())
-                    .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "u64") => {
-            quote! {
-                let #field_name = args.get(#field_name_str)
-                    .and_then(|v| v.as_u64())
-                    .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f32") => {
-            quote! {
-                let #field_name = args.get(#field_name_str)
-                    .and_then(|v| v.as_f64())
-                    .map(|f| f as f32)
-                    .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "number", "other"))?;
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "bool") => {
-            quote! {
-                let #field_name = args.get(#field_name_str)
-                    .and_then(|v| v.as_bool())
-                    .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "boolean", "other"))?;
-            }
-        }
-        syn::Type::Path(type_path)
-            if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" =>
-        {
-            quote! {
-                let #field_name: #field_type = args.get(#field_name_str)
-                    .ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#field_name_str))
-                    .and_then(|v| {
-                        // Handle both array values and string representations of arrays
-                        if let Some(arr) = v.as_array() {
-                            // Direct JSON array
-                            arr.iter()
-                                .map(|item| serde_json::from_value(item.clone()))
-                                .collect::<Result<Vec<_>, _>>()
-                                .map_err(|_| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "array of valid items", "other"))
+        _ => None,
+    };
+    let convert = match ident.as_deref() {
+        Some("String") => quote! { v.as_str().map(|s| s.to_string()) },
+        Some("f64") => quote! { v.as_f64() },
+        Some("f32") => quote! { v.as_f64().map(|f| f as f32) },
+        Some("i32") => quote! { v.as_i64().and_then(|i| i.try_into().ok()) },
+        Some("i64") => quote! { v.as_i64() },
+        Some("u32") => quote! { v.as_u64().and_then(|i| i.try_into().ok()) },
+        Some("u64") => quote! { v.as_u64() },
+        Some("bool") => quote! { v.as_bool() },
+        Some("Vec") => {
+            // Accepts a JSON array, or a string holding one (clients that stringify).
+            return quote! {
+                let #field_name: #field_type = match args.get(#field_name_str) {
+                    None => return Err(turul_mcp_protocol::McpError::missing_param(#field_name_str)),
+                    Some(v) => {
+                        let items = if let Some(arr) = v.as_array() {
+                            Some(arr.clone())
                         } else if let Some(s) = v.as_str() {
-                            // String representation of array like "[1,2,3,4]"
-                            serde_json::from_str::<Vec<serde_json::Value>>(s)
-                                .map_err(|_| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "array or array string", "invalid string"))
-                                .and_then(|arr| {
-                                    arr.iter()
-                                        .map(|item| serde_json::from_value(item.clone()))
-                                        .collect::<Result<Vec<_>, _>>()
-                                        .map_err(|_| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "array of valid items", "other"))
-                                })
+                            serde_json::from_str::<Vec<serde_json::Value>>(s).ok()
                         } else {
-                            Err(turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "array or array string", "other"))
-                        }
-                    })?;
-            }
+                            None
+                        };
+                        items
+                            .and_then(|arr| {
+                                arr.iter()
+                                    .map(|item| serde_json::from_value(item.clone()))
+                                    .collect::<Result<Vec<_>, _>>()
+                                    .ok()
+                            })
+                            .ok_or_else(|| __mcp_param_type_error(#field_name_str, #expected, v))?
+                    }
+                };
+            };
         }
-        _ => {
-            // Generic serde deserialization for complex types
-            quote! {
-                let #field_name: #field_type = args.get(#field_name_str)
-                    .ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#field_name_str))
-                    .and_then(|v| serde_json::from_value(v.clone())
-                        .map_err(|_| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "object", "other")))?;
-            }
-        }
+        _ => quote! { serde_json::from_value::<#field_type>(v.clone()).ok() },
+    };
+    quote! {
+        let #field_name: #field_type = match args.get(#field_name_str) {
+            None => return Err(turul_mcp_protocol::McpError::missing_param(#field_name_str)),
+            Some(v) => (#convert)
+                .ok_or_else(|| __mcp_param_type_error(#field_name_str, #expected, v))?,
+        };
     }
 }
 

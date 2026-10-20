@@ -141,6 +141,13 @@ so behaviour and the advertised schema cannot drift. Only `MissingParameter`,
 `McpError` (MRTR `InputRequired`, `MissingRequiredClientCapability`, ...) still
 propagates as a JSON-RPC error.
 
+**Messages.** A missing required argument is `MissingParameter`. A present value that does
+not convert is `InvalidParameterType` naming the declared schema type and the JSON type
+received (`expected number, got string`); an integer of the right JSON type but out of
+range for the Rust type says so rather than "expected integer, got integer". One
+generated helper builds every such message, and `generate_required_extraction` is the only
+conversion path.
+
 **Nested objects.** Only the top-level argument object is closed. A nested argument is the
 user's own type, converted by serde, so whether it refuses unknown keys is that type's
 contract: `#[serde(deny_unknown_fields)]` makes an unknown nested key an `isError`
