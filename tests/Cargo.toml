@@ -86,6 +86,10 @@ name = "derive_comprehensive_tool_tests"
 path = "derive_comprehensive_tool_tests.rs"
 
 [[test]]
+name = "undeclared_tool_arguments_test"
+path = "undeclared_tool_arguments_test.rs"
+
+[[test]]
 name = "derive_schemars_integration_test"
 path = "derive_schemars_integration_test.rs"
 

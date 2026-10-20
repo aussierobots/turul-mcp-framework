@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-10-20
+
+`turul-mcp-derive` 0.4.1 → 0.4.2.
+
+### Fixed
+
+- **Derive-generated tools no longer silently ignore bad arguments.**
+  `#[derive(McpTool)]`, `#[mcp_tool]` and `tool!{}` read only the keys they declare, so
+  `{"limt": 5}` ran with `limit` defaulted, and a wrong-typed optional value
+  (`{"limit": "5"}`) was read as "not provided". The generated `McpTool::call` now
+  refuses an undeclared, missing or wrong-typed argument, and the generated
+  `inputSchema` carries `additionalProperties: false`. Absent or `null` is still "not
+  provided" for an optional argument.
+- **The refusal is a tool result with `isError: true`, not a JSON-RPC error**, as
+  schema.ts `CallToolResult.isError` and server/tools § Error Handling ("Input
+  validation errors") require, so the model can self-correct. Missing or wrong-typed
+  *required* arguments change the same way: they were `-32602` and are now `isError`
+  results. Every other `McpError` (MRTR `InputRequired`, capability gates) still
+  propagates as a JSON-RPC error; an unknown tool and a malformed `arguments` stay
+  `-32602`. Nested objects are the argument type's own serde contract
+  (`deny_unknown_fields`). See ADR-002 § Input schema strictness.
+- **Behaviour change for clients of derived tools:** extra keys and wrong-typed optional
+  values that used to be ignored now fail. Patch classification: a spec-compliance and
+  correctness fix on the 0.4 line; no public API removed. `ToolBuilder` and hand-written
+  `McpTool` impls are unchanged.
+
 ## [0.4.8] - 2026-10-20
 
 `turul-mcp-schema-validation` 0.4.1 → 0.4.2.

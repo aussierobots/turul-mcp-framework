@@ -249,6 +249,11 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         None => quote! {},
     };
 
+    let close_input_schema = crate::utils::generate_close_input_schema();
+    let undeclared_arg_check = crate::utils::generate_undeclared_arg_check();
+
+    let argument_errors_as_tool_result = crate::utils::generate_argument_errors_as_tool_result();
+
     let expanded = quote! {
         {
             #[derive(Clone)]
@@ -259,14 +264,15 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             impl #tool_name_ident {
                 fn new() -> Self {
                     use std::collections::HashMap;
-                    let input_schema = turul_mcp_protocol::ToolSchema::object()
+                    let mut schema = turul_mcp_protocol::ToolSchema::object()
                         .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                             #(#schema_properties),*
                         ])))
                         .with_required(vec![
                             #(#required_fields),*
                         ]);
-                    Self { input_schema }
+                    #close_input_schema
+                    Self { input_schema: schema }
                 }
             }
 
@@ -313,7 +319,10 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             #[async_trait::async_trait]
             impl turul_mcp_server::McpTool for #tool_name_ident {
                 async fn call(&self, args: serde_json::Value, _session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
+                let outcome: turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> = async {
                     use serde_json::Value;
+
+                    #undeclared_arg_check
 
                     // Extract parameters
                     #(#param_extractions)*
@@ -328,6 +337,9 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                         }
                         Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e.to_string()))
                     }
+                    }.await;
+
+                    #argument_errors_as_tool_result
                 }
             }
 

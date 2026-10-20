@@ -251,8 +251,13 @@ async fn test_all_levels_handle_missing_params() {
 
     // Level 1
     let level1_tool = calculator_add_function();
-    let level1_result = level1_tool.call(incomplete_args.clone(), None).await;
-    assert!(level1_result.is_err());
+    // Derive-generated tools report a missing argument as an `isError` tool result
+    // (ADR-002 § Input schema strictness); the other levels own their own error path.
+    let level1_result = level1_tool
+        .call(incomplete_args.clone(), None)
+        .await
+        .expect("missing argument is a tool result, not an Err");
+    assert_eq!(level1_result.is_error, Some(true));
 
     // Level 3
     let level3_tool = ToolBuilder::new("test")

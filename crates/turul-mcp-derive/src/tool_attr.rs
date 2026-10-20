@@ -303,6 +303,11 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         },
     };
 
+    let close_input_schema = crate::utils::generate_close_input_schema();
+    let undeclared_arg_check = crate::utils::generate_undeclared_arg_check();
+
+    let argument_errors_as_tool_result = crate::utils::generate_argument_errors_as_tool_result();
+
     let expanded = quote! {
         // Keep the original function for direct use (with cleaned attributes)
         #clean_input
@@ -315,13 +320,15 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         impl #struct_name {
             fn get_input_schema() -> turul_mcp_protocol::tools::ToolSchema {
                 use std::collections::HashMap;
-                turul_mcp_protocol::tools::ToolSchema::object()
+                let mut schema = turul_mcp_protocol::tools::ToolSchema::object()
                     .with_properties(turul_mcp_builders::tool_props(HashMap::from([
                         #(#schema_properties),*
                     ])))
                     .with_required(vec![
                         #(#required_fields),*
-                    ])
+                    ]);
+                #close_input_schema
+                schema
             }
         }
 
@@ -370,8 +377,11 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         #[async_trait::async_trait]
         impl turul_mcp_server::McpTool for #struct_name {
             async fn call(&self, args: serde_json::Value, session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
+                let outcome: turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> = async {
                 use serde_json::Value;
                 use turul_mcp_builders::traits::HasOutputSchema;
+
+                #undeclared_arg_check
 
                 // Extract parameters
                 #(#param_extractions)*
@@ -415,6 +425,9 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                     }
                     Err(e) => Err(e)
                 }
+                }.await;
+
+                #argument_errors_as_tool_result
             }
         }
 
