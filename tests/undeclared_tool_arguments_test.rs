@@ -27,12 +27,19 @@ struct DeriveStrict {
 
 impl DeriveStrict {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        Ok(format!("{}:{:?}:{:?}:{}", self.a, self.limit, self.tags, self.note))
+        Ok(format!(
+            "{}:{:?}:{:?}:{}",
+            self.a, self.limit, self.tags, self.note
+        ))
     }
 }
 
 #[mcp_tool(name = "attr_strict", description = "Attribute tool")]
-async fn attr_strict(a: String, limit: Option<u32>, tags: Option<Vec<String>>) -> McpResult<String> {
+async fn attr_strict(
+    a: String,
+    limit: Option<u32>,
+    tags: Option<Vec<String>>,
+) -> McpResult<String> {
     Ok(format!("{a}:{limit:?}:{tags:?}"))
 }
 
@@ -59,8 +66,8 @@ fn declarative() -> impl McpToolTrait {
 
 /// Assert `result` is an `isError: true` tool result whose text names every `keys` entry.
 fn assert_refused_naming(result: McpResult<impl serde::Serialize>, keys: &[&str]) {
-    let value = serde_json::to_value(result.expect("a refusal is a tool result, not an Err"))
-        .unwrap();
+    let value =
+        serde_json::to_value(result.expect("a refusal is a tool result, not an Err")).unwrap();
     assert_eq!(value["isError"], json!(true), "{value:#}");
     let text = value["content"][0]["text"].as_str().unwrap_or_default();
     for key in keys {
@@ -219,7 +226,8 @@ impl NestedStrict {
 async fn nested_unknown_key_is_refused_only_when_the_type_denies_unknown_fields() {
     let tool = NestedStrict::default();
     assert_refused_naming(
-        tool.call(json!({"strict": {"city": "a", "extra": 1}}), None).await,
+        tool.call(json!({"strict": {"city": "a", "extra": 1}}), None)
+            .await,
         &["strict"],
     );
     tool.call(json!({"lenient": {"city": "a", "extra": 1}}), None)
