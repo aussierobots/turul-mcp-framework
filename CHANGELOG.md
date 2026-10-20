@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`conformance-fixture-server` builds again with `hmac` 0.13** (`Mac::new_from_slice`
+  moved to `KeyInit`); the 0.4.8 dependency bump had left it uncompilable. Unpublished
+  example; no crate change.
+
 ## [0.4.9] - 2026-10-20
 
 `turul-mcp-derive` 0.4.1 → 0.4.2.
