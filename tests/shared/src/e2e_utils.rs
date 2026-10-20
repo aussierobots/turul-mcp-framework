@@ -415,6 +415,7 @@ impl TestServerManager {
         match server_name {
             "resource-test-server" => Some("resource-test-server"),
             "prompts-test-server" => Some("prompts-test-server"),
+            "minimal-server" => Some("minimal-server"),
             "tools-test-server" => Some("tools-test-server"),
             "sampling-server" => Some("sampling-server"),
             "roots-server" => Some("roots-server"),

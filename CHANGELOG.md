@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`conformance-fixture-server` builds again with `hmac` 0.13** (`Mac::new_from_slice`
   moved to `KeyInit`); the 0.4.8 dependency bump had left it uncompilable. Unpublished
   example; no crate change.
+- **`turul-mcp-client` is clippy-clean on `client-2025-11-25-only`.** The SEP-2243
+  param-binding cache, its alias and `extract_supported_versions` are now compiled only
+  where the 2026-07-28 wire path is. No runtime change.
+- **`client_integration_test` builds `minimal-server` before spawning it** (it was missing
+  from the harness's package map, so a clean tree failed with `No such file`).
 
 ## [0.4.9] - 2026-10-20
 
