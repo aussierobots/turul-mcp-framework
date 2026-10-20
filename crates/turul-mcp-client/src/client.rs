@@ -36,6 +36,7 @@ pub type NotificationCallback = Arc<dyn Fn(&str, Option<&Value>) + Send + Sync>;
 /// Main MCP client
 /// Per-tool SEP-2243 bindings: tool name → `(header name, argument JSON
 /// pointer, declared type)` per `x-mcp-header` annotation.
+#[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 type ParamBindingMap = std::collections::HashMap<String, Vec<(String, String, String)>>;
 
 pub struct McpClient {
@@ -59,6 +60,7 @@ pub struct McpClient {
     /// result. The public `Tool` vocabulary (2025 types) cannot carry the
     /// `x-mcp-header` annotation, so the bindings are captured before the
     /// type remap.
+    #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
     cached_param_bindings: Arc<RwLock<ParamBindingMap>>,
     /// Raw 2026 `inputSchema` per tool, from the raw `tools/list` result. The
     /// public `Tool` vocabulary cannot hold every JSON Schema 2020-12 construct
@@ -123,6 +125,7 @@ impl DiscoveredServer {
 }
 
 /// `error.data.supported` from an UnsupportedProtocolVersionError object.
+#[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 fn extract_supported_versions(error: &Value) -> Option<Vec<String>> {
     error
         .pointer("/data/supported")
@@ -204,6 +207,7 @@ impl McpClient {
             request_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             response_consumer_handle: Arc::new(parking_lot::Mutex::new(None)),
             cached_tools: Arc::new(RwLock::new(None)),
+            #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
             cached_param_bindings: Arc::new(RwLock::new(std::collections::HashMap::new())),
             cached_tool_schemas: Arc::new(RwLock::new(std::collections::HashMap::new())),
             cached_resources: Arc::new(RwLock::new(None)),
