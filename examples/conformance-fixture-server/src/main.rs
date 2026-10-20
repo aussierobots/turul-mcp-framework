@@ -954,7 +954,8 @@ impl InputRequiredTamperedStateTool {
 
     /// `payload.hex(HMAC-SHA256(key, payload))`
     fn sign(payload: &str) -> String {
-        let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(Self::key()).expect("any key length");
+        let mut mac =
+            <Hmac<Sha256> as KeyInit>::new_from_slice(Self::key()).expect("any key length");
         mac.update(payload.as_bytes());
         let tag = mac.finalize().into_bytes();
         format!("{payload}.{}", hex_lower(&tag))
@@ -964,7 +965,8 @@ impl InputRequiredTamperedStateTool {
         let Some((payload, tag)) = state.rsplit_once('.') else {
             return false;
         };
-        let mut mac = <Hmac<Sha256> as KeyInit>::new_from_slice(Self::key()).expect("any key length");
+        let mut mac =
+            <Hmac<Sha256> as KeyInit>::new_from_slice(Self::key()).expect("any key length");
         mac.update(payload.as_bytes());
         // Constant-time compare via the MAC's own verify.
         match hex_decode(tag) {
