@@ -64,13 +64,6 @@ fn shim_accepts_number_id() {
 }
 
 #[test]
-fn shim_rejects_null_id_per_strict_posture() {
-    // ADR-002 strict departure: null id rejected at parser. Inherited from v0.3.38.
-    let r = parse_json_rpc_message(r#"{"jsonrpc":"2.0","method":"x","id":null}"#).unwrap_err();
-    assert_eq!(r.error.code, INVALID_REQUEST);
-}
-
-#[test]
 fn shim_rejects_fractional_id() {
     let r = parse_json_rpc_message(r#"{"jsonrpc":"2.0","method":"x","id":1.5}"#).unwrap_err();
     assert_eq!(r.error.code, INVALID_REQUEST);

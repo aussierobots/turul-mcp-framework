@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`turul-mcp-json-rpc-server` tests no longer pin `turul-rpc` 0.1 specifics.** The shim is
+  deprecated and the workspace builds it against `turul-rpc` 0.2, which moved
+  `JsonRpcMessage` out of `response`/`prelude` and accepts `id: null`. The two
+  symbol-surface imports and the null-id rejection test are dropped; the published 0.3.47
+  (on `turul-rpc` 0.1) is unaffected and no release follows.
+- **`undeclared_tool_arguments_test` is listed in `.github/workflows/ci.yml` and
+  `scripts/ci-gates.sh`**, so the 2025-11-25 run of the derive argument-validation suite
+  is gated; the 2026-07-28 run already is, as a `turul-mcp-server` test.
+
 ## [0.4.10] - 2026-10-20
 
 `turul-mcp-derive` 0.4.2 → 0.4.3.

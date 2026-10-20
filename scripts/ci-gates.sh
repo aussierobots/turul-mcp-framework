@@ -130,6 +130,7 @@ gate_opt_in_2025() {
   # line below is invisible to CI.
   for t in compliance schema_tests example_validation e2e_tests feature_tests \
            session_context_macro_tests derive_comprehensive_tool_tests \
+           undeclared_tool_arguments_test \
            derive_schemars_integration_test derive_zero_config_output_schema_test \
            dynamic_tools_e2e event_dispatcher_persistence client_integration_test examples_guard \
            mcp_runtime_capabilities_validation streamable_http_behavior_regression \

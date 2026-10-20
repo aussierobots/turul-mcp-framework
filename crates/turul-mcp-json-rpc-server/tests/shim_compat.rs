@@ -39,9 +39,7 @@ use turul_mcp_json_rpc_server::error::{
 };
 use turul_mcp_json_rpc_server::notification::JsonRpcNotification as _N;
 use turul_mcp_json_rpc_server::request::{JsonRpcRequest as _R, RequestParams as _RP};
-use turul_mcp_json_rpc_server::response::{
-    JsonRpcMessage as _M, JsonRpcResponse as _Rsp, ResponseResult as _RR,
-};
+use turul_mcp_json_rpc_server::response::{JsonRpcResponse as _Rsp, ResponseResult as _RR};
 use turul_mcp_json_rpc_server::types::{JsonRpcVersion as _V, RequestId as _ID};
 
 // error_codes module

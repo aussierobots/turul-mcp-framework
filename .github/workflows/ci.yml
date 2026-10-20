@@ -239,6 +239,7 @@ jobs:
           cargo test -p turul-mcp-framework-integration-tests --test feature_tests
           cargo test -p turul-mcp-framework-integration-tests --test session_context_macro_tests
           cargo test -p turul-mcp-framework-integration-tests --test derive_comprehensive_tool_tests
+          cargo test -p turul-mcp-framework-integration-tests --test undeclared_tool_arguments_test
           cargo test -p turul-mcp-framework-integration-tests --test derive_schemars_integration_test
           cargo test -p turul-mcp-framework-integration-tests --test derive_zero_config_output_schema_test
           cargo test -p turul-mcp-framework-integration-tests --test dynamic_tools_e2e

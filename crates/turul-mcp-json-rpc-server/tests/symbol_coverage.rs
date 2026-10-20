@@ -58,7 +58,6 @@ use turul_mcp_json_rpc_server::prelude::INVALID_PARAMS as _use_prelude_INVALID_P
 use turul_mcp_json_rpc_server::prelude::INVALID_REQUEST as _use_prelude_INVALID_REQUEST;
 use turul_mcp_json_rpc_server::prelude::JsonRpcError as _use_prelude_JsonRpcError;
 use turul_mcp_json_rpc_server::prelude::JsonRpcErrorCode as _use_prelude_JsonRpcErrorCode;
-use turul_mcp_json_rpc_server::prelude::JsonRpcMessage as _use_prelude_JsonRpcMessage;
 use turul_mcp_json_rpc_server::prelude::JsonRpcNotification as _use_prelude_JsonRpcNotification;
 use turul_mcp_json_rpc_server::prelude::JsonRpcRequest as _use_prelude_JsonRpcRequest;
 use turul_mcp_json_rpc_server::prelude::JsonRpcResponse as _use_prelude_JsonRpcResponse;
@@ -76,7 +75,6 @@ use turul_mcp_json_rpc_server::request::JsonRpcRequest as _use_request_JsonRpcRe
 use turul_mcp_json_rpc_server::request::RequestParams as _use_request_RequestParams;
 
 use turul_mcp_json_rpc_server::response;
-use turul_mcp_json_rpc_server::response::JsonRpcMessage as _use_response_JsonRpcMessage;
 use turul_mcp_json_rpc_server::response::JsonRpcResponse as _use_response_JsonRpcResponse;
 use turul_mcp_json_rpc_server::response::ResponseResult as _use_response_ResponseResult;
 
