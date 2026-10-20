@@ -472,6 +472,62 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
     }
 }
 
+/// Statement closing a generated `inputSchema` (`additionalProperties: false`) held in
+/// the mutable `ToolSchema` binding `schema`. The counterpart of
+/// [`generate_undeclared_arg_check`]: schema and behaviour agree.
+pub fn generate_close_input_schema() -> TokenStream {
+    quote! {
+        schema.additional.insert("additionalProperties".to_string(), serde_json::json!(false));
+    }
+}
+
+/// Tail of a generated `McpTool::call`: argument-validation failures (missing, wrong-typed
+/// or undeclared argument) become a tool result with `isError: true`, so the model can
+/// see the message and self-correct, as `CallToolResult.isError` in schema.ts requires.
+/// Every other `McpError` (MRTR `InputRequired`, capability gates, ...) still propagates
+/// as a JSON-RPC error.
+pub fn generate_argument_errors_as_tool_result() -> TokenStream {
+    quote! {
+        match outcome {
+            Err(e @ (turul_mcp_protocol::McpError::MissingParameter(_)
+                | turul_mcp_protocol::McpError::InvalidParameterType { .. }
+                | turul_mcp_protocol::McpError::InvalidParameters(_))) => {
+                Ok(turul_mcp_protocol::tools::CallToolResult::error(vec![
+                    turul_mcp_protocol::tools::ToolResult::text(e.to_string())
+                ]))
+            }
+            other => other,
+        }
+    }
+}
+
+/// Statement for the top of a generated `McpTool::call`: refuse any argument key the
+/// tool's own `inputSchema` does not declare with `InvalidParameters` (-32602), naming
+/// every undeclared key. Reads the schema rather than a second list of names, so the
+/// check cannot drift from what `tools/list` advertises.
+pub fn generate_undeclared_arg_check() -> TokenStream {
+    quote! {
+        if let Some(supplied) = args.as_object() {
+            let declared = turul_mcp_builders::traits::HasInputSchema::input_schema(self)
+                .properties
+                .as_ref();
+            let mut undeclared: Vec<&str> = supplied
+                .keys()
+                .map(String::as_str)
+                .filter(|key| !declared.is_some_and(|props| props.contains_key(*key)))
+                .collect();
+            if !undeclared.is_empty() {
+                undeclared.sort_unstable();
+                return Err(turul_mcp_protocol::McpError::InvalidParameters(format!(
+                    "undeclared argument(s) for tool `{}`: {}",
+                    turul_mcp_builders::traits::HasBaseMetadata::name(self),
+                    undeclared.join(", ")
+                )));
+            }
+        }
+    }
+}
+
 /// Generate parameter extraction code
 pub fn generate_param_extraction(
     field_name: &syn::Ident,
@@ -492,168 +548,41 @@ pub fn generate_param_extraction(
     };
 
     if is_option_type {
-        // Field is already Option<T>, extract the inner type
         if let syn::Type::Path(type_path) = field_type
             && let Some(last_seg) = type_path.path.segments.last()
             && let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments
             && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
         {
-            // Handle Option<T> field
-            return generate_option_extraction(field_name, inner_type, field_name_str);
+            return generate_optional_extraction(field_name, inner_type, field_name_str);
         }
-        // Fallback for complex Option types
-        quote! {
-            let #field_name: #field_type = args.get(#field_name_str)
-                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                .unwrap_or(None);
-        }
+        quote! { compile_error!("unsupported Option<..> parameter type"); }
     } else if optional {
         // Field is T but marked as optional, wrap in Option
-        generate_optional_required_extraction(field_name, field_type, field_name_str)
+        generate_optional_extraction(field_name, field_type, field_name_str)
     } else {
         // Required field of type T
         generate_required_extraction(field_name, field_type, field_name_str)
     }
 }
 
-/// Generate extraction code for required fields that are marked as optional via #[param(optional)]
-fn generate_optional_required_extraction(
-    field_name: &syn::Ident,
-    field_type: &syn::Type,
-    field_name_str: String,
-) -> TokenStream {
-    match field_type {
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "String") => {
-            quote! {
-                let #field_name: Option<String> = args.get(#field_name_str)
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f64") => {
-            quote! {
-                let #field_name: Option<f64> = args.get(#field_name_str)
-                    .and_then(|v| v.as_f64());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f32") => {
-            quote! {
-                let #field_name: Option<f32> = args.get(#field_name_str)
-                    .and_then(|v| v.as_f64())
-                    .map(|f| f as f32);
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i32") => {
-            quote! {
-                let #field_name: Option<i32> = args.get(#field_name_str)
-                    .and_then(|v| v.as_i64())
-                    .and_then(|i| i.try_into().ok());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i64") => {
-            quote! {
-                let #field_name: Option<i64> = args.get(#field_name_str)
-                    .and_then(|v| v.as_i64());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "bool") => {
-            quote! {
-                let #field_name: Option<bool> = args.get(#field_name_str)
-                    .and_then(|v| v.as_bool());
-            }
-        }
-        _ => {
-            // Generic serde deserialization for complex types
-            quote! {
-                let #field_name: Option<#field_type> = args.get(#field_name_str)
-                    .and_then(|v| serde_json::from_value(v.clone()).ok());
-            }
-        }
-    }
-}
-
-/// Generate extraction code for Option<T> fields
-fn generate_option_extraction(
+/// Generate extraction code for an optional parameter of inner type `inner_type`.
+/// Absent or `null` is `None`; a present value goes through the required extraction,
+/// so a wrong-typed value is refused with `-32602` instead of being read as "not
+/// provided". One conversion path for required and optional parameters.
+fn generate_optional_extraction(
     field_name: &syn::Ident,
     inner_type: &syn::Type,
     field_name_str: String,
 ) -> TokenStream {
-    match inner_type {
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "String") => {
-            quote! {
-                let #field_name: Option<String> = args.get(#field_name_str)
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
+    let required = generate_required_extraction(field_name, inner_type, field_name_str.clone());
+    quote! {
+        let #field_name: Option<#inner_type> = match args.get(#field_name_str) {
+            None | Some(serde_json::Value::Null) => None,
+            Some(_) => {
+                #required
+                Some(#field_name)
             }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f64") => {
-            quote! {
-                let #field_name: Option<f64> = args.get(#field_name_str)
-                    .and_then(|v| v.as_f64());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i32") => {
-            quote! {
-                let #field_name: Option<i32> = args.get(#field_name_str)
-                    .and_then(|v| v.as_i64())
-                    .and_then(|i| i.try_into().ok());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i64") => {
-            quote! {
-                let #field_name: Option<i64> = args.get(#field_name_str)
-                    .and_then(|v| v.as_i64());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "u32") => {
-            quote! {
-                let #field_name: Option<u32> = args.get(#field_name_str)
-                    .and_then(|v| v.as_u64())
-                    .and_then(|i| i.try_into().ok());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "u64") => {
-            quote! {
-                let #field_name: Option<u64> = args.get(#field_name_str)
-                    .and_then(|v| v.as_u64());
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f32") => {
-            quote! {
-                let #field_name: Option<f32> = args.get(#field_name_str)
-                    .and_then(|v| v.as_f64())
-                    .map(|f| f as f32);
-            }
-        }
-        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "bool") => {
-            quote! {
-                let #field_name: Option<bool> = args.get(#field_name_str)
-                    .and_then(|v| v.as_bool());
-            }
-        }
-        _ => {
-            // Check if this is Option<Vec<T>>
-            if let syn::Type::Path(inner_path) = inner_type
-                && inner_path.path.segments.len() == 1
-                && inner_path.path.segments[0].ident == "Vec"
-            {
-                return quote! {
-                    let #field_name: Option<#inner_type> = args.get(#field_name_str)
-                        .and_then(|v| v.as_array())
-                        .map(|arr| arr.iter()
-                            .map(|item| serde_json::from_value(item.clone()))
-                            .collect::<Result<Vec<_>, _>>()
-                            .ok())
-                        .flatten();
-                };
-            }
-
-            // Generic serde deserialization for complex Option types
-            quote! {
-                let #field_name: Option<#inner_type> = args.get(#field_name_str)
-                    .and_then(|v| serde_json::from_value(v.clone()).ok());
-            }
-        }
+        };
     }
 }
 

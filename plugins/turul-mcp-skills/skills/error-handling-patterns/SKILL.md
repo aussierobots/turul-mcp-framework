@@ -204,6 +204,8 @@ The schema reserves `-32000..-32019` as implementation-defined and `-32020..-320
 | `UnsupportedProtocolVersion` | -32022 | Spec-assigned (2026-07-28) — request's protocol version unsupported |
 | `JsonRpcError { code, .. }` | pass-through | Preserves the original code/message/data verbatim (e.g. `tasks/result` reproducing the task's original error) |
 
+**Derive-generated tools are the exception for argument errors.** `#[derive(McpTool)]`, `#[mcp_tool]` and `tool!{}` report an undeclared, missing or wrong-typed argument as a tool result with `isError: true` (server/tools § Error Handling: input validation errors are tool execution errors), so the model can self-correct. `MissingParameter`, `InvalidParameterType` and `InvalidParameters` still map to `-32602` when a hand-written `McpTool`, `ToolBuilder` or any other handler returns them.
+
 Header/body protocol-version disagreement uses a separate spec-assigned constant, `ERROR_CODE_HEADER_MISMATCH = -32020` (not a named `McpError` variant — surfaced directly from the header-validation layer).
 
 **See:** `references/mcperror-reference.md` for all variants with full constructor signatures.
