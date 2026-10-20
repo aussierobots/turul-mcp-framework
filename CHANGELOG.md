@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-10-20
+
+`turul-mcp-derive` 0.4.2 → 0.4.3.
+
 ### Fixed
 
+- **Type-mismatch messages from derive-generated tools name the declared type and the type
+  received.** `{"history_min": "5"}` on a numeric parameter read `expected object, got
+  other`: the received type was hard-coded to `other`, and any Rust type without a
+  dedicated branch (`u8`, `usize`, `u16`, `i16`, `isize`, ...) was reported as `object`.
+  The message is now `expected number, got string`; an out-of-range integer says so; a
+  missing required argument is `MissingParameter` instead of a type error. One conversion
+  path serves required and optional parameters. Patch: message text only; the result is
+  still an `isError` tool result naming the argument.
 - **`conformance-fixture-server` builds again with `hmac` 0.13** (`Mac::new_from_slice`
   moved to `KeyInit`); the 0.4.8 dependency bump had left it uncompilable. Unpublished
   example; no crate change.

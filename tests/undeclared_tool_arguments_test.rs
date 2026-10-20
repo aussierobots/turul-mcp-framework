@@ -235,3 +235,110 @@ async fn nested_unknown_key_is_refused_only_when_the_type_denies_unknown_fields(
         .map(|r| assert_ne!(serde_json::to_value(r).unwrap()["isError"], json!(true)))
         .expect("a type that tolerates unknown fields keeps tolerating them");
 }
+
+// A type mismatch names the declared schema type and the received JSON type.
+#[derive(McpTool, Clone, Default)]
+#[allow(dead_code)]
+#[tool(name = "typed_params", description = "One parameter per schema type")]
+struct TypedParams {
+    #[param(description = "string")]
+    s: String,
+    #[param(description = "number")]
+    n: f64,
+    #[param(description = "integer")]
+    i: i64,
+    #[param(description = "narrow integer")]
+    u: u8,
+    #[param(description = "boolean")]
+    b: bool,
+    #[param(description = "array")]
+    v: Vec<String>,
+    #[param(description = "optional number")]
+    on: Option<f64>,
+    #[param(description = "optional narrow integer")]
+    ou: Option<usize>,
+}
+
+impl TypedParams {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Ok("ok".into())
+    }
+}
+
+fn valid_typed_args() -> Value {
+    json!({"s": "x", "n": 1.5, "i": 1, "u": 1, "b": true, "v": ["a"]})
+}
+
+#[tokio::test]
+async fn type_mismatch_names_declared_and_received_json_type() {
+    // (declared schema type, parameter, JSON values to send, with their JSON type)
+    let sent = [
+        (json!("x"), "string"),
+        (json!(7), "integer"),
+        (json!(1.5), "number"),
+        (json!(true), "boolean"),
+        (json!([1]), "array"),
+        (json!({"k": 1}), "object"),
+        (json!(null), "null"),
+    ];
+    // (parameter, declared type, JSON types that are valid for it)
+    let params: [(&str, &str, &[&str]); 8] = [
+        ("s", "string", &["string"]),
+        ("n", "number", &["integer", "number"]),
+        ("i", "integer", &["integer"]),
+        ("u", "integer", &["integer"]),
+        ("b", "boolean", &["boolean"]),
+        ("v", "array", &["array", "string"]),
+        ("on", "number", &["integer", "number", "null"]),
+        ("ou", "integer", &["integer", "null"]),
+    ];
+    let tool = TypedParams::default();
+    let mut checked = 0;
+    for (param, declared, valid) in params {
+        for (value, received) in &sent {
+            if valid.contains(received) {
+                continue;
+            }
+            let mut args = valid_typed_args();
+            args[param] = value.clone();
+            let result = serde_json::to_value(tool.call(args, None).await.unwrap()).unwrap();
+            assert_eq!(result["isError"], json!(true), "{param}={value}: {result}");
+            let text = result["content"][0]["text"].as_str().unwrap_or_default();
+            assert!(
+                text.contains(&format!("'{param}'"))
+                    && text.contains(&format!("expected {declared}"))
+                    && text.contains(&format!("got {received}")),
+                "{param}={value} must say expected {declared}, got {received}: {text}"
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked >= 30, "table shrank: {checked} cases");
+}
+
+#[tokio::test]
+async fn out_of_range_integer_is_not_reported_as_the_wrong_type() {
+    let mut args = valid_typed_args();
+    args["u"] = json!(300);
+    let result =
+        serde_json::to_value(TypedParams::default().call(args, None).await.unwrap()).unwrap();
+    assert_eq!(result["isError"], json!(true));
+    let text = result["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(
+        text.contains("'u'") && text.contains("in range") && text.contains("got integer"),
+        "{text}"
+    );
+}
+
+#[tokio::test]
+async fn missing_required_argument_says_missing_not_a_type_error() {
+    let mut args = valid_typed_args();
+    args.as_object_mut().unwrap().remove("n");
+    let result =
+        serde_json::to_value(TypedParams::default().call(args, None).await.unwrap()).unwrap();
+    let text = result["content"][0]["text"].as_str().unwrap_or_default();
+    assert!(
+        text.contains("n") && text.to_lowercase().contains("missing"),
+        "{text}"
+    );
+}
