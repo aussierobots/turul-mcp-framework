@@ -107,7 +107,8 @@ impl LambdaMcpHandler {
             middleware_stack,
             None, // No fingerprint in legacy constructor
         )
-        .with_server_info(implementation);
+        .with_server_info(implementation)
+        .without_subscriptions_listen();
 
         Self {
             session_handler,
@@ -159,7 +160,8 @@ impl LambdaMcpHandler {
             middleware_stack,
             None, // No fingerprint in legacy constructor
         )
-        .with_server_info(implementation);
+        .with_server_info(implementation)
+        .without_subscriptions_listen();
 
         Self {
             session_handler,
@@ -237,7 +239,8 @@ impl LambdaMcpHandler {
             capabilities,
             middleware_stack,
             tool_fingerprint,
-        );
+        )
+        .without_subscriptions_listen();
 
         Self {
             session_handler,

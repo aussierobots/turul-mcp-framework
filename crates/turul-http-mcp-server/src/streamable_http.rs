@@ -338,6 +338,9 @@ pub struct StreamableHttpHandler {
     /// Identity stamped into every successful result's
     /// `_meta.io.modelcontextprotocol/serverInfo`. `None` leaves the key off.
     server_info: Option<turul_mcp_protocol::Implementation>,
+    /// A buffered transport (Lambda) cannot hold a stream open, so
+    /// `subscriptions/listen` is answered like any unimplemented method.
+    listen_unsupported: bool,
 }
 
 impl StreamableHttpHandler {
@@ -360,7 +363,15 @@ impl StreamableHttpHandler {
             tool_fingerprint,
             tool_notifier: None,
             server_info: None,
+            listen_unsupported: false,
         }
+    }
+
+    /// Refuse `subscriptions/listen` at once (HTTP 404 + `-32601`) instead of
+    /// holding an SSE stream open. For transports that buffer the response.
+    pub fn without_subscriptions_listen(mut self) -> Self {
+        self.listen_unsupported = true;
+        self
     }
 
     /// Set the tool change notifier for restart/redeploy fingerprint mismatch notifications.
@@ -1677,7 +1688,8 @@ impl StreamableHttpHandler {
         // subscriptions/listen is transport-handled below, not dispatcher-routed.
         #[cfg(feature = "protocol-2026-07-28")]
         if let JsonRpcMessage::Request(req) = &message
-            && req.method != turul_mcp_protocol::subscriptions::SUBSCRIPTIONS_LISTEN_METHOD
+            && (req.method != turul_mcp_protocol::subscriptions::SUBSCRIPTIONS_LISTEN_METHOD
+                || self.listen_unsupported)
             && !self.dispatcher.handlers.contains_key(&req.method)
             && self.dispatcher.default_handler.is_none()
         {
