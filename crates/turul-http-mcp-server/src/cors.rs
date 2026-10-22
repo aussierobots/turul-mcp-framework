@@ -41,7 +41,7 @@ pub(crate) const CORS_ALLOW_HEADERS: &str = "Content-Type, Accept, Authorization
 #[cfg(feature = "protocol-2025-11-25")]
 pub(crate) const CORS_EXPOSE_HEADERS: &str = "Mcp-Session-Id, WWW-Authenticate";
 #[cfg(not(feature = "protocol-2025-11-25"))]
-pub(crate) const CORS_EXPOSE_HEADERS: &str = "WWW-Authenticate";
+pub(crate) const CORS_EXPOSE_HEADERS: &str = "MCP-Protocol-Version, WWW-Authenticate";
 
 /// Preflight cache duration in seconds (24 hours).
 pub(crate) const CORS_MAX_AGE: &str = "86400";
@@ -315,6 +315,19 @@ mod tests {
                 "{name} is a request header and must not be exposed; got {exposed:?}",
             );
         }
+    }
+
+    #[cfg(feature = "protocol-2026-07-28")]
+    #[test]
+    fn test_stateless_exposes_protocol_version_response_header() {
+        // Responses carry `MCP-Protocol-Version`, which is not CORS-safelisted;
+        // a browser client can read it only if it is exposed.
+        let mut headers = HeaderMap::new();
+        CorsLayer::apply_cors_headers(&mut headers);
+        assert_eq!(
+            header_entries(&headers, "Access-Control-Expose-Headers"),
+            ["mcp-protocol-version", "www-authenticate"],
+        );
     }
 
     #[cfg(feature = "protocol-2025-11-25")]
