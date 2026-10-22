@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.12] - 2026-10-22
+
+`turul-http-mcp-server` 0.4.2 → 0.4.3.
+
+### Fixed
+
+- **A browser can call a 2026-07-28 server: CORS preflight now allows `Mcp-Method` and
+  `Mcp-Name`.** Every 2026-07-28 request carries `Mcp-Method` (and `Mcp-Name` on tools/call,
+  resources/read and prompts/get); neither is CORS-safelisted, so the preflight failed before
+  any request was sent. They are request headers, so they are allowed and not exposed. The
+  deliberate omission of `Mcp-Session-Id` on the 2026-07-28 build is unchanged, and the
+  2025-11-25 build is unchanged. `Mcp-Param-*` (SEP-2243 `x-mcp-header`) cannot be listed
+  statically and is not covered. Patch: allow-list entries only. Test:
+  `test_stateless_preflight_allows_request_metadata_headers`, red without the fix.
+
 ## [0.4.11] - 2026-10-22
 
 `turul-mcp-client` 0.4.3 → 0.4.4.
@@ -2621,7 +2636,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.11...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.12...HEAD
+[0.4.12]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.11...v0.4.12
 [0.4.11]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.10...v0.4.11
 [0.4.6]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.4...v0.4.5
