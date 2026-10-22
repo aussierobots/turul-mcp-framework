@@ -74,7 +74,7 @@ const METHOD_NOT_FOUND: i64 = -32601;
 /// refusal of the probe's requested version (HTTP 400 body). The probe always
 /// requests 2026-07-28, so this code means "this server does not speak 2026".
 /// Mirrors `turul_mcp_protocol_2026_07_28::McpError::UnsupportedProtocolVersion`.
-const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32022;
+pub(crate) const UNSUPPORTED_PROTOCOL_VERSION: i64 = -32022;
 const INVALID_PARAMS: i64 = -32602;
 
 /// JSON-RPC `HeaderMismatchError` — mirrors
@@ -92,6 +92,13 @@ const MISSING_REQUIRED_CLIENT_CAPABILITY: i64 = -32021;
 /// session it was not given.
 const SESSION_REQUIRED: i64 = -32001;
 
+/// Whether a JSON-RPC error is a stateful server refusing a request for lack of
+/// an `Mcp-Session-Id`. `-32001` alone is not enough: it is also this
+/// framework's own `Unauthenticated` code, so the message must name the header.
+pub(crate) fn is_missing_session_id(code: i64, message: Option<&str>) -> bool {
+    code == SESSION_REQUIRED && message.is_some_and(|m| m.contains("Mcp-Session-Id"))
+}
+
 /// Build the probe outcome for a JSON-RPC error reply to `server/discover`.
 /// `-32001` becomes [`DiscoverProbe::MissingSessionId`] only when its message
 /// names the `Mcp-Session-Id` header; every other `-32001` stays a plain
@@ -102,7 +109,7 @@ pub(crate) fn probe_from_jsonrpc_error(
     message: Option<&str>,
     supported: Option<Vec<String>>,
 ) -> DiscoverProbe {
-    if code == SESSION_REQUIRED && message.is_some_and(|m| m.contains("Mcp-Session-Id")) {
+    if is_missing_session_id(code, message) {
         DiscoverProbe::MissingSessionId
     } else {
         DiscoverProbe::JsonRpcError(code, supported)

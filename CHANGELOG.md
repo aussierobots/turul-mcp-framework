@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.11] - 2026-10-22
+
+`turul-mcp-client` 0.4.3 → 0.4.4.
+
+### Fixed
+
+- **A connected `McpClient` survives the server behind its URL changing spec revision.** The
+  wire spec is locked per connection, so after a server upgrade (2025-11-25 → 2026-07-28) or
+  rollback every request failed until the application reconnected by hand. The client now
+  re-negotiates once when an unpinned connection is refused with `-32022`, or with `-32001`
+  "Missing Mcp-Session-Id" while locked to 2026-07-28 (what a real 2025 server answers), on
+  both send paths. If the server comes back on the same spec the request is re-sent; if the
+  spec changed, that one request surfaces the refusal and the next call works. A pinned
+  `mcp_protocol_version` is never overridden. ADR-030 revision log 2026-10-22. Patch:
+  recovery where the client previously stayed broken; no API removed.
+  Tests: `server_upgrade_renegotiation.rs` (wire) and `client_server_upgrade_e2e.rs` (real
+  2025 server in-process plus real 2026 server child process; gated in `ci-gates.sh`).
+  New `McpClientError::is_unsupported_protocol_version` and `is_missing_session_id`.
+
 ### Changed
 
 - **`turul-mcp-json-rpc-server` tests no longer pin `turul-rpc` 0.1 specifics.** The shim is
@@ -2602,7 +2621,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.11...HEAD
+[0.4.11]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.10...v0.4.11
 [0.4.6]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.3...v0.4.4

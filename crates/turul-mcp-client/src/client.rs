@@ -680,6 +680,33 @@ impl McpClient {
         serde_json::to_value(notification).expect("JsonRpcNotification serialization is infallible")
     }
 
+    /// Whether a refusal on an established connection means the server's spec
+    /// changed under us: `-32022` on any connection, or a stateful server's
+    /// missing-session refusal on a connection locked to 2026-07-28 (which
+    /// never sends a session id). Not recoverable when the caller pinned a
+    /// version: the pin is an instruction, not a preference.
+    async fn version_refusal_is_recoverable(&self, e: &McpClientError) -> bool {
+        if self.config.mcp_protocol_version.is_some() {
+            return false;
+        }
+        e.is_unsupported_protocol_version()
+            || (e.is_missing_session_id()
+                && self.negotiated_version().await == Some(crate::version::McpVersion::V2026_07_28))
+    }
+
+    /// Tear the connection down and negotiate afresh. Returns whether the new
+    /// connection speaks the same spec as the old one, i.e. whether a request
+    /// built for the old spec may be re-sent.
+    async fn renegotiate_after_version_refusal(&self) -> McpClientResult<bool> {
+        let before = self.negotiated_version().await;
+        if let Err(dc_err) = self.disconnect().await {
+            warn!(error = %dc_err, "Disconnect before re-negotiation failed");
+        }
+        self.session.reset().await;
+        self.connect().await?;
+        Ok(self.negotiated_version().await == before)
+    }
+
     /// Send request and handle retries
     async fn send_request_internal(&self, request: Value) -> McpClientResult<Value> {
         let mut last_error = None;
@@ -725,6 +752,25 @@ impl McpClient {
                         continue;
                     }
 
+                    // The server behind the URL now speaks a different spec
+                    // revision than the one locked at connect().
+                    if self.version_refusal_is_recoverable(&e).await {
+                        warn!(
+                            "Server refused the locked protocol version (-32022 / missing session) — re-negotiating"
+                        );
+                        return match self.renegotiate_after_version_refusal().await {
+                            // Same spec again: the request is still valid, retry once.
+                            Ok(true) => self.send_request_raw(request).await,
+                            // The spec changed: this request was built for the old one.
+                            // The connection is repaired; the caller's next call succeeds.
+                            Ok(false) => Err(e),
+                            Err(reconnect_err) => {
+                                warn!(error = %reconnect_err, "Re-negotiation failed");
+                                Err(e)
+                            }
+                        };
+                    }
+
                     // JSON-RPC -32031: server rejected because notifications/initialized
                     // hasn't been processed yet. Disconnect, full reconnect, retry once.
                     if e.is_session_not_initialized() {
@@ -732,7 +778,6 @@ impl McpClient {
                             "Session not initialized (code -32031) — \
                              disconnecting and reconnecting"
                         );
-                        // Full reconnect: disconnect old session, connect fresh
                         if let Err(dc_err) = self.disconnect().await {
                             warn!(error = %dc_err, "Disconnect during session retry failed");
                         }
@@ -1089,22 +1134,53 @@ impl McpClient {
         if !self.session.is_ready().await {
             return Err(crate::error::SessionError::NotInitialized.into());
         }
-        let response = tokio::time::timeout(
-            self.config.timeouts.request,
-            self.transport
-                .send_request_with_extra_headers(request, extra_headers),
-        )
-        .await
-        .map_err(|_| McpClientError::Timeout)??;
-        if let Some(error) = response.get("error") {
-            let code = error.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
-            let message = error
-                .get("message")
-                .and_then(|m| m.as_str())
-                .unwrap_or("Unknown error");
-            let data = error.get("data").cloned();
-            return Err(McpClientError::server_error(code, message, data));
-        }
+        let mut renegotiated = false;
+        let response = loop {
+            let sent = tokio::time::timeout(
+                self.config.timeouts.request,
+                self.transport
+                    .send_request_with_extra_headers(request.clone(), extra_headers),
+            )
+            .await
+            .map_err(|_| McpClientError::Timeout)?;
+            let outcome = sent.and_then(|response| match response.get("error") {
+                Some(error) => {
+                    let code = error.get("code").and_then(|c| c.as_i64()).unwrap_or(-1) as i32;
+                    let message = error
+                        .get("message")
+                        .and_then(|m| m.as_str())
+                        .unwrap_or("Unknown error");
+                    let data = error.get("data").cloned();
+                    Err(McpClientError::server_error(code, message, data))
+                }
+                None => Ok(response),
+            });
+            let recover = match &outcome {
+                Err(e) if !renegotiated => self.version_refusal_is_recoverable(e).await,
+                _ => false,
+            };
+            match outcome {
+                Err(e) if recover => {
+                    warn!(
+                        "Server refused the locked protocol version (-32022 / missing session) — re-negotiating"
+                    );
+                    renegotiated = true;
+                    match self.renegotiate_after_version_refusal().await {
+                        // Same spec again: the request is still valid, retry once.
+                        Ok(true) => continue,
+                        // The spec changed: this request was built for the old one.
+                        // The connection is repaired; the caller's next call succeeds.
+                        Ok(false) => return Err(e),
+                        Err(reconnect_err) => {
+                            warn!(error = %reconnect_err, "Re-negotiation failed");
+                            return Err(e);
+                        }
+                    }
+                }
+                Err(e) => return Err(e),
+                Ok(response) => break response,
+            }
+        };
         parse(&response.get("result").cloned().unwrap_or(Value::Null))
     }
 

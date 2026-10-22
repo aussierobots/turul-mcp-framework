@@ -75,6 +75,12 @@ path = "ping_auth_2025.rs"
 name = "client_real_2025_server_e2e"
 path = "client_real_2025_server_e2e.rs"
 
+# A live client across a real 2025 <-> 2026 server flip. The 2026 server is a
+# child process: the two lanes cannot share a build.
+[[test]]
+name = "client_server_upgrade_e2e"
+path = "client_server_upgrade_e2e.rs"
+
 # Standalone: uses mod test_helpers which requires crate-root relative path
 [[test]]
 name = "session_context_macro_tests"
