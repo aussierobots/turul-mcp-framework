@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.13] - 2026-10-22
+
+`turul-mcp-aws-lambda` 0.4.0 → 0.4.1.
+
+### Fixed
+
+- **A client can no longer spoof authorizer identity through `x-authorizer-*` headers.** The
+  Lambda adapter copies API Gateway authorizer fields into `x-authorizer-<field>` request
+  headers, which middleware trusts as authorizer output, but it never removed such headers
+  sent by the client: `headers.insert` overwrote only the fields the authorizer emitted, so
+  any other `x-authorizer-*` header survived, and with no authorizer at all (direct invoke,
+  Function URL, `cargo lambda watch`) all of them did. The adapter now drops every inbound
+  `x-authorizer-*` header before injecting the authorizer's. Behaviour change: tests that
+  supplied these headers by hand without an authorizer must stop doing so. Patch: security
+  fix, no API change. Test: `inbound_authorizer_headers.rs`, red without the fix. 0.3.x is
+  not patched.
+
 ### Changed
 
 - **The opt-in 2025-11-25 lane is documented as not supported from crates.io.** It builds in
@@ -2646,7 +2663,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.12...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.13...HEAD
+[0.4.13]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.12...v0.4.13
 [0.4.12]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.11...v0.4.12
 [0.4.11]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.10...v0.4.11
 [0.4.6]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.5...v0.4.6
