@@ -536,6 +536,7 @@ impl McpServer {
             "Starting MCP server: {} v{}",
             self.implementation.name, self.implementation.version
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         info!("Session management: enabled with automatic cleanup");
 
         if self.enable_sse {
@@ -691,6 +692,7 @@ impl McpServer {
             "Starting MCP server: {} v{}",
             self.implementation.name, self.implementation.version
         );
+        #[cfg(feature = "protocol-2025-11-25")]
         info!("Session management: enabled with automatic cleanup");
 
         if self.enable_sse {

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.15] - 2026-10-23
+
+`turul-http-mcp-server` 0.4.3 → 0.4.4, `turul-mcp-aws-lambda` 0.4.1 → 0.4.2, `turul-mcp-server` 0.4.4 → 0.4.5.
+
+### Fixed
+
+- **`subscriptions/listen` on Lambda no longer holds the invocation open until the function timeout.**
+  The Lambda response is buffered and cannot push, so the SSE stream ran to the timeout (and
+  logged `IncompleteMessage`) every time a client opened one. The Lambda adapter now refuses it
+  at once, like any unimplemented method: HTTP 404 + `-32601`. New
+  `StreamableHttpHandler::without_subscriptions_listen()`; other transports are unchanged.
+  Lambda already advertises `resources.subscribe: false` and static `listChanged: false`.
+- **A stateless (2026-07-28) build no longer logs "Session management: enabled with automatic
+  cleanup".** The line is now 2025-11-25 only.
+
 ## [0.4.14] - 2026-10-22
 
 `turul-mcp-client` 0.4.4 → 0.4.5.
