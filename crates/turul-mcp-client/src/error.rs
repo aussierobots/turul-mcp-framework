@@ -214,6 +214,28 @@ impl McpClientError {
         )
     }
 
+    /// Check if the server refused the request's protocol version
+    /// (JSON-RPC `-32022` UnsupportedProtocolVersionError). On an established
+    /// connection this means the server behind the URL now speaks a different
+    /// spec revision than the one locked at `connect()`.
+    pub fn is_unsupported_protocol_version(&self) -> bool {
+        matches!(
+            self,
+            Self::ServerError { code, .. } if i64::from(*code) == crate::version::UNSUPPORTED_PROTOCOL_VERSION
+        )
+    }
+
+    /// Check if a stateful (2025-era) server refused the request for lack of an
+    /// `Mcp-Session-Id`. On a connection locked to 2026-07-28, which never sends
+    /// one, this means the server behind the URL is now a 2025-era server.
+    pub fn is_missing_session_id(&self) -> bool {
+        matches!(
+            self,
+            Self::ServerError { code, message, .. }
+                if crate::version::is_missing_session_id(i64::from(*code), Some(message))
+        )
+    }
+
     /// Check if this error indicates the server rejected the request because
     /// `notifications/initialized` has not been processed yet (JSON-RPC -32031
     /// or message containing "Session not initialized").

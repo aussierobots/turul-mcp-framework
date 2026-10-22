@@ -100,6 +100,10 @@ gate_opt_in_2025() {
   # disagree with the client that shares its author.
   run "client against a real 2025-11-25 server" \
     cargo test -p turul-mcp-framework-integration-tests --test client_real_2025_server_e2e
+  # A live client across a real 2025 <-> 2026 server flip (the 2026 side is a
+  # child process built into target-upgrade-e2e).
+  run "client survives a real server era flip" \
+    cargo test -p turul-mcp-framework-integration-tests --test client_server_upgrade_e2e
   # Every example whose manifest pins protocol-2025-11-25. They cannot join
   # [default-members] — unifying their features with the 2026 default trips the
   # spec mutex — so this is the only thing that compiles them. tests/examples_guard.rs
