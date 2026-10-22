@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The opt-in 2025-11-25 lane is documented as not supported from crates.io.** It builds in
+  the workspace (CI-gated) but has not compiled from the registry on any `0.4.x` release:
+  the published `turul-mcp-protocol-2025-11-25` 0.3.47 depends on `turul-rpc` 0.1 via the
+  frozen shim while the 0.4 crates use 0.2 (E0277, two `turul_rpc_server` versions).
+  README, CLAUDE.md, AGENTS.md and ADR-029 (revision log 2026-10-22) now say so; no code
+  change, no crate release. Consumers needing a 2025-11-25 server from the registry stay on
+  0.3.x.
+
 ## [0.4.12] - 2026-10-22
 
 `turul-http-mcp-server` 0.4.2 → 0.4.3.

@@ -36,7 +36,7 @@ External dependencies (`serde`, `tokio`, etc.) continue to use `workspace = true
 This file documents the framework under two simultaneous spec targets:
 
 - **The default build** — MCP 2026-07-28, the released current specification (stateless core: handshake and session header removed, capabilities travel in `_meta` on every request, new `server/discover` method). This is what `main` builds and what 0.4.0 published.
-- **The opt-in lane** (`--no-default-features --features protocol-2025-11-25`) — MCP 2025-11-25 (stateful core: `initialize`/`notifications/initialized` handshake, `Mcp-Session-Id` header, capability negotiation at handshake time).
+- **The opt-in lane** (`--no-default-features --features protocol-2025-11-25`; workspace checkout only, not supported from crates.io) — MCP 2025-11-25 (stateful core: `initialize`/`notifications/initialized` handshake, `Mcp-Session-Id` header, capability negotiation at handshake time).
 
 **These are Cargo features, not branches.** Before 2026-08-15 the split was branch-conditional; since 0.4.0 both lanes live on `main` and are selected at compile time. They are mutually exclusive — see §"Build, Test, and Development Commands" for the feature mutex.
 

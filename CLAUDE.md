@@ -5,7 +5,7 @@
 3. Touch only what you must. Clean up only your own mess.
 4. Define success criteria. Loop until verified.
 
-Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and MCP 2026-07-28 specification support (2025-11-25 available as an opt-in build).
+Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and MCP 2026-07-28 specification support (2025-11-25 buildable as an opt-in lane from a workspace checkout; not supported from crates.io).
 
 > **Source of Truth**
 > - **The MCP specification + vendored schema** — what the wire must be

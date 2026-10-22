@@ -4,7 +4,7 @@ Build [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers an
 
 Turul gives you the full MCP surface (tools, resources, prompts, completion, notifications, extensions) behind a zero-configuration builder API: annotate a function or derive on a struct, add it to the builder, run. The framework generates the schemas, wires the transport, and keeps you spec-compliant.
 
-The default build targets **MCP 2026-07-28**, the current specification. The previous spec, **2025-11-25**, stays fully supported as an opt-in build (`--no-default-features --features protocol-2025-11-25`).
+The default build targets **MCP 2026-07-28**, the current specification. The previous spec, **2025-11-25**, remains buildable as an opt-in lane (`--no-default-features --features protocol-2025-11-25`) from a workspace checkout only — **not supported from crates.io**: the published 2025-11-25 crates resolve `turul-rpc` 0.1 while the 0.4 crates use 0.2, so enabling the feature on a published `0.4.x` crate fails to compile.
 
 **A server speaks one spec or the other — never both at once.** The two protocol features are mutually exclusive at compile time, so a given server binary is either 2026-07-28 *or* 2025-11-25. The **client** is different: it links both and negotiates per connection. See [Single-era servers](#single-era-servers-not-dual-era) for what that means for clients trying to reach you.
 
@@ -251,8 +251,8 @@ this section and come back later. Migrating from 2025-11-25? Read it first.
 | GET SSE endpoint / `resources/subscribe` | 2575 | `subscriptions/listen` |
 | Core `tasks/*` (incl. `tasks/list`, blocking `tasks/result`) | 2663 | the Tasks **extension** (`tasks/get` polling + `tasks/update`) |
 
-**2025-11-25 stays fully supported** as the opt-in stateful lane
-(`--no-default-features --features protocol-2025-11-25`) — the handshake, sessions,
+**2025-11-25 remains buildable** as the opt-in stateful lane
+(`--no-default-features --features protocol-2025-11-25`) from a workspace checkout only — **not supported from crates.io**: the published 2025-11-25 crates resolve `turul-rpc` 0.1 while the 0.4 crates use 0.2, so enabling the feature on a published `0.4.x` crate fails to compile. In a checkout the handshake, sessions,
 GET SSE, and core tasks all work there. Per-requirement compliance status:
 [`docs/plans/2026-07-28-spec-compliance.md`](docs/plans/2026-07-28-spec-compliance.md).
 
@@ -1253,7 +1253,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 ## 📋 Development Status & Current Limitations
 
 ### 🎯 Current Framework State
-- **MCP 2026-07-28**: default build targets the current stateless spec; 2025-11-25 remains fully supported as the opt-in stateful line
+- **MCP 2026-07-28**: default build targets the current stateless spec; 2025-11-25 remains buildable from a workspace checkout as the opt-in stateful line (not supported from crates.io)
 - **Examples Validated**: 54 active examples compile under their lane's CI gates (2026-07-28 default lane plus the pinned 2025-11-25 regression set — see EXAMPLES.md)
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
 - **Pre-1.0 (0.4.x)**: production-shaped with comprehensive test coverage; public APIs may still change before 1.0.0
