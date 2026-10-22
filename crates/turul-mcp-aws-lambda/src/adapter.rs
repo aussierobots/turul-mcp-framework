@@ -38,6 +38,9 @@ type MappedFullBody =
 /// added as headers with the `x-authorizer-` prefix. This makes authorizer data
 /// available to middleware via `RequestContext.metadata`.
 ///
+/// Any `x-authorizer-*` header the client sent is removed first, so a value with
+/// that prefix can only have come from the authorizer.
+///
 /// Field names are sanitized (lowercase, alphanumeric + dash/underscore only).
 /// Invalid header names/values are skipped gracefully.
 pub fn lambda_to_hyper_request(
@@ -48,6 +51,18 @@ pub fn lambda_to_hyper_request(
 
     // Convert to parts (consumes request)
     let (mut parts, lambda_body) = lambda_req.into_parts();
+
+    // `x-authorizer-*` is trusted by middleware as authorizer output, so only
+    // the authorizer may set it: drop whatever the client sent, then inject.
+    let inbound: Vec<http::HeaderName> = parts
+        .headers
+        .keys()
+        .filter(|name| name.as_str().starts_with("x-authorizer-"))
+        .cloned()
+        .collect();
+    for name in inbound {
+        parts.headers.remove(name);
+    }
 
     // Inject authorizer fields as x-authorizer-* headers (defensive - skip failures)
     for (field_name, field_value) in authorizer_fields {
