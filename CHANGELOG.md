@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.14] - 2026-10-22
+
+`turul-mcp-client` 0.4.4 → 0.4.5.
+
+### Fixed
+
+- **The GET SSE listener no longer drops the session id on a 405 or 404 (2025-11-25
+  connections only; 2026-07-28 has no session id and no GET stream).** Since 0.4.3 the
+  listener starts after `initialize`, so its GET carries the live `Mcp-Session-Id`, and any
+  4xx cleared it. A stateful server's 405 ("this endpoint offers no SSE stream", allowed by
+  the Streamable HTTP spec) then made every later request fail `-32001 Missing
+  Mcp-Session-Id`. A 405 now ends the listener quietly and keeps the session. A 404 (session
+  terminated) also keeps the id and ends the listener: the spec requires a new
+  `InitializeRequest` on a 404, which the request path already performs when its own request
+  gets the 404 - stripping the id first made that request sessionless, answered `-32001`
+  rather than 404, and left nothing to trigger recovery. Other 4xx still clear the session,
+  as before (a terminated session answers 400 on some servers). Patch: wrong session loss on
+  spec-defined responses. Tests: `sse_405_keeps_session.rs` (405 keeps the session; 404
+  recovers on the next request), both red without the fix.
+
 ## [0.4.13] - 2026-10-22
 
 `turul-mcp-aws-lambda` 0.4.0 → 0.4.1.
@@ -2663,7 +2683,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.13...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.14...HEAD
+[0.4.14]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.13...v0.4.14
 [0.4.13]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.12...v0.4.13
 [0.4.12]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.11...v0.4.12
 [0.4.11]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.10...v0.4.11

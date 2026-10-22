@@ -257,8 +257,11 @@ pub enum ServerEvent {
     /// On the streamable HTTP transport, an `Error` whose payload contains
     /// `"listener exiting"` signals that the SSE GET listener task has
     /// terminated (HTTP 4xx response — see [`Transport::start_event_listener`]
-    /// for the full contract). The cached session header has already been
-    /// cleared; the caller should re-run `initialize` and restart the listener.
+    /// for the full contract). For 404 (session terminated) the cached session
+    /// header is kept: the next request gets the 404 and starts a new session.
+    /// For other 4xx other than 405 it has been cleared; the caller should
+    /// re-run `initialize` and restart the listener. A 405 ("no SSE stream
+    /// offered") ends the listener without an event and keeps the session.
     /// Other `Error` payloads are non-terminal — the listener continues to
     /// retry transient failures.
     Error(String),
