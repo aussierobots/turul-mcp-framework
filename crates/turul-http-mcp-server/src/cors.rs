@@ -22,13 +22,15 @@ pub(crate) const CORS_ALLOW_METHODS: &str = "GET, POST, DELETE, OPTIONS";
 ///   transport ignores an inbound session header and never mints one, so
 ///   advertising it here would claim a contract this lane does not honour.
 /// - `MCP-Protocol-Version` — client MUST send on all requests
+/// - `Mcp-Method`, `Mcp-Name` — 2026-07-28 only: every request carries
+///   `Mcp-Method`, and `Mcp-Name` on tools/call, resources/read and
+///   prompts/get. Not CORS-safelisted, so a browser preflight fails without them.
 /// - `Last-Event-ID` — client SHOULD send for SSE stream resumption
 #[cfg(feature = "protocol-2025-11-25")]
 pub(crate) const CORS_ALLOW_HEADERS: &str =
     "Content-Type, Accept, Authorization, Mcp-Session-Id, MCP-Protocol-Version, Last-Event-ID";
 #[cfg(not(feature = "protocol-2025-11-25"))]
-pub(crate) const CORS_ALLOW_HEADERS: &str =
-    "Content-Type, Accept, Authorization, MCP-Protocol-Version, Last-Event-ID";
+pub(crate) const CORS_ALLOW_HEADERS: &str = "Content-Type, Accept, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Last-Event-ID";
 
 /// Response headers a browser is allowed to read.
 ///
@@ -286,6 +288,33 @@ mod tests {
         // empties the lists instead of removing one entry.
         assert!(allowed.iter().any(|h| h == "mcp-protocol-version"));
         assert!(exposed.iter().any(|h| h == "www-authenticate"));
+    }
+
+    #[cfg(feature = "protocol-2026-07-28")]
+    #[test]
+    fn test_stateless_preflight_allows_request_metadata_headers() {
+        // Every 2026-07-28 request carries `Mcp-Method`, and `Mcp-Name` on
+        // tools/call, resources/read and prompts/get. Neither is
+        // CORS-safelisted, so a browser client's preflight fails unless both
+        // are allowed. They are request headers: nothing to expose.
+        let mut headers = HeaderMap::new();
+        CorsLayer::apply_cors_headers(&mut headers);
+
+        let allowed = header_entries(&headers, "Access-Control-Allow-Headers");
+        for name in ["mcp-method", "mcp-name"] {
+            assert!(
+                allowed.iter().any(|h| h == name),
+                "2026-07-28 Access-Control-Allow-Headers must include {name}; got {allowed:?}",
+            );
+        }
+
+        let exposed = header_entries(&headers, "Access-Control-Expose-Headers");
+        for name in ["mcp-method", "mcp-name"] {
+            assert!(
+                !exposed.iter().any(|h| h == name),
+                "{name} is a request header and must not be exposed; got {exposed:?}",
+            );
+        }
     }
 
     #[cfg(feature = "protocol-2025-11-25")]
