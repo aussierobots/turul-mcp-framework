@@ -1138,6 +1138,30 @@ impl Transport for HttpTransport {
                     }
                     Ok(resp) => {
                         let status = resp.status();
+
+                        // 405 is the spec's answer for "this endpoint offers no SSE
+                        // stream" (Streamable HTTP: the server MUST return the stream
+                        // or 405). It says nothing about the session, so keep the
+                        // session id and stop listening.
+                        if status.as_u16() == 405 {
+                            debug!("Server offers no GET SSE stream (405); listener exiting");
+                            return;
+                        }
+
+                        // 404 means the server terminated the session. The spec's
+                        // recovery is a new InitializeRequest, which the request
+                        // path already performs when its own request gets a 404.
+                        // Keep the id so that next request hits that path, instead
+                        // of sending sessionless and failing -32001 with nothing
+                        // to trigger recovery.
+                        if status.as_u16() == 404 {
+                            warn!("SSE GET got 404: session terminated; listener exiting");
+                            let _ = tx.send(ServerEvent::Error(
+                                "SSE GET rejected with HTTP 404 — listener exiting".to_string(),
+                            ));
+                            return;
+                        }
+
                         warn!("SSE connection failed with status: {}", status);
 
                         // 4xx is structurally fatal for the SSE GET listener: retrying
