@@ -92,6 +92,8 @@ gate_opt_in_2025() {
   # code a single-spec consumer actually runs.
   run "client 2025-11-25-only"   cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
   run "client 2026-07-28-only"   cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
+  run "client http-only 2025-11-25" cargo build -p turul-mcp-client --no-default-features --features http,client-2025-11-25-only
+  run "client http-only 2026-07-28" cargo build -p turul-mcp-client --no-default-features --features http,client-2026-07-28-only
   run "client-initialise-server" cargo build  -p client-initialise-server --no-default-features
   # Building that server proved nothing about the client talking to it. This
   # drives turul-mcp-client at an in-process REAL 2025-11-25 server: discover
