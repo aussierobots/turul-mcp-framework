@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.16] - 2026-10-23
+
+`turul-http-mcp-server` 0.4.4 → 0.4.5.
+
+### Fixed
+
+- **The 2026-07-28 build exposes `MCP-Protocol-Version` to browser clients.**
+  `Access-Control-Expose-Headers` was `WWW-Authenticate` only, so a browser could not read the
+  version header on responses. It is now `MCP-Protocol-Version, WWW-Authenticate`. The
+  2025-11-25 list is unchanged.
+
 ## [0.4.15] - 2026-10-23
 
 `turul-http-mcp-server` 0.4.3 → 0.4.4, `turul-mcp-aws-lambda` 0.4.1 → 0.4.2, `turul-mcp-server` 0.4.4 → 0.4.5.
