@@ -194,6 +194,8 @@ jobs:
           # nothing about the code a single-spec consumer actually runs.
           cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2025-11-25-only
           cargo test   -p turul-mcp-client      --no-default-features --features http,sse,client-2026-07-28-only
+          cargo build  -p turul-mcp-client      --no-default-features --features http,client-2025-11-25-only
+          cargo build  -p turul-mcp-client      --no-default-features --features http,client-2026-07-28-only
           cargo build  -p client-initialise-server --no-default-features
           # Every example whose manifest pins protocol-2025-11-25. They cannot
           # join [default-members] — unifying their features with the 2026

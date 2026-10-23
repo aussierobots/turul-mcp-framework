@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.17] - 2026-10-23
+
+`turul-mcp-client` 0.4.5 → 0.4.6.
+
+### Fixed
+
+- **`turul-mcp-client` builds with `default-features = false, features = ["http", "client-2026-07-28-only"]`.**
+  The HTTP transport uses `tokio_util`, but only the `sse` feature enabled that dependency, so
+  `http` without `sse` failed with an unresolved `tokio_util`. `http` now enables `tokio-util`.
+  CI builds `http` + each single-spec narrowing without `sse`; every narrowed CI feature set
+  carried `sse` before, which hid the break. Patch release.
+
 ## [0.4.16] - 2026-10-23
 
 `turul-http-mcp-server` 0.4.4 → 0.4.5.
