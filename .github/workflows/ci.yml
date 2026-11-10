@@ -47,7 +47,7 @@ jobs:
     name: rustfmt (--check)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -58,7 +58,7 @@ jobs:
     name: Default lane (2026-07-28)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # The full workspace debug build (all test binaries) overflows the
       # default runner disk — three runs died on "No space left on device"
       # with lld Bus errors. Drop the preinstalled SDKs we never use.
@@ -169,7 +169,7 @@ jobs:
     name: Opt-in lane (2025-11-25)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
@@ -258,7 +258,7 @@ jobs:
     name: Spec mutex (both features must not compile)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Enabling both protocol features must be a compile_error
@@ -273,7 +273,7 @@ jobs:
     name: Rustdoc (deny warnings)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # turul-mcp-derive carries doctests that are `rust,ignore` under the
