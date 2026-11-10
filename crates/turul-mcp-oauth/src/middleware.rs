@@ -327,11 +327,11 @@ mod tests {
         use rsa::pkcs1::EncodeRsaPrivateKey;
         use rsa::traits::PublicKeyParts;
 
-        let private = rsa::RsaPrivateKey::new(&mut rand::rngs::ThreadRng::default(), 2048).unwrap();
+        let private = rsa::PrivateKey::new(&mut rand::rngs::ThreadRng::default(), 2048).unwrap();
         let der = private.to_pkcs1_der().unwrap();
         let encoding = EncodingKey::from_rsa_der(der.as_bytes());
 
-        let public = rsa::RsaPublicKey::from(&private);
+        let public = rsa::PublicKey::from(&private);
         let n = URL_SAFE_NO_PAD.encode(be_bytes(public.n().as_ref()));
         let e = URL_SAFE_NO_PAD.encode(be_bytes(public.e()));
         (encoding, n, e)
@@ -496,7 +496,7 @@ mod tests {
 
     #[tokio::test]
     async fn token_signed_by_unknown_key_rejected() {
-        let other = rsa::RsaPrivateKey::new(&mut rand::rngs::ThreadRng::default(), 2048).unwrap();
+        let other = rsa::PrivateKey::new(&mut rand::rngs::ThreadRng::default(), 2048).unwrap();
         let der = rsa::pkcs1::EncodeRsaPrivateKey::to_pkcs1_der(&other).unwrap();
         let forged = sign(
             &claims(Some("mcp:read mcp:write")),
