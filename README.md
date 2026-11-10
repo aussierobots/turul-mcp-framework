@@ -1,5 +1,11 @@
 # Turul MCP Framework
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/turul/logo-dark.png">
+  <img src="docs/assets/turul/logo-light.png" alt="Turul MCP" width="600">
+</picture>
+
+
 Build [Model Context Protocol (MCP)](https://modelcontextprotocol.io) servers and clients in Rust — from a five-line tool server to serverless AWS Lambda deployments.
 
 Turul gives you the full MCP surface (tools, resources, prompts, completion, notifications, extensions) behind a zero-configuration builder API: annotate a function or derive on a struct, add it to the builder, run. The framework generates the schemas, wires the transport, and keeps you spec-compliant.
@@ -1282,3 +1288,8 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 **🚀 Ready to build MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
 
 **💡 Need help?** Open an issue or check our [examples](examples/) covering everything from simple calculators to enterprise systems.
+
+## Brand artwork
+
+Turul brand artwork is © 2026 Toast Technology Pty Ltd, all rights reserved,
+and is excluded from the software licence. See the [artwork notice](docs/assets/turul/ARTWORK-NOTICE.md) and [master assets](https://github.com/aussierobots/turul-brand).
