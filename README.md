@@ -1293,3 +1293,5 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 Turul brand artwork is © 2026 Toast Technology Pty Ltd, all rights reserved,
 and is excluded from the software licence. See the [artwork notice](docs/assets/turul/ARTWORK-NOTICE.md) and [master assets](https://github.com/aussierobots/turul-brand).
+
+[Project icons and artwork](docs/assets/turul/README.md).
