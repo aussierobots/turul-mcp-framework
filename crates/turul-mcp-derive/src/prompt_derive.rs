@@ -7,6 +7,9 @@ use syn::{Data, DeriveInput, Fields, Result};
 use crate::utils::{extract_field_meta, extract_prompt_meta};
 
 pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     let struct_name = &input.ident;
 
     // Extract struct-level attributes from #[prompt(...)]
@@ -30,23 +33,23 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasPromptMetadata for #struct_name {
+        impl #mcp_builders::traits::HasPromptMetadata for #struct_name {
             fn name(&self) -> &str {
                 #name
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasPromptDescription for #struct_name {
+        impl #mcp_builders::traits::HasPromptDescription for #struct_name {
             fn description(&self) -> Option<&str> {
                 Some(#description)
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasPromptArguments for #struct_name {
-            fn arguments(&self) -> Option<&Vec<turul_mcp_protocol::prompts::PromptArgument>> {
-                static ARGS: std::sync::OnceLock<Option<Vec<turul_mcp_protocol::prompts::PromptArgument>>> = std::sync::OnceLock::new();
+        impl #mcp_builders::traits::HasPromptArguments for #struct_name {
+            fn arguments(&self) -> Option<&Vec<#mcp_protocol::prompts::PromptArgument>> {
+                static ARGS: std::sync::OnceLock<Option<Vec<#mcp_protocol::prompts::PromptArgument>>> = std::sync::OnceLock::new();
                 ARGS.get_or_init(|| {
                     if vec![#(#argument_fields),*].is_empty() {
                         None
@@ -58,21 +61,21 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasPromptAnnotations for #struct_name {
-            fn annotations(&self) -> Option<&turul_mcp_builders::traits::PromptAnnotations> {
+        impl #mcp_builders::traits::HasPromptAnnotations for #struct_name {
+            fn annotations(&self) -> Option<&#mcp_builders::traits::PromptAnnotations> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasPromptMeta for #struct_name {
-            fn prompt_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+        impl #mcp_builders::traits::HasPromptMeta for #struct_name {
+            fn prompt_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+        impl #mcp_builders::traits::HasIcons for #struct_name {}
 
         // PromptDefinition automatically implemented via blanket impl in prompts.rs
         // No need for explicit impl - blanket impl handles it
@@ -89,6 +92,7 @@ fn generate_argument_fields(
     struct_name: &syn::Ident,
     data: &syn::DataStruct,
 ) -> Result<Vec<TokenStream>> {
+    let mcp_protocol = crate::utils::protocol_path();
     let mut argument_fields = Vec::new();
 
     match &data.fields {
@@ -104,7 +108,7 @@ fn generate_argument_fields(
 
                 // For now, all prompt arguments are optional - can be enhanced later
                 argument_fields.push(quote! {
-                    turul_mcp_protocol::prompts::PromptArgument::new(#field_name_str)
+                    #mcp_protocol::prompts::PromptArgument::new(#field_name_str)
                         .with_description(#description)
                 });
             }

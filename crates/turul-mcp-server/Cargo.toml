@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-server"
-version = "0.4.5"
+version = "0.4.6"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -14,8 +14,8 @@ categories = ["network-programming"]
 
 [features]
 default = ["http", "sse", "protocol-2026-07-28"]
-protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25", "dep:turul-mcp-task-storage", "turul-mcp-task-storage/protocol-2025-11-25", "turul-http-mcp-server?/protocol-2025-11-25", "turul-mcp-session-storage/in-memory", "turul-mcp-task-storage/in-memory"]
-protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-http-mcp-server?/protocol-2026-07-28", "turul-mcp-session-storage/in-memory"]
+protocol-2025-11-25 = ["turul-mcp-derive/protocol-2025-11-25", "turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25", "dep:turul-mcp-task-storage", "turul-mcp-task-storage/protocol-2025-11-25", "turul-http-mcp-server?/protocol-2025-11-25", "turul-mcp-session-storage/in-memory", "turul-mcp-task-storage/in-memory"]
+protocol-2026-07-28 = ["turul-mcp-derive/protocol-2026-07-28", "turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-http-mcp-server?/protocol-2026-07-28", "turul-mcp-session-storage/in-memory"]
 http = ["turul-http-mcp-server"]
 sse = ["turul-http-mcp-server/sse"]
 sqlite = ["turul-mcp-session-storage/sqlite", "turul-mcp-task-storage?/sqlite", "turul-mcp-server-state-storage?/sqlite"]
@@ -34,6 +34,7 @@ turul-rpc = { workspace = true, features = ["async"] }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4", default-features = false }
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4", default-features = false }
 turul-mcp-schema-validation = { workspace = true }
 turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4", default-features = false }
 turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4", default-features = false, optional = true }
@@ -63,7 +64,6 @@ tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"
 # Protocol feature comes from the server's own normal-dep forwarding; the dev-dep
 # must not also pull a default (protocol-2025-11-25), or the alias sees both specs.
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
-turul-mcp-derive = { path = "../turul-mcp-derive" }
 reqwest = { workspace = true, features = ["stream"] }
 bytes.workspace = true
 serde_json.workspace = true

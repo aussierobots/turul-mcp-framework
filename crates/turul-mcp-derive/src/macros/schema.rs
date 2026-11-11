@@ -9,11 +9,12 @@ use syn::{Result, Type};
 
 /// Implementation function for the schema_for!{} declarative macro
 pub fn schema_for_impl(input: TokenStream) -> Result<TokenStream> {
+    let mcp_protocol = crate::utils::protocol_path();
     let input = syn::parse::<Type>(input)?;
 
     let expanded = quote! {
         {
-            use turul_mcp_protocol::schema::JsonSchema;
+            use #mcp_protocol::schema::JsonSchema;
             use std::collections::HashMap;
 
             // Generate schema based on the type

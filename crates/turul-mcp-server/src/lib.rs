@@ -1,123 +1,96 @@
-//! # MCP Server Framework
+//! Build [Model Context Protocol](https://modelcontextprotocol.io) servers in Rust
+//! with a few lines of code.
 //!
-//! A production-ready Rust framework for building Model Context Protocol (MCP) servers.
-//! Provides zero-configuration setup and multiple deployment targets including HTTP,
-//! AWS Lambda, and local development.
+//! Write a tool as an ordinary `async fn`, register it, and run. The framework
+//! derives the JSON schema, the method names and the wire format from your types.
+//! This crate is the entry point: it re-exports the macros and everything a
+//! server needs, so most projects depend on it and `tokio` alone.
 //!
-//! The default build targets the MCP 2026-07-28 stateless core (`server/discover`,
-//! per-request `_meta`, no `Mcp-Session-Id`). The MCP 2025-11-25 specification is
-//! opt-in via `--no-default-features --features http,sse,protocol-2025-11-25`.
-//!
-//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-server.svg)](https://crates.io/crates/turul-mcp-server)
-//! [![Documentation](https://docs.rs/turul-mcp-server/badge.svg)](https://docs.rs/turul-mcp-server)
-//! [![License](https://img.shields.io/crates/l/turul-mcp-server.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
-//!
-//! ## Features
-//!
-//! - **Zero Configuration**: Framework auto-determines method strings from types
-//! - **Type-Safe Error Handling**: Clean domain/protocol separation
-//! - **4 Tool Creation Levels**: Function macros → derive macros → builders → manual
-//! - **Multiple Transports**: HTTP, Server-Sent Events (SSE), AWS Lambda
-//! - **Pluggable Storage**: InMemory, SQLite, PostgreSQL, DynamoDB
-//! - **Real-time Streaming**: SSE notifications for progress and logging
-//! - **Production Ready**: Comprehensive testing, monitoring, and deployment support
-//!
-//! ## Installation
-//!
-//! Add to your `Cargo.toml`:
+//! # Example
 //!
 //! ```toml
 //! [dependencies]
 //! turul-mcp-server = "0.4"
-//! turul-mcp-derive = "0.4"  # For macros
-//! tokio = { version = "1.0", features = ["full"] }
+//! tokio = { version = "1", features = ["full"] }
 //! ```
-//!
-//! ## Quick Start
 //!
 //! ```rust,no_run
-//! # use turul_mcp_server::prelude::*;
-//! #
-//! # async fn example() -> McpResult<()> {
-//! // Create a basic MCP server with detailed configuration
-//! let server = McpServer::builder()
-//!     .name("calculator-server")
-//!     .version("1.0.0")
-//!     .title("Advanced Calculator Server")
-//!     .instructions("A production-grade calculator server supporting basic arithmetic operations including addition, subtraction, multiplication, and division. Use the available tools to perform calculations. The server maintains session state for calculation history, supports real-time notifications for long-running computations, and provides detailed error reporting for invalid operations.")
-//!     .build()?;
+//! use turul_mcp_server::prelude::*;
 //!
-//! server.run().await
+//! #[mcp_tool(name = "add", description = "Add two numbers")]
+//! async fn add(a: f64, b: f64) -> McpResult<f64> {
+//!     Ok(a + b)
+//! }
+//!
+//! #[tokio::main]
+//! async fn main() -> McpResult<()> {
+//!     McpServer::builder()
+//!         .name("calculator")
+//!         .tool_fn(add)
+//!         .build()?
+//!         .run()
+//!         .await
+//! }
+//! ```
+//!
+//! The server listens on `http://127.0.0.1:8000/mcp`. Change it with
+//! [`McpServerBuilder::bind_address`] and [`McpServerBuilder::mcp_path`].
+//!
+//! For a tool that carries state or configuration, derive it on a struct:
+//!
+//! ```rust,no_run
+//! use turul_mcp_server::prelude::*;
+//!
+//! #[derive(McpTool, Default)]
+//! #[tool(name = "greet", description = "Greet someone")]
+//! struct Greet {
+//!     #[param(description = "Who to greet")]
+//!     name: String,
+//! }
+//!
+//! impl Greet {
+//!     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+//!         Ok(format!("Hello, {}!", self.name))
+//!     }
+//! }
+//!
+//! # async fn run() -> McpResult<()> {
+//! McpServer::builder().name("greeter").tool(Greet::default()).build()?.run().await
 //! # }
 //! ```
 //!
-//! ## Architecture
+//! # Ways to define a tool
 //!
-//! The framework uses **clean domain/protocol separation**:
+//! | Approach | Use when |
+//! |---|---|
+//! | `#[mcp_tool]` on an `async fn` | Most tools. Least code. |
+//! | `#[derive(McpTool)]` on a struct | The tool holds state or config. |
+//! | [`ToolBuilder`] | Tools defined at runtime. |
+//! | Implement [`McpTool`] by hand | Full control. |
 //!
-//! - **Domain Layer**: Tools return `McpResult<T>` with domain errors
-//! - **Protocol Layer**: Framework converts to JSON-RPC 2.0 automatically
-//! - **Transport Layer**: HTTP/SSE with session-aware error handling
-//! - **Storage Layer**: Pluggable backends (InMemory, SQLite, PostgreSQL, DynamoDB)
+//! Resources and prompts follow the same pattern with `#[mcp_resource]`,
+//! `#[derive(McpResource)]` and `#[derive(McpPrompt)]`.
 //!
-//! ## Examples
+//! # Features
 //!
-//! **Complete working examples available at:**
-//! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
+//! | Feature | Default | Enables |
+//! |---|---|---|
+//! | `http` | yes | Streamable HTTP transport |
+//! | `sse` | yes | Server-sent event streams |
+//! | `protocol-2026-07-28` | yes | MCP 2026-07-28 (stateless core) |
+//! | `protocol-2025-11-25` | no | MCP 2025-11-25 sessions; use `--no-default-features --features http,sse,protocol-2025-11-25` |
+//! | `dynamic-tools` | no | Add and remove tools while running |
+//! | `sqlite`, `postgres`, `dynamodb` | no | Storage backends for `dynamic-tools` and 2025-11-25 sessions |
+//! | `ext-tasks` | no | The `io.modelcontextprotocol/tasks` extension |
 //!
-//! - **Minimal Server** - Basic tool setup
-//! - **Calculator** - Math operations with error handling
-//! - **HTTP Server** - Production HTTP deployment
-//! - **AWS Lambda** - Serverless deployment
-//! - **Real-time Streaming** - SSE notifications
-//! - **Database Integration** - SQLite/PostgreSQL/DynamoDB
+//! # Where next
 //!
-//! ## Deployment Options
-//!
-//! ### Local Development
-//! ```bash
-//! cargo run --example minimal-server
-//! # Server runs on http://localhost:8080/mcp
-//! ```
-//!
-//! ### AWS Lambda
-//! ```bash
-//! cargo lambda build --release
-//! cargo lambda deploy --iam-role arn:aws:iam::...
-//! ```
-//!
-//! ### Docker
-//! ```dockerfile
-//! FROM rust:1.70 as builder
-//! COPY . .
-//! RUN cargo build --release
-//!
-//! FROM debian:bookworm-slim
-//! COPY --from=builder /target/release/my-mcp-server /usr/local/bin/
-//! EXPOSE 8080
-//! CMD ["my-mcp-server"]
-//! ```
-//!
-//! ## Configuration
-//!
-//! The framework supports extensive configuration through the builder pattern:
-//!
-//! ```ignore
-//! # use turul_mcp_server::prelude::*;
-//! # use turul_mcp_session_storage::SqliteSessionStorage;
-//! # use std::time::Duration;
-//! #
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let server = McpServer::builder()
-//!     .name("production-server")
-//!     .version("1.0.0")
-//!     .title("Production MCP Server")
-//!     .instructions("This production server provides tools for database operations, file management, and API integrations. Use the 'database/query' tool for SQL operations, 'files/read' for file access, and 'api/call' for external service integration. Session management is enabled with SQLite persistence for reliability.")
-//!     .with_session_storage(std::sync::Arc::new(SqliteSessionStorage::new().await?))
-//!     .build()?;
-//! # Ok(())
-//! # }
-//! ```
+//! - [`McpServerBuilder`] for every server option
+//! - [`turul-mcp-aws-lambda`](https://docs.rs/turul-mcp-aws-lambda) to run on AWS Lambda
+//! - [`turul-mcp-client`](https://docs.rs/turul-mcp-client) to call MCP servers
+//! - [Examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
+
+extern crate self as turul_mcp_server;
 
 pub mod builder;
 pub mod cancellation;
@@ -155,6 +128,18 @@ pub mod uri_template;
 
 #[cfg(feature = "http")]
 pub mod http;
+
+/// Crates that macro-generated code names; lets users depend on this crate alone.
+/// Not a public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use ::async_trait;
+    pub use ::serde;
+    pub use ::serde_json;
+    pub use ::turul_mcp_builders;
+    pub use ::turul_mcp_derive;
+    pub use ::turul_mcp_protocol;
+}
 
 #[cfg(test)]
 mod tests;

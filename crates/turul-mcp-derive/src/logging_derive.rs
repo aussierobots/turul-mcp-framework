@@ -7,6 +7,11 @@ use syn::{DeriveInput, Result};
 use crate::utils::extract_string_attribute;
 
 pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
     // Extract struct-level attributes
@@ -18,20 +23,20 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
 
     // Parse the logging level
     let logging_level = match level.as_str() {
-        "debug" => quote! { turul_mcp_protocol::logging::LoggingLevel::Debug },
-        "info" => quote! { turul_mcp_protocol::logging::LoggingLevel::Info },
-        "notice" => quote! { turul_mcp_protocol::logging::LoggingLevel::Notice },
-        "warning" => quote! { turul_mcp_protocol::logging::LoggingLevel::Warning },
-        "error" => quote! { turul_mcp_protocol::logging::LoggingLevel::Error },
-        "critical" => quote! { turul_mcp_protocol::logging::LoggingLevel::Critical },
-        "alert" => quote! { turul_mcp_protocol::logging::LoggingLevel::Alert },
-        "emergency" => quote! { turul_mcp_protocol::logging::LoggingLevel::Emergency },
-        _ => quote! { turul_mcp_protocol::logging::LoggingLevel::Info },
+        "debug" => quote! { #mcp_protocol::logging::LoggingLevel::Debug },
+        "info" => quote! { #mcp_protocol::logging::LoggingLevel::Info },
+        "notice" => quote! { #mcp_protocol::logging::LoggingLevel::Notice },
+        "warning" => quote! { #mcp_protocol::logging::LoggingLevel::Warning },
+        "error" => quote! { #mcp_protocol::logging::LoggingLevel::Error },
+        "critical" => quote! { #mcp_protocol::logging::LoggingLevel::Critical },
+        "alert" => quote! { #mcp_protocol::logging::LoggingLevel::Alert },
+        "emergency" => quote! { #mcp_protocol::logging::LoggingLevel::Emergency },
+        _ => quote! { #mcp_protocol::logging::LoggingLevel::Info },
     };
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_builders::HasLoggingMetadata for #struct_name {
+        impl #mcp_builders::HasLoggingMetadata for #struct_name {
             fn method(&self) -> &str {
                 "notifications/message"
             }
@@ -42,44 +47,44 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasLogLevel for #struct_name {
-            fn level(&self) -> turul_mcp_protocol::logging::LoggingLevel {
+        impl #mcp_builders::HasLogLevel for #struct_name {
+            fn level(&self) -> #mcp_protocol::logging::LoggingLevel {
                 #logging_level
             }
 
-            fn should_log(&self, message_level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
+            fn should_log(&self, message_level: #mcp_protocol::logging::LoggingLevel) -> bool {
                 message_level.should_log(self.level())
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasLogFormat for #struct_name {
-            fn data(&self) -> &serde_json::Value {
+        impl #mcp_builders::HasLogFormat for #struct_name {
+            fn data(&self) -> &#json_crate::Value {
                 use std::sync::LazyLock;
-                static DEFAULT_DATA: LazyLock<serde_json::Value> = LazyLock::new(|| {
-                    serde_json::json!({"message": "Default log message"})
+                static DEFAULT_DATA: LazyLock<#json_crate::Value> = LazyLock::new(|| {
+                    #json_crate::json!({"message": "Default log message"})
                 });
                 &DEFAULT_DATA
             }
 
             fn format_message(&self) -> String {
                 match self.data() {
-                    serde_json::Value::String(s) => s.clone(),
-                    serde_json::Value::Object(obj) => {
+                    #json_crate::Value::String(s) => s.clone(),
+                    #json_crate::Value::Object(obj) => {
                         if let Some(msg) = obj.get("message") {
                             msg.as_str().unwrap_or("Invalid message").to_string()
                         } else {
-                            serde_json::to_string(obj).unwrap_or_else(|_| "Invalid log data".to_string())
+                            #json_crate::to_string(obj).unwrap_or_else(|_| "Invalid log data".to_string())
                         }
                     }
-                    other => serde_json::to_string(other).unwrap_or_else(|_| "Invalid log data".to_string()),
+                    other => #json_crate::to_string(other).unwrap_or_else(|_| "Invalid log data".to_string()),
                 }
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasLogTransport for #struct_name {
-            fn should_deliver(&self, level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
+        impl #mcp_builders::HasLogTransport for #struct_name {
+            fn should_deliver(&self, level: #mcp_protocol::logging::LoggingLevel) -> bool {
                 self.should_log(level)
             }
 
@@ -91,32 +96,32 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
         // LoggerDefinition is automatically implemented via blanket impl
 
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpLogger for #struct_name {
-            async fn log(&self, level: turul_mcp_protocol::logging::LoggingLevel, data: serde_json::Value) -> turul_mcp_protocol::McpResult<()> {
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpLogger for #struct_name {
+            async fn log(&self, level: #mcp_protocol::logging::LoggingLevel, data: #json_crate::Value) -> #mcp_protocol::McpResult<()> {
                 // Default implementation - this should be overridden by implementing log_impl
                 match self.log_impl(level, data).await {
                     Ok(_) => Ok(()),
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e)),
+                    Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
 
-            async fn set_level(&self, request: turul_mcp_protocol::logging::SetLevelRequest) -> turul_mcp_protocol::McpResult<()> {
+            async fn set_level(&self, request: #mcp_protocol::logging::SetLevelRequest) -> #mcp_protocol::McpResult<()> {
                 // Default implementation - this should be overridden by implementing set_level_impl
                 match self.set_level_impl(request).await {
                     Ok(_) => Ok(()),
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e)),
+                    Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }
 
         impl #struct_name {
             /// Override this method to provide custom logging logic
-            pub async fn log_impl(&self, level: turul_mcp_protocol::logging::LoggingLevel, data: serde_json::Value) -> Result<(), String> {
+            pub async fn log_impl(&self, level: #mcp_protocol::logging::LoggingLevel, data: #json_crate::Value) -> Result<(), String> {
                 // Default: print to stdout
                 let formatted = match &data {
-                    serde_json::Value::String(s) => s.clone(),
-                    other => serde_json::to_string(other).unwrap_or_else(|_| "Invalid data".to_string()),
+                    #json_crate::Value::String(s) => s.clone(),
+                    other => #json_crate::to_string(other).unwrap_or_else(|_| "Invalid data".to_string()),
                 };
 
                 let level_str = format!("{:?}", level).to_uppercase();
@@ -125,7 +130,7 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
             }
 
             /// Override this method to provide custom level setting logic
-            pub async fn set_level_impl(&self, _request: turul_mcp_protocol::logging::SetLevelRequest) -> Result<(), String> {
+            pub async fn set_level_impl(&self, _request: #mcp_protocol::logging::SetLevelRequest) -> Result<(), String> {
                 // Default: no-op (level is fixed at compile time for derived loggers)
                 Ok(())
             }

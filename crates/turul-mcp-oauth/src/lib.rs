@@ -1,68 +1,52 @@
-//! OAuth 2.1 Resource Server support for Turul MCP framework
+//! OAuth 2.1 resource-server support (Bearer token validation) for MCP servers.
 //!
-//! This crate provides OAuth 2.1 Bearer token validation for MCP servers
-//! acting as Resource Servers (RS). It does NOT implement an Authorization
-//! Server — tokens are validated against an external AS via JWKS.
+//! Add this crate alongside [`turul-mcp-server`](https://docs.rs/turul-mcp-server)
+//! to protect an MCP endpoint: it validates tokens issued by an external authorization server via JWKS and
+//! serves RFC 9728 Protected Resource Metadata. It does not implement an
+//! authorization server.
 //!
-//! # Authorization-role posture (MCP 2026-07-28)
+//! # Example
 //!
-//! The MCP authorization spec assigns requirements per OAuth role. This
-//! crate implements the **resource-server role only**:
-//!
-//! - RFC 9728 Protected Resource Metadata (`/.well-known/oauth-protected-resource`)
-//!   — the RS MUST — via [`ProtectedResourceMetadata`] / [`WellKnownOAuthHandler`].
-//! - OAuth 2.1 §5.2 access-token validation with RFC 8707 audience binding
-//!   — via [`JwtValidator`] / [`OAuthResourceMiddleware`].
-//!
-//! **Client ID Metadata Documents** (CIMD,
-//! draft-ietf-oauth-client-id-metadata-document-00) are a SHOULD for
-//! *authorization servers and MCP clients* — client registration never
-//! involves the resource server, so no CIMD surface belongs in this crate.
-//! Applications embedding an AS or building a full MCP OAuth client implement
-//! CIMD there.
-//!
-//! **Dynamic Client Registration** (RFC 7591) is deprecated upstream (MAY,
-//! retained for AS back-compat; not removed — earliest removal 2027-07-28)
-//! and is likewise an AS/client concern. This crate has never implemented a
-//! DCR surface and does not add one.
-//!
-//! # Architecture
-//!
-//! - **`OAuthResourceMiddleware`** — Pre-session middleware that validates
-//!   Bearer tokens and injects claims into request extensions
-//! - **`JwtValidator`** — JWT validation with JWKS caching and kid-miss refresh.
-//!   Owned by [`turul_jwt_validator`] and re-exported here
-//! - **`hardened_validator`** — builds a [`JwtValidator`] with this crate's key
-//!   max-age, stale window and fetch retry, and rejects a non-loopback
-//!   plaintext `jwks_uri`. The bare constructor leaves all of those disabled
-//! - **`ProtectedResourceMetadata`** — RFC 9728 metadata document
-//! - **`WellKnownOAuthHandler`** — Route handler for `/.well-known/oauth-protected-resource`
-//!
-//! # Usage
+//! ```toml
+//! [dependencies]
+//! turul-mcp-oauth = "0.4"
+//! ```
 //!
 //! ```rust,no_run
-//! use std::sync::Arc;
-//! use turul_mcp_oauth::{
-//!     JwtValidator, OAuthResourceMiddleware, ProtectedResourceMetadata,
-//!     WellKnownOAuthHandler, oauth_resource_server,
-//! };
+//! use turul_mcp_oauth::{ProtectedResourceMetadata, oauth_resource_server};
 //!
 //! let metadata = ProtectedResourceMetadata::new(
 //!     "https://example.com/mcp",
 //!     vec!["https://auth.example.com".to_string()],
-//! ).unwrap();
-//!
-//! let (auth_middleware, routes) = oauth_resource_server(
+//! )?;
+//! let (middleware, routes) = oauth_resource_server(
 //!     metadata,
 //!     "https://auth.example.com/.well-known/jwks.json",
-//! ).unwrap();
-//!
-//! // Register with McpServer::builder()
-//! //   let mut builder = McpServer::builder().middleware(auth_middleware);
-//! //   for (path, handler) in routes {
-//! //       builder = builder.route(&path, handler);
-//! //   }
+//! )?;
+//! // With turul-mcp-server: McpServer::builder().middleware(middleware), then
+//! // builder.route(&path, handler) for each (path, handler) in `routes`.
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
+//!
+//! # Components
+//!
+//! - [`OAuthResourceMiddleware`]: validates Bearer tokens (RFC 8707 audience
+//!   binding) and injects claims into request extensions
+//! - [`JwtValidator`]: JWKS-backed validation, owned by [`turul_jwt_validator`]
+//!   and re-exported
+//! - [`hardened_validator`]: a [`JwtValidator`] with this crate's key max-age,
+//!   stale window and fetch retry; rejects a non-loopback plaintext `jwks_uri`.
+//!   The bare constructor leaves those disabled
+//! - [`ProtectedResourceMetadata`] and [`WellKnownOAuthHandler`]: serve
+//!   `/.well-known/oauth-protected-resource`
+//!
+//! Client ID Metadata Documents and Dynamic Client Registration (RFC 7591) are
+//! authorization-server and client concerns; this crate implements neither.
+//!
+//! # Where next
+//!
+//! - [`oauth_resource_server`]: the one-call setup, and multi-AS wiring notes
+//! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server): the server builder
 
 pub mod error;
 pub mod jwt;

@@ -1,72 +1,50 @@
-//! # Model Context Protocol (MCP) - Version Alias
+//! MCP wire types for building servers and clients; selects one versioned protocol crate.
 //!
-//! **The official Rust implementation of the Model Context Protocol specification.**
+//! Most users want [`turul-mcp-server`](https://docs.rs/turul-mcp-server), which
+//! re-exports what it needs from here. Depend on this crate directly only to parse
+//! or produce MCP messages without the server framework.
 //!
-//! This crate is a thin alias that re-exports exactly one versioned MCP protocol
-//! crate, selected by a mutually-exclusive Cargo feature:
+//! By default it re-exports `turul-mcp-protocol-2026-07-28` (MCP 2026-07-28). The
+//! 2025-11-25 spec is an opt-in lane selected by a Cargo feature; the two are
+//! mutually exclusive and exactly one must be active.
 //!
-//! - **`protocol-2026-07-28`** (default) — the 2026-07-28 stateless core.
-//! - **`protocol-2025-11-25`** (opt-in) — the previous 2025-11-25 spec. Enable with
-//!   `--no-default-features --features protocol-2025-11-25`.
-//!
-//! Exactly one must be active; enabling both (or neither) is a compile error.
-//!
-//! Flipping the default to 2026-07-28 is the 0.4 cutover. This alias is the
-//! transition mechanism for 0.4; the long-term direction is for framework crates to
-//! depend on the versioned protocol crates directly and retire the alias in 0.5.
-//!
-//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-protocol.svg)](https://crates.io/crates/turul-mcp-protocol)
-//! [![Documentation](https://docs.rs/turul-mcp-protocol/badge.svg)](https://docs.rs/turul-mcp-protocol)
-//! [![License](https://img.shields.io/crates/l/turul-mcp-protocol.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
-//!
-//! ## Installation
+//! # Example
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-protocol = "0.4"  # default: protocol-2026-07-28
+//! turul-mcp-protocol = "0.4"
 //! ```
-//!
-//! ## Quick Start
 //!
 //! ```rust
 //! use turul_mcp_protocol::prelude::*;
 //!
-//! // Create core MCP types — same surface under either spec.
 //! let tool = Tool::new("calculator", ToolSchema::object());
 //! let resource = Resource::new("file://data.json", "data");
 //! let prompt = Prompt::new("code_review");
 //! ```
 //!
-//! ## Protocol Types
+//! # Types
 //!
-//! This crate provides all core MCP types:
+//! - Tools: [`Tool`], [`CallToolRequest`], [`CallToolResult`]
+//! - Resources: [`Resource`], [`ReadResourceRequest`], [`ResourceContent`]
+//! - Prompts: [`Prompt`], [`GetPromptRequest`], [`PromptMessage`]
+//! - Notifications: [`ProgressNotification`]
+//! - Negotiation and errors: [`McpVersion`], [`ServerCapabilities`], [`McpError`]
 //!
-//! - **Tools**: `Tool`, `CallToolRequest`, `CallToolResult`
-//! - **Resources**: `Resource`, `ReadResourceRequest`, `ResourceContent`
-//! - **Prompts**: `Prompt`, `GetPromptRequest`, `PromptMessage`
-//! - **Notifications**: `ProgressNotification`, `LoggingMessage`
-//! - **Protocol**: `InitializeRequest`, `McpVersion`, `ServerCapabilities`
-//! - **Errors**: `McpError`, `JsonRpcError`, error codes
+//! # Features
 //!
-//! ## Use Cases
+//! | Feature | MCP spec | Crate re-exported |
+//! |---|---|---|
+//! | `protocol-2026-07-28` (default) | 2026-07-28 | `turul-mcp-protocol-2026-07-28` |
+//! | `protocol-2025-11-25` | 2025-11-25 | `turul-mcp-protocol-2025-11-25` |
 //!
-//! - **MCP Server Development**: Use with [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server)
-//! - **MCP Client Development**: Use with [`turul-mcp-client`](https://crates.io/crates/turul-mcp-client)
-//! - **Protocol Parsing**: Direct protocol message handling
-//! - **Type Definitions**: Reference implementation for MCP types
+//! Select the opt-in lane with `--no-default-features --features protocol-2025-11-25`.
 //!
-//! ## Related Crates
+//! # Where next
 //!
-//! - [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server) - High-level server framework
-//! - [`turul-mcp-client`](https://crates.io/crates/turul-mcp-client) - Client library
-//! - [`turul-mcp-derive`](https://crates.io/crates/turul-mcp-derive) - Procedural macros
-//!
-//! ## Version Mapping
-//!
-//! | Feature | MCP Spec | Implementation Crate |
-//! |---------|----------|---------------------|
-//! | `protocol-2026-07-28` (default) | `2026-07-28` | `turul-mcp-protocol-2026-07-28` |
-//! | `protocol-2025-11-25` (opt-in) | `2025-11-25` | `turul-mcp-protocol-2025-11-25` |
+//! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server): build a server
+//! - [`turul-mcp-client`](https://docs.rs/turul-mcp-client): build a client
+//! - [`turul-mcp-protocol-2026-07-28`](https://docs.rs/turul-mcp-protocol-2026-07-28): full type reference
 
 // Exactly one protocol-<date> feature must be active.
 #[cfg(all(feature = "protocol-2025-11-25", feature = "protocol-2026-07-28"))]

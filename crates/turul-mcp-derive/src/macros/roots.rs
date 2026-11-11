@@ -18,6 +18,9 @@ pub fn roots_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
 /// Internal implementation that works with proc_macro2::TokenStream for testing
 pub fn roots_declarative_impl_inner(input: RootsMacroInput) -> proc_macro2::TokenStream {
+    let mcp_derive = crate::utils::derive_path();
+    let serde_attr = crate::utils::serde_attr_path();
+    let serde_crate = crate::utils::serde_path();
     let roots_name_ident = syn::Ident::new(
         &format!("{}Root", capitalize(&input.name)),
         proc_macro2::Span::call_site(),
@@ -31,8 +34,9 @@ pub fn roots_declarative_impl_inner(input: RootsMacroInput) -> proc_macro2::Toke
     let read_only = input.read_only;
 
     quote! {
-        #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(turul_mcp_derive::McpRoot)]
+        #[derive(Clone, Debug, #serde_crate::Serialize, #serde_crate::Deserialize)]
+        #serde_attr
+        #[derive(#mcp_derive::McpRoot)]
         #[root(uri = #uri, name = #name, description = #description, read_only = #read_only)]
         pub struct #roots_name_ident;
 

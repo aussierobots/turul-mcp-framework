@@ -9,6 +9,11 @@ use crate::utils::{
 };
 
 pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     // Parse macro arguments
     let mut tool_name = None;
     let mut tool_description = None;
@@ -171,7 +176,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
             generate_output_schema_auto_for_function(schema_type, &output_field_name)
         }
         _ => quote! {
-            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
+            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> { None }
         },
     };
 
@@ -225,7 +230,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
             if param_meta.optional && !is_option_type(param_type) {
                 // Function expects T but we have Option<T>, so unwrap with error
                 fn_call_args.push(quote! {
-                        #param_name.ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#param_name_str))?
+                        #param_name.ok_or_else(|| #mcp_protocol::McpError::missing_param(#param_name_str))?
                     });
             } else {
                 // Direct use - either required T or Option<T>
@@ -272,34 +277,34 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     // Generate HasExecution impl based on task_support attribute
     let execution_impl = match task_support.as_deref() {
         Some("optional") => quote! {
-            impl turul_mcp_builders::traits::HasExecution for #struct_name {
-                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
-                    Some(turul_mcp_protocol::tools::ToolExecution {
-                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Optional),
+            impl #mcp_builders::traits::HasExecution for #struct_name {
+                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
+                    Some(#mcp_protocol::tools::ToolExecution {
+                        task_support: Some(#mcp_protocol::tools::TaskSupport::Optional),
                     })
                 }
             }
         },
         Some("required") => quote! {
-            impl turul_mcp_builders::traits::HasExecution for #struct_name {
-                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
-                    Some(turul_mcp_protocol::tools::ToolExecution {
-                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Required),
+            impl #mcp_builders::traits::HasExecution for #struct_name {
+                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
+                    Some(#mcp_protocol::tools::ToolExecution {
+                        task_support: Some(#mcp_protocol::tools::TaskSupport::Required),
                     })
                 }
             }
         },
         Some("forbidden") => quote! {
-            impl turul_mcp_builders::traits::HasExecution for #struct_name {
-                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
-                    Some(turul_mcp_protocol::tools::ToolExecution {
-                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Forbidden),
+            impl #mcp_builders::traits::HasExecution for #struct_name {
+                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
+                    Some(#mcp_protocol::tools::ToolExecution {
+                        task_support: Some(#mcp_protocol::tools::TaskSupport::Forbidden),
                     })
                 }
             }
         },
         _ => quote! {
-            impl turul_mcp_builders::traits::HasExecution for #struct_name {}
+            impl #mcp_builders::traits::HasExecution for #struct_name {}
         },
     };
 
@@ -318,10 +323,10 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
 
         // Store schema statically for trait implementation
         impl #struct_name {
-            fn get_input_schema() -> turul_mcp_protocol::tools::ToolSchema {
+            fn get_input_schema() -> #mcp_protocol::tools::ToolSchema {
                 use std::collections::HashMap;
-                let mut schema = turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                let mut schema = #mcp_protocol::tools::ToolSchema::object()
+                    .with_properties(#mcp_builders::tool_props(HashMap::from([
                         #(#schema_properties),*
                     ])))
                     .with_required(vec![
@@ -334,26 +339,26 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
 
         // Implement all fine-grained traits
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasBaseMetadata for #struct_name {
+        impl #mcp_builders::traits::HasBaseMetadata for #struct_name {
             fn name(&self) -> &str { #tool_name }
             fn title(&self) -> Option<&str> { #tool_title_expr }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasDescription for #struct_name {
+        impl #mcp_builders::traits::HasDescription for #struct_name {
             fn description(&self) -> Option<&str> { Some(#tool_description) }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasInputSchema for #struct_name {
-            fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
-                static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+        impl #mcp_builders::traits::HasInputSchema for #struct_name {
+            fn input_schema(&self) -> &#mcp_protocol::tools::ToolSchema {
+                static INPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                 INPUT_SCHEMA.get_or_init(|| Self::get_input_schema())
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasOutputSchema for #struct_name {
+        impl #mcp_builders::traits::HasOutputSchema for #struct_name {
             #output_schema_tokens
         }
 
@@ -361,8 +366,8 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         #annotations_impl
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasToolMeta for #struct_name {
-            fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> { None }
+        impl #mcp_builders::traits::HasToolMeta for #struct_name {
+            fn tool_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> { None }
         }
 
         #[automatically_derived]
@@ -374,12 +379,12 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         // ToolDefinition automatically implemented via blanket impl!
 
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpTool for #struct_name {
-            async fn call(&self, args: serde_json::Value, session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
-                let outcome: turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> = async {
-                use serde_json::Value;
-                use turul_mcp_builders::traits::HasOutputSchema;
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpTool for #struct_name {
+            async fn call(&self, args: #json_crate::Value, session: Option<#mcp_server::SessionContext>) -> #mcp_server::McpResult<#mcp_protocol::tools::CallToolResult> {
+                let outcome: #mcp_server::McpResult<#mcp_protocol::tools::CallToolResult> = async {
+                use #json_crate::Value;
+                use #mcp_builders::traits::HasOutputSchema;
 
                 #undeclared_arg_check
 
@@ -392,17 +397,17 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                         // Wrap primitive results to match schema expectations
                         let schema_result = if self.output_schema().is_some() {
                             // Wrap in {field_name: value} to match generated schema
-                            serde_json::json!({#output_field_name: result})
+                            #json_crate::json!({#output_field_name: result})
                         } else {
                             // No schema - directly serialize the result
-                            serde_json::to_value(&result)
-                                .unwrap_or_else(|e| serde_json::json!({
+                            #json_crate::to_value(&result)
+                                .unwrap_or_else(|e| #json_crate::json!({
                                     "error": format!("Failed to serialize result: {}", e)
                                 }))
                         };
 
                         // Use smart response builder with automatic structured content
-                        turul_mcp_protocol::tools::CallToolResult::from_result_with_schema(&schema_result, self.output_schema())
+                        #mcp_protocol::tools::CallToolResult::from_result_with_schema(&schema_result, self.output_schema())
                     }
                     // `ToolExecutionError` is the one variant that means "the tool ran and
                     // failed", so it is the one the spec wants reported as a RESULT —
@@ -418,9 +423,9 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                     // `MissingRequiredClientCapability` is the spec's -32021 gate.
                     // Swallowing either into `isError` silently breaks the feature — an
                     // earlier, blanket version of this change failed 7 MRTR wire tests.
-                    Err(turul_mcp_protocol::McpError::ToolExecutionError(msg)) => {
-                        Ok(turul_mcp_protocol::tools::CallToolResult::error(vec![
-                            turul_mcp_protocol::tools::ToolResult::text(msg)
+                    Err(#mcp_protocol::McpError::ToolExecutionError(msg)) => {
+                        Ok(#mcp_protocol::tools::CallToolResult::error(vec![
+                            #mcp_protocol::tools::ToolResult::text(msg)
                         ]))
                     }
                     Err(e) => Err(e)

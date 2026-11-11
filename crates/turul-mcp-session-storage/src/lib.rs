@@ -1,24 +1,57 @@
-//! # Session Storage Abstractions and Implementations
+//! Session storage backends for MCP servers on the opt-in 2025-11-25 lane; a
+//! 2026-07-28 server is stateless and needs none of this crate.
 //!
-//! **Pluggable session storage backends for MCP servers across deployment scenarios.**
+//! The [`SessionStorage`] trait persists sessions, per-session state and
+//! replayable SSE events. [`InMemorySessionStorage`] is the default backend;
+//! SQLite, PostgreSQL and DynamoDB backends sit behind Cargo features.
 //!
-//! Provides the core SessionStorage trait with implementations for InMemory, SQLite,
-//! PostgreSQL, and DynamoDB, enabling seamless scaling from development to production.
+//! To use sessions, build [`turul-mcp-server`](https://docs.rs/turul-mcp-server)
+//! with `--no-default-features --features http,sse,protocol-2025-11-25` and pass a
+//! backend to `McpServerBuilder::with_session_storage`.
 //!
-//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-session-storage.svg)](https://crates.io/crates/turul-mcp-session-storage)
-//! [![Documentation](https://docs.rs/turul-mcp-session-storage/badge.svg)](https://docs.rs/turul-mcp-session-storage)
+//! # Example
 //!
-//! ## Installation
+//! The storage API on its own:
 //!
 //! ```toml
 //! [dependencies]
 //! turul-mcp-session-storage = "0.4"
-//!
-//! # Optional features for different backends
-//! turul-mcp-session-storage = { version = "0.4", features = ["sqlite"] }
-//! turul-mcp-session-storage = { version = "0.4", features = ["postgres"] }
-//! turul-mcp-session-storage = { version = "0.4", features = ["dynamodb"] }
+//! turul-mcp-protocol = "0.4"
+//! tokio = { version = "1", features = ["full"] }
 //! ```
+//!
+//! ```rust
+//! use turul_mcp_protocol::ServerCapabilities;
+//! use turul_mcp_session_storage::prelude::*;
+//!
+//! # #[tokio::main]
+//! # async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let storage = InMemorySessionStorage::new();
+//! let session = storage.create_session(ServerCapabilities::default()).await?;
+//! storage
+//!     .set_session_state(&session.session_id, "greeting", serde_json::json!("hi"))
+//!     .await?;
+//! assert_eq!(storage.session_count().await?, 1);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Features
+//!
+//! | Feature | Default | Backend |
+//! |---|---|---|
+//! | `in-memory` | yes | [`InMemorySessionStorage`]: one process, lost on restart |
+//! | `sqlite` | no | `SqliteSessionStorage`: a local file |
+//! | `postgres` | no | `PostgresSessionStorage`: shared across instances |
+//! | `dynamodb` | no | `DynamoDbSessionStorage`: AWS serverless |
+//! | `protocol-2026-07-28` | yes | Build against MCP 2026-07-28 types |
+//! | `protocol-2025-11-25` | no | Build against MCP 2025-11-25 types |
+//!
+//! # Where next
+//!
+//! - [`SessionStorage`] for the trait a custom backend implements
+//! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server) for the server builder
+//! - [Examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 
 // Core trait and types
 mod traits;

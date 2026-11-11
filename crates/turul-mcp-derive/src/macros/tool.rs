@@ -14,6 +14,11 @@ use crate::macros::shared::capitalize;
 
 /// Implementation function for the tool!{} declarative macro
 pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let input = syn::parse::<ToolMacroInput>(input)?;
 
     let tool_name_ident = syn::Ident::new(
@@ -42,7 +47,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         let type_str = quote!(#param_type).to_string();
         let base_schema = match type_str.as_str() {
             "f64" | "f32" => {
-                let mut schema = quote! { turul_mcp_protocol::schema::JsonSchema::number().with_description(#param_desc) };
+                let mut schema = quote! { #mcp_protocol::schema::JsonSchema::number().with_description(#param_desc) };
                 if let Some(min) = min_value {
                     schema = quote! { #schema.with_minimum(#min) };
                 }
@@ -52,7 +57,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 schema
             }
             "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" => {
-                let mut schema = quote! { turul_mcp_protocol::schema::JsonSchema::integer().with_description(#param_desc) };
+                let mut schema = quote! { #mcp_protocol::schema::JsonSchema::integer().with_description(#param_desc) };
                 if let Some(min) = min_value {
                     let min_int = min as i64;
                     schema = quote! { #schema.with_minimum(#min_int) };
@@ -64,35 +69,35 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 schema
             }
             "bool" => {
-                quote! { turul_mcp_protocol::schema::JsonSchema::boolean().with_description(#param_desc) }
+                quote! { #mcp_protocol::schema::JsonSchema::boolean().with_description(#param_desc) }
             }
             "String" => {
-                quote! { turul_mcp_protocol::schema::JsonSchema::string().with_description(#param_desc) }
+                quote! { #mcp_protocol::schema::JsonSchema::string().with_description(#param_desc) }
             }
             s if s.starts_with("Option<") => {
                 // Handle Option types by extracting the inner type
                 let inner_type_str = &s[7..s.len() - 1]; // Remove "Option<" and ">"
                 match inner_type_str {
                     "f64" | "f32" => {
-                        quote! { turul_mcp_protocol::schema::JsonSchema::number().with_description(#param_desc) }
+                        quote! { #mcp_protocol::schema::JsonSchema::number().with_description(#param_desc) }
                     }
                     "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
                     | "usize" => {
-                        quote! { turul_mcp_protocol::schema::JsonSchema::integer().with_description(#param_desc) }
+                        quote! { #mcp_protocol::schema::JsonSchema::integer().with_description(#param_desc) }
                     }
                     "bool" => {
-                        quote! { turul_mcp_protocol::schema::JsonSchema::boolean().with_description(#param_desc) }
+                        quote! { #mcp_protocol::schema::JsonSchema::boolean().with_description(#param_desc) }
                     }
                     "String" => {
-                        quote! { turul_mcp_protocol::schema::JsonSchema::string().with_description(#param_desc) }
+                        quote! { #mcp_protocol::schema::JsonSchema::string().with_description(#param_desc) }
                     }
                     _ => {
-                        quote! { turul_mcp_protocol::schema::JsonSchema::string().with_description(#param_desc) }
+                        quote! { #mcp_protocol::schema::JsonSchema::string().with_description(#param_desc) }
                     }
                 }
             }
             _ => {
-                quote! { turul_mcp_protocol::schema::JsonSchema::string().with_description(#param_desc) }
+                quote! { #mcp_protocol::schema::JsonSchema::string().with_description(#param_desc) }
             }
         };
 
@@ -133,7 +138,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 },
                 _ => quote! {
                     let #param_name: Option<#param_type> = args.get(#param_name_str)
-                        .and_then(|v| serde_json::from_value(v.clone()).ok());
+                        .and_then(|v| #json_crate::from_value(v.clone()).ok());
                 },
             }
         } else if type_str.starts_with("Option<") {
@@ -161,7 +166,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 },
                 _ => quote! {
                     let #param_name: #param_type = args.get(#param_name_str)
-                        .and_then(|v| serde_json::from_value(v.clone()).ok());
+                        .and_then(|v| #json_crate::from_value(v.clone()).ok());
                 },
             }
         } else {
@@ -181,30 +186,30 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 "i64" => quote! {
                     let #param_name = args.get(#param_name_str)
                         .and_then(|v| v.as_i64())
-                        .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#param_name_str, "integer", "other"))?;
+                        .ok_or_else(|| #mcp_protocol::McpError::invalid_param_type(#param_name_str, "integer", "other"))?;
                 },
                 "i32" => quote! {
                     let #param_name = args.get(#param_name_str)
                         .and_then(|v| v.as_i64())
                         .and_then(|i| i.try_into().ok())
-                        .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#param_name_str, "integer", "other"))?;
+                        .ok_or_else(|| #mcp_protocol::McpError::invalid_param_type(#param_name_str, "integer", "other"))?;
                 },
                 "bool" => quote! {
                     let #param_name = args.get(#param_name_str)
                         .and_then(|v| v.as_bool())
-                        .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#param_name_str, "boolean", "other"))?;
+                        .ok_or_else(|| #mcp_protocol::McpError::invalid_param_type(#param_name_str, "boolean", "other"))?;
                 },
                 "String" => quote! {
                     let #param_name = args.get(#param_name_str)
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string())
-                        .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#param_name_str, "string", "other"))?;
+                        .ok_or_else(|| #mcp_protocol::McpError::invalid_param_type(#param_name_str, "string", "other"))?;
                 },
                 _ => quote! {
                     let #param_name: #param_type = args.get(#param_name_str)
-                        .ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#param_name_str))
-                        .and_then(|v| serde_json::from_value(v.clone())
-                            .map_err(|_| turul_mcp_protocol::McpError::invalid_param_type(#param_name_str, "object", "other")))?;
+                        .ok_or_else(|| #mcp_protocol::McpError::missing_param(#param_name_str))
+                        .and_then(|v| #json_crate::from_value(v.clone())
+                            .map_err(|_| #mcp_protocol::McpError::invalid_param_type(#param_name_str, "object", "other")))?;
                 },
             }
         };
@@ -258,14 +263,14 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         {
             #[derive(Clone)]
             struct #tool_name_ident {
-                input_schema: turul_mcp_protocol::ToolSchema,
+                input_schema: #mcp_protocol::ToolSchema,
             }
 
             impl #tool_name_ident {
                 fn new() -> Self {
                     use std::collections::HashMap;
-                    let mut schema = turul_mcp_protocol::ToolSchema::object()
-                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                    let mut schema = #mcp_protocol::ToolSchema::object()
+                        .with_properties(#mcp_builders::tool_props(HashMap::from([
                             #(#schema_properties),*
                         ])))
                         .with_required(vec![
@@ -277,50 +282,50 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
 
             // Implement fine-grained traits
-            impl turul_mcp_builders::HasBaseMetadata for #tool_name_ident {
+            impl #mcp_builders::HasBaseMetadata for #tool_name_ident {
                 fn name(&self) -> &str {
                     #tool_name
                 }
                 #tool_title_impl
             }
 
-            impl turul_mcp_builders::HasDescription for #tool_name_ident {
+            impl #mcp_builders::HasDescription for #tool_name_ident {
                 fn description(&self) -> Option<&str> {
                     Some(#tool_description)
                 }
             }
 
-            impl turul_mcp_builders::HasInputSchema for #tool_name_ident {
-                fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
+            impl #mcp_builders::HasInputSchema for #tool_name_ident {
+                fn input_schema(&self) -> &#mcp_protocol::ToolSchema {
                     &self.input_schema
                 }
             }
 
-            impl turul_mcp_builders::HasOutputSchema for #tool_name_ident {
-                fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
+            impl #mcp_builders::HasOutputSchema for #tool_name_ident {
+                fn output_schema(&self) -> Option<&#mcp_protocol::ToolSchema> {
                     None
                 }
             }
 
             #annotations_impl
 
-            impl turul_mcp_builders::HasToolMeta for #tool_name_ident {
-                fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+            impl #mcp_builders::HasToolMeta for #tool_name_ident {
+                fn tool_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
                     None
                 }
             }
 
-            impl turul_mcp_builders::HasIcons for #tool_name_ident {}
+            impl #mcp_builders::HasIcons for #tool_name_ident {}
 
-            impl turul_mcp_builders::HasExecution for #tool_name_ident {}
+            impl #mcp_builders::HasExecution for #tool_name_ident {}
 
             // ToolDefinition automatically implemented via blanket impl!
 
-            #[async_trait::async_trait]
-            impl turul_mcp_server::McpTool for #tool_name_ident {
-                async fn call(&self, args: serde_json::Value, _session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
-                let outcome: turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> = async {
-                    use serde_json::Value;
+            #[#async_trait::async_trait]
+            impl #mcp_server::McpTool for #tool_name_ident {
+                async fn call(&self, args: #json_crate::Value, _session: Option<#mcp_server::SessionContext>) -> #mcp_server::McpResult<#mcp_protocol::tools::CallToolResult> {
+                let outcome: #mcp_server::McpResult<#mcp_protocol::tools::CallToolResult> = async {
+                    use #json_crate::Value;
 
                     #undeclared_arg_check
 
@@ -333,9 +338,9 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                         Ok(result) => {
                             // Use smart response builder that automatically adds structured content
                             // when outputSchema is defined (MCP 2025-11-25 compliance)
-                            turul_mcp_protocol::tools::CallToolResult::from_result_with_schema(&result, self.output_schema())
+                            #mcp_protocol::tools::CallToolResult::from_result_with_schema(&result, self.output_schema())
                         }
-                        Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e.to_string()))
+                        Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e.to_string()))
                     }
                     }.await;
 

@@ -7,6 +7,11 @@ use syn::{DeriveInput, Result};
 use crate::utils::extract_string_attribute;
 
 pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
     // Extract struct-level attributes
@@ -29,10 +34,10 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
     // Generate proper tokens for model preferences
     let model_prefs_impl = if let Some(ref model_name) = model {
         quote! {
-            static MODEL_PREFS: std::sync::OnceLock<Option<turul_mcp_protocol::sampling::ModelPreferences>> = std::sync::OnceLock::new();
+            static MODEL_PREFS: std::sync::OnceLock<Option<#mcp_protocol::sampling::ModelPreferences>> = std::sync::OnceLock::new();
             MODEL_PREFS.get_or_init(|| {
-                Some(turul_mcp_protocol::sampling::ModelPreferences {
-                    hints: Some(serde_json::json!({
+                Some(#mcp_protocol::sampling::ModelPreferences {
+                    hints: Some(#json_crate::json!({
                         "preferred_model": #model_name
                     })),
                     cost_priority: None,
@@ -47,9 +52,9 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let metadata_impl = if let Some(ref model_name) = model {
         quote! {
-            static METADATA: std::sync::OnceLock<Option<serde_json::Value>> = std::sync::OnceLock::new();
+            static METADATA: std::sync::OnceLock<Option<#json_crate::Value>> = std::sync::OnceLock::new();
             METADATA.get_or_init(|| {
-                Some(serde_json::json!({
+                Some(#json_crate::json!({
                     "configured_model": #model_name,
                     "max_tokens": #max_tokens,
                     "temperature": #temperature_tokens
@@ -68,7 +73,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_builders::HasSamplingConfig for #struct_name {
+        impl #mcp_builders::HasSamplingConfig for #struct_name {
             fn max_tokens(&self) -> u32 {
                 #max_tokens
             }
@@ -83,8 +88,8 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasSamplingContext for #struct_name {
-            fn messages(&self) -> &[turul_mcp_protocol::sampling::SamplingMessage] {
+        impl #mcp_builders::HasSamplingContext for #struct_name {
+            fn messages(&self) -> &[#mcp_protocol::sampling::SamplingMessage] {
                 // Default: empty messages - should be overridden
                 &[]
             }
@@ -99,40 +104,40 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasModelPreferences for #struct_name {
-            fn model_preferences(&self) -> Option<&turul_mcp_protocol::sampling::ModelPreferences> {
+        impl #mcp_builders::HasModelPreferences for #struct_name {
+            fn model_preferences(&self) -> Option<&#mcp_protocol::sampling::ModelPreferences> {
                 #model_prefs_impl
             }
 
-            fn metadata(&self) -> Option<&serde_json::Value> {
+            fn metadata(&self) -> Option<&#json_crate::Value> {
                 #metadata_impl
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasSamplingTools for #struct_name {}
+        impl #mcp_builders::HasSamplingTools for #struct_name {}
 
         // SamplingDefinition is automatically implemented via blanket impl
 
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpSampling for #struct_name {
-            async fn sample(&self, request: turul_mcp_protocol::sampling::CreateMessageRequest) -> turul_mcp_protocol::McpResult<turul_mcp_protocol::sampling::CreateMessageResult> {
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpSampling for #struct_name {
+            async fn sample(&self, request: #mcp_protocol::sampling::CreateMessageRequest) -> #mcp_protocol::McpResult<#mcp_protocol::sampling::CreateMessageResult> {
                 // Default implementation - this should be overridden by implementing sample_impl
                 match self.sample_impl(request).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e)),
+                    Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }
 
         impl #struct_name {
             /// Override this method to provide custom sampling logic
-            pub async fn sample_impl(&self, _request: turul_mcp_protocol::sampling::CreateMessageRequest) -> Result<turul_mcp_protocol::sampling::CreateMessageResult, String> {
+            pub async fn sample_impl(&self, _request: #mcp_protocol::sampling::CreateMessageRequest) -> Result<#mcp_protocol::sampling::CreateMessageResult, String> {
                 // Default: return a simple response
-                let response_message = turul_mcp_protocol::sampling::SamplingMessage {
-                    role: turul_mcp_protocol::sampling::Role::Assistant,
-                    content: turul_mcp_protocol::prompts::ContentBlock::Text {
+                let response_message = #mcp_protocol::sampling::SamplingMessage {
+                    role: #mcp_protocol::sampling::Role::Assistant,
+                    content: #mcp_protocol::prompts::ContentBlock::Text {
                         text: "This is a generated response. Override sample_impl() to customize.".to_string(),
                         annotations: None,
                         meta: None,
@@ -140,7 +145,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
                 };
 
                 let model_name = #model_name_impl;
-                Ok(turul_mcp_protocol::sampling::CreateMessageResult::new(response_message.role, response_message.content, model_name))
+                Ok(#mcp_protocol::sampling::CreateMessageResult::new(response_message.role, response_message.content, model_name))
             }
         }
     };

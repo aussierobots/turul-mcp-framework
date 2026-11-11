@@ -7,6 +7,11 @@ use syn::{FnArg, ItemFn, Lit, Meta, Pat, Result, Token, punctuated::Punctuated};
 use crate::macros::shared::capitalize;
 
 pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     // Parse macro arguments
     let mut resource_uri = None;
     let mut resource_name = None;
@@ -117,19 +122,19 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
                 // Generate parameter extraction from template variables
                 let param_name_str = param_name.to_string();
                 fn_call_args.push(quote! {
-                        {
-                            let template_vars = params
-                                .as_ref()
-                                .and_then(|p| p.get("template_variables"))
-                                .and_then(|tv| tv.as_object());
+                    {
+                        let template_vars = params
+                            .as_ref()
+                            .and_then(|p| p.get("template_variables"))
+                            .and_then(|tv| tv.as_object());
 
-                            template_vars
-                                .and_then(|vars| vars.get(#param_name_str))
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string())
-                                .ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#param_name_str))?
-                        }
-                    });
+                        template_vars
+                            .and_then(|vars| vars.get(#param_name_str))
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string())
+                            .ok_or_else(|| #mcp_protocol::McpError::missing_param(#param_name_str))?
+                    }
+                });
             } else if param_name == "params"
                 && matches!(**param_type, syn::Type::Path(ref p) if p.path.segments.last().unwrap().ident == "Value")
             {
@@ -140,14 +145,14 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
                 // Regular parameter - extract from params
                 let param_name_str = param_name.to_string();
                 fn_call_args.push(quote! {
-                        {
-                            params
-                                .as_ref()
-                                .and_then(|p| p.get(#param_name_str))
-                                .and_then(|v| serde_json::from_value(v.clone()).ok())
-                                .ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#param_name_str))?
-                        }
-                    });
+                    {
+                        params
+                            .as_ref()
+                            .and_then(|p| p.get(#param_name_str))
+                            .and_then(|v| #json_crate::from_value(v.clone()).ok())
+                            .ok_or_else(|| #mcp_protocol::McpError::missing_param(#param_name_str))?
+                    }
+                });
             }
         }
     }
@@ -185,7 +190,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
         }
 
         // Implement resource metadata traits
-        impl turul_mcp_builders::traits::HasResourceMetadata for #struct_name {
+        impl #mcp_builders::traits::HasResourceMetadata for #struct_name {
             fn name(&self) -> &str {
                 #resource_name
             }
@@ -195,48 +200,48 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             }
         }
 
-        impl turul_mcp_builders::traits::HasResourceDescription for #struct_name {
+        impl #mcp_builders::traits::HasResourceDescription for #struct_name {
             fn description(&self) -> Option<&str> {
                 Some(#resource_description)
             }
         }
 
-        impl turul_mcp_builders::traits::HasResourceUri for #struct_name {
+        impl #mcp_builders::traits::HasResourceUri for #struct_name {
             fn uri(&self) -> &str {
                 #resource_uri
             }
         }
 
-        impl turul_mcp_builders::traits::HasResourceMimeType for #struct_name {
+        impl #mcp_builders::traits::HasResourceMimeType for #struct_name {
             fn mime_type(&self) -> Option<&str> {
                 #mime_type_expr
             }
         }
 
-        impl turul_mcp_builders::traits::HasResourceSize for #struct_name {
+        impl #mcp_builders::traits::HasResourceSize for #struct_name {
             fn size(&self) -> Option<u64> {
                 None
             }
         }
 
-        impl turul_mcp_builders::traits::HasResourceAnnotations for #struct_name {
-            fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+        impl #mcp_builders::traits::HasResourceAnnotations for #struct_name {
+            fn annotations(&self) -> Option<&#mcp_protocol::meta::Annotations> {
                 None
             }
         }
 
-        impl turul_mcp_builders::traits::HasResourceMeta for #struct_name {
-            fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+        impl #mcp_builders::traits::HasResourceMeta for #struct_name {
+            fn resource_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
                 None
             }
         }
 
-        impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+        impl #mcp_builders::traits::HasIcons for #struct_name {}
 
         // Implement McpResource trait with session-aware signature
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpResource for #struct_name {
-            async fn read(&self, params: Option<serde_json::Value>, _session: Option<&turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpResource for #struct_name {
+            async fn read(&self, params: Option<#json_crate::Value>, _session: Option<&#mcp_server::SessionContext>) -> #mcp_server::McpResult<Vec<#mcp_protocol::resources::ResourceContent>> {
                 // Call the renamed implementation function with extracted parameters
                 #impl_fn_name(#(#fn_call_args),*).await
             }
@@ -333,10 +338,11 @@ mod tests {
 
     #[test]
     fn test_mcp_resource_with_params_argument() {
+        let json_crate = crate::utils::serde_json_path();
         let args =
             parse_quote! { uri = "file:///custom/{id}.json", description = "Custom resource" };
         let input = parse_quote! {
-            async fn custom_resource(id: String, params: serde_json::Value) -> McpResult<Vec<ResourceContent>> {
+            async fn custom_resource(id: String, params: #json_crate::Value) -> McpResult<Vec<ResourceContent>> {
                 Ok(vec![])
             }
         };

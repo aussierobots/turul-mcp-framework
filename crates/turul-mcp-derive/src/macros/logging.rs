@@ -18,6 +18,9 @@ pub fn logging_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
 /// Internal implementation that works with proc_macro2::TokenStream for testing
 pub fn logging_declarative_impl_inner(input: LoggingMacroInput) -> proc_macro2::TokenStream {
+    let mcp_derive = crate::utils::derive_path();
+    let serde_attr = crate::utils::serde_attr_path();
+    let serde_crate = crate::utils::serde_path();
     let logging_name_ident = syn::Ident::new(
         &format!("{}Logger", capitalize(&input.name)),
         proc_macro2::Span::call_site(),
@@ -27,8 +30,9 @@ pub fn logging_declarative_impl_inner(input: LoggingMacroInput) -> proc_macro2::
     let default_impl = generate_default_impl(&logging_name_ident, &input.fields);
 
     quote! {
-        #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(turul_mcp_derive::McpLogger)]
+        #[derive(Clone, Debug, #serde_crate::Serialize, #serde_crate::Deserialize)]
+        #serde_attr
+        #[derive(#mcp_derive::McpLogger)]
         pub struct #logging_name_ident {
             #struct_fields
         }

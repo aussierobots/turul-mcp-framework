@@ -7,6 +7,11 @@ use syn::{DeriveInput, Result};
 use crate::utils::extract_root_meta;
 
 pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
     // Extract struct-level attributes from #[root(...)]
@@ -32,7 +37,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasRootMetadata for #struct_name {
+        impl #mcp_builders::HasRootMetadata for #struct_name {
             fn uri(&self) -> &str {
                 Self::ROOT_URI
             }
@@ -47,7 +52,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasRootPermissions for #struct_name {
+        impl #mcp_builders::HasRootPermissions for #struct_name {
             fn can_read(&self, _path: &str) -> bool {
                 true
             }
@@ -62,7 +67,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasRootFiltering for #struct_name {
+        impl #mcp_builders::HasRootFiltering for #struct_name {
             fn allowed_extensions(&self) -> Option<&[String]> {
                 None // Allow all extensions by default
             }
@@ -95,8 +100,8 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasRootAnnotations for #struct_name {
-            fn annotations(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+        impl #mcp_builders::HasRootAnnotations for #struct_name {
+            fn annotations(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
                 None
             }
 
@@ -108,46 +113,46 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         // RootDefinition is automatically implemented via blanket impl
 
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpRoot for #struct_name {
-            async fn list_roots(&self, request: turul_mcp_protocol::roots::ListRootsRequest) -> turul_mcp_protocol::McpResult<turul_mcp_protocol::roots::ListRootsResult> {
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpRoot for #struct_name {
+            async fn list_roots(&self, request: #mcp_protocol::roots::ListRootsRequest) -> #mcp_protocol::McpResult<#mcp_protocol::roots::ListRootsResult> {
                 // Default implementation - this should be overridden by implementing list_roots_impl
                 match self.list_roots_impl(request).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e)),
+                    Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
 
-            async fn list_files(&self, path: &str) -> turul_mcp_protocol::McpResult<Vec<turul_mcp_server::roots::FileInfo>> {
+            async fn list_files(&self, path: &str) -> #mcp_protocol::McpResult<Vec<#mcp_server::roots::FileInfo>> {
                 // Default implementation - this should be overridden by implementing list_files_impl
                 match self.list_files_impl(path).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e)),
+                    Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
 
-            async fn check_access(&self, path: &str) -> turul_mcp_protocol::McpResult<turul_mcp_server::roots::AccessLevel> {
+            async fn check_access(&self, path: &str) -> #mcp_protocol::McpResult<#mcp_server::roots::AccessLevel> {
                 // Default implementation based on permissions
                 if self.can_write(path) {
-                    Ok(turul_mcp_server::roots::AccessLevel::Full)
+                    Ok(#mcp_server::roots::AccessLevel::Full)
                 } else if self.can_read(path) {
-                    Ok(turul_mcp_server::roots::AccessLevel::Read)
+                    Ok(#mcp_server::roots::AccessLevel::Read)
                 } else {
-                    Ok(turul_mcp_server::roots::AccessLevel::None)
+                    Ok(#mcp_server::roots::AccessLevel::None)
                 }
             }
         }
 
         impl #struct_name {
             /// Override this method to provide custom root listing logic
-            pub async fn list_roots_impl(&self, _request: turul_mcp_protocol::roots::ListRootsRequest) -> Result<turul_mcp_protocol::roots::ListRootsResult, String> {
+            pub async fn list_roots_impl(&self, _request: #mcp_protocol::roots::ListRootsRequest) -> Result<#mcp_protocol::roots::ListRootsResult, String> {
                 // Default: return this root only
                 let root = self.to_root();
-                Ok(turul_mcp_protocol::roots::ListRootsResult::new(vec![root]))
+                Ok(#mcp_protocol::roots::ListRootsResult::new(vec![root]))
             }
 
             /// Override this method to provide custom file listing logic
-            pub async fn list_files_impl(&self, path: &str) -> Result<Vec<turul_mcp_server::roots::FileInfo>, String> {
+            pub async fn list_files_impl(&self, path: &str) -> Result<Vec<#mcp_server::roots::FileInfo>, String> {
                 // Default: basic file listing using std::fs
                 use std::fs;
                 use std::path::Path;
@@ -182,7 +187,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
 
                                     if self.should_include(&relative_path) {
                                         let metadata = entry.metadata().ok();
-                                        let file_info = turul_mcp_server::roots::FileInfo {
+                                        let file_info = #mcp_server::roots::FileInfo {
                                             path: relative_path,
                                             is_directory: metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false),
                                             size: metadata.as_ref().and_then(|m| if m.is_file() { Some(m.len()) } else { None }),

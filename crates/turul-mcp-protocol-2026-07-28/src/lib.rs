@@ -1,17 +1,28 @@
-//! # Model Context Protocol (MCP) — 2026-07-28
+//! Rust bindings for the MCP 2026-07-28 wire schema: requests, results, notifications and errors.
 //!
-//! Faithful 1:1 Rust implementation of the upstream MCP schema
-//! ([`schema.ts` vendored at `schema/schema.ts`](../../../schema/schema.ts)).
-//! Wire-version string is [`MCP_VERSION`] = `"2026-07-28"`. It is the only
-//! version literal this crate emits or accepts; the pre-finalization draft
-//! literal is rejected (see [`version::McpVersion`]).
+//! Most users want [`turul-mcp-server`](https://docs.rs/turul-mcp-server), which
+//! re-exports what it needs. Depend on [`turul-mcp-protocol`](https://docs.rs/turul-mcp-protocol)
+//! (the version-selecting alias) or on this crate directly only to parse or produce
+//! MCP messages without the server framework.
 //!
 //! Every `export interface`/`export type`/`export const` in the vendored
-//! `schema/schema.ts` has a corresponding Rust binding here. Every
-//! binding has a compliance test in `tests/compliance.rs`. The full
-//! authoritative coverage source is `docs/plans/2026-07-28-spec-compliance.md`.
+//! [`schema.ts`](https://github.com/aussierobots/turul-mcp-framework/blob/main/crates/turul-mcp-protocol-2026-07-28/schema/schema.ts)
+//! has a Rust binding here. [`MCP_VERSION`] is `"2026-07-28"`, the only version
+//! literal this crate emits or accepts (see [`version::McpVersion`]).
 //!
-//! ## Surface area
+//! # Example
+//!
+//! ```rust
+//! use turul_mcp_protocol_2026_07_28::tools::{Tool, ToolSchema};
+//!
+//! let tool = Tool::new("calculator", ToolSchema::object());
+//! let json = serde_json::to_string(&tool)?;
+//! let back: Tool = serde_json::from_str(&json)?;
+//! assert_eq!(back.name, "calculator");
+//! # Ok::<(), serde_json::Error>(())
+//! ```
+//!
+//! # Surface area
 //!
 //! - **Stateless RPC** — per-request capability negotiation via
 //!   [`meta::RequestMetaObject`] (`io.modelcontextprotocol/protocolVersion`,
@@ -39,7 +50,7 @@
 //!   (header mismatch / capability / version negotiation failures) allocated
 //!   sequentially from the schema's spec-reserved `-32020..-32099` range.
 //!
-//! ## `_meta` key + HTTP header constants
+//! # `_meta` key + HTTP header constants
 //!
 //! Typed source-of-truth constants for spelling:
 //!
@@ -47,27 +58,12 @@
 //!   [`META_KEY_CLIENT_INFO`], [`META_KEY_CLIENT_CAPABILITIES`],
 //!   [`META_KEY_LOG_LEVEL`].
 //! - Convention `_meta` keys: [`META_KEY_TRACEPARENT`], [`META_KEY_TRACESTATE`],
-//!   [`META_KEY_BAGGAGE`] (W3C Trace Context, [SEP-414]),
+//!   [`META_KEY_BAGGAGE`] (W3C Trace Context, SEP-414),
 //!   [`META_KEY_SUBSCRIPTION_ID`] (subscription tagging).
-//! - Streamable HTTP headers ([SEP-2243]): [`HTTP_HEADER_PROTOCOL_VERSION`],
+//! - Streamable HTTP headers (SEP-2243): [`HTTP_HEADER_PROTOCOL_VERSION`],
 //!   [`HTTP_HEADER_METHOD`], [`HTTP_HEADER_NAME`], [`HTTP_HEADER_PARAM_PREFIX`].
 //!
-//! The upstream `schema.ts` has finalized its wire-version literal, and the
-//! vendored `schema/schema.ts` is taken from the released
-//! `schema/2026-07-28/` upstream path. That directory receives only errata
-//! against the released spec; `schema/README.md` records the pin provenance
-//! and the re-pin procedure.
-//!
-//! [SEP-2106]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2106-tool-output-schema.md
-//! [SEP-2133]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2133-extensions.md
-//! [SEP-2164]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2164-standard-error-codes.md
-//! [SEP-2322]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2322-MRTR.md
-//! [SEP-2549]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2549-TTL-for-list-results.md
-//! [SEP-2567]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2567-sessionless-mcp.md
-//! [SEP-2575]: https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575
-//! [SEP-2663]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2663-tasks-extension.md
-//!
-//! ## `_meta` field usage
+//! # `_meta` field usage
 //!
 //! Two distinct `_meta` carriers:
 //!
@@ -77,6 +73,20 @@
 //!   `logLevel`. Arbitrary namespaced keys ride along on `extra`.
 //! - [`meta::MetaObject`] — loose `HashMap<String, Value>` for
 //!   `Notification.params._meta` and `Result._meta`.
+//!
+//! # Where next
+//!
+//! - [`turul-mcp-protocol`](https://docs.rs/turul-mcp-protocol): version-selecting alias
+//! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server): build a server
+//! - [`tools`], [`discover`], [`input_required`]: start with these modules
+//!
+//! [SEP-2106]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2106-tool-output-schema.md
+//! [SEP-2133]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2133-extensions.md
+//! [SEP-2164]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2164-standard-error-codes.md
+//! [SEP-2322]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2322-MRTR.md
+//! [SEP-2549]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2549-TTL-for-list-results.md
+//! [SEP-2567]: https://github.com/modelcontextprotocol/modelcontextprotocol/blob/main/seps/2567-sessionless-mcp.md
+//! [SEP-2575]: https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2575
 
 pub mod caching;
 pub mod completion;

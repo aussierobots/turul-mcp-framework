@@ -57,6 +57,11 @@ fn camel_to_snake_case(input: &str) -> String {
 }
 
 pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
     // AUTO-DETERMINE method from struct name (ZERO CONFIGURATION!)
@@ -79,7 +84,7 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_builders::HasNotificationMetadata for #struct_name {
+        impl #mcp_builders::HasNotificationMetadata for #struct_name {
             fn method(&self) -> &str {
                 #method
             }
@@ -100,14 +105,14 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasNotificationPayload for #struct_name {
-            fn payload(&self) -> Option<serde_json::Value> {
-                Some(serde_json::json!({}))
+        impl #mcp_builders::HasNotificationPayload for #struct_name {
+            fn payload(&self) -> Option<#json_crate::Value> {
+                Some(#json_crate::json!({}))
             }
 
             fn serialize_payload(&self) -> Result<String, String> {
                 match self.payload() {
-                    Some(data) => serde_json::to_string(&data)
+                    Some(data) => #json_crate::to_string(&data)
                         .map_err(|e| format!("Serialization error: {}", e)),
                     None => Ok("{}".to_string()),
                 }
@@ -115,7 +120,7 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasNotificationRules for #struct_name {
+        impl #mcp_builders::HasNotificationRules for #struct_name {
             fn priority(&self) -> u32 {
                 #priority
             }
@@ -136,25 +141,25 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
         // NotificationDefinition is automatically implemented via blanket impl
 
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpNotification for #struct_name {
-            async fn send(&self, payload: serde_json::Value) -> turul_mcp_protocol::McpResult<turul_mcp_server::notifications::DeliveryResult> {
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpNotification for #struct_name {
+            async fn send(&self, payload: #json_crate::Value) -> #mcp_protocol::McpResult<#mcp_server::notifications::DeliveryResult> {
                 // Default implementation - this should be overridden by implementing send_impl
                 match self.send_impl(payload).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e)),
+                    Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }
 
         impl #struct_name {
             /// Override this method to provide custom notification sending logic
-            pub async fn send_impl(&self, payload: serde_json::Value) -> Result<turul_mcp_server::notifications::DeliveryResult, String> {
+            pub async fn send_impl(&self, payload: #json_crate::Value) -> Result<#mcp_server::notifications::DeliveryResult, String> {
                 // Default: simulate successful delivery
                 println!("Sending notification [{}]: {}", #method, payload);
 
-                Ok(turul_mcp_server::notifications::DeliveryResult {
-                    status: turul_mcp_server::notifications::DeliveryStatus::Sent,
+                Ok(#mcp_server::notifications::DeliveryResult {
+                    status: #mcp_server::notifications::DeliveryStatus::Sent,
                     attempts: 1,
                     error: None,
                     delivered_at: Some(

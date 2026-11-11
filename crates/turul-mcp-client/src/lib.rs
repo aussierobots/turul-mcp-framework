@@ -1,210 +1,62 @@
-//! # MCP Client Library
+//! Client for [Model Context Protocol](https://modelcontextprotocol.io) servers:
+//! connect, list and call tools, read resources, fetch prompts.
 //!
-//! **Production-ready Rust client for Model Context Protocol (MCP) servers.**
+//! The client speaks both MCP 2026-07-28 and 2025-11-25 and negotiates the spec
+//! per connection. To build a server rather than call one, use
+//! [`turul-mcp-server`](https://docs.rs/turul-mcp-server).
 //!
-//! Connect to MCP servers with full protocol compliance, multiple transport options,
-//! and automatic session management. Supports both synchronous and streaming operations
-//! with comprehensive error handling and recovery mechanisms.
-//!
-//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-client.svg)](https://crates.io/crates/turul-mcp-client)
-//! [![Documentation](https://docs.rs/turul-mcp-client/badge.svg)](https://docs.rs/turul-mcp-client)
-//! [![License](https://img.shields.io/crates/l/turul-mcp-client.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
-//!
-//! ## Features
-//!
-//! - **Multi-transport**: HTTP and Server-Sent Events (SSE), with stdio planned
-//! - **Bilingual Protocol**: Speaks both MCP 2026-07-28 (stateless core) and
-//!   2025-11-25; by default the client negotiates the spec per connection
-//! - **High Performance**: Built on Tokio with async/await throughout
-//! - **Session Management**: Automatic connection handling and recovery
-//! - **Real-time Streaming**: SSE support for progress and notifications
-//! - **Error Handling**: Comprehensive error types with automatic retry
-//! - **Configurable**: Timeouts, retries, connection pooling
-//!
-//! ## Installation
+//! # Example
 //!
 //! ```toml
 //! [dependencies]
 //! turul-mcp-client = "0.4"
-//! tokio = { version = "1.0", features = ["full"] }
+//! tokio = { version = "1", features = ["full"] }
+//! serde_json = "1"
 //! ```
 //!
-//! ## Quick Start
-//!
 //! ```rust,no_run
-//! use turul_mcp_client::{McpClient, McpClientBuilder, transport::HttpTransport};
+//! use turul_mcp_client::{McpClientBuilder, transport::HttpTransport};
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let transport = HttpTransport::new("http://localhost:8080/mcp")?;
 //!     let client = McpClientBuilder::new()
-//!         .with_transport(Box::new(transport))
+//!         .with_transport(Box::new(HttpTransport::new("http://127.0.0.1:8000/mcp")?))
 //!         .build();
-//!
 //!     client.connect().await?;
 //!
 //!     let tools = client.list_tools().await?;
-//!     println!("Available tools: {:?}", tools);
+//!     println!("{} tools", tools.len());
 //!
+//!     let result = client
+//!         .call_tool("add", serde_json::json!({ "a": 5, "b": 3 }))
+//!         .await?;
+//!     println!("{result:?}");
 //!     Ok(())
 //! }
 //! ```
 //!
-//! ## Transport Types
+//! [`transport::HttpTransport`] sends each request as an independent Streamable HTTP
+//! POST. `connect()` probes `server/discover`; a 2025-11-25 server is detected there
+//! and handled with the `initialize` handshake. See the [`transport`] module for the
+//! other transports.
 //!
-//! ### HTTP Transport (Streamable HTTP)
+//! # Features
 //!
-//! The Streamable HTTP transport sends each MCP request as an independent HTTP
-//! POST. There is no persistent connection. The client negotiates the spec per
-//! connection: on a 2026-07-28 connection it is stateless (no session id; each
-//! request carries `_meta` and the `MCP-Protocol-Version: 2026-07-28` header). On
-//! a connection locked to 2025-11-25, session continuity is maintained via the
-//! `Mcp-Session-Id` header the server returns during initialization and the client
-//! includes on subsequent requests.
+//! | Feature | Default | Enables |
+//! |---|---|---|
+//! | `http` | yes | HTTP transport |
+//! | `sse` | yes | Server-sent event streams |
+//! | `client-bilingual` | yes | Both specs, negotiated at connect |
+//! | `client-2026-07-28-only` | no | Only MCP 2026-07-28; use with `--no-default-features` |
+//! | `client-2025-11-25-only` | no | Only MCP 2025-11-25; use with `--no-default-features` |
+//! | `ext-tasks` | no | The `io.modelcontextprotocol/tasks` extension (2026-07-28 connections) |
 //!
-//! `transport.connect()` only marks the transport as logically ready; it performs
-//! no network I/O. The first real validation happens when `McpClient::connect()`
-//! probes `server/discover`. On a 2026-07-28 server discovery answers statelessly;
-//! on a 2025-locked connection the client falls back to the `initialize` POST
-//! followed by `notifications/initialized`. If the server is unreachable or rejects
-//! the probe, the error surfaces there.
+//! # Where next
 //!
-//! ```rust,no_run
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use turul_mcp_client::transport::HttpTransport;
-//!
-//! let transport = HttpTransport::new("http://localhost:8080/mcp")?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### SSE Transport (HTTP+SSE, deprecated — SEP-2596)
-//!
-//! For servers using the pre-2025-03-26 SSE-based protocol. The HTTP+SSE
-//! transport is deprecated upstream ("new implementations SHOULD NOT adopt
-//! it") — use [`HttpTransport`](transport::HttpTransport) unless you must
-//! talk to an unmigrated ≤ 2024-11-05 server. Like the HTTP transport,
-//! `connect()` is a no-op marker — the SSE subscription is established
-//! lazily during message exchange.
-//!
-//! ```rust,no_run
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! #![allow(deprecated)]
-//! use turul_mcp_client::transport::SseTransport;
-//!
-//! let transport = SseTransport::new("http://localhost:8080/mcp")?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Future Transports
-//!
-//! Stdio transports are planned for future releases:
-//!
-//! ```text
-//! // Coming soon:
-//! // StdioTransport::new("./mcp-server-executable")
-//! ```
-//!
-//! ## Common Operations
-//!
-//! ### Tool Execution
-//!
-//! ```rust,no_run
-//! # use turul_mcp_client::prelude::*;
-//! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
-//! // List available tools
-//! let tools = client.list_tools().await?;
-//! println!("Available tools: {:?}", tools);
-//!
-//! // Execute a tool
-//! let result = client.call_tool("calculator", serde_json::json!({
-//!     "operation": "add",
-//!     "a": 5,
-//!     "b": 3
-//! })).await?;
-//! println!("Result: {:?}", result);
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Resource Access
-//!
-//! ```rust,no_run
-//! # use turul_mcp_client::prelude::*;
-//! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
-//! // List available resources
-//! let resources = client.list_resources().await?;
-//!
-//! // Discover dynamic URI templates
-//! let templates = client.list_resource_templates().await?;
-//!
-//! // Read a specific resource
-//! let content = client.read_resource("file://config.json").await?;
-//! println!("Resource content: {:?}", content);
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Prompt Templates
-//!
-//! ```rust,no_run
-//! # use turul_mcp_client::prelude::*;
-//! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
-//! // List available prompts
-//! let prompts = client.list_prompts().await?;
-//!
-//! // Get a prompt with arguments
-//! let prompt = client.get_prompt("code_review", Some(serde_json::json!({
-//!     "language": "rust",
-//!     "code": "fn main() { println!(\"Hello!\"); }"
-//! }))).await?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## Configuration
-//!
-//! The client supports extensive configuration:
-//!
-//! ```rust,no_run
-//! # use turul_mcp_client::prelude::*;
-//!
-//! // Create a client with default configuration
-//! let client = McpClientBuilder::new()
-//!     .build();
-//! ```
-//!
-//! ## Real-time Streaming
-//!
-//! For real-time notifications and progress updates:
-//!
-//! ```rust,no_run
-//! # use turul_mcp_client::prelude::*;
-//! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
-//! // Get available tools from server
-//! let tools = client.list_tools().await?;
-//! println!("Available tools: {}", tools.len());
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## Examples
-//!
-//! **Complete examples available at:**
-//! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
-//!
-//! - **Basic Client** - Simple tool execution
-//! - **Streaming Client** - Real-time notifications
-//! - **HTTP Client** - Production HTTP integration
-//! - **Retry Logic** - Error handling and recovery
-//! - **Monitoring** - Connection health and metrics
-//!
-//! ## Related Crates
-//!
-//! - [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server) - Build MCP servers
-//! - [`turul-mcp-protocol`](https://crates.io/crates/turul-mcp-protocol) - Protocol types
-//! - [`turul-mcp-derive`](https://crates.io/crates/turul-mcp-derive) - Macros for tools/resources
+//! - [`McpClient`] for resources, prompts and every other operation
+//! - [`transport`] for transports
+//! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server) to build servers
+//! - [Examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 
 // Spec-coexistence features are mutually exclusive. Bilingual (default) links
 // both protocol crates; narrowing to one requires --no-default-features.

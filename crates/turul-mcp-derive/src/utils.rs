@@ -28,10 +28,12 @@ impl AnnotationMeta {
 /// If ANY field is Some → OnceLock-backed impl returning Some(ToolAnnotations { ... })
 /// If ALL fields are None → impl returning None (backward compatible)
 pub fn generate_annotations_impl(name: &syn::Ident, meta: &AnnotationMeta) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     if !meta.has_any() {
         return quote! {
-            impl turul_mcp_builders::traits::HasAnnotations for #name {
-                fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+            impl #mcp_builders::traits::HasAnnotations for #name {
+                fn annotations(&self) -> Option<&#mcp_protocol::tools::ToolAnnotations> {
                     None
                 }
             }
@@ -60,11 +62,11 @@ pub fn generate_annotations_impl(name: &syn::Ident, meta: &AnnotationMeta) -> To
     };
 
     quote! {
-        impl turul_mcp_builders::traits::HasAnnotations for #name {
-            fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-                static ANNOTATIONS: std::sync::OnceLock<turul_mcp_protocol::tools::ToolAnnotations> = std::sync::OnceLock::new();
+        impl #mcp_builders::traits::HasAnnotations for #name {
+            fn annotations(&self) -> Option<&#mcp_protocol::tools::ToolAnnotations> {
+                static ANNOTATIONS: std::sync::OnceLock<#mcp_protocol::tools::ToolAnnotations> = std::sync::OnceLock::new();
                 Some(ANNOTATIONS.get_or_init(|| {
-                    turul_mcp_protocol::tools::ToolAnnotations {
+                    #mcp_protocol::tools::ToolAnnotations {
                         title: #title_expr,
                         read_only_hint: #read_only_expr,
                         destructive_hint: #destructive_expr,
@@ -362,6 +364,8 @@ pub fn extract_param_meta(attrs: &[Attribute]) -> Result<ParamMeta> {
 
 /// Generate JSON schema for a Rust type
 pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     let description = param_meta
         .description
         .as_ref()
@@ -373,7 +377,7 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
         syn::Type::Path(type_path) => {
             let Some(last_seg) = type_path.path.segments.last() else {
                 return quote! {
-                    turul_mcp_protocol::schema::JsonSchema::string() #description
+                    #mcp_protocol::schema::JsonSchema::string() #description
                 };
             };
 
@@ -387,7 +391,7 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                     }
                     // Fallback for malformed Option
                     quote! {
-                        turul_mcp_protocol::schema::JsonSchema::string() #description
+                        #mcp_protocol::schema::JsonSchema::string() #description
                     }
                 }
                 // Vec<T>: array with items schema from inner type
@@ -397,26 +401,26 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                     {
                         let items_schema = type_to_schema(inner_ty, &ParamMeta::default());
                         return quote! {
-                            turul_mcp_protocol::schema::JsonSchema::array(#items_schema) #description
+                            #mcp_protocol::schema::JsonSchema::array(#items_schema) #description
                         };
                     }
                     // Fallback: array of strings
                     quote! {
-                        turul_mcp_protocol::schema::JsonSchema::array(
-                            turul_mcp_protocol::schema::JsonSchema::string()
+                        #mcp_protocol::schema::JsonSchema::array(
+                            #mcp_protocol::schema::JsonSchema::string()
                         ) #description
                     }
                 }
                 "String" | "str" => {
                     quote! {
-                        turul_mcp_protocol::schema::JsonSchema::string() #description
+                        #mcp_protocol::schema::JsonSchema::string() #description
                     }
                 }
                 "f64" | "f32" => {
                     let min = param_meta.min.map(|m| quote! { .with_minimum(#m) });
                     let max = param_meta.max.map(|m| quote! { .with_maximum(#m) });
                     quote! {
-                        turul_mcp_protocol::schema::JsonSchema::number() #description #min #max
+                        #mcp_protocol::schema::JsonSchema::number() #description #min #max
                     }
                 }
                 "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" => {
@@ -429,12 +433,12 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                         quote! { .with_maximum(#m_int as f64) }
                     });
                     quote! {
-                        turul_mcp_protocol::schema::JsonSchema::integer() #description #min #max
+                        #mcp_protocol::schema::JsonSchema::integer() #description #min #max
                     }
                 }
                 "bool" => {
                     quote! {
-                        turul_mcp_protocol::schema::JsonSchema::boolean() #description
+                        #mcp_protocol::schema::JsonSchema::boolean() #description
                     }
                 }
                 _ => {
@@ -446,8 +450,8 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                     let full_ty = &type_path.path;
                     quote! {
                         {
-                            let schemars_schema = turul_mcp_builders::schemars::schema_for!(#full_ty);
-                            turul_mcp_builders::schemars_param_schema(schemars_schema) #description
+                            let schemars_schema = #mcp_builders::schemars::schema_for!(#full_ty);
+                            #mcp_builders::schemars_param_schema(schemars_schema) #description
                         }
                     }
                 }
@@ -458,7 +462,7 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
             let items_schema = type_to_schema(&array.elem, &ParamMeta::default());
             let len = &array.len;
             quote! {
-                turul_mcp_protocol::schema::JsonSchema::array(#items_schema)
+                #mcp_protocol::schema::JsonSchema::array(#items_schema)
                     .with_min_items(#len as u64)
                     .with_max_items(#len as u64)
                     #description
@@ -466,7 +470,7 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
         }
         _ => {
             quote! {
-                turul_mcp_protocol::schema::JsonSchema::string() #description
+                #mcp_protocol::schema::JsonSchema::string() #description
             }
         }
     }
@@ -476,8 +480,9 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
 /// the mutable `ToolSchema` binding `schema`. The counterpart of
 /// [`generate_undeclared_arg_check`]: schema and behaviour agree.
 pub fn generate_close_input_schema() -> TokenStream {
+    let json_crate = crate::utils::serde_json_path();
     quote! {
-        schema.additional.insert("additionalProperties".to_string(), serde_json::json!(false));
+        schema.additional.insert("additionalProperties".to_string(), #json_crate::json!(false));
     }
 }
 
@@ -487,13 +492,14 @@ pub fn generate_close_input_schema() -> TokenStream {
 /// Every other `McpError` (MRTR `InputRequired`, capability gates, ...) still propagates
 /// as a JSON-RPC error.
 pub fn generate_argument_errors_as_tool_result() -> TokenStream {
+    let mcp_protocol = crate::utils::protocol_path();
     quote! {
         match outcome {
-            Err(e @ (turul_mcp_protocol::McpError::MissingParameter(_)
-                | turul_mcp_protocol::McpError::InvalidParameterType { .. }
-                | turul_mcp_protocol::McpError::InvalidParameters(_))) => {
-                Ok(turul_mcp_protocol::tools::CallToolResult::error(vec![
-                    turul_mcp_protocol::tools::ToolResult::text(e.to_string())
+            Err(e @ (#mcp_protocol::McpError::MissingParameter(_)
+                | #mcp_protocol::McpError::InvalidParameterType { .. }
+                | #mcp_protocol::McpError::InvalidParameters(_))) => {
+                Ok(#mcp_protocol::tools::CallToolResult::error(vec![
+                    #mcp_protocol::tools::ToolResult::text(e.to_string())
                 ]))
             }
             other => other,
@@ -506,21 +512,24 @@ pub fn generate_argument_errors_as_tool_result() -> TokenStream {
 /// every undeclared key. Reads the schema rather than a second list of names, so the
 /// check cannot drift from what `tools/list` advertises.
 pub fn generate_undeclared_arg_check() -> TokenStream {
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     quote! {
         // Type-mismatch error: the declared schema type and the JSON type received.
         fn __mcp_param_type_error(
             name: &str,
             expected: &str,
-            received: &serde_json::Value,
-        ) -> turul_mcp_protocol::McpError {
+            received: &#json_crate::Value,
+        ) -> #mcp_protocol::McpError {
             let got = match received {
-                serde_json::Value::Null => "null",
-                serde_json::Value::Bool(_) => "boolean",
-                serde_json::Value::Number(n) if n.is_i64() || n.is_u64() => "integer",
-                serde_json::Value::Number(_) => "number",
-                serde_json::Value::String(_) => "string",
-                serde_json::Value::Array(_) => "array",
-                serde_json::Value::Object(_) => "object",
+                #json_crate::Value::Null => "null",
+                #json_crate::Value::Bool(_) => "boolean",
+                #json_crate::Value::Number(n) if n.is_i64() || n.is_u64() => "integer",
+                #json_crate::Value::Number(_) => "number",
+                #json_crate::Value::String(_) => "string",
+                #json_crate::Value::Array(_) => "array",
+                #json_crate::Value::Object(_) => "object",
             };
             // An integer that is the right JSON type but out of range for the declared
             // Rust type (e.g. 300 for a `u8`) must not read "expected integer, got integer".
@@ -529,11 +538,11 @@ pub fn generate_undeclared_arg_check() -> TokenStream {
             } else {
                 expected
             };
-            turul_mcp_protocol::McpError::invalid_param_type(name, expected, got)
+            #mcp_protocol::McpError::invalid_param_type(name, expected, got)
         }
 
         if let Some(supplied) = args.as_object() {
-            let declared = turul_mcp_builders::traits::HasInputSchema::input_schema(self)
+            let declared = #mcp_builders::traits::HasInputSchema::input_schema(self)
                 .properties
                 .as_ref();
             let mut undeclared: Vec<&str> = supplied
@@ -543,9 +552,9 @@ pub fn generate_undeclared_arg_check() -> TokenStream {
                 .collect();
             if !undeclared.is_empty() {
                 undeclared.sort_unstable();
-                return Err(turul_mcp_protocol::McpError::InvalidParameters(format!(
+                return Err(#mcp_protocol::McpError::InvalidParameters(format!(
                     "undeclared argument(s) for tool `{}`: {}",
-                    turul_mcp_builders::traits::HasBaseMetadata::name(self),
+                    #mcp_builders::traits::HasBaseMetadata::name(self),
                     undeclared.join(", ")
                 )));
             }
@@ -599,10 +608,11 @@ fn generate_optional_extraction(
     inner_type: &syn::Type,
     field_name_str: String,
 ) -> TokenStream {
+    let json_crate = crate::utils::serde_json_path();
     let required = generate_required_extraction(field_name, inner_type, field_name_str.clone());
     quote! {
         let #field_name: Option<#inner_type> = match args.get(#field_name_str) {
-            None | Some(serde_json::Value::Null) => None,
+            None | Some(#json_crate::Value::Null) => None,
             Some(_) => {
                 #required
                 Some(#field_name)
@@ -639,6 +649,8 @@ fn generate_required_extraction(
     field_type: &syn::Type,
     field_name_str: String,
 ) -> TokenStream {
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_protocol = crate::utils::protocol_path();
     let expected = json_type_for(field_type);
     let ident = match field_type {
         syn::Type::Path(type_path) if type_path.path.segments.len() == 1 => {
@@ -659,19 +671,19 @@ fn generate_required_extraction(
             // Accepts a JSON array, or a string holding one (clients that stringify).
             return quote! {
                 let #field_name: #field_type = match args.get(#field_name_str) {
-                    None => return Err(turul_mcp_protocol::McpError::missing_param(#field_name_str)),
+                    None => return Err(#mcp_protocol::McpError::missing_param(#field_name_str)),
                     Some(v) => {
                         let items = if let Some(arr) = v.as_array() {
                             Some(arr.clone())
                         } else if let Some(s) = v.as_str() {
-                            serde_json::from_str::<Vec<serde_json::Value>>(s).ok()
+                            #json_crate::from_str::<Vec<#json_crate::Value>>(s).ok()
                         } else {
                             None
                         };
                         items
                             .and_then(|arr| {
                                 arr.iter()
-                                    .map(|item| serde_json::from_value(item.clone()))
+                                    .map(|item| #json_crate::from_value(item.clone()))
                                     .collect::<Result<Vec<_>, _>>()
                                     .ok()
                             })
@@ -680,11 +692,11 @@ fn generate_required_extraction(
                 };
             };
         }
-        _ => quote! { serde_json::from_value::<#field_type>(v.clone()).ok() },
+        _ => quote! { #json_crate::from_value::<#field_type>(v.clone()).ok() },
     };
     quote! {
         let #field_name: #field_type = match args.get(#field_name_str) {
-            None => return Err(turul_mcp_protocol::McpError::missing_param(#field_name_str)),
+            None => return Err(#mcp_protocol::McpError::missing_param(#field_name_str)),
             Some(v) => (#convert)
                 .ok_or_else(|| __mcp_param_type_error(#field_name_str, #expected, v))?,
         };
@@ -957,6 +969,8 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
 }
 
 pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &str) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     match ty {
         syn::Type::Path(type_path) => {
             // First check if it's a qualified path like serde_json::Value
@@ -971,13 +985,13 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
             // Special case for serde_json::Value (qualified path)
             if path_string.contains("serde_json") && path_string.ends_with("Value") {
                 return quote! {
-                    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                        static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                    fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                        static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                         Some(OUTPUT_SCHEMA.get_or_init(|| {
-                            use turul_mcp_protocol::schema::JsonSchema;
+                            use #mcp_protocol::schema::JsonSchema;
                             use std::collections::HashMap;
-                            turul_mcp_protocol::tools::ToolSchema::object()
-                                .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                            #mcp_protocol::tools::ToolSchema::object()
+                                .with_properties(#mcp_builders::tool_props(HashMap::from([
                                     (#field_name.to_string(), JsonSchema::Object {
                                         description: Some("JSON object or value".to_string()),
                                         properties: None,
@@ -994,13 +1008,13 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
             // Check for Vec<T> generic type
             if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" {
                 return quote! {
-                    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                        static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                    fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                        static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                         Some(OUTPUT_SCHEMA.get_or_init(|| {
-                            use turul_mcp_protocol::schema::JsonSchema;
+                            use #mcp_protocol::schema::JsonSchema;
                             use std::collections::HashMap;
-                            turul_mcp_protocol::tools::ToolSchema::object()
-                                .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                            #mcp_protocol::tools::ToolSchema::object()
+                                .with_properties(#mcp_builders::tool_props(HashMap::from([
                                     (#field_name.to_string(), JsonSchema::Array {
                                         description: Some("Array of items".to_string()),
                                         items: None,
@@ -1019,12 +1033,12 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                 match ident.to_string().as_str() {
                     "f64" | "f32" => {
                         quote! {
-                            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use turul_mcp_protocol::schema::JsonSchema;
-                                    turul_mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        turul_mcp_builders::tool_props(std::collections::HashMap::from([
+                                    use #mcp_protocol::schema::JsonSchema;
+                                    #mcp_protocol::tools::ToolSchema::object().with_properties(
+                                        #mcp_builders::tool_props(std::collections::HashMap::from([
                                             (#field_name.to_string(), JsonSchema::number())
                                         ]))
                                     ).with_required(vec![#field_name.to_string()])
@@ -1035,12 +1049,12 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                     "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
                     | "usize" => {
                         quote! {
-                            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use turul_mcp_protocol::schema::JsonSchema;
-                                    turul_mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        turul_mcp_builders::tool_props(std::collections::HashMap::from([
+                                    use #mcp_protocol::schema::JsonSchema;
+                                    #mcp_protocol::tools::ToolSchema::object().with_properties(
+                                        #mcp_builders::tool_props(std::collections::HashMap::from([
                                             (#field_name.to_string(), JsonSchema::integer())
                                         ]))
                                     ).with_required(vec![#field_name.to_string()])
@@ -1050,12 +1064,12 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                     }
                     "String" | "str" => {
                         quote! {
-                            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use turul_mcp_protocol::schema::JsonSchema;
-                                    turul_mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        turul_mcp_builders::tool_props(std::collections::HashMap::from([
+                                    use #mcp_protocol::schema::JsonSchema;
+                                    #mcp_protocol::tools::ToolSchema::object().with_properties(
+                                        #mcp_builders::tool_props(std::collections::HashMap::from([
                                             (#field_name.to_string(), JsonSchema::string())
                                         ]))
                                     ).with_required(vec![#field_name.to_string()])
@@ -1065,12 +1079,12 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                     }
                     "bool" => {
                         quote! {
-                            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use turul_mcp_protocol::schema::JsonSchema;
-                                    turul_mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        turul_mcp_builders::tool_props(std::collections::HashMap::from([
+                                    use #mcp_protocol::schema::JsonSchema;
+                                    #mcp_protocol::tools::ToolSchema::object().with_properties(
+                                        #mcp_builders::tool_props(std::collections::HashMap::from([
                                             (#field_name.to_string(), JsonSchema::boolean())
                                         ]))
                                     ).with_required(vec![#field_name.to_string()])
@@ -1083,13 +1097,13 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                         // This will be enhanced by the generate_enhanced_output_schema function
                         // when struct introspection is available
                         quote! {
-                            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use turul_mcp_protocol::schema::JsonSchema;
+                                    use #mcp_protocol::schema::JsonSchema;
                                     use std::collections::HashMap;
-                                    turul_mcp_protocol::tools::ToolSchema::object()
-                                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                                    #mcp_protocol::tools::ToolSchema::object()
+                                        .with_properties(#mcp_builders::tool_props(HashMap::from([
                                             (#field_name.to_string(), JsonSchema::object())
                                         ])))
                                         .with_required(vec![#field_name.to_string()])
@@ -1100,7 +1114,7 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                 }
             } else {
                 quote! {
-                    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+                    fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
                         None
                     }
                 }
@@ -1109,10 +1123,10 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
         _ => {
             // For struct types, generate a basic object schema
             quote! {
-                fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                    static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                    static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                     Some(OUTPUT_SCHEMA.get_or_init(|| {
-                        turul_mcp_protocol::tools::ToolSchema::object()
+                        #mcp_protocol::tools::ToolSchema::object()
                     }))
                 }
             }
@@ -1273,6 +1287,8 @@ fn extract_struct_schema_content(
     fields: &syn::FieldsNamed,
     output_field_name: &str,
 ) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     let mut property_definitions = Vec::new();
     let mut required_fields = Vec::new();
 
@@ -1300,7 +1316,7 @@ fn extract_struct_schema_content(
     }
 
     quote! {
-        use turul_mcp_protocol::schema::JsonSchema;
+        use #mcp_protocol::schema::JsonSchema;
         use std::collections::HashMap;
 
         // Structured properties for the inner object; kept JsonSchema-typed so the
@@ -1314,8 +1330,8 @@ fn extract_struct_schema_content(
         ];
 
         // Wrap in outer object with custom output field name
-        turul_mcp_protocol::tools::ToolSchema::object()
-            .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+        #mcp_protocol::tools::ToolSchema::object()
+            .with_properties(#mcp_builders::tool_props(HashMap::from([
                 (#output_field_name.to_string(), JsonSchema::Object {
                     description: None,
                     properties: Some(struct_properties),
@@ -1381,6 +1397,8 @@ pub fn generate_output_schema_auto(
     field_name: &str,
     input: Option<&DeriveInput>,
 ) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     // Extract schema content for fallback (struct introspection)
     let fallback_schema_content = extract_schema_content(ty, field_name, input);
 
@@ -1394,8 +1412,8 @@ pub fn generate_output_schema_auto(
     if is_self_type {
         // Self type - use introspection
         return quote! {
-            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
+            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> =
                     std::sync::OnceLock::new();
                 Some(OUTPUT_SCHEMA.get_or_init(|| {
                     #fallback_schema_content
@@ -1407,8 +1425,8 @@ pub fn generate_output_schema_auto(
     // For basic types (String, i32, etc.), use simple schema without requiring schemars
     if is_basic_type(ty) {
         return quote! {
-            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
+            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> =
                     std::sync::OnceLock::new();
                 Some(OUTPUT_SCHEMA.get_or_init(|| {
                     #fallback_schema_content
@@ -1421,8 +1439,8 @@ pub fn generate_output_schema_auto(
     // REQUIRES: Output type must derive schemars::JsonSchema
     // If the type doesn't implement JsonSchema, compilation will fail with a clear error
     quote! {
-        fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-            static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
+        fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
+            static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> =
                 std::sync::OnceLock::new();
             Some(OUTPUT_SCHEMA.get_or_init(|| {
                 use std::collections::HashMap;
@@ -1432,12 +1450,12 @@ pub fn generate_output_schema_auto(
                 // If you get a compile error here, add #[derive(schemars::JsonSchema)] to your output type
                 // schemars_param_schema is lane-aware: verbatim 2020-12 on
                 // 2026 (local $refs inlined), typed conversion on 2025.
-                let schemars_schema = turul_mcp_builders::schemars::schema_for!(#ty);
-                let inner_schema = turul_mcp_builders::schemars_param_schema(schemars_schema);
+                let schemars_schema = #mcp_builders::schemars::schema_for!(#ty);
+                let inner_schema = #mcp_builders::schemars_param_schema(schemars_schema);
 
                 // Wrap in output field
-                turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                #mcp_protocol::tools::ToolSchema::object()
+                    .with_properties(#mcp_builders::tool_props(HashMap::from([
                         (#field_name.to_string(), inner_schema)
                     ])))
                     .with_required(vec![#field_name.to_string()])
@@ -1448,6 +1466,8 @@ pub fn generate_output_schema_auto(
 
 /// Generate basic type schema content (without function wrapper)
 fn generate_basic_type_schema_content(ty: &syn::Type, field_name: &str) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     match ty {
         syn::Type::Path(type_path) => {
             if let Some(ident) = type_path.path.get_ident() {
@@ -1462,23 +1482,181 @@ fn generate_basic_type_schema_content(ty: &syn::Type, field_name: &str) -> Token
                 };
 
                 quote! {
-                    use turul_mcp_protocol::schema::JsonSchema;
+                    use #mcp_protocol::schema::JsonSchema;
                     use std::collections::HashMap;
 
-                    turul_mcp_protocol::tools::ToolSchema::object()
-                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                    #mcp_protocol::tools::ToolSchema::object()
+                        .with_properties(#mcp_builders::tool_props(HashMap::from([
                             (#field_name.to_string(), #schema_type)
                         ])))
                         .with_required(vec![#field_name.to_string()])
                 }
             } else {
                 quote! {
-                    turul_mcp_protocol::tools::ToolSchema::object()
+                    #mcp_protocol::tools::ToolSchema::object()
                 }
             }
         }
         _ => quote! {
-            turul_mcp_protocol::tools::ToolSchema::object()
+            #mcp_protocol::tools::ToolSchema::object()
         },
+    }
+}
+
+// Crate roots that generated code names. Every emission site goes through these
+// so the resolution strategy lives in one place. When the calling crate is
+// `turul-mcp-server` or lists it under `[dependencies]` (plain or target-specific),
+// everything resolves through it; otherwise the bare crate names are emitted and the
+// caller must depend on them directly. Dev-dependencies do not count: a library with
+// the server only for its tests still compiles its lib target without it. Only the
+// `turul-mcp-server` key counts: a crate may also carry an older server under an
+// alias, and that one has no `__private` module.
+
+fn server_root() -> Option<TokenStream> {
+    manifest_names_server().then(|| quote!(::turul_mcp_server))
+}
+
+fn manifest_names_server() -> bool {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    thread_local! {
+        static CACHE: RefCell<HashMap<String, bool>> = RefCell::new(HashMap::new());
+    }
+
+    let Ok(dir) = std::env::var("CARGO_MANIFEST_DIR") else {
+        return false;
+    };
+    CACHE.with(|cache| {
+        *cache
+            .borrow_mut()
+            .entry(dir.clone())
+            .or_insert_with(|| read_manifest_names_server(&dir))
+    })
+}
+
+fn read_manifest_names_server(dir: &str) -> bool {
+    const SERVER: &str = "turul-mcp-server";
+    let path = std::path::Path::new(dir).join("Cargo.toml");
+    let Some(manifest) = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|text| text.parse::<toml::Table>().ok())
+    else {
+        return false;
+    };
+
+    let is_server = manifest
+        .get("package")
+        .and_then(|p| p.get("name"))
+        .and_then(|n| n.as_str())
+        == Some(SERVER);
+
+    let lists_server = |table: &toml::Table| {
+        table
+            .get("dependencies")
+            .and_then(|d| d.get(SERVER))
+            .is_some()
+    };
+    let in_targets = manifest
+        .get("target")
+        .and_then(|t| t.as_table())
+        .is_some_and(|targets| {
+            targets
+                .values()
+                .filter_map(|t| t.as_table())
+                .any(lists_server)
+        });
+
+    is_server || lists_server(&manifest) || in_targets
+}
+
+fn private(bare: &str) -> TokenStream {
+    let bare = proc_macro2::Ident::new(bare, proc_macro2::Span::call_site());
+    match server_root() {
+        Some(root) => quote!(#root::__private::#bare),
+        None => quote!(#bare),
+    }
+}
+
+pub(crate) fn server_path() -> TokenStream {
+    server_root().unwrap_or_else(|| quote!(turul_mcp_server))
+}
+
+pub(crate) fn protocol_path() -> TokenStream {
+    private("turul_mcp_protocol")
+}
+
+pub(crate) fn builders_path() -> TokenStream {
+    private("turul_mcp_builders")
+}
+
+pub(crate) fn serde_json_path() -> TokenStream {
+    private("serde_json")
+}
+
+pub(crate) fn serde_path() -> TokenStream {
+    private("serde")
+}
+
+pub(crate) fn async_trait_path() -> TokenStream {
+    private("async_trait")
+}
+
+pub(crate) fn derive_path() -> TokenStream {
+    private("turul_mcp_derive")
+}
+
+/// `#[serde(crate = "...")]` pointing at `serde_path()`; empty when serde is named bare.
+pub(crate) fn serde_attr_path() -> TokenStream {
+    match server_root() {
+        Some(root) => {
+            let path = format!("{}::__private::serde", root.to_string().replace(' ', ""));
+            quote!(#[serde(crate = #path)])
+        }
+        None => TokenStream::new(),
+    }
+}
+
+#[cfg(test)]
+mod manifest_resolution_tests {
+    use super::read_manifest_names_server;
+
+    fn check(manifest: &str) -> bool {
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir =
+            std::env::temp_dir().join(format!("turul-derive-manifest-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Cargo.toml"), manifest).unwrap();
+        let found = read_manifest_names_server(dir.to_str().unwrap());
+        std::fs::remove_dir_all(&dir).unwrap();
+        found
+    }
+
+    #[test]
+    fn server_key_resolves_through_server_in_any_order() {
+        let current = "turul-mcp-server = \"0.4\"\n";
+        let legacy = "old = { package = \"turul-mcp-server\", version = \"=0.3.47\" }\n";
+        assert!(check(&format!("[dependencies]\n{current}{legacy}")));
+        assert!(check(&format!("[dependencies]\n{legacy}{current}")));
+    }
+
+    #[test]
+    fn workspace_target_and_self_count() {
+        assert!(check("[dependencies]\nturul-mcp-server.workspace = true\n"));
+        assert!(check(
+            "[target.'cfg(unix)'.dependencies]\nturul-mcp-server = \"0.4\"\n"
+        ));
+        assert!(check("[package]\nname = \"turul-mcp-server\"\n"));
+    }
+
+    #[test]
+    fn alias_only_or_absent_falls_back_to_bare_paths() {
+        assert!(!check(
+            "[dependencies]\nold = { package = \"turul-mcp-server\", version = \"=0.3.47\" }\n"
+        ));
+        assert!(!check("[dependencies]\nturul-mcp-protocol = \"0.4\"\n"));
+        assert!(!check("[dev-dependencies]\nturul-mcp-server = \"0.4\"\n"));
+        assert!(!check("[build-dependencies]\nturul-mcp-server = \"0.4\"\n"));
     }
 }

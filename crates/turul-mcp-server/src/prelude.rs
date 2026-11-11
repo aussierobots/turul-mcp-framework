@@ -27,6 +27,8 @@ pub use crate::http::ServerConfig;
 // Server trait interfaces
 pub use crate::{McpPrompt, McpResource, McpTool};
 
+pub use turul_mcp_derive::*;
+
 // Tasks extension (SEP-2663): how a tool participates in task election.
 // Pairs with `McpServerBuilder::ext_task_tool_with`.
 #[cfg(feature = "ext-tasks")]

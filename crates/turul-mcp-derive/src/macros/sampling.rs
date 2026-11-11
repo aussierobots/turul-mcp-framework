@@ -92,6 +92,11 @@ impl Parse for SamplingMacro {
 
 /// Implementation of the sampling! declarative macro
 pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let sampling_def = syn::parse::<SamplingMacro>(input)?;
 
     let max_tokens = &sampling_def.max_tokens;
@@ -133,10 +138,10 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
     let result = quote! {
         {
-            use turul_mcp_protocol::sampling::*;
-            use turul_mcp_server::McpSampling;
+            use #mcp_protocol::sampling::*;
+            use #mcp_server::McpSampling;
             use std::collections::HashMap;
-            use serde_json::Value;
+            use #json_crate::Value;
 
             #[derive(Clone)]
             struct #struct_name {
@@ -149,31 +154,31 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
             }
 
-            impl turul_mcp_builders::HasSamplingConfig for #struct_name {
+            impl #mcp_builders::HasSamplingConfig for #struct_name {
                 fn max_tokens(&self) -> u32 { #max_tokens }
                 fn temperature(&self) -> Option<f64> { #temperature }
                 fn stop_sequences(&self) -> Option<&Vec<String>> { #stop_sequences }
             }
 
-            impl turul_mcp_builders::HasSamplingContext for #struct_name {
+            impl #mcp_builders::HasSamplingContext for #struct_name {
                 fn messages(&self) -> &[SamplingMessage] { &self.messages }
                 fn system_prompt(&self) -> Option<&str> { #system_prompt }
                 fn include_context(&self) -> Option<&str> { None }
             }
 
-            impl turul_mcp_builders::HasModelPreferences for #struct_name {
-                fn model_preferences(&self) -> Option<&turul_mcp_protocol::sampling::ModelPreferences> { #model_preferences }
-                fn metadata(&self) -> Option<&serde_json::Value> { None }
+            impl #mcp_builders::HasModelPreferences for #struct_name {
+                fn model_preferences(&self) -> Option<&#mcp_protocol::sampling::ModelPreferences> { #model_preferences }
+                fn metadata(&self) -> Option<&#json_crate::Value> { None }
             }
 
-            impl turul_mcp_builders::HasSamplingTools for #struct_name {}
+            impl #mcp_builders::HasSamplingTools for #struct_name {}
 
             // SamplingDefinition automatically implemented via blanket impl!
 
-            #[async_trait::async_trait]
+            #[#async_trait::async_trait]
             impl McpSampling for #struct_name {
-                async fn sample(&self, request: turul_mcp_protocol::sampling::CreateMessageRequest)
-                    -> turul_mcp_protocol::McpResult<turul_mcp_protocol::sampling::CreateMessageResult>
+                async fn sample(&self, request: #mcp_protocol::sampling::CreateMessageRequest)
+                    -> #mcp_protocol::McpResult<#mcp_protocol::sampling::CreateMessageResult>
                 {
                     let handler_fn = #handler;
                     handler_fn(request).await
