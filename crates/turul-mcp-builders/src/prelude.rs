@@ -27,7 +27,6 @@ pub use crate::notification::NotificationBuilder;
 pub use crate::prompt::PromptBuilder;
 pub use crate::resource::ResourceBuilder;
 pub use crate::root::RootBuilder;
-#[cfg(feature = "protocol-2025-11-25")]
 pub use crate::tool::{DynamicToolFn, ToolBuilder};
 
 // Re-export commonly used protocol types for convenience
@@ -38,3 +37,12 @@ pub use turul_mcp_protocol::{
 // Re-export common std/external types
 pub use serde_json::{Value, json};
 pub use std::collections::HashMap;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn tool_builder_is_in_the_prelude_on_every_lane() {
+        use crate::prelude::*;
+        let _builder: ToolBuilder = ToolBuilder::new("echo").description("Echo input");
+    }
+}

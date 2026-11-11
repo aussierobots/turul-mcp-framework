@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.19] - 2026-11-11
+
+`turul-mcp-builders` 0.4.1 → 0.4.2.
+
+### Fixed
+
+- **`turul_mcp_builders::prelude` exports `ToolBuilder` and `DynamicToolFn` on the default
+  2026-07-28 lane.** They were re-exported only on 2025-11-25, although both compile and are
+  exported from the crate root on either lane. Patch release.
+
 ## [0.4.18] - 2026-11-11
 
 `turul-http-mcp-server` 0.4.5 → 0.4.6, `turul-mcp-aws-lambda` 0.4.2 → 0.4.3, `turul-mcp-builders` 0.4.0 → 0.4.1, `turul-mcp-client` 0.4.6 → 0.4.7, `turul-mcp-derive` 0.4.3 → 0.4.4, `turul-mcp-ext-apps` 0.1.0 → 0.1.1, `turul-mcp-ext-tasks` 0.1.5 → 0.1.6, `turul-mcp-oauth` 0.4.0 → 0.4.1, `turul-mcp-protocol` 0.4.0 → 0.4.1, `turul-mcp-protocol-2026-07-28` 0.4.0 → 0.4.1, `turul-mcp-schema-validation` 0.4.2 → 0.4.3, `turul-mcp-server` 0.4.5 → 0.4.6, `turul-mcp-server-state-storage` 0.4.0 → 0.4.1, `turul-mcp-session-storage` 0.4.0 → 0.4.1.
@@ -2748,7 +2758,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.18...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.19...HEAD
+[0.4.19]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.18...v0.4.19
 [0.4.18]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.17...v0.4.18
 [0.4.17]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.16...v0.4.17
 [0.4.16]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.15...v0.4.16
