@@ -6,6 +6,10 @@ license.workspace = true
 repository.workspace = true
 description = "OAuth 2.1 Resource Server support for Turul MCP framework"
 readme = "README.md"
+documentation = "https://docs.rs/turul-mcp-oauth"
+homepage.workspace = true
+keywords.workspace = true
+categories = ["network-programming"]
 
 [features]
 # Spec selection forwards to the transport/storage deps (one per build —

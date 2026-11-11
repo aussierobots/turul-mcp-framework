@@ -10,6 +10,7 @@ description = "Runtime builders for MCP (Model Context Protocol) components"
 readme = "README.md"
 keywords = ["mcp", "protocol", "builders", "runtime"]
 categories = ["development-tools", "api-bindings"]
+documentation = "https://docs.rs/turul-mcp-builders"
 
 [features]
 default = ["protocol-2026-07-28"]

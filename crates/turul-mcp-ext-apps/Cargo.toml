@@ -10,6 +10,9 @@ repository.workspace = true
 homepage.workspace = true
 description = "MCP Apps extension (io.modelcontextprotocol/ui, SEP-1865) MCP-side types — spec-neutral crate, 2026-07-28 lane first"
 readme = "README.md"
+documentation = "https://docs.rs/turul-mcp-ext-apps"
+keywords.workspace = true
+categories = ["network-programming"]
 
 [features]
 default = ["protocol-2026-07-28"]

@@ -8,6 +8,9 @@ repository.workspace = true
 homepage.workspace = true
 description = "HTTP transport layer for Model Context Protocol (MCP) servers"
 readme = "README.md"
+documentation = "https://docs.rs/turul-http-mcp-server"
+keywords.workspace = true
+categories = ["network-programming"]
 
 [features]
 default = ["sse", "protocol-2026-07-28"]

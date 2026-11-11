@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Point package homepages and project links to Aussie Robots; add explicit API documentation links and review discovery metadata.
+
+
 ## [0.4.17] - 2026-10-23
 
 `turul-mcp-client` 0.4.5 → 0.4.6.
