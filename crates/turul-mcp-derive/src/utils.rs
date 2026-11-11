@@ -1507,8 +1507,10 @@ fn generate_basic_type_schema_content(ty: &syn::Type, field_name: &str) -> Token
 // so the resolution strategy lives in one place. When the calling crate is
 // `turul-mcp-server` or lists it under `[dependencies]` (plain or target-specific),
 // everything resolves through it; otherwise the bare crate names are emitted and the
-// caller must depend on them directly. Dev-dependencies do not count: a library with
-// the server only for its tests still compiles its lib target without it. Only the
+// caller must depend on them directly. A server under `[dev-dependencies]` counts only
+// when neither `turul-mcp-protocol` nor `turul-mcp-builders` is a regular dependency:
+// without them the lib target cannot expand these macros on either path, so the
+// macros can only be in test code, where the server is present. Only the
 // `turul-mcp-server` key counts: a crate may also carry an older server under an
 // alias, and that one has no `__private` module.
 
@@ -1551,23 +1553,22 @@ fn read_manifest_names_server(dir: &str) -> bool {
         .and_then(|n| n.as_str())
         == Some(SERVER);
 
-    let lists_server = |table: &toml::Table| {
-        table
-            .get("dependencies")
-            .and_then(|d| d.get(SERVER))
-            .is_some()
-    };
-    let in_targets = manifest
+    let targets: Vec<&toml::Table> = manifest
         .get("target")
         .and_then(|t| t.as_table())
-        .is_some_and(|targets| {
-            targets
-                .values()
-                .filter_map(|t| t.as_table())
-                .any(lists_server)
-        });
+        .map(|t| t.values().filter_map(|t| t.as_table()).collect())
+        .unwrap_or_default();
+    let lists = |section: &str, krate: &str| {
+        std::iter::once(&manifest)
+            .chain(targets.iter().copied())
+            .any(|table| table.get(section).and_then(|d| d.get(krate)).is_some())
+    };
 
-    is_server || lists_server(&manifest) || in_targets
+    is_server
+        || lists("dependencies", SERVER)
+        || (lists("dev-dependencies", SERVER)
+            && !lists("dependencies", "turul-mcp-protocol")
+            && !lists("dependencies", "turul-mcp-builders"))
 }
 
 fn private(bare: &str) -> TokenStream {
@@ -1656,7 +1657,25 @@ mod manifest_resolution_tests {
             "[dependencies]\nold = { package = \"turul-mcp-server\", version = \"=0.3.47\" }\n"
         ));
         assert!(!check("[dependencies]\nturul-mcp-protocol = \"0.4\"\n"));
-        assert!(!check("[dev-dependencies]\nturul-mcp-server = \"0.4\"\n"));
         assert!(!check("[build-dependencies]\nturul-mcp-server = \"0.4\"\n"));
+    }
+
+    #[test]
+    fn dev_only_server_counts_unless_lib_names_the_bare_crates() {
+        let dev = "[dev-dependencies]\nturul-mcp-server = \"0.4\"\n";
+        assert!(check(dev));
+        assert!(check(&format!("{dev}turul-mcp-protocol = \"0.4\"\n")));
+        assert!(check(
+            "[target.'cfg(unix)'.dev-dependencies]\nturul-mcp-server = \"0.4\"\n"
+        ));
+        assert!(!check(&format!(
+            "{dev}[dependencies]\nturul-mcp-protocol = \"0.4\"\n"
+        )));
+        assert!(!check(&format!(
+            "{dev}[dependencies]\nturul-mcp-builders = \"0.4\"\n"
+        )));
+        assert!(!check(&format!(
+            "{dev}[target.'cfg(unix)'.dependencies]\nturul-mcp-protocol = \"0.4\"\n"
+        )));
     }
 }
