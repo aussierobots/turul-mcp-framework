@@ -1,22 +1,41 @@
-//! # MCP Apps Extension (`io.modelcontextprotocol/ui`, SEP-1865)
+//! Types for the MCP Apps extension (`io.modelcontextprotocol/ui`): UI views
+//! that an MCP server serves as `ui://` resources and links from tools.
 //!
-//! Spec-neutral host crate for the MCP-side surface of the Apps extension:
-//! UI views embedded in AI chat hosts, served by MCP servers as `ui://`
-//! resources and linked from tools via `_meta.ui`.
+//! Most users want [`turul-mcp-server`](https://docs.rs/turul-mcp-server); this
+//! crate holds the extension's wire types for the 2026-07-28 spec lane. It
+//! covers the client capability ([`UiClientCapabilities`]), tool metadata
+//! ([`UiToolMeta`]) and UI resource metadata ([`UiResourceMeta`]). The
+//! host-to-view iframe protocol is left to app and host SDKs.
 //!
-//! Scope: this crate binds what an MCP **server** declares —
-//! - the client capability shape under `capabilities.extensions`
-//!   ([`UiClientCapabilities`], identifier [`EXTENSION_IDENTIFIER`])
-//! - tool `_meta.ui` metadata ([`UiToolMeta`]: `resourceUri`, `visibility`)
-//! - UI-resource `_meta.ui` metadata ([`UiResourceMeta`]: CSP, sandbox
-//!   permissions, dedicated origin, border preference)
+//! # Example
 //!
-//! The host↔view iframe protocol (`ui/*` methods over postMessage) belongs to
-//! app/host SDKs and is deliberately not bound here.
+//! Link a tool to its UI resource under `_meta.ui`:
 //!
-//! The Apps protocol versions independently of core MCP (current: 2026-01-26);
-//! this crate's `v2026_07_28` module names the CORE spec lane it pairs with.
-//! Schema provenance: `schema/README.md`.
+//! ```toml
+//! [dependencies]
+//! turul-mcp-ext-apps = "0.1"
+//! serde_json = "1"
+//! ```
+//!
+//! ```rust
+//! use turul_mcp_ext_apps::{META_KEY_UI, UiToolMeta, UiToolVisibility};
+//!
+//! # fn main() -> Result<(), serde_json::Error> {
+//! let meta = UiToolMeta {
+//!     resource_uri: Some("ui://weather/view.html".into()),
+//!     visibility: Some(vec![UiToolVisibility::Model, UiToolVisibility::App]),
+//! };
+//! let tool_meta = serde_json::json!({ META_KEY_UI: serde_json::to_value(&meta)? });
+//! assert_eq!(tool_meta["ui"]["resourceUri"], "ui://weather/view.html");
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Where next
+//!
+//! - [`UiResourceMeta`] for CSP, sandbox permissions and border preference
+//! - [`client_supports_html_views`] to check a client's declared capability
+//! - [MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps)
 
 #[cfg(feature = "protocol-2026-07-28")]
 pub mod v2026_07_28;

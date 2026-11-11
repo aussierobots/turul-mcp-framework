@@ -20,6 +20,9 @@ pub fn elicitation_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 pub fn elicitation_declarative_impl_inner(
     input: ElicitationMacroInput,
 ) -> proc_macro2::TokenStream {
+    let mcp_derive = crate::utils::derive_path();
+    let serde_attr = crate::utils::serde_attr_path();
+    let serde_crate = crate::utils::serde_path();
     let elicitation_name_ident = syn::Ident::new(
         &format!("{}Elicitation", capitalize(&input.name)),
         proc_macro2::Span::call_site(),
@@ -30,8 +33,9 @@ pub fn elicitation_declarative_impl_inner(
     let default_impl = generate_default_impl(&elicitation_name_ident, &input.fields);
 
     quote! {
-        #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(turul_mcp_derive::McpElicitation)]
+        #[derive(Clone, Debug, #serde_crate::Serialize, #serde_crate::Deserialize)]
+        #serde_attr
+        #[derive(#mcp_derive::McpElicitation)]
         #[elicitation(message = #message)]
         pub struct #elicitation_name_ident {
             #struct_fields

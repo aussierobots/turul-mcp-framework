@@ -1,50 +1,71 @@
-//! # HTTP MCP Server
+//! HTTP transport for [Model Context Protocol](https://modelcontextprotocol.io) servers:
+//! Streamable HTTP routing, CORS, Origin checks and SSE streaming on top of hyper.
 //!
-//! **Production HTTP transport layer for Model Context Protocol (MCP) servers.**
+//! Most users want [`turul-mcp-server`](https://docs.rs/turul-mcp-server), which
+//! builds on this crate and adds tools, resources, prompts and macros. Use this
+//! crate directly only to embed the HTTP transport around your own JSON-RPC
+//! handlers.
 //!
-//! Provides both modern Streamable HTTP and legacy HTTP+SSE transports with automatic
-//! protocol detection, CORS support, and session management for maximum compatibility.
-//!
-//! [![Crates.io](https://img.shields.io/crates/v/turul-http-mcp-server.svg)](https://crates.io/crates/turul-http-mcp-server)
-//! [![Documentation](https://docs.rs/turul-http-mcp-server/badge.svg)](https://docs.rs/turul-http-mcp-server)
-//!
-//! ## Installation
+//! # Example
 //!
 //! ```toml
 //! [dependencies]
 //! turul-http-mcp-server = "0.4"
-//! turul-mcp-server = "0.4"
+//! turul-mcp-protocol = "0.4"
+//! turul-rpc = "0.2"
+//! async-trait = "0.1"
+//! serde_json = "1"
+//! tokio = { version = "1", features = ["full"] }
 //! ```
-//!
-//! ## Supported Transports
-//! - **Streamable HTTP**: Recommended for production deployments
-//! - **HTTP+SSE**: Legacy transport for backwards compatibility
-//!
-//! ## Features
-//! - Automatic protocol version detection and routing
-//! - CORS support for browser-based clients
-//! - Session management with cryptographically secure IDs
-//! - Graceful error handling and JSON-RPC 2.0 compliance
-//!
-//! ## Quick Start
 //!
 //! ```rust,no_run
-//! use turul_http_mcp_server::HttpMcpServerBuilder;
-//! use std::net::SocketAddr;
+//! use turul_http_mcp_server::{HttpMcpServerBuilder, JsonRpcHandler, McpError};
+//! use turul_mcp_protocol::tools::{ListToolsResult, Tool, ToolSchema};
 //!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let addr: SocketAddr = "127.0.0.1:8080".parse()?;
-//!     let server = HttpMcpServerBuilder::new()
-//!         .bind_address(addr)
-//!         .cors(true)
-//!         .build();
+//! struct ToolList;
 //!
-//!     println!("Server running on http://127.0.0.1:8080/mcp");
-//!     server.run().await?;
-//!     Ok(())
+//! #[async_trait::async_trait]
+//! impl JsonRpcHandler for ToolList {
+//!     type Error = McpError;
+//!
+//!     async fn handle(
+//!         &self,
+//!         _method: &str,
+//!         _params: Option<turul_rpc::RequestParams>,
+//!         _session: Option<turul_rpc::SessionContext>,
+//!     ) -> Result<serde_json::Value, McpError> {
+//!         let tools = ListToolsResult::new(vec![Tool::new("ping", ToolSchema::object())]);
+//!         Ok(serde_json::to_value(tools)?)
+//!     }
 //! }
+//!
+//! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
+//! let server = HttpMcpServerBuilder::new()
+//!     .bind_address("127.0.0.1:8000".parse()?)
+//!     .register_handler(vec!["tools/list".to_string()], ToolList)
+//!     .build();
+//! server.run().await?;
+//! # Ok(())
+//! # }
 //! ```
+//!
+//! The endpoint is `http://127.0.0.1:8080/mcp`; change it with
+//! [`HttpMcpServerBuilder::mcp_path`].
+//!
+//! # Features
+//!
+//! | Feature | Default | Enables |
+//! |---|---|---|
+//! | `sse` | yes | Server-sent event streams |
+//! | `protocol-2026-07-28` | yes | MCP 2026-07-28 (stateless core) |
+//! | `protocol-2025-11-25` | no | MCP 2025-11-25 sessions; use `--no-default-features --features sse,protocol-2025-11-25` |
+//!
+//! # Where next
+//!
+//! - [`HttpMcpServerBuilder`] for every transport option
+//! - [`StreamableHttpHandler`] to mount the transport in your own hyper service
+//! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server) for the full server
+//! - [Examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 
 pub mod cors;
 pub mod handler;

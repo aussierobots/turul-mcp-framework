@@ -95,7 +95,7 @@ fn split_icons_attr(attrs: &[syn::Attribute]) -> Result<(Option<syn::Expr>, Vec<
             if value.is_empty() {
                 return Err(syn::Error::new_spanned(
                     attr,
-                    "icons must be `icons = <expr>` yielding Vec<turul_mcp_protocol::icons::Icon>",
+                    "icons must be `icons = <expr>` yielding Vec<::turul_mcp_server::__private::turul_mcp_protocol::icons::Icon>",
                 ));
             }
             icons = Some(syn::parse2(value)?);
@@ -112,23 +112,30 @@ fn split_icons_attr(attrs: &[syn::Attribute]) -> Result<(Option<syn::Expr>, Vec<
 /// (no icons) impl is emitted; the trait is a supertrait of `ToolDefinition`,
 /// so some impl is always required.
 pub(crate) fn generate_icons_impl(name: &syn::Ident, icons: Option<&syn::Expr>) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     match icons {
         Some(expr) => quote! {
-            impl turul_mcp_builders::traits::HasIcons for #name {
-                fn icons(&self) -> Option<&Vec<turul_mcp_protocol::icons::Icon>> {
-                    static ICONS: std::sync::OnceLock<Vec<turul_mcp_protocol::icons::Icon>> =
+            impl #mcp_builders::traits::HasIcons for #name {
+                fn icons(&self) -> Option<&Vec<#mcp_protocol::icons::Icon>> {
+                    static ICONS: std::sync::OnceLock<Vec<#mcp_protocol::icons::Icon>> =
                         std::sync::OnceLock::new();
                     Some(ICONS.get_or_init(|| #expr))
                 }
             }
         },
         None => quote! {
-            impl turul_mcp_builders::traits::HasIcons for #name {}
+            impl #mcp_builders::traits::HasIcons for #name {}
         },
     }
 }
 
 pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let name = &input.ident;
 
     // AUTO-DETERMINE tool name from struct name (ZERO CONFIGURATION!)
@@ -277,7 +284,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         // Previously this introspected Self, which incorrectly used input fields as
         // the output schema. Use #[tool(output = Type)] for explicit output schemas.
         quote! {
-            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
                 None
             }
         }
@@ -286,34 +293,34 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     // Generate HasExecution impl based on task_support attribute
     let execution_impl = match tool_meta.task_support.as_deref() {
         Some("optional") => quote! {
-            impl turul_mcp_builders::traits::HasExecution for #name {
-                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
-                    Some(turul_mcp_protocol::tools::ToolExecution {
-                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Optional),
+            impl #mcp_builders::traits::HasExecution for #name {
+                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
+                    Some(#mcp_protocol::tools::ToolExecution {
+                        task_support: Some(#mcp_protocol::tools::TaskSupport::Optional),
                     })
                 }
             }
         },
         Some("required") => quote! {
-            impl turul_mcp_builders::traits::HasExecution for #name {
-                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
-                    Some(turul_mcp_protocol::tools::ToolExecution {
-                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Required),
+            impl #mcp_builders::traits::HasExecution for #name {
+                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
+                    Some(#mcp_protocol::tools::ToolExecution {
+                        task_support: Some(#mcp_protocol::tools::TaskSupport::Required),
                     })
                 }
             }
         },
         Some("forbidden") => quote! {
-            impl turul_mcp_builders::traits::HasExecution for #name {
-                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
-                    Some(turul_mcp_protocol::tools::ToolExecution {
-                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Forbidden),
+            impl #mcp_builders::traits::HasExecution for #name {
+                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
+                    Some(#mcp_protocol::tools::ToolExecution {
+                        task_support: Some(#mcp_protocol::tools::TaskSupport::Forbidden),
                     })
                 }
             }
         },
         _ => quote! {
-            impl turul_mcp_builders::traits::HasExecution for #name {}
+            impl #mcp_builders::traits::HasExecution for #name {}
         },
     };
 
@@ -325,7 +332,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let expanded = quote! {
         #[automatically_derived]
         // Generate fine-grained trait implementations
-        impl turul_mcp_builders::traits::HasBaseMetadata for #name {
+        impl #mcp_builders::traits::HasBaseMetadata for #name {
             fn name(&self) -> &str {
                 #tool_name
             }
@@ -335,20 +342,20 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_builders::traits::HasDescription for #name {
+        impl #mcp_builders::traits::HasDescription for #name {
             fn description(&self) -> Option<&str> {
                 Some(#tool_description)
             }
         }
 
-        impl turul_mcp_builders::traits::HasInputSchema for #name {
-            fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
+        impl #mcp_builders::traits::HasInputSchema for #name {
+            fn input_schema(&self) -> &#mcp_protocol::tools::ToolSchema {
                 // Generate static schema at compile time
-                static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                static INPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                 INPUT_SCHEMA.get_or_init(|| {
                     use std::collections::HashMap;
-                    let mut schema = turul_mcp_protocol::tools::ToolSchema::object()
-                        .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                    let mut schema = #mcp_protocol::tools::ToolSchema::object()
+                        .with_properties(#mcp_builders::tool_props(HashMap::from([
                             #(#schema_properties),*
                         ])))
                         .with_required(vec![
@@ -360,7 +367,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_builders::traits::HasOutputSchema for #name {
+        impl #mcp_builders::traits::HasOutputSchema for #name {
             #output_schema_tokens
         }
 
@@ -368,17 +375,17 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         impl #name {
             /// Generate schema using heuristics from struct name and common patterns
             /// Note: Zero-config mode has limitations for struct outputs - use #[tool(output = Type)] for exact schemas
-            fn generate_heuristic_schema(field_name: &str, struct_name: &str) -> turul_mcp_protocol::tools::ToolSchema {
+            fn generate_heuristic_schema(field_name: &str, struct_name: &str) -> #mcp_protocol::tools::ToolSchema {
                 use std::collections::HashMap;
-                use turul_mcp_protocol::schema::JsonSchema;
+                use #mcp_protocol::schema::JsonSchema;
 
                 // For struct outputs in zero-config mode, we can't predict the exact field name
                 // since it depends on the actual return type. Use a flexible schema instead.
                 if struct_name.contains("Struct") || struct_name.contains("Complex") || struct_name.contains("Result") {
                     // Generate flexible object schema that accepts any properties
-                    let mut schema = turul_mcp_protocol::tools::ToolSchema::object();
-                    schema.additional.insert("additionalProperties".to_string(), serde_json::json!(true));
-                    schema.additional.insert("description".to_string(), serde_json::json!("Complex object output (zero-config heuristic)"));
+                    let mut schema = #mcp_protocol::tools::ToolSchema::object();
+                    schema.additional.insert("additionalProperties".to_string(), #json_crate::json!(true));
+                    schema.additional.insert("description".to_string(), #json_crate::json!("Complex object output (zero-config heuristic)"));
                     return schema;
                 }
 
@@ -407,25 +414,25 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                     }
                 };
 
-                turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                #mcp_protocol::tools::ToolSchema::object()
+                    .with_properties(#mcp_builders::tool_props(HashMap::from([
                         (field_name.to_string(), field_schema)
                     ])))
                     .with_required(vec![field_name.to_string()])
             }
 
             /// Update schema based on actual return value (called during execution)
-            fn update_schema_from_value(field_name: &str, value: &serde_json::Value) -> turul_mcp_protocol::tools::ToolSchema {
+            fn update_schema_from_value(field_name: &str, value: &#json_crate::Value) -> #mcp_protocol::tools::ToolSchema {
                 use std::collections::HashMap;
-                use turul_mcp_protocol::schema::JsonSchema;
+                use #mcp_protocol::schema::JsonSchema;
 
-                fn infer_schema(value: &serde_json::Value) -> JsonSchema {
+                fn infer_schema(value: &#json_crate::Value) -> JsonSchema {
                     match value {
-                        serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
-                        serde_json::Value::Number(_) => JsonSchema::integer(),
-                        serde_json::Value::String(_) => JsonSchema::string(),
-                        serde_json::Value::Bool(_) => JsonSchema::boolean(),
-                        serde_json::Value::Array(arr) => {
+                        #json_crate::Value::Number(n) if n.is_f64() => JsonSchema::number(),
+                        #json_crate::Value::Number(_) => JsonSchema::integer(),
+                        #json_crate::Value::String(_) => JsonSchema::string(),
+                        #json_crate::Value::Bool(_) => JsonSchema::boolean(),
+                        #json_crate::Value::Array(arr) => {
                             let item_schema = arr.first().map(|item| Box::new(infer_schema(item)));
                             JsonSchema::Array {
                                 description: Some("Array output".to_string()),
@@ -434,7 +441,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                                 max_items: None,
                             }
                         }
-                        serde_json::Value::Object(obj) => {
+                        #json_crate::Value::Object(obj) => {
                             let mut properties = HashMap::new();
                             let mut required = Vec::new();
                             for (key, value) in obj.iter() {
@@ -448,7 +455,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                                 additional_properties: Some(false),
                             }
                         }
-                        serde_json::Value::Null => JsonSchema::Object {
+                        #json_crate::Value::Null => JsonSchema::Object {
                             description: Some("JSON value".to_string()),
                             properties: None,
                             required: None,
@@ -459,8 +466,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
                 let field_schema = infer_schema(value);
 
-                turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([
+                #mcp_protocol::tools::ToolSchema::object()
+                    .with_properties(#mcp_builders::tool_props(HashMap::from([
                         (field_name.to_string(), field_schema)
                     ])))
                     .with_required(vec![field_name.to_string()])
@@ -469,8 +476,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
         #annotations_impl
 
-        impl turul_mcp_builders::traits::HasToolMeta for #name {
-            fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+        impl #mcp_builders::traits::HasToolMeta for #name {
+            fn tool_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
                 None
             }
         }
@@ -482,12 +489,12 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         // ToolDefinition automatically implemented via trait composition!
 
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpTool for #name {
-            async fn call(&self, args: serde_json::Value, session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
-                let outcome: turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> = async {
-                use serde_json::Value;
-                use turul_mcp_builders::traits::HasOutputSchema;
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpTool for #name {
+            async fn call(&self, args: #json_crate::Value, session: Option<#mcp_server::SessionContext>) -> #mcp_server::McpResult<#mcp_protocol::tools::CallToolResult> {
+                let outcome: #mcp_server::McpResult<#mcp_protocol::tools::CallToolResult> = async {
+                use #json_crate::Value;
+                use #mcp_builders::traits::HasOutputSchema;
 
                 #undeclared_arg_check
 
@@ -503,8 +510,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 match instance.execute(session).await {
                     Ok(result) => {
                         // Serialize result for output
-                        let result_value = serde_json::to_value(&result)
-                            .map_err(|e| turul_mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
+                        let result_value = #json_crate::to_value(&result)
+                            .map_err(|e| #mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
 
                         // Determine field name using enhanced logic with custom field support
                         let field_name = {
@@ -520,7 +527,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                         };
 
                         // Wrap result to match MCP object schema format
-                        let wrapped_result = serde_json::json!({&field_name: result_value});
+                        let wrapped_result = #json_crate::json!({&field_name: result_value});
 
                         // Correct schema if needed (zero-config type mismatch fix)
                         let corrected_schema = if let Some(schema) = self.output_schema() {
@@ -528,7 +535,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                             let needs_correction = if let Some(props) = &schema.properties {
                                 if let Some(output_schema) = props.get(&field_name) {
                                     // Schema says "object" but the value is an array.
-                                    turul_mcp_builders::tool_prop_is_object(output_schema) && result_value.is_array()
+                                    #mcp_builders::tool_prop_is_object(output_schema) && result_value.is_array()
                                 } else {
                                     false
                                 }
@@ -539,15 +546,15 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                             if needs_correction {
                                 // Generate corrected schema with array type
                                 use std::collections::HashMap;
-                                use turul_mcp_protocol::schema::JsonSchema;
+                                use #mcp_protocol::schema::JsonSchema;
                                 let array_schema = JsonSchema::Array {
                                     description: Some("Array of items".to_string()),
                                     items: None,
                                     min_items: None,
                                     max_items: None,
                                 };
-                                Some(turul_mcp_protocol::tools::ToolSchema::object()
-                                    .with_properties(turul_mcp_builders::tool_props(HashMap::from([(field_name.clone(), array_schema)])))
+                                Some(#mcp_protocol::tools::ToolSchema::object()
+                                    .with_properties(#mcp_builders::tool_props(HashMap::from([(field_name.clone(), array_schema)])))
                                     .with_required(vec![field_name.clone()]))
                             } else {
                                 Some(schema.clone())
@@ -557,7 +564,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                         };
 
                         // Return structured result with corrected schema
-                        turul_mcp_protocol::tools::CallToolResult::from_result_auto(&wrapped_result, corrected_schema.as_ref())
+                        #mcp_protocol::tools::CallToolResult::from_result_auto(&wrapped_result, corrected_schema.as_ref())
                     }
                     // `ToolExecutionError` is the one variant that means "the tool ran and
                     // failed", so it is the one the spec wants reported as a RESULT —
@@ -573,9 +580,9 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                     // `MissingRequiredClientCapability` is the spec's -32021 gate.
                     // Swallowing either into `isError` silently breaks the feature — an
                     // earlier, blanket version of this change failed 7 MRTR wire tests.
-                    Err(turul_mcp_protocol::McpError::ToolExecutionError(msg)) => {
-                        Ok(turul_mcp_protocol::tools::CallToolResult::error(vec![
-                            turul_mcp_protocol::tools::ToolResult::text(msg)
+                    Err(#mcp_protocol::McpError::ToolExecutionError(msg)) => {
+                        Ok(#mcp_protocol::tools::CallToolResult::error(vec![
+                            #mcp_protocol::tools::ToolResult::text(msg)
                         ]))
                     }
                     Err(e) => Err(e)

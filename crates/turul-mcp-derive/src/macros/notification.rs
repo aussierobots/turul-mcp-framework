@@ -20,6 +20,9 @@ pub fn notification_declarative_impl(input: TokenStream) -> Result<TokenStream> 
 pub fn notification_declarative_impl_inner(
     input: NotificationMacroInput,
 ) -> proc_macro2::TokenStream {
+    let mcp_derive = crate::utils::derive_path();
+    let serde_attr = crate::utils::serde_attr_path();
+    let serde_crate = crate::utils::serde_path();
     let notification_name_ident = syn::Ident::new(
         &format!("{}Notification", capitalize(&input.name)),
         proc_macro2::Span::call_site(),
@@ -29,8 +32,9 @@ pub fn notification_declarative_impl_inner(
     let default_impl = generate_default_impl(&notification_name_ident, &input.fields);
 
     quote! {
-        #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(turul_mcp_derive::McpNotification)]
+        #[derive(Clone, Debug, #serde_crate::Serialize, #serde_crate::Deserialize)]
+        #serde_attr
+        #[derive(#mcp_derive::McpNotification)]
         pub struct #notification_name_ident {
             #struct_fields
         }

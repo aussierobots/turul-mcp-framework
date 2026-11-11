@@ -7,8 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.18] - 2026-11-11
+
+`turul-http-mcp-server` 0.4.5 → 0.4.6, `turul-mcp-aws-lambda` 0.4.2 → 0.4.3, `turul-mcp-builders` 0.4.0 → 0.4.1, `turul-mcp-client` 0.4.6 → 0.4.7, `turul-mcp-derive` 0.4.3 → 0.4.4, `turul-mcp-ext-apps` 0.1.0 → 0.1.1, `turul-mcp-ext-tasks` 0.1.5 → 0.1.6, `turul-mcp-oauth` 0.4.0 → 0.4.1, `turul-mcp-protocol` 0.4.0 → 0.4.1, `turul-mcp-protocol-2026-07-28` 0.4.0 → 0.4.1, `turul-mcp-schema-validation` 0.4.2 → 0.4.3, `turul-mcp-server` 0.4.5 → 0.4.6, `turul-mcp-server-state-storage` 0.4.0 → 0.4.1, `turul-mcp-session-storage` 0.4.0 → 0.4.1.
+
 ### Changed
 
+- **The macros work with `turul-mcp-server` and `tokio` alone.** `turul-mcp-server` now
+  depends on `turul-mcp-derive` and re-exports every macro from `turul_mcp_server::prelude`, so
+  `use turul_mcp_server::prelude::*;` brings `#[mcp_tool]`, `#[derive(McpTool)]` and the rest.
+  When the calling crate's `Cargo.toml` lists `turul-mcp-server` under `[dependencies]`
+  (plain or target-specific; dev-dependencies do not count), generated code resolves
+  `turul_mcp_protocol`, `turul_mcp_builders`, `turul_mcp_derive`, `serde`, `serde_json` and
+  `async_trait` through the hidden `turul_mcp_server::__private` module; a crate that does not list
+  it gets the same bare paths as before. A server dependency under another name (for example an
+  aliased `0.3.47`) is not followed. Update `turul-mcp-server` and `turul-mcp-derive` together:
+  a new `turul-mcp-derive` with an older `turul-mcp-server` fails on the missing `__private`
+  module. `turul-mcp-derive` gains a `toml` dependency to read the caller's manifest.
+  **Classification: patch, non-breaking** — existing dependency sets and imports compile
+  unchanged.
+- **Crate front pages on docs.rs rewritten.** Each crate opens with what it is for, one short
+  compiling example and, where the crate has features, a feature table, and points to
+  `turul-mcp-server` as the entry point. Claims that only held on the 2025-11-25 lane (sessions, session storage on Lambda,
+  `initialize`) are removed from the default-lane pages; `turul-mcp-session-storage` states it
+  serves the 2025-11-25 lane only. Two broken intra-doc links in `turul-mcp-client` fixed.
 - Point package homepages and project links to Aussie Robots; add explicit API documentation links and review discovery metadata.
 
 
@@ -2726,7 +2748,11 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.14...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.18...HEAD
+[0.4.18]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.17...v0.4.18
+[0.4.17]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.16...v0.4.17
+[0.4.16]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.15...v0.4.16
+[0.4.15]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.14...v0.4.15
 [0.4.14]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.13...v0.4.14
 [0.4.13]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.12...v0.4.13
 [0.4.12]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.11...v0.4.12

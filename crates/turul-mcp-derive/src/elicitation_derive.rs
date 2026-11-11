@@ -7,6 +7,11 @@ use syn::{Data, DeriveInput, Field, Fields, Result};
 use crate::utils::{extract_elicitation_meta, extract_field_meta};
 
 pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
     // Extract struct-level attributes from #[elicitation(...)]
@@ -29,18 +34,18 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_builders::HasElicitationMetadata for #struct_name {
+        impl #mcp_builders::HasElicitationMetadata for #struct_name {
             fn message(&self) -> &str {
                 #message
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasElicitationSchema for #struct_name {
-            fn requested_schema(&self) -> &turul_mcp_protocol::elicitation::ElicitationSchema {
+        impl #mcp_builders::HasElicitationSchema for #struct_name {
+            fn requested_schema(&self) -> &#mcp_protocol::elicitation::ElicitationSchema {
                 use std::sync::LazyLock;
-                static SCHEMA: LazyLock<turul_mcp_protocol::elicitation::ElicitationSchema> = LazyLock::new(|| {
-                    let mut schema = turul_mcp_protocol::elicitation::ElicitationSchema::new();
+                static SCHEMA: LazyLock<#mcp_protocol::elicitation::ElicitationSchema> = LazyLock::new(|| {
+                    let mut schema = #mcp_protocol::elicitation::ElicitationSchema::new();
                     #(#schema_fields)*
                     schema
                 });
@@ -49,30 +54,30 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasElicitationHandling for #struct_name {}
+        impl #mcp_builders::HasElicitationHandling for #struct_name {}
 
         // ElicitationDefinition is automatically implemented via blanket impl
 
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpElicitation for #struct_name {
-            async fn elicit(&self, request: turul_mcp_protocol::elicitation::ElicitCreateRequest) -> turul_mcp_protocol::McpResult<turul_mcp_protocol::elicitation::ElicitResult> {
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpElicitation for #struct_name {
+            async fn elicit(&self, request: #mcp_protocol::elicitation::ElicitCreateRequest) -> #mcp_protocol::McpResult<#mcp_protocol::elicitation::ElicitResult> {
                 // Default implementation - this should be overridden by implementing elicit_impl
                 match self.elicit_impl(request).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e)),
+                    Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }
 
         impl #struct_name {
             /// Override this method to provide custom elicitation logic
-            pub async fn elicit_impl(&self, _request: turul_mcp_protocol::elicitation::ElicitCreateRequest) -> Result<turul_mcp_protocol::elicitation::ElicitResult, String> {
+            pub async fn elicit_impl(&self, _request: #mcp_protocol::elicitation::ElicitCreateRequest) -> Result<#mcp_protocol::elicitation::ElicitResult, String> {
                 // Default: return a sample result
                 use std::collections::HashMap;
                 let mut content = HashMap::new();
-                content.insert("response".to_string(), serde_json::Value::String("User input collected".to_string()));
-                Ok(turul_mcp_builders::elicitation::ElicitResultBuilder::accept(content))
+                content.insert("response".to_string(), #json_crate::Value::String("User input collected".to_string()));
+                Ok(#mcp_builders::elicitation::ElicitResultBuilder::accept(content))
             }
         }
     };
@@ -117,6 +122,7 @@ fn generate_schema_fields(
 }
 
 fn generate_field_schema(field: &Field) -> Result<TokenStream> {
+    let mcp_protocol = crate::utils::protocol_path();
     let field_meta = extract_field_meta(&field.attrs)?;
     let description = field_meta
         .description
@@ -127,7 +133,7 @@ fn generate_field_schema(field: &Field) -> Result<TokenStream> {
     let schema = match type_name {
         syn::Type::Path(path) if path.path.is_ident("String") => {
             quote! {
-                turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string_with_description(#description)
+                #mcp_protocol::elicitation::PrimitiveSchemaDefinition::string_with_description(#description)
             }
         }
         syn::Type::Path(path)
@@ -136,7 +142,7 @@ fn generate_field_schema(field: &Field) -> Result<TokenStream> {
                 || path.path.is_ident("isize") =>
         {
             quote! {
-                turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::Integer {
+                #mcp_protocol::elicitation::PrimitiveSchemaDefinition::Integer {
                     title: None,
                     description: Some(#description.to_string()),
                     minimum: None,
@@ -146,7 +152,7 @@ fn generate_field_schema(field: &Field) -> Result<TokenStream> {
         }
         syn::Type::Path(path) if path.path.is_ident("f32") || path.path.is_ident("f64") => {
             quote! {
-                turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::Number {
+                #mcp_protocol::elicitation::PrimitiveSchemaDefinition::Number {
                     title: None,
                     description: Some(#description.to_string()),
                     minimum: None,
@@ -156,7 +162,7 @@ fn generate_field_schema(field: &Field) -> Result<TokenStream> {
         }
         syn::Type::Path(path) if path.path.is_ident("bool") => {
             quote! {
-                turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::Boolean {
+                #mcp_protocol::elicitation::PrimitiveSchemaDefinition::Boolean {
                     title: None,
                     description: Some(#description.to_string()),
                     default: None,
@@ -166,7 +172,7 @@ fn generate_field_schema(field: &Field) -> Result<TokenStream> {
         _ => {
             // Default to string for unknown types
             quote! {
-                turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string_with_description(#description)
+                #mcp_protocol::elicitation::PrimitiveSchemaDefinition::string_with_description(#description)
             }
         }
     };

@@ -1,62 +1,73 @@
-//! AWS Lambda integration for turul-mcp-framework
+//! Run [Model Context Protocol](https://modelcontextprotocol.io) servers on AWS Lambda
+//! behind API Gateway or a function URL.
 //!
-//! This crate provides seamless integration between the turul-mcp-framework and AWS Lambda,
-//! enabling serverless deployment of MCP servers with proper session management, CORS handling,
-//! and SSE streaming support.
+//! This crate adapts `lambda_http` requests to the framework's server and returns
+//! responses, including streamed ones, in Lambda's format. It is built on
+//! [`turul-mcp-server`](https://docs.rs/turul-mcp-server), which supplies the macros
+//! and the prelude. On MCP 2026-07-28 the server is stateless, so it needs no
+//! session storage.
 //!
-//! ## Architecture
+//! # Example
 //!
-//! The crate bridges the gap between Lambda's HTTP execution model and the framework's
-//! hyper-based architecture through:
-//!
-//! - **Type Conversion**: Clean conversion between `lambda_http` and `hyper` types
-//! - **Handler Registration**: Direct tool registration with `JsonRpcDispatcher`
-//! - **Session Management**: DynamoDB-backed session persistence across invocations
-//! - **CORS Support**: Proper CORS header injection for browser clients
-//! - **SSE Streaming**: Server-Sent Events adaptation through Lambda's streaming response
-//!
-//! ## Quick Start
+//! ```toml
+//! [dependencies]
+//! turul-mcp-aws-lambda = "0.4"
+//! turul-mcp-server = "0.4"
+//! tokio = { version = "1", features = ["full"] }
+//! ```
 //!
 //! ```rust,no_run
 //! use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
-//! use turul_mcp_derive::McpTool;
-//! use turul_mcp_server::{McpResult, SessionContext};
+//! use turul_mcp_server::prelude::*;
 //!
-//! #[derive(McpTool, Clone, Default)]
-//! #[tool(name = "example", description = "Example tool")]
-//! struct ExampleTool {
-//!     #[param(description = "Example parameter")]
-//!     value: String,
+//! #[derive(McpTool, Default)]
+//! #[tool(name = "greet", description = "Greet someone")]
+//! struct Greet {
+//!     #[param(description = "Who to greet")]
+//!     name: String,
 //! }
 //!
-//! impl ExampleTool {
+//! impl Greet {
 //!     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-//!         Ok(format!("Got: {}", self.value))
+//!         Ok(format!("Hello, {}!", self.name))
 //!     }
 //! }
 //!
 //! #[tokio::main]
-//! async fn main() -> Result<(), lambda_http::Error> {
-//!     let server = LambdaMcpServerBuilder::new()
-//!         .tool(ExampleTool::default())
+//! async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+//!     let handler = LambdaMcpServerBuilder::new()
+//!         .tool(Greet::default())
 //!         .build()
+//!         .await?
+//!         .handler()
 //!         .await?;
 //!
-//!     let handler = server.handler().await?;
-//!
-//!     // run_streaming handles API Gateway completion invocations gracefully
 //!     turul_mcp_aws_lambda::run_streaming(handler).await
 //! }
 //! ```
 //!
-//! ## Streaming Entry Points
+//! [`run_streaming`] also acknowledges the completion invocations API Gateway sends
+//! after a streamed response. Use [`run_streaming_with`] to run your own logic
+//! (for example `.well-known` routing) before the MCP handler.
 //!
-//! Two entry points replace `lambda_http::run_with_streaming_response()`:
+//! # Features
 //!
-//! - [`run_streaming()`] — standard path: pass a [`LambdaMcpHandler`] directly
-//! - [`run_streaming_with()`] — custom dispatch: provide your own closure for
-//!   pre-dispatch logic (e.g., `.well-known` routing) while still getting
-//!   completion-invocation handling for free
+//! | Feature | Default | Enables |
+//! |---|---|---|
+//! | `cors` | yes | CORS headers on Lambda responses |
+//! | `sse` | yes | Server-sent event stream adaptation |
+//! | `streaming` | no | Real-time streaming; without it, a server with SSE on logs a warning at startup |
+//! | `protocol-2026-07-28` | yes | MCP 2026-07-28 (stateless core) |
+//! | `protocol-2025-11-25` | no | MCP 2025-11-25 sessions; use `--no-default-features --features cors,sse,protocol-2025-11-25` |
+//! | `dynamic-tools` | no | Add and remove tools while running |
+//! | `sqlite`, `postgres`, `dynamodb` | no | Storage backends for 2025-11-25 sessions and `dynamic-tools` |
+//!
+//! # Where next
+//!
+//! - [`LambdaMcpServerBuilder`] for every server option
+//! - [`run_streaming_with`] for custom dispatch
+//! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server) for tools, resources and prompts
+//! - [Examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 
 pub mod adapter;
 pub mod builder;

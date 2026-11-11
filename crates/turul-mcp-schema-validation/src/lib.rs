@@ -1,24 +1,43 @@
-//! JSON Schema 2020-12 dialect validation for MCP tool `inputSchema`.
+//! JSON Schema 2020-12 validation for MCP tool `inputSchema`.
 //!
-//! 2026-07-28 (SEP-2106) opens `Tool.inputSchema` to the full JSON Schema
-//! 2020-12 vocabulary (`oneOf`/`anyOf`/`allOf`/`$ref`/`$defs`/conditionals).
-//! The spec states the MUST this crate satisfies:
-//! "Clients and servers MUST validate schemas according to their declared or
-//! default dialect and MUST handle unsupported dialects gracefully by
-//! returning an appropriate error." [`validate_tool_input_schema`]'s dialect
-//! check and 2020-12 meta-validation compile step are that MUST.
+//! Most users want [`turul-mcp-server`](https://docs.rs/turul-mcp-server), which
+//! validates every tool's `inputSchema` at registration. Use this crate directly
+//! to check a schema yourself, for example a client filtering `tools/list`.
 //!
-//! Two additional checks in this crate are **framework security policy, not
-//! a JSON Schema spec requirement**: rejecting a remote `$ref` (prevents
-//! SSRF — fetching attacker-controlled schema content over the network) and
-//! enforcing size/nesting/composition-depth bounds (prevents resource-
-//! exhaustion DoS from an oversized or pathologically nested schema). Both
-//! are deliberate hardening layered on top of the spec MUST, not mandated by
-//! it.
+//! # Example
 //!
-//! This crate is used by both trust boundaries: a server MUST NOT advertise
-//! an invalid `inputSchema` (enforced at tool registration), and a client
-//! MUST exclude a tool whose `inputSchema` is invalid from `tools/list`.
+//! ```toml
+//! [dependencies]
+//! turul-mcp-schema-validation = "0.4"
+//! serde_json = "1"
+//! ```
+//!
+//! ```rust
+//! use serde_json::json;
+//! use turul_mcp_schema_validation::validate_tool_input_schema;
+//!
+//! validate_tool_input_schema(&json!({
+//!     "type": "object",
+//!     "properties": { "a": { "type": "number" } },
+//!     "required": ["a"]
+//! }))?;
+//! # Ok::<(), turul_mcp_schema_validation::SchemaValidationError>(())
+//! ```
+//!
+//! # What is checked
+//!
+//! [`validate_tool_input_schema`] rejects an unsupported `$schema` dialect and a
+//! schema that fails 2020-12 meta-validation; this satisfies the MCP 2026-07-28
+//! requirement (SEP-2106) to validate schemas against their declared dialect.
+//! Two further checks are framework security policy, not part of the spec:
+//! remote `$ref` is rejected (prevents SSRF), and size, nesting and
+//! composition-depth bounds apply, starting at [`MAX_SCHEMA_BYTES`] (prevents
+//! resource exhaustion).
+//!
+//! # Where next
+//!
+//! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server): build a server
+//! - [`SchemaValidationError`]: the failure cases
 
 /// Maximum serialized size of a tool `inputSchema`, in bytes. Framework
 /// security policy (DoS hardening), not a JSON Schema spec requirement.

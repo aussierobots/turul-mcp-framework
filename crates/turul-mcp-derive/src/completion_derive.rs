@@ -7,6 +7,10 @@ use syn::{DeriveInput, Result};
 use crate::utils::extract_string_attribute;
 
 pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
     // Extract struct-level attributes
@@ -18,18 +22,18 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_builders::HasCompletionMetadata for #struct_name {
+        impl #mcp_builders::HasCompletionMetadata for #struct_name {
             fn method(&self) -> &str {
                 "completion/complete"
             }
 
-            fn reference(&self) -> &turul_mcp_protocol::completion::CompletionReference {
+            fn reference(&self) -> &#mcp_protocol::completion::CompletionReference {
                 use std::sync::LazyLock;
-                static REFERENCE: LazyLock<turul_mcp_protocol::completion::CompletionReference> = LazyLock::new(|| {
+                static REFERENCE: LazyLock<#mcp_protocol::completion::CompletionReference> = LazyLock::new(|| {
                     if #reference.starts_with("ref/resource") {
-                        turul_mcp_protocol::completion::CompletionReference::resource("resource://completion")
+                        #mcp_protocol::completion::CompletionReference::resource("resource://completion")
                     } else {
-                        turul_mcp_protocol::completion::CompletionReference::prompt("completion-prompt")
+                        #mcp_protocol::completion::CompletionReference::prompt("completion-prompt")
                     }
                 });
                 &REFERENCE
@@ -37,23 +41,23 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasCompletionContext for #struct_name {
-            fn argument(&self) -> &turul_mcp_protocol::completion::CompleteArgument {
+        impl #mcp_builders::HasCompletionContext for #struct_name {
+            fn argument(&self) -> &#mcp_protocol::completion::CompleteArgument {
                 use std::sync::LazyLock;
-                static ARGUMENT: LazyLock<turul_mcp_protocol::completion::CompleteArgument> = LazyLock::new(|| {
-                    turul_mcp_protocol::completion::CompleteArgument::new(#argument_name, "")
+                static ARGUMENT: LazyLock<#mcp_protocol::completion::CompleteArgument> = LazyLock::new(|| {
+                    #mcp_protocol::completion::CompleteArgument::new(#argument_name, "")
                 });
                 &ARGUMENT
             }
 
-            fn context(&self) -> Option<&turul_mcp_protocol::completion::CompletionContext> {
+            fn context(&self) -> Option<&#mcp_protocol::completion::CompletionContext> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::HasCompletionHandling for #struct_name {
-            fn validate_request(&self, _request: &turul_mcp_protocol::completion::CompleteRequest) -> Result<(), String> {
+        impl #mcp_builders::HasCompletionHandling for #struct_name {
+            fn validate_request(&self, _request: &#mcp_protocol::completion::CompleteRequest) -> Result<(), String> {
                 Ok(())
             }
 
@@ -69,20 +73,20 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
         // CompletionDefinition is automatically implemented via blanket impl
 
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl turul_mcp_server::McpCompletion for #struct_name {
-            async fn complete(&self, request: turul_mcp_protocol::completion::CompleteRequest) -> turul_mcp_protocol::McpResult<turul_mcp_protocol::completion::CompleteResult> {
+        #[#async_trait::async_trait]
+        impl #mcp_server::McpCompletion for #struct_name {
+            async fn complete(&self, request: #mcp_protocol::completion::CompleteRequest) -> #mcp_protocol::McpResult<#mcp_protocol::completion::CompleteResult> {
                 // Default implementation - this should be overridden by implementing complete_impl
                 match self.complete_impl(request).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e)),
+                    Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }
 
         impl #struct_name {
             /// Override this method to provide custom completion logic
-            pub async fn complete_impl(&self, request: turul_mcp_protocol::completion::CompleteRequest) -> Result<turul_mcp_protocol::completion::CompleteResult, String> {
+            pub async fn complete_impl(&self, request: #mcp_protocol::completion::CompleteRequest) -> Result<#mcp_protocol::completion::CompleteResult, String> {
                 // Default: return sample completions
                 let current_value = &request.params.argument.value;
                 let completions = vec![
@@ -92,11 +96,11 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
                 ];
 
                 let filtered = self.filter_completions(completions, current_value);
-                let completion_result = turul_mcp_protocol::completion::CompletionResult::new(filtered)
+                let completion_result = #mcp_protocol::completion::CompletionResult::new(filtered)
                     .with_total(3.0)
                     .with_has_more(false);
 
-                Ok(turul_mcp_protocol::completion::CompleteResult::new(completion_result))
+                Ok(#mcp_protocol::completion::CompleteResult::new(completion_result))
             }
         }
     };

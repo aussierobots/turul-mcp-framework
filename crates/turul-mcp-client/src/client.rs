@@ -533,7 +533,7 @@ impl McpClient {
     /// `Authorization` header (if any) was configured at construction.
     ///
     /// On transports that don't authenticate at the transport layer (stdio,
-    /// plain SSE), this is a no-op — see [`Transport::update_auth_header`].
+    /// plain SSE), this is a no-op — see [`crate::transport::Transport::update_auth_header`].
     ///
     /// # Example
     ///

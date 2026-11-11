@@ -7,6 +7,9 @@ use syn::{Data, DeriveInput, Result};
 use crate::utils::extract_resource_meta;
 
 pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
     let struct_name = &input.ident;
     let _vis = &input.vis;
 
@@ -43,7 +46,7 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasResourceMetadata for #struct_name {
+        impl #mcp_builders::traits::HasResourceMetadata for #struct_name {
             fn name(&self) -> &str {
                 #name
             }
@@ -54,49 +57,49 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasResourceDescription for #struct_name {
+        impl #mcp_builders::traits::HasResourceDescription for #struct_name {
             fn description(&self) -> Option<&str> {
                 Some(#description)
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasResourceUri for #struct_name {
+        impl #mcp_builders::traits::HasResourceUri for #struct_name {
             fn uri(&self) -> &str {
                 #uri
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasResourceMimeType for #struct_name {
+        impl #mcp_builders::traits::HasResourceMimeType for #struct_name {
             fn mime_type(&self) -> Option<&str> {
                 #mime_type_expr
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasResourceSize for #struct_name {
+        impl #mcp_builders::traits::HasResourceSize for #struct_name {
             fn size(&self) -> Option<u64> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasResourceAnnotations for #struct_name {
-            fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+        impl #mcp_builders::traits::HasResourceAnnotations for #struct_name {
+            fn annotations(&self) -> Option<&#mcp_protocol::meta::Annotations> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasResourceMeta for #struct_name {
-            fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+        impl #mcp_builders::traits::HasResourceMeta for #struct_name {
+            fn resource_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+        impl #mcp_builders::traits::HasIcons for #struct_name {}
 
         // ResourceDefinition automatically implemented via blanket impl in resources.rs
         // No need for explicit impl - blanket impl handles it
@@ -139,7 +142,7 @@ mod tests {
         assert!(generated.contains("HasResourceUri"));
         assert!(generated.contains("HasResourceDescription"));
         // Should NOT contain McpResource trait implementation
-        assert!(!generated.contains("impl turul_mcp_server::McpResource"));
+        assert!(!generated.contains("impl ::turul_mcp_server::McpResource"));
     }
 
     #[test]

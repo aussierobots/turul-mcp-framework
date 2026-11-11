@@ -118,6 +118,11 @@ impl Parse for PromptArgument {
 
 /// Implementation of the prompt! declarative macro
 pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let prompt_def = syn::parse::<PromptMacro>(input)?;
 
     let name = &prompt_def.name;
@@ -154,7 +159,7 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             let required = arg.required;
 
             quote! {
-                turul_mcp_protocol::prompts::PromptArgument {
+                #mcp_protocol::prompts::PromptArgument {
                     name: #arg_name.to_string(),
                     title: None,
                     description: Some(#description.to_string()),
@@ -170,46 +175,46 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
     let result = quote! {
         {
-            use turul_mcp_protocol::prompts::*;
-            use turul_mcp_server::McpPrompt;
+            use #mcp_protocol::prompts::*;
+            use #mcp_server::McpPrompt;
             use std::collections::HashMap;
-            use serde_json::Value;
+            use #json_crate::Value;
 
             #[derive(Clone)]
             struct GeneratedPrompt;
 
-            impl turul_mcp_builders::HasPromptMetadata for GeneratedPrompt {
+            impl #mcp_builders::HasPromptMetadata for GeneratedPrompt {
                 fn name(&self) -> &str { #name }
                 fn title(&self) -> Option<&str> { #title }
             }
 
-            impl turul_mcp_builders::HasPromptDescription for GeneratedPrompt {
+            impl #mcp_builders::HasPromptDescription for GeneratedPrompt {
                 fn description(&self) -> Option<&str> { #description }
             }
 
-            impl turul_mcp_builders::HasPromptArguments for GeneratedPrompt {
+            impl #mcp_builders::HasPromptArguments for GeneratedPrompt {
                 fn arguments(&self) -> Option<&Vec<PromptArgument>> {
                     static ARGS: std::sync::OnceLock<Option<Vec<PromptArgument>>> = std::sync::OnceLock::new();
                     ARGS.get_or_init(|| #prompt_args).as_ref()
                 }
             }
 
-            impl turul_mcp_builders::HasPromptAnnotations for GeneratedPrompt {
-                fn annotations(&self) -> Option<&turul_mcp_builders::traits::PromptAnnotations> { None }
+            impl #mcp_builders::HasPromptAnnotations for GeneratedPrompt {
+                fn annotations(&self) -> Option<&#mcp_builders::traits::PromptAnnotations> { None }
             }
 
-            impl turul_mcp_builders::HasPromptMeta for GeneratedPrompt {
+            impl #mcp_builders::HasPromptMeta for GeneratedPrompt {
                 fn prompt_meta(&self) -> Option<&HashMap<String, Value>> { None }
             }
 
-            impl turul_mcp_builders::HasIcons for GeneratedPrompt {}
+            impl #mcp_builders::HasIcons for GeneratedPrompt {}
 
             // PromptDefinition automatically implemented via blanket impl!
 
-            #[async_trait::async_trait]
+            #[#async_trait::async_trait]
             impl McpPrompt for GeneratedPrompt {
                 async fn render(&self, arguments: Option<HashMap<String, Value>>)
-                    -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>>
+                    -> #mcp_server::McpResult<Vec<#mcp_protocol::prompts::PromptMessage>>
                 {
                     let template_fn = #template;
                     let messages = template_fn(arguments).await?;

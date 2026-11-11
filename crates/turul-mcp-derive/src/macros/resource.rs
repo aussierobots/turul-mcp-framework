@@ -11,6 +11,11 @@ use crate::macros::shared::capitalize;
 
 /// Implementation function for the resource!{} declarative macro
 pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
+    let async_trait = crate::utils::async_trait_path();
+    let json_crate = crate::utils::serde_json_path();
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let mcp_server = crate::utils::server_path();
     let input = syn::parse::<ResourceMacroInput>(input)?;
 
     let resource_name_ident = syn::Ident::new(
@@ -41,7 +46,7 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
 
             // Implement fine-grained traits
-            impl turul_mcp_builders::HasResourceMetadata for #resource_name_ident {
+            impl #mcp_builders::HasResourceMetadata for #resource_name_ident {
                 fn name(&self) -> &str {
                     #name
                 }
@@ -51,49 +56,49 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
             }
 
-            impl turul_mcp_builders::HasResourceDescription for #resource_name_ident {
+            impl #mcp_builders::HasResourceDescription for #resource_name_ident {
                 fn description(&self) -> Option<&str> {
                     Some(#description)
                 }
             }
 
-            impl turul_mcp_builders::HasResourceUri for #resource_name_ident {
+            impl #mcp_builders::HasResourceUri for #resource_name_ident {
                 fn uri(&self) -> &str {
                     #uri
                 }
             }
 
-            impl turul_mcp_builders::HasResourceMimeType for #resource_name_ident {
+            impl #mcp_builders::HasResourceMimeType for #resource_name_ident {
                 fn mime_type(&self) -> Option<&str> {
                     None
                 }
             }
 
-            impl turul_mcp_builders::HasResourceSize for #resource_name_ident {
+            impl #mcp_builders::HasResourceSize for #resource_name_ident {
                 fn size(&self) -> Option<u64> {
                     None
                 }
             }
 
-            impl turul_mcp_builders::HasResourceAnnotations for #resource_name_ident {
-                fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+            impl #mcp_builders::HasResourceAnnotations for #resource_name_ident {
+                fn annotations(&self) -> Option<&#mcp_protocol::meta::Annotations> {
                     None
                 }
             }
 
-            impl turul_mcp_builders::HasResourceMeta for #resource_name_ident {
-                fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+            impl #mcp_builders::HasResourceMeta for #resource_name_ident {
+                fn resource_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
                     None
                 }
             }
 
-            impl turul_mcp_builders::HasIcons for #resource_name_ident {}
+            impl #mcp_builders::HasIcons for #resource_name_ident {}
 
             // ResourceDefinition automatically implemented via blanket impl!
 
-            #[async_trait::async_trait]
-            impl turul_mcp_server::McpResource for #resource_name_ident {
-                async fn read(&self, params: Option<serde_json::Value>, session: Option<&turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+            #[#async_trait::async_trait]
+            impl #mcp_server::McpResource for #resource_name_ident {
+                async fn read(&self, params: Option<#json_crate::Value>, session: Option<&#mcp_server::SessionContext>) -> #mcp_server::McpResult<Vec<#mcp_protocol::resources::ResourceContent>> {
                     let content_fn = #content_closure;
                     content_fn(params, session).await
                 }

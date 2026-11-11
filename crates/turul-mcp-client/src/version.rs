@@ -1,7 +1,7 @@
 //! Per-connection MCP wire-version negotiation for the bilingual client.
 //!
 //! A single `McpClient` probes the server with `server/discover` at `connect()`
-//! and locks one wire spec for its lifetime. [`classify_probe`] is the
+//! and locks one wire spec for its lifetime. `classify_probe` is the
 //! security-relevant core: a JSON-RPC `-32601` (Method Not Found) is the ONLY
 //! signal that downgrades to 2025-11-25. HTTP 4xx and every other JSON-RPC error
 //! abort the connect rather than silently downgrade the protocol the caller
