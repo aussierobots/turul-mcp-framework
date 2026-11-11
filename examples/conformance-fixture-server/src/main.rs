@@ -1471,13 +1471,16 @@ impl ProtocolErrorJobTool {
 /// runtime parks the task rather than returning input-required to the caller.
 #[derive(McpTool, Clone, Default)]
 #[tool(name = "confirm_delete", description = "Delete after confirmation", output = String)]
-struct ConfirmDeleteTool {}
+struct ConfirmDeleteTool {
+    #[param(description = "File to delete")]
+    filename: String,
+}
 
 impl ConfirmDeleteTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
         let session = session.ok_or_else(|| McpError::tool_execution("session required"))?;
         if session.input_responses().is_some() {
-            return Ok("Deleted".to_string());
+            return Ok(format!("Deleted {}", self.filename));
         }
         let schema = ElicitationSchema::new()
             .with_property("confirm".to_string(), PrimitiveSchemaDefinition::string());

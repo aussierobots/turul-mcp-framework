@@ -149,17 +149,17 @@ See [`../plans/interop-test-matrix.md`](../plans/interop-test-matrix.md) §4–�
 
 ### Conformance score — the strongest external signal we have
 
-**37 of 37 scored scenarios pass**, measured **2026-08-15**.
+**37 of 37 scored scenarios pass**, measured **2026-11-11**.
 
 | | |
 |---|---|
-| Harness | `@modelcontextprotocol/conformance@**0.2.0-alpha.11**` |
+| Harness | `@modelcontextprotocol/conformance@**0.2.0-alpha.12**` |
 | Invocation | `server --requirements 2026-07-28 --url …` |
 | Fixture server | `examples/conformance-fixture-server` |
-| Full run | 183 checks passed, 8 failed |
+| Full run | 192 checks passed, 0 failed |
 | **Scored** | **37 scenarios, 0 failing** |
 
-**The pin is an alpha, and that qualifies the number.** `0.2.0-alpha.11` is the
+**The pin is an alpha, and that qualifies the number.** `0.2.0-alpha.12` is the
 newest alpha and the `alpha` dist-tag; npm `latest` is `0.1.16`, which predates
 2026-07-28. So the alpha is the only harness that can score this revision — but
 a pre-release pin is a claim with a short shelf life, and this file has already
@@ -170,47 +170,18 @@ before quoting the number.
 it runs, labelling them *"Not scored for 2026-07-28 … These do not affect
 conformance"*:
 
-- **10 `tasks-*`** — the `io.modelcontextprotocol/tasks` extension (SEP-2663).
-  Two now pass outright; the other eight fail on **one check each**, and that
-  check is the same one in every case (see below). This is not incidental: no
-  SDK implements SEP-2663 client-side, so this suite is the *only* external
-  check that could exist for our tasks wire format. Task #71.
+- **10 `tasks-*`** — the `io.modelcontextprotocol/tasks` extension (SEP-2663),
+  all passing. No SDK implements SEP-2663 client-side, so this suite is the
+  *only* external check that could exist for our tasks wire format.
 - **3 `pending`** — all three passing.
 
 Quoting "37/37" without that denominator would overstate it.
 
-#### The 8 remaining unscored failures are all one check, and it is upstream's
-
-Counted by check id, not by scenario, because all eight scenarios fail on the
-*same* check:
-
-| Count | Check | Owner |
-|---|---|---|
-| 8 | `wire-schema-valid` — `CallToolResult: must have required property 'content'` | **Upstream** |
-
-**Nothing of ours fails the suite.** Everything the harness raised against this
-implementation has been fixed: the last one was `tasks/update` rejecting an
-entire request over a key the task was not waiting on (task #88).
-
-The eight are **structural and not fixable by any server.** The released core
-schema declares (`crates/turul-mcp-protocol-2026-07-28/schema/schema.ts:1849`):
-
-```ts
-export interface CallToolResultResponse extends JSONRPCResultResponse {
-  result: CallToolResult | InputRequiredResult;
-}
-```
-
-`CreateTaskResult` is absent from that union — it is defined in the *tasks
-extension* schema, which the core union never references and which
-`wire-schema-valid` does not compose in. So every response that correctly mints
-a task fails a check derived from a schema that cannot describe it. Any
-conforming SEP-2663 server fails these eight, however clean its envelope.
-
-That reading was earned, not assumed. The same investigation found three
-failures in the identical batch that were genuinely ours and are now fixed:
-`ttlMs: null` (0.4.3), a fixture registered `optional` where the scenario needs
-`required`, and the `tasks/update` key handling above. Worth reporting upstream.
+Under `0.2.0-alpha.11`, eight `tasks-*` scenarios failed one upstream check,
+`wire-schema-valid`, which validated a task-minting `tools/call` response against
+the core `CallToolResult | InputRequiredResult` union that cannot describe a
+`CreateTaskResult`. `0.2.0-alpha.12` no longer fails it. The same alpha calls
+`confirm_delete` with a `filename` argument, which the fixture now declares.
 
 **What the run found.** Three defects, none of which the 3600-test internal
 suite could see, because it has turul code on both ends of every wire:
@@ -229,16 +200,10 @@ The DNS-rebinding one was a live vulnerability, same class as the TypeScript SDK
 GHSA-w48q-cv73-mx4w, and it had an ADR *specifying* the defective rule. That is
 the case for this suite in one line.
 
-**`--expected-failures` is deliberately not in use.** Nothing is currently
-suppressed; every scored scenario genuinely passes and every unscored failure
-is visible above. Adopt the file only when a failure is provably upstream's,
-with a one-line justification per entry — an unexplained entry is a hidden
-failure, not a known one.
-
-The eight `wire-schema-valid` failures now meet that bar, and the file is
-*still* not adopted: they sit in scenarios the harness already excludes from
-conformance, so suppressing them would buy nothing and cost visibility. The
-separation above is the artifact; a YAML entry would only hide it.
+**`--expected-failures` is deliberately not in use.** Nothing is suppressed;
+every scenario, scored or not, passes. Adopt the file only when a failure is
+provably upstream's, with a one-line justification per entry — an unexplained
+entry is a hidden failure, not a known one.
 
 A fourth measure sits behind all of it: **12 of 88 upstream fixture directories
 are modeled** (13.6%). Those are a different artifact from the scenarios scored

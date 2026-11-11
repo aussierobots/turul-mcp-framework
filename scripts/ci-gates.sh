@@ -5,7 +5,7 @@
 #   opt-in lane   = 2025-11-25 (legacy)
 #
 # Gates mirror docs/plans/2026-07-28-final-readiness-audit.md §7.
-# Usage:  scripts/ci-gates.sh [fmt|default|opt-in-2025|lambda|mutex|docs|examples|all]  (default: all)
+# Usage:  scripts/ci-gates.sh [fmt|default|opt-in-2025|lambda|mutex|docs|examples|conformance|all]  (default: all)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -237,6 +237,7 @@ gate_conformance() {
   rc=$?
   if [ "$rc" = "0" ]; then echo "  PASS"
   elif [ "$rc" = "77" ]; then echo "  SKIPPED (npx unavailable)"
+  elif [ "$rc" = "78" ]; then echo "  STALE PIN (suite passed at the pinned version; upstream has a newer alpha)"; fail=1
   else echo "  FAIL"; fail=1
   fi
 }
