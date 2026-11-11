@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+`turul-mcp-derive` 0.4.4 → 0.4.5.
+
+### Fixed
+
+- **The derive and function macros resolve through `turul-mcp-server` when it is only a
+  dev-dependency.** A crate that uses the server and its macros only in tests no longer has to
+  list `turul-mcp-protocol` and `turul-mcp-builders` as well. A dev-only server counts unless
+  either of those is a regular dependency, in which case the lib target may expand the macros
+  and the bare paths stay. Patch release.
+
 ### Changed
 
 - **Upstream conformance harness re-pinned to `0.2.0-alpha.12`: 37/37 scored, 192 checks
