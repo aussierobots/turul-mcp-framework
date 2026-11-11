@@ -201,7 +201,8 @@ edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aussierobots/turul-mcp-framework"
-homepage = "https://github.com/aussierobots/turul-mcp-framework"
+homepage = "https://aussierobots.com.au/turul-mcp.html"
+keywords = ["mcp", "model-context", "ai", "agents", "tools"]
 
 [workspace.dependencies]
 # Core dependencies shared across crates

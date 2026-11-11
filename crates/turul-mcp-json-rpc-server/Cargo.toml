@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Compatibility shim re-exporting turul-rpc — see turul-rpc on crates.io for current development."
+documentation = "https://docs.rs/turul-mcp-json-rpc-server"
+keywords.workspace = true
+categories = ["network-programming"]
 
 [features]
 default = ["async"]

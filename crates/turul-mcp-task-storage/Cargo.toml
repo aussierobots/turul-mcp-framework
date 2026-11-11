@@ -8,6 +8,9 @@ repository.workspace = true
 homepage.workspace = true
 description = "Task storage abstractions for Model Context Protocol (MCP) servers - durable state machines for long-running operations"
 readme = "README.md"
+documentation = "https://docs.rs/turul-mcp-task-storage"
+keywords.workspace = true
+categories = ["network-programming"]
 
 [dependencies]
 # Core dependencies

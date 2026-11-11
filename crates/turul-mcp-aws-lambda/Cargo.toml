@@ -9,6 +9,9 @@ homepage.workspace = true
 description = "AWS Lambda integration for turul-mcp-framework servers"
 readme = "README.md"
 autoexamples = false                                                   # Disable auto-discovery to prevent duplicate target warnings
+documentation = "https://docs.rs/turul-mcp-aws-lambda"
+keywords.workspace = true
+categories = ["network-programming"]
 
 [features]
 default = ["cors", "sse", "protocol-2026-07-28"]

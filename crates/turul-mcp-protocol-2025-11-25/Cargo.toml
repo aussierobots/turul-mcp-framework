@@ -10,6 +10,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Model Context Protocol (MCP) specification implementation - 2025-11-25 version"
+documentation = "https://docs.rs/turul-mcp-protocol-2025-11-25"
+keywords.workspace = true
+categories = ["network-programming"]
 
 [features]
 default = []
