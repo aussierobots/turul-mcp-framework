@@ -10,17 +10,21 @@
 #   scripts/conformance-suite.sh              # scored scenarios must all pass
 #   scripts/conformance-suite.sh --verbose    # keep the harness output on stdout
 #
-# Exit 0 = every SCORED scenario passed. Unscored scenarios (the tasks
-# extension and `pending` ones) are reported but never fail the gate — the
-# harness itself excludes them from conformance.
+# Exit 0  = every SCORED scenario passed at the pinned harness, and the pin is current.
+# Exit 1  = a scored scenario failed (or the harness output could not be parsed).
+# Exit 78 = the suite passed at the pinned harness, but upstream has published a
+#           newer alpha, so the recorded score is stale.
+# Unscored scenarios (the tasks extension and `pending` ones) are reported but
+# never fail the gate — the harness itself excludes them from conformance.
 set -euo pipefail
 
-# A PRE-RELEASE pin. 0.2.0-alpha.11 is the newest alpha and the only line that
-# scores 2026-07-28 (npm `latest` is 0.1.16, which predates the revision).
+# A PRE-RELEASE pin. The 0.2.0 alphas are the only line that scores 2026-07-28
+# (npm `latest` is 0.1.16, which predates the revision).
 # Treat it as a claim with a short shelf life: this repo has already published
 # two releases citing a superseded FastMCP prerelease because a currency
-# warning went unread. The check below is therefore fatal, not advisory.
-CONFORMANCE_VERSION="0.2.0-alpha.11"
+# warning went unread. The currency check is therefore fatal, not advisory; it
+# runs after the suite so a newer upstream alpha never hides the pinned result.
+CONFORMANCE_VERSION="0.2.0-alpha.12"
 PORT="${CONFORMANCE_PORT:-8010}"
 VERBOSE=0
 [[ "${1:-}" == "--verbose" ]] && VERBOSE=1
@@ -37,21 +41,10 @@ trap cleanup EXIT
 
 command -v npx >/dev/null || { echo "SKIP: npx not available"; exit 77; }
 
-echo "==> pin currency"
-LATEST_ALPHA="$(npm view "@modelcontextprotocol/conformance" dist-tags.alpha 2>/dev/null || echo "")"
-if [[ -n "$LATEST_ALPHA" && "$LATEST_ALPHA" != "$CONFORMANCE_VERSION" ]]; then
-    echo "FAIL: pinned $CONFORMANCE_VERSION but dist-tag alpha is now $LATEST_ALPHA."
-    echo "      Re-run against the new harness and update CONFORMANCE_VERSION here"
-    echo "      AND the score in docs/compliance/README.md. A stale pin makes the"
-    echo "      recorded score a measurement of something that no longer exists."
-    exit 1
-fi
-echo "    pinned $CONFORMANCE_VERSION == dist-tag alpha"
-
 echo "==> build fixture server"
 cargo build -q -p conformance-fixture-server --manifest-path "$ROOT/Cargo.toml"
 
-"$ROOT/target/debug/conformance-fixture-server" --port "$PORT" >"$WORK/server.log" 2>&1 &
+"${CARGO_TARGET_DIR:-$ROOT/target}/debug/conformance-fixture-server" --port "$PORT" >"$WORK/server.log" 2>&1 &
 SERVER_PID=$!
 
 for _ in $(seq 1 40); do
@@ -92,3 +85,17 @@ if failed:
     sys.exit(1)
 print("PASS: every scored 2026-07-28 scenario passed")
 PY
+
+echo "==> pin currency"
+LATEST_ALPHA="$(npm view "@modelcontextprotocol/conformance" dist-tags.alpha 2>/dev/null || echo "")"
+if [[ -z "$LATEST_ALPHA" ]]; then
+    echo "    could not read dist-tag alpha (offline?); pin currency not checked"
+elif [[ "$LATEST_ALPHA" != "$CONFORMANCE_VERSION" ]]; then
+    echo "STALE PIN: pinned $CONFORMANCE_VERSION but dist-tag alpha is now $LATEST_ALPHA."
+    echo "      Re-run against the new harness and update CONFORMANCE_VERSION here"
+    echo "      AND the score in docs/compliance/README.md. A stale pin makes the"
+    echo "      recorded score a measurement of something that no longer exists."
+    exit 78
+else
+    echo "    pinned $CONFORMANCE_VERSION == dist-tag alpha"
+fi

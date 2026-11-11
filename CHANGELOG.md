@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Upstream conformance harness re-pinned to `0.2.0-alpha.12`: 37/37 scored, 192 checks
+  passed, 0 failed.** `scripts/conformance-suite.sh` now runs the pinned suite before the
+  pin-currency check, so a newer upstream alpha is reported as `STALE PIN` (exit 78) after the
+  score instead of aborting the run; `ci-gates.sh` labels it and still fails the release gate.
+  The fixture's `confirm_delete` declares the `filename` argument alpha.12 sends. No crate
+  changes.
+
 ## [0.4.19] - 2026-11-11
 
 `turul-mcp-builders` 0.4.1 → 0.4.2.

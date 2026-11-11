@@ -7,8 +7,8 @@ name: CI
 # All jobs use standard ubuntu-latest runners (free on public repos).
 #
 # Relationship to scripts/ci-gates.sh: hosted CI covers every lane gate, and
-# omits only the two that need a toolchain or wall clock a runner should not
-# spend. Measured 2026-08-02, counting commands (local -> hosted):
+# omits only the three that need a toolchain, network or wall clock a runner
+# should not spend. Measured 2026-08-02, counting commands (local -> hosted):
 #   fmt          1  -> 1   parity
 #   default-2026 28 -> 28  parity
 #   opt-in-2025  35 -> 35  parity
@@ -17,6 +17,8 @@ name: CI
 #                          cross-compilation toolchain
 #   examples     5  -> 0   no hosted job: boots real servers over six phases
 #                          (minutes of wall clock), and one leg wants DynamoDB
+#   conformance  1  -> 0   no hosted job: runs the upstream npm harness and
+#                          checks its pin against the live npm dist-tag
 #
 # So a green CI run is necessary but NOT sufficient for release. Run
 # `./scripts/ci-gates.sh` (all) before tagging — that is the release gate;
