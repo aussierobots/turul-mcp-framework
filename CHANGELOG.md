@@ -53,6 +53,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`lambda-skills-server` bin and `scripts/e2e-lambda-skills.sh`** (in `ci-gates.sh lambda`).
   Skills on a real local Lambda under `cargo lambda watch`: 75 files re-hashed, sep-2640
   32/32 and 6/6, host scenarios 4/4.
+`turul-mcp-protocol-2026-07-28` 0.4.2 → 0.4.3.
+
+### Fixed
+
+- **Wire output is byte-stable.** Every `HashMap` field of a 2026-07-28 wire type (tool
+  `inputSchema.properties`, schema extensions, `_meta` maps and the rest) now serializes in
+  sorted key order through `serde_maps::sorted` (ADR-036). Before, the order was whatever the
+  `HashMap` iterated in; it only looked stable while serde_json's `preserve_order` feature was
+  off, so a consumer whose dependencies enabled that feature got different `tools/list` bytes
+  on every run. Public types are unchanged. Bug fix, patch release.
 
 ## [0.4.23] - 2026-11-14
 

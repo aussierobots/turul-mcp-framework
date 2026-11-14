@@ -170,6 +170,7 @@ pub enum SamplingMessageContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         annotations: Option<crate::meta::Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<std::collections::HashMap<String, Value>>,
     },
     #[serde(rename = "image")]
@@ -180,6 +181,7 @@ pub enum SamplingMessageContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         annotations: Option<crate::meta::Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<std::collections::HashMap<String, Value>>,
     },
     #[serde(rename = "audio")]
@@ -190,14 +192,17 @@ pub enum SamplingMessageContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         annotations: Option<crate::meta::Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<std::collections::HashMap<String, Value>>,
     },
     #[serde(rename = "tool_use")]
     ToolUse {
         id: String,
         name: String,
+        #[serde(serialize_with = "crate::serde_maps::sorted")]
         input: std::collections::HashMap<String, Value>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<std::collections::HashMap<String, Value>>,
     },
     #[serde(rename = "tool_result")]
@@ -210,6 +215,7 @@ pub enum SamplingMessageContentBlock {
         #[serde(rename = "isError", skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<std::collections::HashMap<String, Value>>,
     },
 }
@@ -264,6 +270,7 @@ pub struct SamplingMessage {
     pub role: Role,
     pub content: SamplingMessageContent,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
@@ -309,6 +316,7 @@ pub struct CreateMessageRequestParams {
     /// convention this crate uses for other `JSONObject` fields (e.g.
     /// `ClientCapabilities.experimental`).
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub metadata: Option<std::collections::HashMap<String, Value>>,
     /// Optional tools the LLM can use during sampling.
     #[serde(skip_serializing_if = "Option::is_none")]

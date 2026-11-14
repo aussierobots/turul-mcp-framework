@@ -146,6 +146,7 @@ pub struct SubscriptionsAcknowledgedNotificationParams {
     pub notifications: SubscriptionFilter,
 
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -227,7 +228,7 @@ impl serde::Serialize for SubscriptionsListenResultMetaObject {
         if let Some(info) = &self.server_info {
             map.serialize_entry(crate::meta::META_KEY_SERVER_INFO, info)?;
         }
-        for (k, v) in &self.extra {
+        for (k, v) in crate::serde_maps::sorted_entries(&self.extra) {
             if !RESERVED.contains(&k.as_str()) {
                 map.serialize_entry(k, v)?;
             }

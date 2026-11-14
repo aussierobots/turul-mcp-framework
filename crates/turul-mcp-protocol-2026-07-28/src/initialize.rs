@@ -106,16 +106,19 @@ pub struct SamplingCapabilities {
     /// Server MAY use `includeContext: "thisServer"`/`"allServers"` only if this
     /// is declared.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub context: Option<HashMap<String, Value>>,
 
     /// Whether the client supports tool use in sampling.
     /// Server MUST get an error if it sends `tools`/`toolChoice` without this
     /// declared.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub tools: Option<HashMap<String, Value>>,
 
     /// Additional forward-compatible capability data.
     #[serde(flatten)]
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub extra: HashMap<String, Value>,
 }
 
@@ -132,14 +135,17 @@ pub struct SamplingCapabilities {
 pub struct ElicitationCapabilities {
     /// Form-mode elicitation support.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub form: Option<HashMap<String, Value>>,
 
     /// URL-mode elicitation support.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub url: Option<HashMap<String, Value>>,
 
     /// Additional forward-compatible capability data.
     #[serde(flatten)]
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub extra: HashMap<String, Value>,
 }
 
@@ -171,12 +177,14 @@ pub struct ClientCapabilities {
     pub elicitation: Option<ElicitationCapabilities>,
     /// Experimental capabilities.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub experimental: Option<HashMap<String, Value>>,
     /// MCP extensions the client supports.
     /// Keys are reverse-DNS extension identifiers (e.g.
     /// `"io.modelcontextprotocol/oauth-client-credentials"`); values are
     /// per-extension settings. Empty `{}` means support without settings.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub extensions: Option<HashMap<String, Value>>,
 }
 
@@ -221,6 +229,7 @@ pub struct ResourcesCapabilities {
 pub struct LoggingCapabilities {
     /// Opaque content per the schema's `JSONObject` (usually empty).
     #[serde(flatten)]
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub extra: HashMap<String, Value>,
 }
 
@@ -231,6 +240,7 @@ pub struct CompletionsCapabilities {
     /// Opaque content per the schema's `JSONObject` (usually empty) —
     /// PRESENCE means `completion/complete` is supported.
     #[serde(flatten)]
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub extra: HashMap<String, Value>,
 }
 
@@ -269,12 +279,14 @@ pub struct ServerCapabilities {
     pub tools: Option<ToolsCapabilities>,
     /// Experimental capabilities.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub experimental: Option<HashMap<String, Value>>,
     /// MCP extensions the server supports.
     /// Keys are reverse-DNS extension identifiers (e.g.
     /// `"io.modelcontextprotocol/apps"`); values are per-extension settings.
     /// Empty `{}` means support without settings.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub extensions: Option<HashMap<String, Value>>,
 }
 

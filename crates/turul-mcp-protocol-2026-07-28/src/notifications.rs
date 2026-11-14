@@ -31,9 +31,11 @@ use turul_rpc::RequestId;
 pub struct NotificationParams {
     /// Optional MCP meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
     /// All other notification-specific parameters
     #[serde(flatten)]
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub other: HashMap<String, Value>,
 }
 
@@ -247,6 +249,7 @@ pub struct ProgressNotificationParams {
     pub message: Option<String>,
     /// Optional MCP meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -297,6 +300,7 @@ pub struct ResourceUpdatedNotificationParams {
     pub uri: String,
     /// Optional MCP meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -341,6 +345,7 @@ pub struct CancelledNotificationParams {
     pub reason: Option<String>,
     /// Optional MCP meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -412,6 +417,7 @@ pub struct LoggingMessageNotificationParams {
     pub data: Value,
     /// Optional MCP meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 

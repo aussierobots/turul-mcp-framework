@@ -107,6 +107,7 @@ pub struct ToolSchema {
     /// than our structured `JsonSchema` enum so `$ref`, `oneOf` inside properties,
     /// and any other 2020-12 keyword work without conversion.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub properties: Option<HashMap<String, Value>>,
     /// Required property names.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -114,6 +115,7 @@ pub struct ToolSchema {
     /// Additional schema properties (`$schema`, `oneOf`, `$defs`, conditionals, etc.)
     /// per the schema's `[key: string]: unknown` clause.
     #[serde(flatten)]
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub additional: HashMap<String, Value>,
 }
 
@@ -156,6 +158,7 @@ pub struct ToolOutputSchema {
     /// per schema). Use this for `$schema`, `type` (if you want object root),
     /// `oneOf`, `anyOf`, `$ref`, `$defs`, etc.
     #[serde(flatten)]
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub additional: HashMap<String, Value>,
 }
 
@@ -203,6 +206,7 @@ pub struct Tool {
         alias = "_meta",
         rename = "_meta"
     )]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -364,6 +368,7 @@ pub struct CallToolRequestParams {
     pub name: String,
     /// Arguments to pass to the tool — `{ [key: string]: unknown }`.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub arguments: Option<HashMap<String, Value>>,
 
     /// Responses to a prior `InputRequiredResult` (mixin from
@@ -847,6 +852,36 @@ mod tests {
         let n = CallToolResult::from_result_auto(&json!(42), None).unwrap();
         assert_eq!(text_of(&n), "42");
         assert_eq!(n.structured_content, Some(json!(42)));
+    }
+
+    /// ADR-036: the same schema serializes to the same bytes every time, keys
+    /// sorted, whatever order the `HashMap`s happen to iterate in.
+    #[test]
+    fn tool_schema_serializes_identically_every_time() {
+        let build = || {
+            let props: HashMap<String, Value> = (0..32)
+                .map(|i| (format!("p{i:02}"), json!({"type": "string"})))
+                .collect();
+            let mut schema = ToolSchema::object().with_properties(props);
+            for i in 0..8 {
+                schema.additional.insert(format!("x-ext{i}"), json!(i));
+            }
+            serde_json::to_string(&schema).unwrap()
+        };
+        let first = build();
+        for _ in 0..50 {
+            assert_eq!(
+                build(),
+                first,
+                "schema bytes must not depend on HashMap order"
+            );
+        }
+        let p00 = first.find("\"p00\"").unwrap();
+        let p31 = first.find("\"p31\"").unwrap();
+        assert!(
+            p00 < p31,
+            "properties are written in sorted key order: {first}"
+        );
     }
 
     #[test]
