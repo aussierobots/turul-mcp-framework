@@ -220,3 +220,53 @@ fn ui_uri_scheme_literal() {
     assert_eq!(UI_URI_SCHEME, "ui://");
     assert!("ui://weather-server/dashboard-template".starts_with(UI_URI_SCHEME));
 }
+
+/// `from_meta` is the inverse of `to_meta`: absent `ui` is `Ok(None)`, a
+/// malformed one is an error rather than a silent `None`.
+#[test]
+fn ui_meta_from_meta_round_trips_and_rejects_malformed() {
+    let tool = UiToolMeta {
+        resource_uri: Some("ui://weather-server/dashboard-template".into()),
+        visibility: Some(vec![UiToolVisibility::App]),
+    };
+    assert_eq!(UiToolMeta::from_meta(&tool.to_meta()).unwrap(), Some(tool));
+
+    let resource = UiResourceMeta {
+        prefers_border: Some(true),
+        ..Default::default()
+    };
+    assert_eq!(
+        UiResourceMeta::from_meta(&resource.to_meta()).unwrap(),
+        Some(resource)
+    );
+
+    let empty = std::collections::HashMap::new();
+    assert_eq!(UiToolMeta::from_meta(&empty).unwrap(), None);
+
+    let bad: std::collections::HashMap<String, serde_json::Value> = [(
+        META_KEY_UI.to_string(),
+        json!({ "visibility": ["everyone"] }),
+    )]
+    .into();
+    assert!(UiToolMeta::from_meta(&bad).is_err());
+}
+
+/// Apps §Visibility: "`visibility` defaults to `["model", "app"]` if omitted";
+/// `"model"` = visible to the agent, `"app"` = callable by the app.
+#[test]
+fn apps_visibility_defaults_to_model_and_app_when_omitted() {
+    let omitted = UiToolMeta::default();
+    assert!(omitted.is_model_visible() && omitted.is_app_callable());
+
+    let app_only = UiToolMeta {
+        visibility: Some(vec![UiToolVisibility::App]),
+        ..Default::default()
+    };
+    assert!(!app_only.is_model_visible() && app_only.is_app_callable());
+
+    let model_only = UiToolMeta {
+        visibility: Some(vec![UiToolVisibility::Model]),
+        ..Default::default()
+    };
+    assert!(model_only.is_model_visible() && !model_only.is_app_callable());
+}

@@ -59,7 +59,8 @@ turul-on-turul.
 | UI resource: `ui://` URI, `text/html;profile=mcp-app`, `_meta.ui` on the read content item | MUST | **Implemented** (generic hook) | `McpResource::read` + `UiResourceMeta::to_meta` | `ext_apps_2026.rs::apps_ui_resource_reads_with_mcp_app_mime_and_content_item_ui_meta` | ✅ | — | — | — |
 | Tools return meaningful `content` with or without UI; server SHOULD check client capability | MUST / SHOULD | **Implemented** (in the call) | `SessionContext::client_capabilities` + `client_supports_html_views` | `ext_apps_2026.rs::apps_graceful_degradation_tool_returns_text_content_with_or_without_ui_capability` | ✅ | — | — | — |
 | Hide non-`model` tools from the agent; reject app `tools/call` for non-`app` tools | MUST (host) | **Out of scope** | Apps spec §Visibility assigns both to the host; the server lists every tool | n/a | n/a | n/a | n/a | n/a |
-| Client `mimeTypes` capability including `text/html;profile=mcp-app` | MUST (host) | **Not implemented** | `turul-mcp-client` renders nothing, so it does not declare it | — | — | — | — | — |
+| Client `mimeTypes` capability including `text/html;profile=mcp-app` | MUST (host) | **Implemented** (opt-in `ext-apps` feature) | `DeclaredCapabilities::ext_apps` → `clientCapabilities.extensions` on every 2026 request | `c/turul-mcp-client/tests/ext_apps_client_2026.rs::apps_client_declares_ui_extension_with_mime_types_only_when_opted_in` | ✅ | — | — | — |
+| Host reads `_meta.ui` and splits app-only tools from model-visible ones | MUST (host) | **Helpers only** | `turul_mcp_client::ext_apps::{tool_ui_meta, resource_ui_meta, partition_tools}`; enforcing the split is the host application's job | `ext_apps_client_2026.rs::apps_visibility_split_separates_app_only_tools_from_model_visible_ones`, `::apps_resource_ui_meta_is_read_from_the_read_content_item` | ✅ | — | — | — |
 | Host↔view iframe protocol (`ui/*` over postMessage) | MUST | **Out of scope** | belongs to app/host SDKs, not a server framework | n/a | n/a | n/a | n/a | n/a |
 
 **Served through generic hooks, with no server feature.** `turul-mcp-server` has
@@ -101,9 +102,9 @@ path, so an honestly-recorded pin at a floating path fails the gate.
 
 ## Gap register
 
-1. **`turul-mcp-client` does not declare the Apps capability.** The server side is
-   served through generic hooks (§3); the client renders nothing, so declaring
-   `mimeTypes` would advertise what the library cannot honour alone.
+1. **No Apps host exists in this repo.** The client can declare Apps and read
+   `_meta.ui` (opt-in `ext-apps` feature) but renders nothing, so every Apps ✅ in
+   §3 is turul-on-turul. Upstream `basic-host` is the only independent host.
 2. **No peer has exercised the Tasks extension.** Its coverage is thorough and
    entirely self-referential. Three peers now drive the core surface — the Go
    SDK, the TypeScript SDK and FastMCP — and none of them touches the extension,

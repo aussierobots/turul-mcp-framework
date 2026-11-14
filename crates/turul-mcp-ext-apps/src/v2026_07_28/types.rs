@@ -75,6 +75,26 @@ impl UiToolMeta {
     pub fn to_meta(&self) -> HashMap<String, Value> {
         ui_meta(self)
     }
+
+    /// Read `ui` back out of a tool's `_meta`: `Ok(None)` when absent, an
+    /// error when present but malformed.
+    pub fn from_meta(meta: &HashMap<String, Value>) -> Result<Option<Self>, serde_json::Error> {
+        from_ui_meta(meta)
+    }
+
+    /// The agent may see and call the tool: `visibility` absent or includes `"model"`.
+    pub fn is_model_visible(&self) -> bool {
+        self.allows(UiToolVisibility::Model)
+    }
+
+    /// An app may call the tool: `visibility` absent or includes `"app"`.
+    pub fn is_app_callable(&self) -> bool {
+        self.allows(UiToolVisibility::App)
+    }
+
+    fn allows(&self, who: UiToolVisibility) -> bool {
+        self.visibility.as_ref().is_none_or(|v| v.contains(&who))
+    }
 }
 
 /// Content Security Policy configuration for a UI resource —
@@ -147,6 +167,20 @@ impl UiResourceMeta {
     pub fn to_meta(&self) -> HashMap<String, Value> {
         ui_meta(self)
     }
+
+    /// Read `ui` back out of a content item's `_meta`: `Ok(None)` when
+    /// absent, an error when present but malformed.
+    pub fn from_meta(meta: &HashMap<String, Value>) -> Result<Option<Self>, serde_json::Error> {
+        from_ui_meta(meta)
+    }
+}
+
+fn from_ui_meta<T: serde::de::DeserializeOwned>(
+    meta: &HashMap<String, Value>,
+) -> Result<Option<T>, serde_json::Error> {
+    meta.get(META_KEY_UI)
+        .map(|ui| T::deserialize(ui))
+        .transpose()
 }
 
 fn ui_meta(value: &impl Serialize) -> HashMap<String, Value> {

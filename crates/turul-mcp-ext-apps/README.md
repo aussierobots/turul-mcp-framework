@@ -53,7 +53,8 @@ carry the spec's string literals. `capability()` is the server's
 - Sandboxing, building CSP from `_meta.ui.csp`, and the `ui/*` postMessage
   protocol between host and view. This crate binds none of it.
 
-`turul-mcp-client` does not declare the Apps capability: it renders nothing.
+`turul-mcp-client` (feature `ext-apps`) can declare the Apps capability and read
+`_meta.ui` through `UiToolMeta::from_meta` / `UiResourceMeta::from_meta`; it renders nothing.
 
 ## Feature flags
 

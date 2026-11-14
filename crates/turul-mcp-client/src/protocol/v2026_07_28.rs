@@ -39,12 +39,7 @@ pub(crate) fn request_meta(
             },
         ),
         roots: declared.roots.then(Default::default),
-        extensions: declared.ext_tasks.then(|| {
-            std::collections::HashMap::from([(
-                "io.modelcontextprotocol/tasks".to_string(),
-                serde_json::json!({}),
-            )])
-        }),
+        extensions: declared_extensions(declared),
         ..Default::default()
     };
     p::meta::RequestMetaObject::new(
@@ -52,6 +47,30 @@ pub(crate) fn request_meta(
         p::initialize::Implementation::new(client_name.to_string(), client_version.to_string()),
         capabilities,
     )
+}
+
+/// The `clientCapabilities.extensions` map, absent when nothing is declared.
+fn declared_extensions(
+    declared: &crate::config::DeclaredCapabilities,
+) -> Option<std::collections::HashMap<String, Value>> {
+    let mut extensions = std::collections::HashMap::new();
+    if declared.ext_tasks {
+        extensions.insert(
+            "io.modelcontextprotocol/tasks".to_string(),
+            serde_json::json!({}),
+        );
+    }
+    #[cfg(feature = "ext-apps")]
+    if declared.ext_apps {
+        let ui = turul_mcp_ext_apps::UiClientCapabilities {
+            mime_types: Some(vec![turul_mcp_ext_apps::MCP_APP_HTML_MIME.to_string()]),
+        };
+        extensions.insert(
+            turul_mcp_ext_apps::EXTENSION_IDENTIFIER.to_string(),
+            serde_json::to_value(ui).expect("UiClientCapabilities serializes"),
+        );
+    }
+    (!extensions.is_empty()).then_some(extensions)
 }
 
 /// `resultType` discriminator check (SEP-2322 / basic §Responses).
@@ -484,6 +503,25 @@ mod tests {
         );
     }
 
+    /// Apps §Client (Host) Capabilities: `io.modelcontextprotocol/ui` with
+    /// `mimeTypes` (REQUIRED) listing the mcp-app profile, beside Tasks.
+    #[cfg(feature = "ext-apps")]
+    #[test]
+    fn apps_declaration_rides_request_meta_extensions_with_mime_types() {
+        let declared = crate::config::DeclaredCapabilities {
+            ext_apps: true,
+            ext_tasks: true,
+            ..Default::default()
+        };
+        let v = serde_json::to_value(request_meta("t", "1", &declared)).unwrap();
+        let ext = &v["io.modelcontextprotocol/clientCapabilities"]["extensions"];
+        assert_eq!(
+            ext["io.modelcontextprotocol/ui"],
+            serde_json::json!({ "mimeTypes": ["text/html;profile=mcp-app"] })
+        );
+        assert_eq!(ext["io.modelcontextprotocol/tasks"], serde_json::json!({}));
+    }
+
     #[test]
     fn sub_capabilities_map_into_request_meta() {
         let declared = crate::config::DeclaredCapabilities {
@@ -494,6 +532,8 @@ mod tests {
             sampling_context: false,
             roots: false,
             ext_tasks: false,
+            #[cfg(feature = "ext-apps")]
+            ext_apps: false,
         };
         let meta = request_meta("t", "1", &declared);
         let v = serde_json::to_value(&meta).unwrap();
@@ -508,7 +548,7 @@ mod tests {
             elicitation_url: true,
             ..Default::default()
         };
-        let v = serde_json::to_value(&request_meta("t", "1", &url_only)).unwrap();
+        let v = serde_json::to_value(request_meta("t", "1", &url_only)).unwrap();
         assert!(v["io.modelcontextprotocol/clientCapabilities"]["elicitation"]["url"].is_object());
     }
 

@@ -50,6 +50,7 @@
 //! | `client-2026-07-28-only` | no | Only MCP 2026-07-28; use with `--no-default-features` |
 //! | `client-2025-11-25-only` | no | Only MCP 2025-11-25; use with `--no-default-features` |
 //! | `ext-tasks` | no | The `io.modelcontextprotocol/tasks` extension (2026-07-28 connections) |
+//! | `ext-apps` | no | MCP Apps (`io.modelcontextprotocol/ui`) declaration and `_meta.ui` accessors; no rendering |
 //!
 //! # Where next
 //!
@@ -86,6 +87,8 @@ compile_error!(
 pub mod client;
 pub mod config;
 pub mod error;
+#[cfg(feature = "ext-apps")]
+pub mod ext_apps;
 pub mod prelude;
 pub(crate) mod protocol;
 pub mod session;

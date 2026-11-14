@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-client"
-version = "0.4.9"
+version = "0.4.10"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -25,6 +25,7 @@ categories = ["network-programming"]
 # client and a 2026-default server into one test binary).
 turul-mcp-protocol-2025-11-25 = { workspace = true }
 turul-mcp-ext-tasks = { workspace = true, optional = true }
+turul-mcp-ext-apps = { workspace = true, optional = true }
 turul-mcp-protocol-2026-07-28 = { workspace = true, optional = true }
 turul-rpc = { workspace = true }
 # JSON Schema 2020-12 dialect validation, client-side trust boundary.
@@ -71,6 +72,9 @@ client-bilingual = ["dep:turul-mcp-protocol-2026-07-28", "dep:turul-mcp-schema-v
 # Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) client surface —
 # 2026-07-28 connections only; off by default per SEP-2133.
 ext-tasks = ["dep:turul-mcp-ext-tasks"]
+# MCP Apps extension (io.modelcontextprotocol/ui) declaration and `_meta.ui`
+# accessors; 2026-07-28 connections only; off by default per SEP-2133. No rendering.
+ext-apps = ["dep:turul-mcp-ext-apps"]
 # Narrowing: each speaks exactly ONE wire spec. Requires --no-default-features
 # (otherwise client-bilingual is also active and the mutex fires). The frozen
 # 2025-11-25 protocol crate is always linked as the shared type vocabulary;
