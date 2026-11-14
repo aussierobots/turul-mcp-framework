@@ -38,7 +38,8 @@
 //! ```
 //!
 //! [`ResourceBuilder`] and [`PromptBuilder`] work the same way. A builder's output
-//! is registered on a server with `McpServer::builder().tool(...)`.
+//! is registered on a server with `McpServer::builder().tool(...)`, `.resource(...)`
+//! or `.prompt(...)`.
 //!
 //! # Features
 //!
