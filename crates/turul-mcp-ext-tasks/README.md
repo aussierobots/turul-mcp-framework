@@ -6,30 +6,22 @@ that MCP 2026-07-28 moved out of the protocol core.
 
 ## Read this before depending on it
 
-**Upstream is experimental, and its schema is not frozen.** The
-`modelcontextprotocol/ext-tasks` repository labels itself an *experimental*
-extension that "may change significantly or be discontinued", and it publishes
-its schema only at the mutable path `schema/draft/schema.ts` — there is no
-released, dated artifact to pin against, and the repository carries no tags.
+**Upstream stage: Beta, headed to Core.** The crate pins the released,
+immutable 2026-07-28 artifacts of `modelcontextprotocol/ext-tasks`
+(`specification/2026-07-28/tasks.md`, `schema/2026-07-28/schema.{ts,json}`),
+the same discipline as the core protocol crates. Commits, checksums and the
+re-pin procedure: [`schema/README.md`](schema/README.md).
 
-That is a materially weaker guarantee than the core protocol crates, which pin
-an immutable released path (`schema/2026-07-28/schema.ts`). This crate pins a
-**specific upstream commit plus a content checksum** instead, which is the
-strongest provenance available for a source with no tags. Exact commit,
-checksum and re-pin procedure: [`schema/README.md`](schema/README.md).
-
-Practical consequences:
-
-- Wire shapes here can change without an upstream version bump, because there
-  is no upstream version to bump.
-- This crate versions independently of the framework (`0.1.0`, not `0.4.x`) per
-  SEP-2133 §Evolution. The `0.x` is doing real work — treat breaking changes
-  between minor releases as expected, not exceptional.
+- This crate versions independently of the framework (`0.1.x`, not `0.4.x`)
+  per SEP-2133 §Evolution. A breaking change to the extension's wire shape
+  mints a new extension identifier upstream.
 - Extensions are **off by default** (SEP-2133). Adding the dependency and
   enabling the server feature is the opt-in; nothing here activates implicitly.
+- When Tasks moves into Core in a later spec revision, the extension form
+  remains the binding for 2026-07-28.
 
-If you need a stable task API today, the 2025-11-25 opt-in lane carries tasks
-as a *core* capability with the frozen 2025-11-25 schema behind it.
+If you need tasks on the 2025-11-25 opt-in lane, that spec carries them as a
+*core* capability with the frozen 2025-11-25 schema behind it.
 
 ## What this crate is
 
@@ -49,7 +41,7 @@ Unlike its sibling `turul-mcp-ext-apps`, this crate **is** wired end to end.
 Server dispatch lives in `turul-mcp-server` behind its `ext-tasks` feature
 (`.with_ext_tasks(store)` + `.ext_task_tool(tool)`); the client side is
 `call_tool_or_task` plus `task_get` / `task_update` / `task_cancel` /
-`task_wait`. Server election, the `-32003` capability gate, mid-task input and
+`task_wait`. Server election, the `-32021` capability gate (on `tools/call`, the `tasks/*` methods and `subscriptions/listen`), mid-task input and
 task notifications are all implemented. Worked example:
 `examples/ext-tasks-server`.
 

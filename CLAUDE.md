@@ -358,8 +358,8 @@ Before publishing a new version:
 5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
 6. **Publish order** (dependency-first, derived from the actual non-dev dependency graph):
    ```
-   protocol-2026-07-28 → protocol → session-storage → http-server → builders → derive* →
-   ext-tasks → oauth → schema-validation → server-state-storage → task-storage →
+   protocol-2026-07-28 → ext-tasks → protocol → session-storage → http-server → builders →
+   derive* → oauth → schema-validation → server-state-storage → task-storage →
    server → aws-lambda → client → ext-apps
    ```
    *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*

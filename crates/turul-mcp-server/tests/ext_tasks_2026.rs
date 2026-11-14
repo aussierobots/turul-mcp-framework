@@ -1175,6 +1175,39 @@ async fn task_notifications_ride_listen_filtered_by_task_id() {
     );
 }
 
+/// tasks.md §Task Status Notifications: a client that requests `taskIds`
+/// without declaring the extension MUST get `-32021` naming the missing
+/// capability, not a stream that silently drops the filter.
+#[tokio::test]
+async fn listen_task_ids_without_declaration_is_32021() {
+    let url = start_server().await;
+    let resp = reqwest::Client::new()
+        .post(&url)
+        .header("Accept", "text/event-stream")
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "subscriptions/listen")
+        .json(&json!({
+            "jsonrpc": "2.0", "id": 10, "method": "subscriptions/listen",
+            "params": {
+                "_meta": meta(false),
+                "notifications": { "taskIds": ["786512e2-9e0d-44bd-8f29-789f320fe840"] }
+            }
+        }))
+        .send()
+        .await
+        .expect("listen POST");
+    assert_eq!(resp.status(), 400);
+    let body: Value = resp.json().await.expect("json error body");
+    assert_eq!(body["id"], 10);
+    assert_eq!(body["error"]["code"], -32021, "{body}");
+    assert_eq!(
+        body["error"]["data"]["requiredCapabilities"],
+        json!({ "extensions": { EXT: {} } }),
+        "{body}"
+    );
+}
+
 /// State Handle Hijacking (Security Best Practices): a task id is a state
 /// handle bound to the principal that created it. A task created by `alice`
 /// MUST NOT be readable, updatable, or cancellable by `bob` — each attempt

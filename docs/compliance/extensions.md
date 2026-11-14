@@ -34,11 +34,14 @@ Tasks moved out of core into an extension in 2026-07-28. The frozen
 | Methods are `tasks/get`, `tasks/update`, `tasks/cancel` — no `tasks/list` | MUST | Implemented | `c/turul-mcp-ext-tasks/src/v2026_07_28/lifecycle.rs`; dispatch at `builder.rs:1899-1926`; client at `client.rs:1438-1468` | `ext_tasks_e2e_2026.rs::task_outcome_polls_to_completion`, `::task_cancel_reaches_cancelled`, `::task_update_resumes_an_input_required_task` | pass | — | — | — |
 | The server alone decides materialisation: synchronous unless the client declared *and* the tool requires | MUST | Implemented | `c/turul-mcp-server/src/ext_tasks.rs:425-438` | `ext_tasks_2026.rs::declared_call_returns_task_and_polls_to_completion`, `::undeclared_call_runs_synchronously` | pass | — | — | — |
 | A required task tool called without the declared extension → `-32021` with `data.requiredCapabilities.extensions` | MUST | Implemented | `ext_tasks.rs:425-431` | `ext_tasks_2026.rs::required_tool_without_extension_is_32021` | pass | — | — | — |
-| Task IDs are unguessable (UUIDv4, not the house UUIDv7) because they act as bearer tokens | MUST | Implemented | `c/turul-mcp-ext-tasks/src/v2026_07_28/store.rs` | `ext_tasks_2026.rs::task_ids_are_unguessable_uuids` | pass | — | — | — |
+| Task IDs are unguessable (UUIDv4, not the house UUIDv7) because they act as bearer tokens | MUST | Implemented | `c/turul-mcp-server/src/ext_tasks.rs` (`Uuid::new_v4`) | `ext_tasks_2026.rs::task_ids_are_unguessable_uuids` | pass | — | — | — |
 | Unknown task id → invalid params | MUST | Implemented | `lifecycle.rs` | `ext_tasks_2026.rs::unknown_task_id_is_invalid_params` | pass | — | — | — |
 | Cancel flips working → cancelled and acknowledges the terminal state | MUST | Implemented | `lifecycle.rs` | `ext_tasks_2026.rs::cancel_flips_working_to_cancelled_and_acks_terminal` | pass | — | — | — |
-| A task-augmented tool returning `InputRequired` parks in `input_required`; `tasks/update` resumes it | MUST | Implemented | `lifecycle.rs`, `store.rs` | `ext_tasks_e2e_2026.rs::task_update_resumes_an_input_required_task` | pass | — | — | — |
+| A task-augmented tool returning `InputRequired` parks in `input_required`; `tasks/update` resumes it | MUST | Implemented | `lifecycle.rs`, `traits.rs` | `ext_tasks_e2e_2026.rs::task_update_resumes_an_input_required_task` | pass | — | — | — |
 | `notifications/tasks` ride `subscriptions/listen`, filtered by `taskIds` | SHOULD | Implemented | transport filter | `ext_tasks_2026.rs::task_notifications_ride_listen_filtered_by_task_id` | pass | — | — | — |
+| `taskIds` requested by a client that did not declare the extension → `-32021` with `data.requiredCapabilities.extensions` | MUST | Implemented | `c/turul-http-mcp-server/src/streamable_http.rs` (`handle_subscriptions_listen`) via `turul_mcp_ext_tasks::missing_capability_error` | `ext_tasks_2026.rs::listen_task_ids_without_declaration_is_32021` | pass | — | — | — |
+| Client sets `Mcp-Name` = `params.taskId` on `tasks/get`, `tasks/update`, `tasks/cancel` | MUST | Implemented | `c/turul-mcp-client/src/transport/http.rs` (`apply_request_metadata_headers`) | `transport::http::tests::task_methods_set_mcp_name_to_task_id` | pass | — | — | — |
+| Wire types validate against the released `schema/2026-07-28/schema.json` | MUST | Implemented | `c/turul-mcp-ext-tasks/schema/` pinned at `0d0a6bd4` / `899c1bbc` | `released_schema_test.rs` (every result and status) | pass | — | — | — |
 | Exactly one encoded `Mcp-Name` header on a task-augmented call | MUST | Implemented | client transport | `ext_tasks_e2e_2026.rs::call_tool_or_task_emits_exactly_one_encoded_mcp_name_header` | pass | — | — | — |
 
 Tasks is the best-tested area in the framework by ratio of asserting tests to
@@ -99,11 +102,7 @@ path, so an honestly-recorded pin at a floating path fails the gate.
    entirely self-referential. Three peers now drive the core surface — the Go
    SDK, the TypeScript SDK and FastMCP — and none of them touches the extension,
    so the harness to close this already exists.
-3. **The Tasks extension's `taskId` is a bearer token with no owner binding.**
-   Recorded in full in [base-protocol.md](base-protocol.md) §12; named here
-   because it is an extension defect, not a core one — `tasks/get`/`update`/`cancel`
-   take no principal, so possession of the handle is the entire access check.
-4. **`spec.types.ts` and `apps-2026-01-26.mdx` are pinned to different upstream
+3. **`spec.types.ts` and `apps-2026-01-26.mdx` are pinned to different upstream
    commits** (`v1.7.5` and `v1.0.0`). The core crate's rule is one immutable
    commit for both artifacts. The split is deliberate and argued — upstream
    publishes no dated `spec.types.ts`, and the bound field sets are identical at

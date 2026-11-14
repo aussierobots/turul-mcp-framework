@@ -585,17 +585,6 @@ impl McpHandler for ExtTasksCancelHandler {
     }
 }
 
-/// The `-32021` payload for a task-requiring tool called without the
-/// declared extension — `data.requiredCapabilities.extensions` shape per the
-/// upstream overview.
-pub fn missing_capability_error() -> McpError {
-    McpError::MissingRequiredClientCapability {
-        required: serde_json::json!({
-            "extensions": { turul_mcp_ext_tasks::EXTENSION_IDENTIFIER: {} }
-        }),
-    }
-}
-
 /// True when this request's declared capabilities activate the extension.
 pub fn declared(caps: &turul_mcp_protocol::initialize::ClientCapabilities) -> bool {
     turul_mcp_ext_tasks::declared_by_client(caps)
@@ -630,7 +619,7 @@ fn require_declared(params: &Option<Value>) -> McpResult<()> {
     if declared(&caps) {
         Ok(())
     } else {
-        Err(missing_capability_error())
+        Err(turul_mcp_ext_tasks::missing_capability_error())
     }
 }
 

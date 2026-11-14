@@ -44,6 +44,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unseen. `scripts/warning-sweep.sh default|opt-in-2025` holds the one list, built with the same
   features the gates use; `ci-gates.sh` and CI both call it. No crate changes.
 
+`turul-mcp-ext-tasks` 0.1.6 → 0.1.7, `turul-http-mcp-server` → 0.4.8,
+`turul-mcp-server` → 0.4.8, `turul-mcp-client` → 0.4.9.
+
+### Fixed
+
+- **`subscriptions/listen` refuses `taskIds` from a client that did not declare the Tasks
+  extension.** It now answers `-32021` with `data.requiredCapabilities.extensions`, as
+  tasks.md §Task Status Notifications requires, instead of opening a stream that silently drops
+  the filter. A server that does not advertise the extension still ignores `taskIds`.
+  Spec-compliance fix; behaviour change for non-declaring clients. Patch release.
+- **The client sends `Mcp-Name` = `params.taskId` on `tasks/get`, `tasks/update` and
+  `tasks/cancel`** (tasks.md §Streamable HTTP: Routing Headers), so intermediaries can route a
+  task's requests to the instance holding it. Spec-compliance fix. Patch release.
+
+### Changed
+
+- **Tasks re-pinned to the released 2026-07-28 artifacts.** `turul-mcp-ext-tasks` vendors
+  ext-tasks `specification/2026-07-28/tasks.md` (`899c1bbc`) and
+  `schema/2026-07-28/schema.{ts,json}` (`0d0a6bd4`) in place of the `schema/draft/` copies, and
+  a new test validates every result and task status against `schema.json`. The pin gate now
+  requires dated upstream paths for ext-tasks too. Upstream stage is Beta, headed to Core. No
+  wire change.
+- **`turul-http-mcp-server` depends on `turul-mcp-ext-tasks`** (2026-07-28 lane only) instead
+  of matching the extension identifier as a string literal, so the identifier has one owner.
+  `turul-mcp-ext-tasks` now publishes before `turul-http-mcp-server`.
+- **`missing_capability_error` moved from `turul_mcp_server::ext_tasks` to
+  `turul_mcp_ext_tasks`.** Removing the server path is formally semver-breaking; it ships as a
+  patch under the 0.4 rule. Call `turul_mcp_ext_tasks::missing_capability_error()` instead.
+
 ## [0.4.20] - 2026-11-12
 
 `turul-mcp-derive` 0.4.4 → 0.4.5.

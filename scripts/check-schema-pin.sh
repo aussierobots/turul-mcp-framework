@@ -139,20 +139,16 @@ done
 # ---------------------------------------------------------------------------
 # Tasks extension — turul-mcp-ext-tasks
 # ---------------------------------------------------------------------------
-# Upstream modelcontextprotocol/ext-tasks has no dated release directory and no
-# tags at all — `schema/draft/` is the only thing that exists, so the dated-path
-# rule above cannot apply here. The check is that the vendored bytes still match
-# what the provenance table claims.
+# Upstream modelcontextprotocol/ext-tasks publishes the released, immutable
+# `specification/2026-07-28/` and `schema/2026-07-28/` directories next to a
+# floating `draft/`. Every ext-tasks row must come from a dated directory, the
+# same rule the Apps arm applies.
 #
-# Two upstream repos are pinned here, not one: ext-tasks carries the schema,
-# and modelcontextprotocol/modelcontextprotocol carries the SEP prose. Several
-# rules this crate must satisfy (MRTR/task sequencing, phase-state separation)
-# exist ONLY in the prose, so the SEP document is a pinned artifact too and is
-# checksummed like any other. See that README's "Rules that live only in the
-# prose".
+# The SEP-2663 document from modelcontextprotocol/modelcontextprotocol is
+# pinned too: two sequencing rules exist only there (see that README's "Rules
+# that live only in the prose"). It is checksummed but has no dated path.
 #
-# Checksums are read from the crate's schema/README.md table, in the same
-# format as turul-mcp-ext-apps above:
+# Checksums are read from the crate's schema/README.md table:
 #   | `file` | upstream/repo | upstream/path | `<40-hex>` | `<64-hex>` | date |
 
 TASKS_DIR=crates/turul-mcp-ext-tasks/schema
@@ -162,17 +158,19 @@ tasks_rows=$(awk -F'|' '
   /^\|[^|]*`[^`]+`[^|]*\|/ {
     n = split($0, c, "|")
     if (n < 7) next
-    file = c[2]; commit = c[5]; sum = c[6]
+    file = c[2]; repo = c[3]; src = c[4]; commit = c[5]; sum = c[6]
     gsub(/[^a-zA-Z0-9._\/-]/, "", file)
+    gsub(/[^a-zA-Z0-9._\/-]/, "", repo)
+    gsub(/[^a-zA-Z0-9._\/-]/, "", src)
     if (match(commit, /[0-9a-f]{40}/)) commit = substr(commit, RSTART, RLENGTH); else commit = ""
     if (match(sum, /[0-9a-f]{64}/))    sum    = substr(sum,    RSTART, RLENGTH); else sum    = ""
-    if (file != "" && commit != "" && sum != "") print file, commit, sum
+    if (file != "" && repo != "" && src != "" && commit != "" && sum != "") print file, repo, src, commit, sum
   }' "$TASKS_README")
 
 if [ -z "$tasks_rows" ]; then
   bad "ext-tasks provenance table" "no complete rows parsed from $TASKS_README"
 else
-  while read -r file commit sum; do
+  while read -r file repo src commit sum; do
     path=$TASKS_DIR/$file
     if [ ! -f "$path" ]; then
       bad "ext-tasks $file" "listed in README but missing on disk"
@@ -183,6 +181,14 @@ else
       bad "ext-tasks $file checksum" "on disk $disk != README $sum"
     else
       note "ext-tasks $file checksum" "OK (${commit:0:12})"
+    fi
+    if [ "$repo" = "modelcontextprotocol/ext-tasks" ]; then
+      case "$src" in
+        specification/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*|schema/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/*)
+          note "ext-tasks $file source path" "OK ($src)" ;;
+        *)
+          bad "ext-tasks $file source path" "'$src' is not a dated specification/ or schema/<YYYY-MM-DD>/ path" ;;
+      esac
     fi
   done <<EOF
 $tasks_rows

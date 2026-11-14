@@ -1958,27 +1958,44 @@ impl StreamableHttpHandler {
                 .filter(|uris| !uris.is_empty() && caps.resources.is_some()),
         };
 
-        // Tasks-extension filter addition (SEP-2663 `taskIds`): rides the same
+        // Tasks-extension filter addition (`taskIds`): rides the same
         // `notifications` object but is not a core-schema field, so it is read
-        // from the raw params; honored only when the server advertises
-        // `io.modelcontextprotocol/tasks` in `capabilities.extensions`.
-        let tasks_extension_advertised = caps
-            .extensions
-            .as_ref()
-            .is_some_and(|m| m.contains_key("io.modelcontextprotocol/tasks"));
-        let honored_task_ids: Option<Vec<String>> = request
+        // from the raw params. Honored only when the server advertises the
+        // extension; when it does, tasks.md §Task Status Notifications requires
+        // `-32021` for a client that asks without declaring it.
+        let tasks_extension_advertised = turul_mcp_ext_tasks::declared_by_server(caps);
+        let raw_params = request
             .params
             .as_ref()
-            .and_then(|p| serde_json::to_value(p).ok())
+            .and_then(|p| serde_json::to_value(p).ok());
+        let requested_task_ids: Vec<String> = raw_params
             .as_ref()
             .and_then(|v| v.pointer("/notifications/taskIds"))
             .and_then(|v| v.as_array())
             .map(|ids| {
                 ids.iter()
                     .filter_map(|i| i.as_str().map(String::from))
-                    .collect::<Vec<_>>()
+                    .collect()
             })
-            .filter(|ids| !ids.is_empty() && tasks_extension_advertised);
+            .unwrap_or_default();
+        if tasks_extension_advertised && !requested_task_ids.is_empty() {
+            let client_caps = raw_params
+                .as_ref()
+                .and_then(|v| v.get("_meta"))
+                .and_then(|m| m.get(turul_mcp_protocol::meta::META_KEY_CLIENT_CAPABILITIES))
+                .cloned()
+                .and_then(|c| serde_json::from_value(c).ok())
+                .unwrap_or_default();
+            if !turul_mcp_ext_tasks::declared_by_client(&client_caps) {
+                return reject_400(
+                    request.id.clone(),
+                    turul_mcp_ext_tasks::missing_capability_error().to_error_object(),
+                    context.protocol_version.as_str(),
+                );
+            }
+        }
+        let honored_task_ids: Option<Vec<String>> =
+            Some(requested_task_ids).filter(|ids| !ids.is_empty() && tasks_extension_advertised);
 
         // Gate delivery at the broadcast layer: the subscription registry entry is
         // created even when empty, so an empty filter delivers nothing (the

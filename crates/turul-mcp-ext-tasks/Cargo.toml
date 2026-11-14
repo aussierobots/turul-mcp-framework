@@ -4,7 +4,7 @@
 # version, never version.workspace = true.
 [package]
 name = "turul-mcp-ext-tasks"
-version = "0.1.6"
+version = "0.1.7"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -50,5 +50,7 @@ aws-config = { workspace = true, optional = true }
 aws-sdk-dynamodb = { workspace = true, optional = true }
 
 [dev-dependencies]
+# Validates the wire types against the vendored released schema.json.
+jsonschema.workspace = true
 # The parity harness is async; #[tokio::test] drives it.
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
