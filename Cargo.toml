@@ -8,6 +8,7 @@ members = [
   "crates/turul-mcp-protocol-2026-07-28",
   "crates/turul-mcp-schema-validation",
   "crates/turul-mcp-ext-apps",
+  "crates/turul-mcp-ext-skills",
   "crates/turul-mcp-ext-tasks",
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
@@ -121,6 +122,7 @@ default-members = [
   "crates/turul-mcp-protocol-2026-07-28",
   "crates/turul-mcp-schema-validation",
   "crates/turul-mcp-ext-apps",
+  "crates/turul-mcp-ext-skills",
   "crates/turul-mcp-ext-tasks",
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
@@ -216,6 +218,9 @@ serde_yml = "0.0.13"
 # The conformance fixture signs `requestState` with these.
 hmac = "0.13"
 sha2 = "0.11"
+# Agent Skills parsing and validation (sibling repo, crates.io); owner of the
+# SKILL.md format for turul-mcp-ext-skills (ADR-033).
+turul-agent-skills = "0.1"
 getrandom = "0.4"
 thiserror = "2.0"
 async-trait = "0.1"
@@ -268,6 +273,7 @@ turul-mcp-server = { version = "0.4", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.4", path = "crates/turul-mcp-derive" }
 turul-mcp-client = { version = "0.4", path = "crates/turul-mcp-client" }
 turul-mcp-ext-apps = { version = "0.1", path = "crates/turul-mcp-ext-apps" }
+turul-mcp-ext-skills = { version = "0.1", path = "crates/turul-mcp-ext-skills" }
 turul-mcp-ext-tasks = { version = "0.1", path = "crates/turul-mcp-ext-tasks" }
 turul-mcp-builders = { version = "0.4", path = "crates/turul-mcp-builders" }
 turul-mcp-aws-lambda = { version = "0.4", path = "crates/turul-mcp-aws-lambda" }

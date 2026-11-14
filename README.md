@@ -572,6 +572,7 @@ impl McpMiddleware for AuthMiddleware {
 - **`turul-mcp-derive`** - Procedural macros for all MCP areas
 - **`turul-mcp-builders`** - Runtime builder patterns for dynamic MCP components
 - **`turul-mcp-ext-tasks`** - Tasks extension (`io.modelcontextprotocol/tasks`, SEP-2663) for the 2026-07-28 lane (opt-in `ext-tasks` feature)
+- **`turul-mcp-ext-skills`** - Skills extension (`io.modelcontextprotocol/skills`, SEP-2640, Beta) — `skill://` URIs, `sha256:` manifests and wire types over [`turul-agent-skills`](https://docs.rs/turul-agent-skills) (opt-in `ext-skills` feature, ADR-033)
 - **`turul-mcp-ext-apps`** - MCP Apps extension (`io.modelcontextprotocol/ui`, SEP-1865) — MCP-side bindings
 - **`turul-mcp-json-rpc-server`** - Frozen 0.3.x compatibility shim re-exporting [`turul-rpc`](https://github.com/aussierobots/turul-rpc); the framework crates depend on `turul-rpc` directly (see ADR-025)
 - **`turul-mcp-session-storage`** - Session storage backends (SQLite, PostgreSQL, DynamoDB)

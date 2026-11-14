@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-server"
-version = "0.4.9"
+version = "0.4.10"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -25,10 +25,13 @@ dynamic-tools = ["turul-mcp-server-state-storage"]
 # Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) on the 2026 lane.
 # Off by default: SEP-2133 requires extensions disabled unless opted into.
 ext-tasks = ["protocol-2026-07-28", "dep:turul-mcp-ext-tasks", "dep:turul-mcp-oauth"]
+# Skills extension (io.modelcontextprotocol/skills, SEP-2640; ADR-033). Off by default.
+ext-skills = ["protocol-2026-07-28", "dep:turul-mcp-ext-skills"]
 test-utils = []
 
 [dependencies]
 turul-mcp-ext-tasks = { workspace = true, optional = true }
+turul-mcp-ext-skills = { workspace = true, optional = true }
 # Framework dependencies
 turul-rpc = { workspace = true, features = ["async"] }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }

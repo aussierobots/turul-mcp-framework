@@ -7,7 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-`turul-mcp-ext-apps` 0.1.1 → 0.1.2.
+`turul-mcp-ext-apps` 0.1.1 → 0.1.2, `turul-mcp-ext-skills` 0.1.0 (new),
+`turul-mcp-server` → 0.4.10.
 
 ### Added
 
@@ -26,6 +27,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   asserts what a host needs. It needs npm, so it is run by hand and not gated. The view loads
   the MCP Apps SDK from one exact-version URL checked by an import-map sha384, so its Refresh
   button calls the app-only `refresh_weather` through the host.
+- **Skills extension (`io.modelcontextprotocol/skills`, SEP-2640, Beta) — ADR-033.** New
+  crate `turul-mcp-ext-skills` holds the wire types and the only producers of `skill://`
+  URIs (`SkillPath`), `sha256:` digests (`SkillResource::of`), complete manifests within
+  the 512-file / 16 MiB limits (`Manifest::new`), verbatim frontmatter
+  (`Frontmatter::from_skill_md`) and entries (`SkillEntry::from_files`). SKILL.md parsing
+  and validation come from `turul-agent-skills` 0.1. Vendored `specification/beta/skills.mdx`
+  at `ff224337`, checked by `scripts/check-schema-pin.sh`.
+- **`turul-mcp-server` feature `ext-skills`** (off by default): `with_ext_skills(catalog)`
+  declares the extension and the `resources` capability, serves `skills/list` and
+  `skills/get`, and registers every manifest file as a static resource serving the hashed
+  bytes. A manifest URI the `resources/read` policy would reject (`..`, `/etc/`, `/proc/`)
+  fails `build()` with the file named, as does a skill-file URI that two skills list with
+  different bytes or that another resource already holds. Additive patch release.
+- Not yet: frontmatter with typed (non-string) values, `"dynamic"` skills,
+  `resources/directory/read`, directory-backed catalogs, and Lambda.
+
 
 ### Fixed
 

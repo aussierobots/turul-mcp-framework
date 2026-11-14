@@ -68,6 +68,11 @@ pub struct McpServerBuilder {
     #[cfg(feature = "ext-tasks")]
     ext_task_retention: Option<(turul_mcp_ext_tasks::RetentionPolicy, std::time::Duration)>,
 
+    /// Resource URIs served by the Skills extension. One URI serves one
+    /// content (ADR-033 §5): a later `.resource()` on one of these is refused.
+    #[cfg(feature = "ext-skills")]
+    ext_skill_uris: std::collections::HashSet<String>,
+
     /// Loggers registered with the server
     #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
@@ -294,6 +299,8 @@ impl McpServerBuilder {
             ext_task_tools: std::collections::HashMap::new(),
             #[cfg(feature = "ext-tasks")]
             ext_task_retention: None,
+            #[cfg(feature = "ext-skills")]
+            ext_skill_uris: std::collections::HashSet::new(),
             #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
             notifications: HashMap::new(),
@@ -448,6 +455,76 @@ impl McpServerBuilder {
     pub fn with_ext_tasks(mut self, store: Arc<dyn turul_mcp_ext_tasks::TaskStore>) -> Self {
         self.ext_task_store = Some(store);
         self
+    }
+
+    /// Serve the Skills extension (`io.modelcontextprotocol/skills`, ADR-033):
+    /// advertises the extension with `directoryRead` false, forces the
+    /// `resources` capability, registers `skills/list` and `skills/get`, and
+    /// registers every manifest file as a static resource serving exactly the
+    /// hashed bytes. Call once.
+    ///
+    /// A manifest URI the `resources/read` policy would reject (it contains
+    /// `..`, `/etc/` or `/proc/`) makes `build()` fail, naming the file, so no
+    /// unreadable URI is ever advertised (ADR-033 §5).
+    #[cfg(feature = "ext-skills")]
+    pub fn with_ext_skills(mut self, catalog: crate::ext_skills::SkillCatalog) -> Self {
+        use turul_mcp_ext_skills::v2026_07_28::{
+            EXTENSION_IDENTIFIER, SkillsCapability, capability,
+        };
+        let catalog = Arc::new(catalog);
+        // One URI, one content: nested skills list files their enclosing skill
+        // also lists. The entry's own SKILL.md wins the resource metadata.
+        let mut files: std::collections::BTreeMap<String, crate::ext_skills::SkillFileResource> =
+            std::collections::BTreeMap::new();
+        for entry in catalog.entries() {
+            for file in crate::ext_skills::SkillFileResource::for_entry(entry) {
+                match files.get(file.uri()) {
+                    Some(prev) if prev.digest() != file.digest() => {
+                        self.validation_errors.push(format!(
+                            "skill file {} is listed with different content by two skills; \
+                             one URI serves one content (ADR-033 §5)",
+                            file.uri()
+                        ));
+                    }
+                    Some(prev) if prev.own_skill_md() || !file.own_skill_md() => {}
+                    _ => {
+                        files.insert(file.uri().to_string(), file);
+                    }
+                }
+            }
+        }
+        let mut uris = Vec::new();
+        for (uri, file) in files {
+            if self.resources.contains_key(&uri) {
+                self.validation_errors.push(format!(
+                    "skill file {uri} is already registered as another resource; \
+                     one URI serves one content (ADR-033 §5)"
+                ));
+                continue;
+            }
+            self = self.resource(file);
+            self.ext_skill_uris.insert(uri.clone());
+            uris.push(uri);
+        }
+        // Checked through the read path's own policy: the blocklist keeps one
+        // definition (build_resource_security).
+        let policy = self.build_resource_security();
+        for uri in uris {
+            let probe = serde_json::json!({ "uri": uri });
+            if let Err(e) = policy.validate_request("resources/read", Some(&probe), None) {
+                self.validation_errors.push(format!(
+                    "skill file {uri} would be unreadable through resources/read ({e}); \
+                     a served skill must not advertise it (ADR-033 §5)"
+                ));
+            }
+        }
+        self.with_resources()
+            .extension_capability(
+                EXTENSION_IDENTIFIER,
+                capability(SkillsCapability::default()),
+            )
+            .handler(crate::ext_skills::SkillsListHandler(Arc::clone(&catalog)))
+            .handler(crate::ext_skills::SkillsGetHandler(catalog))
     }
 
     /// Run the task retention sweep on a timer.
@@ -834,6 +911,13 @@ impl McpServerBuilder {
                 self.validation_errors
                     .push(format!("Invalid resource URI '{}': {}", uri, e));
             } else {
+                #[cfg(feature = "ext-skills")]
+                if self.ext_skill_uris.contains(&uri) {
+                    self.validation_errors.push(format!(
+                        "resource {uri} is already served as a skill file; one URI serves one content (ADR-033 §5)"
+                    ));
+                    return self;
+                }
                 tracing::debug!("Successfully added static resource: {}", uri);
                 self.resources.insert(uri, Arc::new(resource));
             }

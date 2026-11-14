@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Offline, deterministic guard on every vendored MCP schema pin in the repo:
-# the core protocol crate plus the two extension crates.
+# the core protocol crate plus the extension crates.
 #
 # Nothing else recomputes a vendored file's checksum, so a hand-edited schema,
 # a half-applied re-pin, or a copy taken from the wrong upstream directory
@@ -202,6 +202,58 @@ for f in "$TASKS_DIR"/*; do
   [ "$base" = "README.md" ] && continue
   if ! printf '%s\n' "$tasks_rows" | cut -d' ' -f1 | grep -qx "$base"; then
     bad "ext-tasks $base" "on disk but absent from the $TASKS_README table"
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Skills extension — turul-mcp-ext-skills (ADR-033)
+# ---------------------------------------------------------------------------
+# Upstream modelcontextprotocol/ext-skills is Beta: no tags, no dated
+# directory, no schema file — the TypeScript blocks in skills.mdx are the
+# schema. The check is that the vendored bytes match the provenance table,
+# in the same format as turul-mcp-ext-tasks above:
+#   | `file` | upstream/repo | upstream/path | `<40-hex>` | `<64-hex>` | date |
+
+SKILLS_DIR=crates/turul-mcp-ext-skills/schema
+SKILLS_README=$SKILLS_DIR/README.md
+
+skills_rows=$(awk -F'|' '
+  /^\|[^|]*`[^`]+`[^|]*\|/ {
+    n = split($0, c, "|")
+    if (n < 7) next
+    file = c[2]; commit = c[5]; sum = c[6]
+    gsub(/[^a-zA-Z0-9._\/-]/, "", file)
+    if (match(commit, /[0-9a-f]{40}/)) commit = substr(commit, RSTART, RLENGTH); else commit = ""
+    if (match(sum, /[0-9a-f]{64}/))    sum    = substr(sum,    RSTART, RLENGTH); else sum    = ""
+    if (file != "" && commit != "" && sum != "") print file, commit, sum
+  }' "$SKILLS_README")
+
+if [ -z "$skills_rows" ]; then
+  bad "ext-skills provenance table" "no complete rows parsed from $SKILLS_README"
+else
+  while read -r file commit sum; do
+    path=$SKILLS_DIR/$file
+    if [ ! -f "$path" ]; then
+      bad "ext-skills $file" "listed in README but missing on disk"
+      continue
+    fi
+    disk=$(shasum -a 256 "$path" | cut -d' ' -f1)
+    if [ "$disk" != "$sum" ]; then
+      bad "ext-skills $file checksum" "on disk $disk != README $sum"
+    else
+      note "ext-skills $file checksum" "OK (${commit:0:12})"
+    fi
+  done <<EOF
+$skills_rows
+EOF
+fi
+
+# Every vendored file must be accounted for by a table row.
+for f in "$SKILLS_DIR"/*; do
+  base=$(basename "$f")
+  [ "$base" = "README.md" ] && continue
+  if ! printf '%s\n' "$skills_rows" | cut -d' ' -f1 | grep -qx "$base"; then
+    bad "ext-skills $base" "on disk but absent from the $SKILLS_README table"
   fi
 done
 
