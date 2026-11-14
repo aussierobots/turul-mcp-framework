@@ -34,6 +34,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `turul-mcp-ext-apps` README, `docs/compliance/extensions.md` §3 and ADR-028. `UiResourceMeta`
   now documents `_meta.ui` on the `resources/read` content item only, as the released spec does.
 
+`turul-mcp-server` 0.4.8 → 0.4.9, `turul-mcp-builders` 0.4.2 → 0.4.3.
+
+### Fixed
+
+- **`ResourceBuilder` and `PromptBuilder` output can be served.** `turul-mcp-server` now
+  implements `McpResource` for `DynamicResource` and `McpPrompt` for `DynamicPrompt`, as it already
+  did `McpTool` for `DynamicTool`, so `.resource(builder.build()?)` and
+  `.prompt(builder.build()?)` compile and serve. Before this, nothing could register what either
+  builder built, though the crate docs said they work like `ToolBuilder`. A builder prompt
+  receives only string arguments. Bug fix, patch release.
+- **A `ResourceBuilder` resource reads with the MIME type it lists.** `text_content` stamped
+  `text/plain` on the content item whatever `mime_type` declared, so `resources/list` and
+  `resources/read` disagreed. Static text content now takes the declared type. Bug fix, patch
+  release.
+
 ## [0.4.21] - 2026-11-14
 
 `turul-mcp-derive` 0.4.5 → 0.4.6, `turul-http-mcp-server` 0.4.6 → 0.4.8,

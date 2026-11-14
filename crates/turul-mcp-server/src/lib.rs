@@ -290,3 +290,39 @@ impl McpTool for DynamicTool {
         }
     }
 }
+
+/// Serves `ResourceBuilder` output: static content or the builder's `read` function.
+#[async_trait::async_trait]
+impl McpResource for turul_mcp_builders::resource::DynamicResource {
+    async fn read(
+        &self,
+        _params: Option<serde_json::Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+        turul_mcp_builders::resource::DynamicResource::read(self)
+            .await
+            .map(|content| vec![content])
+            .map_err(|e| McpError::resource_execution(&e))
+    }
+}
+
+/// Serves `PromptBuilder` output through its `get` function.
+#[async_trait::async_trait]
+impl McpPrompt for turul_mcp_builders::prompt::DynamicPrompt {
+    async fn render(
+        &self,
+        args: Option<std::collections::HashMap<String, serde_json::Value>>,
+    ) -> McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>> {
+        // Wire prompt arguments are strings; the handler's MRTR keys carry JSON
+        // and mean nothing to a builder prompt, which cannot request input.
+        let args = args
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(k, v)| v.as_str().map(|s| (k, s.to_string())))
+            .collect();
+        self.get(args)
+            .await
+            .map(|result| result.messages)
+            .map_err(|e| McpError::prompt_execution(&e))
+    }
+}

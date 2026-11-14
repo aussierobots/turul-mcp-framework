@@ -207,6 +207,12 @@ impl ResourceBuilder {
 
     /// Build the dynamic resource
     pub fn build(self) -> Result<DynamicResource, String> {
+        // The read must report the type the listing declares, whichever setter ran last.
+        let mut content = self.content;
+        if let (Some(ResourceContent::Text(text)), Some(mime)) = (content.as_mut(), &self.mime_type)
+        {
+            text.mime_type = Some(mime.clone());
+        }
         Ok(DynamicResource {
             uri: self.uri,
             name: self.name,
@@ -214,7 +220,7 @@ impl ResourceBuilder {
             description: self.description,
             mime_type: self.mime_type,
             size: self.size,
-            content: self.content,
+            content,
             annotations: self.annotations,
             icons: self.icons,
             meta: self.meta,
