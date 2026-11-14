@@ -35,7 +35,7 @@ fn round_trip<T: Serialize + DeserializeOwned>(v: &Value) {
 /// typed wire structs unchanged.
 #[test]
 fn spec_examples_round_trip() {
-    let mut seen = [0usize; 4];
+    let mut seen = [0usize; 6];
     for ex in json_examples() {
         match ex["method"].as_str() {
             Some(METHOD_SKILLS_LIST) => {
@@ -46,6 +46,10 @@ fn spec_examples_round_trip() {
                 round_trip::<GetSkillRequestParams>(&ex["params"]);
                 seen[1] += 1;
             }
+            Some(super::types::METHOD_RESOURCES_DIRECTORY_READ) => {
+                round_trip::<super::types::ReadResourceDirectoryRequestParams>(&ex["params"]);
+                seen[4] += 1;
+            }
             _ => {}
         }
         if ex["result"].get("skills").is_some() {
@@ -55,6 +59,10 @@ fn spec_examples_round_trip() {
         if ex["result"].get("skill").is_some() {
             round_trip::<GetSkillResult>(&ex["result"]);
             seen[3] += 1;
+        }
+        if ex["result"].get("resources").is_some() && ex["result"].get("skills").is_none() {
+            round_trip::<super::types::ReadResourceDirectoryResult>(&ex["result"]);
+            seen[5] += 1;
         }
     }
     assert!(seen.iter().all(|&n| n >= 1), "examples matched: {seen:?}");

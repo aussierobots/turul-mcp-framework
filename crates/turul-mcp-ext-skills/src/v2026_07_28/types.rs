@@ -5,6 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::{Map, Value};
 use turul_mcp_protocol_2026_07_28::caching::{CacheScope, ttl_ms_serde};
 use turul_mcp_protocol_2026_07_28::meta::{Cursor, RequestMetaObject};
+use turul_mcp_protocol_2026_07_28::resources::Resource;
 use turul_mcp_protocol_2026_07_28::result_type::ResultType;
 
 use super::manifest::SkillResource;
@@ -100,6 +101,40 @@ pub struct GetSkillResult {
     #[serde(default)]
     pub result_type: ResultType,
     pub skill: Skill,
+    #[serde(with = "ttl_ms_serde")]
+    pub ttl_ms: f64,
+    pub cache_scope: CacheScope,
+    #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
+    pub meta: Option<Map<String, Value>>,
+}
+
+/// `mimeType` of a directory resource (`skills.mdx` §Directory Resources).
+pub const MIME_TYPE_DIRECTORY: &str = "inode/directory";
+
+/// `resources/directory/read` params (`ReadResourceDirectoryRequestParams`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReadResourceDirectoryRequestParams {
+    /// URI of the directory resource to read.
+    pub uri: String,
+    /// Pagination cursor from a previous page's `nextCursor`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Cursor>,
+    /// Required request metadata.
+    #[serde(rename = "_meta")]
+    pub meta: RequestMetaObject,
+}
+
+/// `resources/directory/read` result: the directory's direct children.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadResourceDirectoryResult {
+    /// MUST be `"complete"`.
+    #[serde(default)]
+    pub result_type: ResultType,
+    /// Files with their `Resource` metadata; subdirectories as directory resources.
+    pub resources: Vec<Resource>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<Cursor>,
     #[serde(with = "ttl_ms_serde")]
     pub ttl_ms: f64,
     pub cache_scope: CacheScope,
