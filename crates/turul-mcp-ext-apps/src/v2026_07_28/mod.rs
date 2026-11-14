@@ -6,8 +6,11 @@ pub mod types;
 #[cfg(test)]
 mod compliance_test;
 
-pub use capability::{EXTENSION_IDENTIFIER, client_supports_html_views, declared_by_client};
+pub use capability::{
+    EXTENSION_IDENTIFIER, capability, client_supports_html_views, declared_by_client,
+    declared_by_server,
+};
 pub use types::{
-    EmptyObject, MCP_APP_HTML_MIME, META_KEY_UI, UiClientCapabilities, UiResourceCsp,
-    UiResourceMeta, UiResourcePermissions, UiToolMeta, UiToolVisibility,
+    EmptyObject, MCP_APP_HTML_MIME, META_KEY_UI, UI_URI_SCHEME, UiClientCapabilities,
+    UiResourceCsp, UiResourceMeta, UiResourcePermissions, UiToolMeta, UiToolVisibility,
 };

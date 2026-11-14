@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+`turul-mcp-ext-apps` 0.1.1 → 0.1.2.
+
+### Added
+
+- **`turul-mcp-ext-apps` helpers for serving MCP Apps.** `capability()` (the server's
+  `{}` extension entry), `declared_by_server`, `UI_URI_SCHEME`, and `UiToolMeta::to_meta` /
+  `UiResourceMeta::to_meta`, which build the `{ "ui": … }` `_meta` map. **Classification:
+  patch, additive.**
+- **MCP Apps served through `turul-mcp-server`'s generic hooks, with no server feature.**
+  `crates/turul-mcp-server/tests/ext_apps_2026.rs` checks discover, `tools/list` `_meta.ui`
+  (app-only tools stay listed), the `ui://` `resources/read` MIME and content-item `_meta.ui`,
+  and in-call degradation on the request's client capabilities. It runs in the default lane.
+  `turul-mcp-ext-apps` becomes a dev-dependency of `turul-mcp-server`, which needs no version
+  bump. New example: `examples/ext-apps-server`.
+- **`scripts/interop-ext-apps.sh`.** Runs upstream ext-apps `basic-host`'s server-facing code,
+  with the official TypeScript SDK and ext-apps packages, against `examples/ext-apps-server` and
+  asserts what a host needs. It needs npm, so it is run by hand and not gated. The view loads
+  the MCP Apps SDK from one exact-version URL checked by an import-map sha384, so its Refresh
+  button calls the app-only `refresh_weather` through the host.
+
+### Fixed
+
+- **Apps docs no longer list host duties as missing server MUSTs.** Hiding non-`model` tools
+  and rejecting app `tools/call` belong to the host (Apps spec §Visibility). Corrected in the
+  `turul-mcp-ext-apps` README, `docs/compliance/extensions.md` §3 and ADR-028. `UiResourceMeta`
+  now documents `_meta.ui` on the `resources/read` content item only, as the released spec does.
+
 ## [0.4.21] - 2026-11-14
 
 `turul-mcp-derive` 0.4.5 → 0.4.6, `turul-http-mcp-server` 0.4.6 → 0.4.8,

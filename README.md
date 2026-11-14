@@ -225,8 +225,9 @@ this section and come back later. Migrating from 2025-11-25? Read it first.
   via `turul-mcp-ext-tasks` (opt-in `ext-tasks` feature): `.with_ext_tasks()` +
   `.ext_task_tool()` server-side, `call_tool_or_task` / `task_*` client-side.
   → `examples/ext-tasks-server`
-- **MCP Apps extension** (`io.modelcontextprotocol/ui`, SEP-1865) — MCP-side bindings
-  (`turul-mcp-ext-apps`).
+- **MCP Apps extension** (`io.modelcontextprotocol/ui`, SEP-1865) — `turul-mcp-ext-apps`
+  types and helpers, served through the server's generic hooks (no feature flag).
+  → `examples/ext-apps-server`
 - **SEP-2243 request-metadata headers** — `Mcp-Method` / `Mcp-Name` / `Mcp-Param-*` let
   infrastructure route on method/tool/arguments without parsing JSON bodies.
   → `examples/header-bound-tools-server`

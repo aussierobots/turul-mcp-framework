@@ -9,11 +9,17 @@
 //! - `McpUiResourceCsp`        → [`UiResourceCsp`]
 //! - `McpUiResourcePermissions`→ [`UiResourcePermissions`]
 
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// The MIME profile a client MUST list in its declared `mimeTypes` to
 /// support MCP Apps HTML views.
 pub const MCP_APP_HTML_MIME: &str = "text/html;profile=mcp-app";
+
+/// URI scheme every UI resource MUST use.
+pub const UI_URI_SCHEME: &str = "ui://";
 
 /// `_meta` key carrying UI metadata on tools and UI resources.
 /// (The flat `_meta["ui/resourceUri"]` form is deprecated upstream and is
@@ -61,6 +67,14 @@ pub struct UiToolMeta {
     /// Access scope. Default when absent: `["model", "app"]`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub visibility: Option<Vec<UiToolVisibility>>,
+}
+
+impl UiToolMeta {
+    /// The tool's `_meta` map: `{ "ui": <self> }`. Pass it to
+    /// `ToolBuilder::meta` or return it from `HasToolMeta::tool_meta`.
+    pub fn to_meta(&self) -> HashMap<String, Value> {
+        ui_meta(self)
+    }
 }
 
 /// Content Security Policy configuration for a UI resource —
@@ -111,9 +125,8 @@ pub struct UiResourcePermissions {
 #[serde(deny_unknown_fields)]
 pub struct EmptyObject {}
 
-/// UI metadata for a UI resource, carried in `_meta.ui` on the resource
-/// declaration and on each `resources/read` content item —
-/// `McpUiResourceMeta`.
+/// UI metadata for a UI resource, carried in `_meta.ui` on each
+/// `resources/read` content item — `McpUiResourceMeta`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct UiResourceMeta {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -127,4 +140,17 @@ pub struct UiResourceMeta {
     /// background; hosts' defaults vary, so setting it is recommended.
     #[serde(rename = "prefersBorder", skip_serializing_if = "Option::is_none")]
     pub prefers_border: Option<bool>,
+}
+
+impl UiResourceMeta {
+    /// A `resources/read` content item's `_meta` map: `{ "ui": <self> }`.
+    pub fn to_meta(&self) -> HashMap<String, Value> {
+        ui_meta(self)
+    }
+}
+
+fn ui_meta(value: &impl Serialize) -> HashMap<String, Value> {
+    // Every field is a string, bool, list or empty object: serializing cannot fail.
+    let ui = serde_json::to_value(value).expect("UI metadata serializes to JSON");
+    HashMap::from([(META_KEY_UI.to_string(), ui)])
 }
