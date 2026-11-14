@@ -1,22 +1,17 @@
-//! Lambda MCP Server Implementation
+//! Lambda MCP server
 //!
-//! This module provides the main Lambda MCP server implementation that mirrors
-//! the architecture of turul-mcp-server but adapted for AWS Lambda deployment.
+//! A [`LambdaMcpServer`] wraps the [`McpServer`] its builder produced (ADR-035)
+//! and adds only Lambda transport: the request adapter, streaming, CORS and the
+//! Lambda `ServerConfig`. Handlers, capabilities and the resource-security
+//! policy are the core server's.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use tracing::{debug, info};
 
 use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
-use turul_mcp_server::{
-    McpCompletion, McpNotification, McpPrompt, McpResource, McpTool, handlers::McpHandler,
-    session::SessionManager,
-};
-#[cfg(feature = "protocol-2025-11-25")]
-use turul_mcp_server::{McpElicitation, McpLogger, McpSampling};
-use turul_mcp_session_storage::BoxedSessionStorage;
+use turul_mcp_server::McpServer;
 
 use crate::error::Result;
 use crate::handler::LambdaMcpHandler;
@@ -24,180 +19,44 @@ use crate::handler::LambdaMcpHandler;
 #[cfg(feature = "cors")]
 use crate::cors::CorsConfig;
 
-/// Main Lambda MCP server
-///
-/// This server stores all configuration and can create Lambda handlers when needed.
-/// It mirrors the architecture of McpServer but is designed for Lambda deployment.
-#[allow(dead_code)]
+/// Main Lambda MCP server.
 pub struct LambdaMcpServer {
-    /// Server implementation information
+    /// Server implementation information, as built.
     pub implementation: Implementation,
-    /// Server capabilities
+    /// Server capabilities, as built. Read-only: capabilities are configured
+    /// through the builder (ADR-035), and `server/discover` reports those.
     pub capabilities: ServerCapabilities,
-    /// Registered tools
-    tools: HashMap<String, Arc<dyn McpTool>>,
-    /// Registered resources
-    resources: HashMap<String, Arc<dyn McpResource>>,
-    /// Registered prompts
-    prompts: HashMap<String, Arc<dyn McpPrompt>>,
-    /// Registered elicitations
-    #[cfg(feature = "protocol-2025-11-25")]
-    elicitations: HashMap<String, Arc<dyn McpElicitation>>,
-    /// Registered sampling providers
-    #[cfg(feature = "protocol-2025-11-25")]
-    sampling: HashMap<String, Arc<dyn McpSampling>>,
-    /// Registered completion providers
-    completions: Vec<Arc<dyn McpCompletion>>,
-    /// Registered loggers
-    #[cfg(feature = "protocol-2025-11-25")]
-    loggers: HashMap<String, Arc<dyn McpLogger>>,
-    /// Registered root providers
-    /// Registered notification providers
-    notifications: HashMap<String, Arc<dyn McpNotification>>,
-    /// Registered handlers
-    handlers: HashMap<String, Arc<dyn McpHandler>>,
-    /// Configured roots
-    // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
-    #[allow(deprecated)]
-    roots: Vec<turul_mcp_protocol::roots::Root>,
-    /// Optional client instructions
-    instructions: Option<String>,
-    /// Session manager for state persistence
-    session_manager: Arc<SessionManager>,
-    /// Session storage backend (shared between SessionManager and handler)
-    session_storage: Arc<BoxedSessionStorage>,
-    /// Strict MCP lifecycle enforcement
-    strict_lifecycle: bool,
-    /// Server configuration
+    /// The core server: the single owner of handlers and capabilities.
+    core: McpServer,
+    /// Lambda HTTP-layer configuration.
     server_config: ServerConfig,
-    /// Enable SSE streaming
+    /// Enable SSE responses.
     enable_sse: bool,
-    /// Stream configuration
+    /// Streaming configuration.
     stream_config: StreamConfig,
-    /// CORS configuration (if enabled)
+    /// CORS configuration (if enabled).
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
-    /// Middleware stack for request/response interception
-    middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
-    /// Custom route registry (e.g., .well-known endpoints)
-    route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
-    /// Optional task runtime for MCP task support
-    #[cfg(feature = "protocol-2025-11-25")]
-    task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
-    /// Stable fingerprint of the registered tool set for session versioning
-    tool_fingerprint: String,
-    /// Dynamic tool registry (only in Dynamic mode)
-    #[cfg(feature = "dynamic-tools")]
-    tool_registry: Option<Arc<turul_mcp_server::ToolRegistry>>,
-    /// Whether cross-instance coordination is enabled (explicit storage was provided)
-    #[cfg(feature = "dynamic-tools")]
-    coordination_enabled: bool,
 }
 
 impl LambdaMcpServer {
-    /// Create a new Lambda MCP server (use builder instead)
-    #[allow(clippy::too_many_arguments)]
-    // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
-    #[allow(deprecated)]
+    /// Wrap a built core server with Lambda transport settings (use the builder).
     pub(crate) fn new(
-        implementation: Implementation,
-        capabilities: ServerCapabilities,
-        tools: HashMap<String, Arc<dyn McpTool>>,
-        resources: HashMap<String, Arc<dyn McpResource>>,
-        prompts: HashMap<String, Arc<dyn McpPrompt>>,
-        #[cfg(feature = "protocol-2025-11-25")] elicitations: HashMap<
-            String,
-            Arc<dyn McpElicitation>,
-        >,
-        #[cfg(feature = "protocol-2025-11-25")] sampling: HashMap<String, Arc<dyn McpSampling>>,
-        completions: Vec<Arc<dyn McpCompletion>>,
-        #[cfg(feature = "protocol-2025-11-25")] loggers: HashMap<String, Arc<dyn McpLogger>>,
-        notifications: HashMap<String, Arc<dyn McpNotification>>,
-        handlers: HashMap<String, Arc<dyn McpHandler>>,
-        roots: Vec<turul_mcp_protocol::roots::Root>,
-        instructions: Option<String>,
-        session_storage: Arc<BoxedSessionStorage>,
-        strict_lifecycle: bool,
+        core: McpServer,
         server_config: ServerConfig,
         enable_sse: bool,
         stream_config: StreamConfig,
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
-        middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
-        route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
-        #[cfg(feature = "protocol-2025-11-25")] task_runtime: Option<
-            Arc<turul_mcp_server::TaskRuntime>,
-        >,
-        tool_fingerprint: String,
-        #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
-        #[cfg(feature = "dynamic-tools")] server_state_storage: Option<
-            Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
-        >,
     ) -> Self {
-        // Create session manager with server capabilities
-        let session_manager = Arc::new(SessionManager::with_storage_and_timeouts(
-            Arc::clone(&session_storage),
-            capabilities.clone(),
-            std::time::Duration::from_secs(30 * 60), // 30 minutes default
-            std::time::Duration::from_secs(60),      // 1 minute cleanup interval
-        ));
-
-        // Coordination enabled only for shared backends that can be accessed by multiple instances.
-        // InMemory and SQLite are local-only. Only PostgreSQL and DynamoDB are shared.
-        #[cfg(feature = "dynamic-tools")]
-        let coordination_enabled = server_state_storage
-            .as_ref()
-            .map(|s| matches!(s.backend_name(), "PostgreSQL" | "DynamoDB"))
-            .unwrap_or(false);
-
-        // Create ToolRegistry when dynamic mode is enabled
-        #[cfg(feature = "dynamic-tools")]
-        let tool_registry = if dynamic_tools {
-            let storage = server_state_storage.unwrap_or_else(|| {
-                Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new())
-            });
-            Some(Arc::new(turul_mcp_server::ToolRegistry::new(
-                tools.clone(),
-                session_manager.clone(),
-                storage,
-            )))
-        } else {
-            None
-        };
-
         Self {
-            implementation,
-            capabilities,
-            tools,
-            resources,
-            prompts,
-            #[cfg(feature = "protocol-2025-11-25")]
-            elicitations,
-            #[cfg(feature = "protocol-2025-11-25")]
-            sampling,
-            completions,
-            #[cfg(feature = "protocol-2025-11-25")]
-            loggers,
-            notifications,
-            handlers,
-            roots,
-            instructions,
-            session_manager,
-            session_storage,
-            strict_lifecycle,
+            implementation: core.implementation.clone(),
+            capabilities: core.capabilities.clone(),
+            core,
             server_config,
             enable_sse,
             stream_config,
             #[cfg(feature = "cors")]
             cors_config,
-            middleware_stack,
-            route_registry,
-            #[cfg(feature = "protocol-2025-11-25")]
-            task_runtime,
-            tool_fingerprint,
-            #[cfg(feature = "dynamic-tools")]
-            tool_registry,
-            #[cfg(feature = "dynamic-tools")]
-            coordination_enabled,
         }
     }
 
@@ -206,33 +65,19 @@ impl LambdaMcpServer {
         &self.capabilities
     }
 
-    /// Whether a task runtime is configured (always false when tasks are not part of the spec).
-    fn has_task_runtime(&self) -> bool {
-        #[cfg(feature = "protocol-2025-11-25")]
-        {
-            self.task_runtime.is_some()
-        }
-        #[cfg(not(feature = "protocol-2025-11-25"))]
-        {
-            false
-        }
-    }
-
-    /// Create a Lambda handler ready for use with Lambda runtime
+    /// Create a Lambda handler ready for use with the Lambda runtime.
     ///
-    /// This is equivalent to McpServer::run_http() but creates a handler instead of running a server.
+    /// The Lambda counterpart of `McpServer::run_http()`: it serves the core
+    /// server's dispatcher through the Lambda adapter. Call once per cold start.
     pub async fn handler(&self) -> Result<LambdaMcpHandler> {
         info!(
             "Creating Lambda MCP handler: {} v{}",
             self.implementation.name, self.implementation.version
         );
-        #[cfg(feature = "protocol-2025-11-25")]
-        info!("Session management: enabled with automatic cleanup");
 
         if self.enable_sse {
             info!("SSE notifications: enabled for Lambda responses");
 
-            // ⚠️ GUARDRAIL: SSE enabled without streaming feature
             #[cfg(not(feature = "streaming"))]
             {
                 use tracing::warn;
@@ -247,29 +92,29 @@ impl LambdaMcpServer {
             }
         }
 
-        // Start session cleanup task (same as MCP server)
-        let _cleanup_task = self.session_manager.clone().start_cleanup_task();
+        let parts = self.core.transport_parts();
 
-        // Sync tool registry with shared storage on startup (coordination mode only)
+        // Start session cleanup task (same as the HTTP server)
+        let _cleanup_task = parts.session_manager.clone().start_cleanup_task();
+
+        // Sync tool registry with shared storage on cold start (coordination mode only)
         #[cfg(feature = "dynamic-tools")]
-        if self.coordination_enabled
-            && let Some(ref registry) = self.tool_registry
+        if parts.coordination_enabled
+            && let Some(ref registry) = parts.tool_registry
         {
             use tracing::warn;
             match registry.sync_from_storage().await {
-                Ok(_) => {
-                    info!("Dynamic: synced tool registry with shared storage");
-                }
+                Ok(_) => info!("Dynamic: synced tool registry with shared storage"),
                 Err(e) => {
-                    warn!(error = %e, "Dynamic: failed to sync with shared storage on cold start");
+                    warn!(error = %e, "Dynamic: failed to sync with shared storage on cold start")
                 }
             }
         }
 
-        // Cold-start recovery: handler() is called once per Lambda cold start from main().
-        // The returned LambdaMcpHandler is Clone'd for each request — recovery runs exactly once.
+        // Cold-start recovery: handler() runs once per Lambda cold start; the
+        // returned LambdaMcpHandler is cloned per request.
         #[cfg(feature = "protocol-2025-11-25")]
-        if let Some(ref runtime) = self.task_runtime {
+        if let Some(ref runtime) = parts.task_runtime {
             match runtime.recover_stuck_tasks().await {
                 Ok(recovered) if !recovered.is_empty() => {
                     info!(
@@ -285,15 +130,13 @@ impl LambdaMcpServer {
             }
         }
 
-        // Create stream manager for SSE
         let stream_manager = Arc::new(StreamManager::with_config(
-            self.session_storage.clone(),
+            parts.session_storage.clone(),
             self.stream_config.clone(),
         ));
 
-        // Install awaited event dispatcher for guaranteed persistence.
-        // Custom events are persisted via StreamManager on the request path,
-        // not via the detached bridge task.
+        // Awaited event dispatcher: custom events persist through the
+        // StreamManager on the request path (guaranteed persistence).
         {
             use turul_mcp_server::SessionEventDispatcher;
 
@@ -317,202 +160,38 @@ impl LambdaMcpServer {
                 }
             }
 
-            let dispatcher = Arc::new(LambdaEventDispatcher {
-                stream_manager: Arc::clone(&stream_manager),
-            });
-            self.session_manager.set_event_dispatcher(dispatcher).await;
+            parts
+                .session_manager
+                .set_event_dispatcher(Arc::new(LambdaEventDispatcher {
+                    stream_manager: Arc::clone(&stream_manager),
+                }))
+                .await;
             debug!("Lambda event dispatcher installed (guaranteed persistence for Custom events)");
         }
 
-        // SSE event bridge — observer-only for Custom events.
-        // The dispatcher above handles persistence on the request path.
-        {
-            let mut global_events = self.session_manager.subscribe_all_session_events();
-
-            tokio::spawn(async move {
-                debug!("Lambda SSE Event Bridge: started (observer-only for Custom events)");
-
-                while let Ok((session_id, event)) = global_events.recv().await {
-                    match event {
-                        turul_mcp_server::session::SessionEvent::Custom {
-                            ref event_type, ..
-                        } => {
-                            debug!(
-                                "Lambda SSE Bridge: observed custom event '{}' for session {} (dispatcher handles persistence)",
-                                event_type, session_id
-                            );
-                        }
-                        _ => {
-                            debug!(
-                                "Lambda SSE Bridge: non-custom event for session {}",
-                                session_id
-                            );
-                        }
-                    }
-                }
-
-                debug!("Lambda SSE Event Bridge: stopped");
-            });
-        }
-
-        // Create JSON-RPC dispatcher
-        use turul_rpc::JsonRpcDispatcher;
-        let mut dispatcher = JsonRpcDispatcher::new();
-
-        // Create session-aware initialize handler (2025-11-25 stateful handshake;
-        // the 2026-07-28 stateless core has no `initialize` method).
-        #[cfg(feature = "protocol-2025-11-25")]
-        {
-            use turul_mcp_server::SessionAwareInitializeHandler;
-            #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-            let mut init_handler = SessionAwareInitializeHandler::new(
-                self.implementation.clone(),
-                self.capabilities.clone(),
-                self.instructions.clone(),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-                self.tool_fingerprint.clone(),
-            );
-            #[cfg(feature = "dynamic-tools")]
-            if let Some(ref registry) = self.tool_registry {
-                init_handler = init_handler.with_tool_registry(Arc::clone(registry));
-            }
-            dispatcher.register_method("initialize".to_string(), init_handler);
-        }
-
-        // Create session-aware tools/list handler (reuse MCP server handler)
-        use turul_mcp_server::ListToolsHandler;
-        #[allow(unused_mut)]
-        let mut list_handler = ListToolsHandler::new_with_session_manager(
-            self.tools.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-            self.has_task_runtime(),
-        );
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry {
-            list_handler = list_handler.with_tool_registry(Arc::clone(registry));
-        }
-        dispatcher.register_method("tools/list".to_string(), list_handler);
-
-        // Create session-aware tool handler for tools/call (reuse MCP server handler)
-        use turul_mcp_server::SessionAwareToolHandler;
-        #[cfg_attr(
-            not(any(feature = "protocol-2025-11-25", feature = "dynamic-tools")),
-            allow(unused_mut)
-        )]
-        let mut tool_handler = SessionAwareToolHandler::new(
-            self.tools.clone(),
-            self.session_manager.clone(),
-            self.strict_lifecycle,
-        );
-        #[cfg(feature = "protocol-2025-11-25")]
-        if let Some(ref runtime) = self.task_runtime {
-            tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
-        }
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry {
-            tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
-        }
-        dispatcher.register_method("tools/call".to_string(), tool_handler);
-
-        #[cfg(feature = "protocol-2026-07-28")]
-        {
-            use turul_mcp_protocol::SERVER_DISCOVER_METHOD;
-            use turul_mcp_server::DiscoverHandler;
-            dispatcher.register_method(
-                SERVER_DISCOVER_METHOD.to_string(),
-                DiscoverHandler::new(self.capabilities.clone(), self.instructions.clone()),
-            );
-        }
-
-        // Register all MCP handlers with session awareness (reuse MCP server bridge)
-        use turul_mcp_server::SessionAwareMcpHandlerBridge;
-        for (method, handler) in &self.handlers {
-            let bridge_handler = SessionAwareMcpHandlerBridge::new(
-                handler.clone(),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-            );
-            dispatcher.register_method(method.clone(), bridge_handler);
-        }
-
-        // notifications/initialized exists only in the 2025-11-25 lifecycle; the
-        // 2026-07-28 stateless core has no initialize/initialized handshake.
-        #[cfg(feature = "protocol-2025-11-25")]
-        {
-            use turul_mcp_server::handlers::InitializedNotificationHandler;
-            let initialized_handler =
-                InitializedNotificationHandler::new(self.session_manager.clone());
-            let initialized_bridge = SessionAwareMcpHandlerBridge::new(
-                Arc::new(initialized_handler),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-            );
-            dispatcher.register_method("notifications/initialized".to_string(), initialized_bridge);
-        }
-
-        // Create the Lambda handler with all components and middleware
-        let middleware_stack = Arc::new(self.middleware_stack.clone());
-
         let handler = LambdaMcpHandler::with_middleware_and_fingerprint(
             self.server_config.clone(),
-            Arc::new(dispatcher),
-            self.session_storage.clone(),
+            Arc::new(parts.dispatcher),
+            parts.session_storage,
             stream_manager,
             self.stream_config.clone(),
-            self.capabilities.clone(),
-            middleware_stack,
+            parts.capabilities,
+            Arc::new(parts.middleware_stack),
             self.enable_sse,
-            Arc::clone(&self.route_registry),
-            Some(self.tool_fingerprint.clone()),
+            parts.route_registry,
+            Some(parts.tool_fingerprint),
         )
-        .with_server_info(self.implementation.clone());
-
-        // Wire tool change notifier for restart/redeploy fingerprint mismatch.
-        // Uses SessionManager → dispatch_custom_event() → dispatcher → guaranteed persistence.
-        // dispatch_custom_event is storage-backed and does NOT depend on the in-memory session cache.
-        let handler = {
-            struct LambdaToolNotifier {
-                session_manager: Arc<turul_mcp_server::SessionManager>,
-            }
-            #[async_trait::async_trait]
-            impl turul_http_mcp_server::ToolChangeNotifier for LambdaToolNotifier {
-                async fn notify_tools_changed(
-                    &self,
-                    session_id: &str,
-                ) -> std::result::Result<(), String> {
-                    let notification = turul_rpc::JsonRpcNotification::new_no_params(
-                        "notifications/tools/list_changed".to_string(),
-                    );
-                    let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
-                    self.session_manager
-                        .dispatch_custom_event(
-                            session_id,
-                            "notifications/tools/list_changed".to_string(),
-                            data,
-                        )
-                        .await
-                }
-            }
-            handler.with_tool_notifier(Arc::new(LambdaToolNotifier {
-                session_manager: Arc::clone(&self.session_manager),
-            }))
-        };
+        .with_server_info(parts.implementation)
+        .with_tool_notifier(parts.tool_notifier);
 
         #[cfg(feature = "dynamic-tools")]
-        let handler = if let Some(ref registry) = self.tool_registry {
-            handler.with_tool_registry(Arc::clone(registry))
-        } else {
-            handler
+        let handler = match parts.tool_registry {
+            Some(registry) => handler.with_tool_registry(registry),
+            None => handler,
         };
 
-        // Propagate builder-configured CORS to the constructed handler.
-        // Must be applied after notifier/registry wiring so the final handler
-        // returned to the caller carries the CORS config — every
-        // `if let Some(cors_config)` branch inside `LambdaMcpHandler` reads
-        // from `self.cors_config`, which `with_middleware_and_fingerprint`
-        // initializes to `None`.
+        // CORS must be applied last: every CORS branch inside LambdaMcpHandler
+        // reads the config set here.
         #[cfg(feature = "cors")]
         let handler = match self.cors_config.clone() {
             Some(cors) => handler.with_cors(cors),

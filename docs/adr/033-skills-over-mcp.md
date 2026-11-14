@@ -158,7 +158,7 @@ symlink only when its canonical target lies inside the canonical skill directory
 refuses the skill otherwise, naming the file. A server must not serve bytes from outside
 the directory it was pointed at.
 
-Lambda: not covered (`LambdaMcpServerBuilder` cannot advertise extensions; drift D-L).
+Lambda: served through the same owner. `LambdaMcpServerBuilder::with_ext_skills` delegates to this method and the Lambda handler serves `McpServer`'s dispatcher (ADR-035), so nothing here is re-implemented for Lambda. Build the catalog once per container (cold start).
 
 ### 6. Client (`turul-mcp-client`, feature `ext-skills`, default off)
 
@@ -253,6 +253,7 @@ Each test is named after the clause it proves.
 
 ## Revision log
 
+- **2026-11-14 (Lambda)**: Skills on AWS Lambda through ADR-035's single owner; live gate `scripts/e2e-lambda-skills.sh` under `cargo lambda watch` (75 files re-hashed; sep-2640 32/32, 6/6; host scenarios 4/4).
 - **2026-11-14 (Accepted)**: server slices merged (#52); client slice (#53) completes the
   owner table and the test contract; turul-agent-skills accepted the boundary (its ADR-011).
 - **2026-11-14 (S6, client)**: §6 Client added — host clauses C-1 to C-8 mapped to

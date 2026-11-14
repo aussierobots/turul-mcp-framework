@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-aws-lambda"
-version = "0.4.3"
+version = "0.4.4"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -24,6 +24,9 @@ sqlite = ["turul-mcp-server/sqlite"]              # SQLite storage backends
 postgres = ["turul-mcp-server/postgres"]          # PostgreSQL storage backends
 dynamodb = ["turul-mcp-server/dynamodb", "turul-mcp-session-storage/dynamodb"] # DynamoDB storage backends
 dynamic-tools = ["turul-mcp-server/dynamic-tools", "turul-mcp-server-state-storage"]
+# Skills extension (io.modelcontextprotocol/skills; ADR-033, ADR-035): served by the
+# owner, turul-mcp-server. Off by default per SEP-2133.
+ext-skills = ["turul-mcp-server/ext-skills", "dep:turul-mcp-ext-skills"]
 
 [dependencies]
 # Core MCP framework
@@ -31,6 +34,7 @@ turul-mcp-server = { path = "../turul-mcp-server", version = "0.4", default-feat
 turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4", default-features = false }
 turul-rpc = { workspace = true, features = ["async"] }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
+turul-mcp-ext-skills = { workspace = true, optional = true }
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4", default-features = false }
 turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4", default-features = false }
@@ -71,6 +75,7 @@ tokio-test = { workspace = true }
 tracing-subscriber = { workspace = true }
 aws_lambda_events = { workspace = true }
 serial_test = { workspace = true }
+base64 = { workspace = true }
 
 # Binary target required for `cargo lambda watch` to work properly
 # Must be [[bin]] not [[example]] for lambda tooling compatibility
@@ -79,6 +84,12 @@ name = "lambda-echo-server"
 path = "examples/lambda-echo-server.rs"
 # Demonstrates cors_allow_all_origins(), which only exists with the cors feature.
 required-features = ["cors"]
+
+# Skills over MCP on Lambda (ADR-035); the live gate boots it under `cargo lambda watch`.
+[[bin]]
+name = "lambda-skills-server"
+path = "examples/lambda-skills-server.rs"
+required-features = ["ext-skills"]
 
 # Note: autoexamples = false in [package] prevents duplicate target warnings
 

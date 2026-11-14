@@ -184,6 +184,9 @@ pub use server::DiscoverHandler;
 /// Core MCP server and session-aware handlers
 #[cfg(feature = "protocol-2025-11-25")]
 pub use server::SessionAwareInitializeHandler;
+/// What a transport needs to serve an [`McpServer`] (ADR-035)
+#[cfg(feature = "http")]
+pub use server::TransportParts;
 /// Core MCP server and session-aware handlers
 pub use server::{
     ListToolsHandler, McpServer, SessionAwareMcpHandlerBridge, SessionAwareToolHandler,

@@ -17,7 +17,10 @@ cd "$(dirname "$0")/.."
 . scripts/lib/mcp2026.sh
 
 PORT="${SKILLS_PORT:-8650}"
-URL="http://127.0.0.1:$PORT/mcp"
+# SKILLS_URL targets an already-running server serving the same skills (e.g.
+# the Lambda function under `cargo lambda watch`, ADR-035); otherwise the
+# example server is started here.
+URL="${SKILLS_URL:-http://127.0.0.1:$PORT/mcp}"
 SKILLS_DIR=plugins/turul-mcp-skills/skills
 VERSION=$(grep -oE '^CONFORMANCE_VERSION="[^"]+"' scripts/conformance-suite.sh | cut -d'"' -f2)
 [ -n "$VERSION" ] || { echo "FAIL: no CONFORMANCE_VERSION in conformance-suite.sh"; exit 1; }
@@ -25,10 +28,12 @@ VERSION=$(grep -oE '^CONFORMANCE_VERSION="[^"]+"' scripts/conformance-suite.sh |
 command -v npx >/dev/null || { echo "  SKIP: npx unavailable"; exit 77; }
 cargo build -q -p ext-skills-server --bins || exit 1
 CLIENT="$(cargo metadata -q --format-version 1 --no-deps | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')/debug/ext-skills-client"
-cargo run -q -p ext-skills-server -- "$PORT" >/dev/null 2>&1 &
-PID=$!
-trap 'kill $PID 2>/dev/null' EXIT
-mcp2026_wait_for_server "$PORT" || { echo "FAIL: ext-skills-server did not answer on :$PORT"; exit 1; }
+if [ -z "${SKILLS_URL:-}" ]; then
+  cargo run -q -p ext-skills-server -- "$PORT" >/dev/null 2>&1 &
+  PID=$!
+  trap 'kill $PID 2>/dev/null' EXIT
+  mcp2026_wait_for_server "$PORT" || { echo "FAIL: ext-skills-server did not answer on :$PORT"; exit 1; }
+fi
 
 fail=0
 bad() { echo "  FAIL $*"; fail=1; }

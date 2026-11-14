@@ -312,6 +312,14 @@ impl HttpMcpServerBuilder {
         self
     }
 
+    /// Register every method of a dispatcher built by its owner
+    /// (`turul_mcp_server::McpServer`; ADR-035). Methods already registered
+    /// with the same name are replaced.
+    pub fn register_dispatcher(mut self, dispatcher: JsonRpcDispatcher<McpError>) -> Self {
+        self.dispatcher.handlers.extend(dispatcher.handlers);
+        self
+    }
+
     /// Register a default handler for unhandled methods
     pub fn default_handler<H>(mut self, handler: H) -> Self
     where

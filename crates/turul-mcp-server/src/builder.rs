@@ -73,6 +73,11 @@ pub struct McpServerBuilder {
     #[cfg(feature = "ext-skills")]
     ext_skill_uris: std::collections::HashSet<String>,
 
+    /// Whether the transport serves `subscriptions/listen` resource
+    /// subscriptions; decides `resources.subscribe` (ADR-035 §3).
+    #[cfg(feature = "protocol-2026-07-28")]
+    resource_subscriptions: bool,
+
     /// Loggers registered with the server
     #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
@@ -304,6 +309,8 @@ impl McpServerBuilder {
             ext_task_retention: None,
             #[cfg(feature = "ext-skills")]
             ext_skill_uris: std::collections::HashSet::new(),
+            #[cfg(feature = "protocol-2026-07-28")]
+            resource_subscriptions: true,
             #[cfg(feature = "protocol-2025-11-25")]
             loggers: HashMap::new(),
             notifications: HashMap::new(),
@@ -1355,7 +1362,7 @@ impl McpServerBuilder {
         // transport's `subscriptions/listen` stream — the capability is real.
         // 2025: the `resources/subscribe` RPC has no handler here.
         #[cfg(feature = "protocol-2026-07-28")]
-        let supports_subscribe = true;
+        let supports_subscribe = self.resource_subscriptions;
         #[cfg(feature = "protocol-2025-11-25")]
         let supports_subscribe = false;
         self.capabilities.resources = Some(ResourcesCapabilities {
@@ -1461,6 +1468,17 @@ impl McpServerBuilder {
             .extensions
             .get_or_insert_with(std::collections::HashMap::new)
             .insert(identifier.into(), settings);
+        self
+    }
+
+    /// Whether this server's transport serves per-URI resource subscriptions
+    /// over `subscriptions/listen`. Defaults to `true`: the HTTP transport
+    /// serves them. A transport that cannot (buffered AWS Lambda has no
+    /// long-lived stream) passes `false` so `resources.subscribe` stays
+    /// truthful (ADR-035 §3).
+    #[cfg(feature = "protocol-2026-07-28")]
+    pub fn resource_subscriptions(mut self, served: bool) -> Self {
+        self.resource_subscriptions = served;
         self
     }
 
@@ -1607,17 +1625,11 @@ impl McpServerBuilder {
     }
 
     /// Configure session storage backend (defaults to InMemory if not specified)
-    pub fn with_session_storage<
-        S: turul_mcp_session_storage::SessionStorage<
-                Error = turul_mcp_session_storage::SessionStorageError,
-            > + 'static,
-    >(
+    pub fn with_session_storage(
         mut self,
-        storage: Arc<S>,
+        storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     ) -> Self {
-        // Convert concrete storage type to trait object
-        let boxed_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> = storage;
-        self.session_storage = Some(boxed_storage);
+        self.session_storage = Some(storage);
         self
     }
 
@@ -1945,7 +1957,7 @@ impl McpServerBuilder {
             // transport's `subscriptions/listen` stream — the capability is real.
             // 2025: the `resources/subscribe` RPC has no handler here.
             #[cfg(feature = "protocol-2026-07-28")]
-            let supports_subscribe = true;
+            let supports_subscribe = self.resource_subscriptions;
             #[cfg(feature = "protocol-2025-11-25")]
             let supports_subscribe = false;
             self.capabilities.resources = Some(ResourcesCapabilities {

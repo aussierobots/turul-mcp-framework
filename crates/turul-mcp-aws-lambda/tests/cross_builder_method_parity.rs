@@ -1,13 +1,12 @@
 //! Cross-builder method-registration parity.
 //!
-//! The local `McpServer` builder (`turul-mcp-server`) and the
-//! `LambdaMcpServerBuilder` are independent code paths that each register the
-//! JSON-RPC method handlers for the active protocol lane. They MUST register
-//! the same method set — otherwise one transport silently serves a method the
-//! other 404s (exactly the `server/discover`-missing-on-Lambda bug fixed
+//! `LambdaMcpServerBuilder` delegates to `McpServerBuilder`, and the Lambda
+//! handler serves `McpServer`'s own dispatcher (ADR-035), so the two transports
+//! MUST register the same method set — otherwise one transport silently serves
+//! a method the other 404s (the `server/discover`-missing-on-Lambda bug fixed
 //! 2026-07-13). These tests build both through their production paths, read the
 //! dispatcher's registered method set from each, and assert they are identical
-//! per lane. Adding a method to one builder but not the other fails here.
+//! per lane.
 
 #![cfg(any(feature = "protocol-2026-07-28", feature = "protocol-2025-11-25"))]
 

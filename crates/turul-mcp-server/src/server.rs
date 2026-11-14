@@ -132,6 +132,44 @@ pub struct McpServer {
     origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
 }
 
+/// What a transport adapter needs to serve an [`McpServer`]; see
+/// [`McpServer::transport_parts`] (ADR-035). Transports add only their own
+/// I/O (an HTTP listener, the AWS Lambda runtime adapter, CORS, streaming).
+#[cfg(feature = "http")]
+pub struct TransportParts {
+    /// Server identity.
+    pub implementation: Implementation,
+    /// Capabilities, as `server/discover` reports them.
+    pub capabilities: ServerCapabilities,
+    /// Client instructions.
+    pub instructions: Option<String>,
+    /// Every MCP method handler for the active lane.
+    pub dispatcher: turul_rpc::JsonRpcDispatcher<McpError>,
+    /// Session manager behind the handlers.
+    pub session_manager: Arc<SessionManager>,
+    /// Session storage the manager uses.
+    pub session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
+    /// Middleware stack.
+    pub middleware_stack: crate::middleware::MiddlewareStack,
+    /// Custom HTTP routes.
+    pub route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
+    /// Fingerprint of the registered tool set.
+    pub tool_fingerprint: String,
+    /// Delivers `notifications/tools/list_changed` through the session manager.
+    pub tool_notifier: Arc<dyn turul_http_mcp_server::ToolChangeNotifier>,
+    /// Origin policy set on the builder, if any (ADR-031).
+    pub origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
+    /// 2025-11-25 task runtime, if configured.
+    #[cfg(feature = "protocol-2025-11-25")]
+    pub task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+    /// Dynamic tool registry, if in dynamic mode.
+    #[cfg(feature = "dynamic-tools")]
+    pub tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
+    /// Whether cross-instance tool coordination is enabled.
+    #[cfg(feature = "dynamic-tools")]
+    pub coordination_enabled: bool,
+}
+
 impl McpServer {
     /// Create a new MCP server (use builder instead)
     #[allow(clippy::too_many_arguments)]
@@ -387,14 +425,16 @@ impl McpServer {
         }
     }
 
-    /// Build the HTTP server builder with every MCP method handler
-    /// registered for the active protocol lane, WITHOUT binding or running.
-    /// Single source of method registration shared by `run_http` and
-    /// `run_with_sse_access` so the two entry points cannot register divergent
-    /// method sets, and reused by [`registered_methods`](Self::registered_methods).
-    #[cfg(feature = "http")]
-    fn build_configured_http_builder(&self) -> turul_http_mcp_server::HttpMcpServerBuilder {
-        // Create session-aware tool handler (with optional task runtime for async execution)
+    /// Every MCP method handler for the active protocol lane, in one
+    /// dispatcher. The single owner of method registration (ADR-035): the HTTP
+    /// transport ([`Self::run_http`]) and other transports
+    /// ([`Self::transport_parts`], e.g. AWS Lambda) serve exactly this table.
+    /// Handlers registered through the builder come last, so they win a
+    /// method name, as before.
+    fn mcp_dispatcher(&self) -> turul_rpc::JsonRpcDispatcher<McpError> {
+        let mut dispatcher = turul_rpc::JsonRpcDispatcher::<McpError>::new();
+
+        // Session-aware tool handler (with optional task runtime for async execution)
         #[cfg_attr(
             not(any(feature = "protocol-2025-11-25", feature = "dynamic-tools")),
             allow(unused_mut)
@@ -418,24 +458,113 @@ impl McpServer {
             tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
         }
 
-        // Create session-aware initialize handler (2025-11-25 stateful handshake;
-        // the 2026-07-28 stateless core has no `initialize` method).
-        #[cfg(feature = "protocol-2025-11-25")]
         #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-        let mut init_handler = SessionAwareInitializeHandler::new(
-            self.implementation.clone(),
-            self.capabilities.clone(),
-            self.instructions.clone(),
+        let mut list_handler = ListToolsHandler::new_with_session_manager(
+            self.tools.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
-            self.tool_fingerprint.clone(),
+            self.has_task_runtime(),
         );
-        #[cfg(all(feature = "protocol-2025-11-25", feature = "dynamic-tools"))]
+        #[cfg(feature = "dynamic-tools")]
         if let Some(ref registry) = self.tool_registry {
-            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
+            list_handler = list_handler.with_tool_registry(Arc::clone(registry));
+        }
+        dispatcher.register_method("tools/list".to_string(), list_handler);
+        dispatcher.register_method("tools/call".to_string(), tool_handler);
+
+        // Session-aware initialize handler (2025-11-25 stateful handshake; the
+        // 2026-07-28 stateless core has no `initialize` method).
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
+            let mut init_handler = SessionAwareInitializeHandler::new(
+                self.implementation.clone(),
+                self.capabilities.clone(),
+                self.instructions.clone(),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+                self.tool_fingerprint.clone(),
+            );
+            #[cfg(feature = "dynamic-tools")]
+            if let Some(ref registry) = self.tool_registry {
+                init_handler = init_handler.with_tool_registry(Arc::clone(registry));
+            }
+            dispatcher.register_method("initialize".to_string(), init_handler);
         }
 
-        // Build HTTP server with shared session storage from SessionManager
+        #[cfg(feature = "protocol-2026-07-28")]
+        dispatcher.register_method(
+            SERVER_DISCOVER_METHOD.to_string(),
+            DiscoverHandler::new(self.capabilities.clone(), self.instructions.clone()),
+        );
+
+        // Every MCP handler registered through the builder, session-aware.
+        for (method, handler) in &self.handlers {
+            dispatcher.register_method(
+                method.clone(),
+                SessionAwareMcpHandlerBridge::new(
+                    handler.clone(),
+                    self.session_manager.clone(),
+                    self.strict_lifecycle,
+                ),
+            );
+        }
+
+        // notifications/initialized exists only in the 2025-11-25 lifecycle.
+        #[cfg(feature = "protocol-2025-11-25")]
+        {
+            use crate::handlers::InitializedNotificationHandler;
+            dispatcher.register_method(
+                "notifications/initialized".to_string(),
+                SessionAwareMcpHandlerBridge::new(
+                    Arc::new(InitializedNotificationHandler::new(
+                        self.session_manager.clone(),
+                    )),
+                    self.session_manager.clone(),
+                    self.strict_lifecycle,
+                ),
+            );
+        }
+
+        dispatcher
+    }
+
+    /// Everything a transport adapter needs to serve this server without
+    /// re-assembling any of it (ADR-035): the method dispatcher, capabilities,
+    /// identity, session machinery, middleware and custom routes. The HTTP
+    /// transport is built from the same pieces.
+    #[cfg(feature = "http")]
+    pub fn transport_parts(&self) -> TransportParts {
+        TransportParts {
+            implementation: self.implementation.clone(),
+            capabilities: self.capabilities.clone(),
+            instructions: self.instructions.clone(),
+            dispatcher: self.mcp_dispatcher(),
+            session_manager: Arc::clone(&self.session_manager),
+            session_storage: self.session_manager.get_storage(),
+            middleware_stack: self.middleware_stack.clone(),
+            route_registry: Arc::clone(&self.route_registry),
+            tool_fingerprint: self.tool_fingerprint.clone(),
+            tool_notifier: Arc::new(SessionManagerToolNotifier {
+                session_manager: Arc::clone(&self.session_manager),
+            }),
+            origin_policy: self.origin_policy.clone(),
+            #[cfg(feature = "protocol-2025-11-25")]
+            task_runtime: self.task_runtime.clone(),
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: self.tool_registry.clone(),
+            #[cfg(feature = "dynamic-tools")]
+            coordination_enabled: self.coordination_enabled,
+        }
+    }
+
+    /// Build the HTTP server builder with every MCP method handler
+    /// registered for the active protocol lane, WITHOUT binding or running.
+    /// Single source of method registration shared by `run_http` and
+    /// `run_with_sse_access` so the two entry points cannot register divergent
+    /// method sets, and reused by [`registered_methods`](Self::registered_methods).
+    #[cfg(feature = "http")]
+    fn build_configured_http_builder(&self) -> turul_http_mcp_server::HttpMcpServerBuilder {
         let session_storage = self.session_manager.get_storage();
         debug!("Configuring HTTP MCP server with session storage backend");
         #[allow(deprecated)] // get_sse: 2026-lane-deprecated; pass-through stays for the 2025 lane
@@ -445,84 +574,25 @@ impl McpServer {
                 .mcp_path(&self.mcp_path)
                 .cors(self.enable_cors)
                 .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
-                // POST SSE remains at default (false) for compatibility
-                .server_capabilities(self.capabilities.clone()) // Pass server capabilities
+                .server_capabilities(self.capabilities.clone())
                 .server_info(self.implementation.clone())
-                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
-                .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
+                .with_middleware_stack(Arc::new(self.middleware_stack.clone()))
+                .route_registry(Arc::clone(&self.route_registry))
                 .tool_fingerprint(self.tool_fingerprint.clone())
                 .tool_notifier(Arc::new(SessionManagerToolNotifier {
                     session_manager: Arc::clone(&self.session_manager),
                 }))
-                .register_handler(vec!["tools/list".to_string()], {
-                    #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
-                    let mut lth = ListToolsHandler::new_with_session_manager(
-                        self.tools.clone(),
-                        self.session_manager.clone(),
-                        self.strict_lifecycle,
-                        self.has_task_runtime(),
-                    );
-                    #[cfg(feature = "dynamic-tools")]
-                    if let Some(ref registry) = self.tool_registry {
-                        lth = lth.with_tool_registry(Arc::clone(registry));
-                    }
-                    lth
-                })
-                .register_handler(vec!["tools/call".to_string()], tool_handler);
+                .register_dispatcher(self.mcp_dispatcher());
 
-        #[cfg(feature = "protocol-2025-11-25")]
-        {
-            builder = builder.register_handler(vec!["initialize".to_string()], init_handler);
-        }
-
-        #[cfg(feature = "protocol-2026-07-28")]
-        {
-            builder = builder.register_handler(
-                vec![SERVER_DISCOVER_METHOD.to_string()],
-                DiscoverHandler::new(self.capabilities.clone(), self.instructions.clone()),
-            );
-        }
-
-        // Pass allow_unauthenticated_ping config to HTTP layer
         if let Some(allow) = self.allow_unauthenticated_ping {
             builder = builder.allow_unauthenticated_ping(allow);
         }
         if let Some(policy) = self.origin_policy.clone() {
             builder = builder.origin_policy(policy);
         }
-
-        // Register all MCP handlers with session awareness
-        for (method, handler) in &self.handlers {
-            let bridge_handler = SessionAwareMcpHandlerBridge::new(
-                handler.clone(),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-            );
-            builder = builder.register_handler(vec![method.clone()], bridge_handler);
-        }
-
-        // notifications/initialized exists only in the 2025-11-25 lifecycle; the
-        // 2026-07-28 stateless core has no initialize/initialized handshake.
-        #[cfg(feature = "protocol-2025-11-25")]
-        {
-            use crate::handlers::InitializedNotificationHandler;
-            let initialized_handler =
-                InitializedNotificationHandler::new(self.session_manager.clone());
-            let initialized_bridge = SessionAwareMcpHandlerBridge::new(
-                Arc::new(initialized_handler),
-                self.session_manager.clone(),
-                self.strict_lifecycle,
-            );
-            builder = builder.register_handler(
-                vec!["notifications/initialized".to_string()],
-                initialized_bridge,
-            );
-        }
-
         if let Some(ref listener) = self.listener {
             builder = builder.prebound_listener(listener.clone());
         }
-
         builder
     }
 
