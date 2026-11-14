@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+`turul-mcp-aws-lambda` 0.4.3 → 0.4.4, `turul-mcp-server` 0.4.11 → 0.4.12,
+`turul-http-mcp-server` 0.4.9 → 0.4.10.
+
+### Changed
+
+- **`LambdaMcpServerBuilder` is a thin wrapper over `McpServerBuilder` (ADR-035).** Every
+  registration and capability method delegates; the Lambda handler serves `McpServer`'s own
+  dispatcher through the new `McpServer::transport_parts()`. The Lambda crate no longer builds
+  handlers or capabilities itself: its `src/` loses 1,152 lines and gains 310.
+  Public method names and signatures are kept. **Classification: patch; behaviour changes and
+  formally breaking items listed below.**
+- **Behaviour changes on Lambda:**
+  - `resources/read` enforces the server's resource-security policy (ADR-007), which it
+    previously skipped. A URI under `/etc/`, `/proc/` or containing `..`, or outside the
+    patterns derived from registered resources, is now refused with `-32602`.
+  - An invalid resource URI (for example one without a scheme) fails `build()` instead of
+    being accepted silently.
+  - Session timeouts take effect. On Lambda, `session_timeout_minutes`,
+    `session_cleanup_interval_seconds`, `with_long_sessions()` and `with_short_sessions()`
+    were stored but never read: every Lambda server ran with a fixed 30-minute timeout and
+    60-second cleanup. They now apply. `with_short_sessions()` uses the server's preset, a
+    15-minute timeout (an effective 30 minutes before).
+  - `LambdaMcpServer::capabilities` is the built value; mutating the field no longer
+    changes what `server/discover` reports. Configure capabilities through the builder.
+- **Formally breaking, shipped as patches under the 0.4 rule:**
+  - `LambdaMcpServerBuilder::root()` and `with_roots()` exist only on the 2025-11-25 lane, as on
+    `McpServerBuilder`. On 2026-07-28 `roots/list` is not a client-to-server method.
+  - `McpServerBuilder::with_session_storage` takes `Arc<BoxedSessionStorage>` instead of a
+    generic `Arc<S>`. `Arc<ConcreteStorage>` arguments still coerce; only an explicit
+    turbofish breaks.
+
+### Added
+
+- **Extensions on Lambda:**
+  - `LambdaMcpServerBuilder::extension_capability` (2026-07-28 lane).
+  - `with_ext_skills`, behind the new `turul-mcp-aws-lambda` feature `ext-skills`.
+  - Apps works through the same generic hooks as on the HTTP server.
+  - Tasks on Lambda is deferred, and Lambda does not advertise it (ADR-035 §5).
+- **`McpServer::transport_parts()` / `TransportParts`.** What a transport needs in order to
+  serve an `McpServer` without re-assembling it. `HttpMcpServerBuilder::register_dispatcher`
+  lets the HTTP transport consume the same dispatcher.
+- **`McpServerBuilder::resource_subscriptions(bool)`.** A transport that cannot serve
+  `subscriptions/listen` keeps `resources.subscribe` truthful with it. Lambda passes `false`.
+- **`lambda-skills-server` bin and `scripts/e2e-lambda-skills.sh`** (in `ci-gates.sh lambda`).
+  Skills on a real local Lambda under `cargo lambda watch`: 75 files re-hashed, sep-2640
+  32/32 and 6/6, host scenarios 4/4.
+
 ## [0.4.23] - 2026-11-14
 
 `turul-mcp-protocol-2026-07-28` 0.4.1 → 0.4.2; examples `minimal-server`, `tools-test-server`,

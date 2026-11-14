@@ -1017,7 +1017,7 @@ mod streaming_completion_tests {
         );
     }
 
-    /// Service-fn-level: mirror sd-mcp's exact dispatch shape — custom
+    /// Service-fn-level: mirror a production consumer's dispatch shape — custom
     /// OPTIONS short-circuit returning `Response<UnsyncBoxBody>` with
     /// `Empty::new()` body — through `handle_runtime_payload` (which is
     /// what `run_streaming_with` wraps around the dispatch closure).

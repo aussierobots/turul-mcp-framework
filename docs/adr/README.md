@@ -10,7 +10,7 @@ Each ADR follows the standard format:
   - **Accepted** (33) — decided and implemented.
   - **Mandatory** (5) — ADRs 001–005, the always-on architectural rules. Stronger
     than Accepted: these are not per-slice decisions but standing constraints.
-  - **Proposed** (0 in use) — decided in principle, but an alternative path
+  - **Proposed** (1 in use: ADR-035) — decided in principle, but an alternative path
     still ships. An ADR that ratifies an intent before the duplicate is deleted
     is a claim, not a decision; it stays Proposed until the duplicate is gone.
     ADR-032 was authored this way and moved to Accepted once its gate was met.
@@ -65,6 +65,7 @@ Each ADR follows the standard format:
 | [032](./032-adopt-turul-jwt-validator.md) | Adopt `turul-jwt-validator`; `turul-mcp-oauth` stops owning JWT validation | Accepted | 2026-08-02 | Delegate JWT/JWKS to the extracted sibling crate; forces `jsonwebtoken` 10→11. Must land before 0.4.0 publishes |
 | [033](./033-skills-over-mcp.md) | Skills over MCP — `turul-mcp-ext-skills` on `turul-agent-skills` | Accepted | 2026-11-14 | Skills extension (SEP-2640): owners of `skill://` URIs, `sha256:` manifests and the capability value; opt-in `ext-skills` server feature |
 | [034](./034-prebound-listener.md) | Pre-bound listener for the HTTP transport | Accepted | 2026-11-14 | Servers serve on a caller-bound `TcpListener`; removes the release-then-rebind port race in tests |
+| [035](./035-lambda-consumes-server-builder.md) | Lambda consumes `McpServerBuilder` — one owner of handlers, capabilities and extensions | Proposed | 2026-11-14 | `LambdaMcpServerBuilder` becomes a thin wrapper; extensions (Skills, Apps) reach Lambda; one resource-security policy; Tasks on Lambda deferred |
 
 ## Tasks Architecture ADRs
 

@@ -167,12 +167,31 @@ The crate bridges AWS Lambda's HTTP execution model with the turul-mcp-framework
 │  ├─ Type Conversion     │  ← lambda_http ↔ hyper
 │  ├─ CORS Integration    │  ← Automatic header injection
 │  ├─ SSE Adaptation      │  ← Lambda streaming responses
-│  ├─ Session Management  │  ← DynamoDB persistence
-│  └─ Task Runtime        │  ← MCP Tasks with durable storage
+│  └─ Session storage     │  ← DynamoDB persistence
 ├─────────────────────────┤
-│   turul-mcp-server      │  ← Core framework
+│   turul-mcp-server      │  ← Handlers, capabilities, extensions, security
 └─────────────────────────┘
 ```
+
+`LambdaMcpServerBuilder` delegates every registration and capability method to
+`turul_mcp_server::McpServerBuilder`, and the Lambda handler serves that server's own
+dispatcher ([ADR-035](../../docs/adr/035-lambda-consumes-server-builder.md)). A Lambda
+function therefore serves exactly what an HTTP `McpServer` built from the same
+configuration would, apart from `resources.subscribe`: buffered Lambda has no
+long-lived `subscriptions/listen` stream, so it does not advertise subscriptions.
+
+## Extensions
+
+- **Skills** (`io.modelcontextprotocol/skills`): enable the `ext-skills` feature and call
+  `.with_ext_skills(catalog)`. Build the catalog once per container, before handing
+  control to the Lambda runtime. `lambda-skills-server` is a working example, and
+  `scripts/e2e-lambda-skills.sh` runs it under `cargo lambda watch`. During a rollout,
+  two instances can serve different bytes, so a client's digest check can fail until
+  the rollout completes.
+- **Apps** (`io.modelcontextprotocol/ui`): `.extension_capability(...)` plus the usual
+  tools and resources, as on the HTTP server.
+- **Tasks extension** (`io.modelcontextprotocol/tasks`): not available on Lambda yet
+  (ADR-035 §5). The 2025-11-25 task runtime described below is unchanged.
 
 ### Three-Layer Discovery
 
@@ -226,7 +245,7 @@ impl CounterTool {
 }
 ```
 
-## MCP Tasks Support
+## MCP Tasks Support (2025-11-25 lane)
 
 Enable task-augmented `tools/call` for long-running operations. When a client sends `tools/call` with a `task` parameter, the server creates a task record, dispatches execution asynchronously, and returns a `CreateTaskResult` immediately.
 
