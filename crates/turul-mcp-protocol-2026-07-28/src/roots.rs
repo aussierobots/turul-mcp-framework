@@ -40,6 +40,7 @@ pub struct Root {
     pub name: Option<String>,
     /// Optional metadata
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -78,6 +79,7 @@ impl Root {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ListRootsRequestParams {
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 

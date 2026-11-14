@@ -42,6 +42,7 @@ pub struct RequestParams {
 
     /// All other method-specific parameters
     #[serde(flatten)]
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub other: HashMap<String, Value>,
 }
 

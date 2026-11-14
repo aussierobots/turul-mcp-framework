@@ -36,6 +36,7 @@ pub struct ResourceTemplate {
     pub icons: Option<Vec<crate::icons::Icon>>,
     /// See General fields: _meta for notes on _meta usage
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -113,6 +114,7 @@ pub struct Resource {
     pub icons: Option<Vec<crate::icons::Icon>>,
     /// See General fields: _meta for notes on _meta usage
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -366,6 +368,7 @@ pub struct ResourceContents {
     pub mime_type: Option<String>,
     /// See General fields: _meta for notes on _meta usage
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -380,6 +383,7 @@ pub struct TextResourceContents {
     pub mime_type: Option<String>,
     /// See General fields: _meta for notes on _meta usage
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
     /// The text of the item. This must only be set if the item can actually be represented as text (not binary data)
     pub text: String,
@@ -396,6 +400,7 @@ pub struct BlobResourceContents {
     pub mime_type: Option<String>,
     /// See General fields: _meta for notes on _meta usage
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
     /// A base64-encoded string representing the binary data of the item (format: byte)
     pub blob: String,

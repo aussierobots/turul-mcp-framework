@@ -110,6 +110,7 @@ pub mod result_type;
 pub mod roots;
 pub mod sampling;
 pub mod schema;
+pub mod serde_maps;
 pub mod subscriptions;
 pub mod tools;
 pub mod traits;

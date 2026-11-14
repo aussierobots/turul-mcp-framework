@@ -348,7 +348,7 @@ impl Serialize for ResultMetaObject {
         if let Some(info) = &self.server_info {
             map.serialize_entry(META_KEY_SERVER_INFO, info)?;
         }
-        for (k, v) in &self.extra {
+        for (k, v) in crate::serde_maps::sorted_entries(&self.extra) {
             if k.as_str() != META_KEY_SERVER_INFO {
                 map.serialize_entry(k, v)?;
             }
@@ -535,7 +535,7 @@ impl Serialize for RequestMetaObject {
         if let Some(level) = &self.log_level {
             map.serialize_entry(META_KEY_LOG_LEVEL, level)?;
         }
-        for (k, v) in &self.extra {
+        for (k, v) in crate::serde_maps::sorted_entries(&self.extra) {
             if !RESERVED_EXTRA_KEYS.contains(&k.as_str()) {
                 map.serialize_entry(k, v)?;
             }

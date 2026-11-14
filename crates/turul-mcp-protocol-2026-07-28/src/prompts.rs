@@ -27,6 +27,7 @@ pub struct Prompt {
     pub icons: Option<Vec<crate::icons::Icon>>,
     /// Optional MCP meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -237,6 +238,7 @@ pub struct GetPromptRequestParams {
     pub name: String,
     /// Arguments to pass to the prompt — `{ [key: string]: string }`.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub arguments: Option<HashMap<String, String>>,
 
     /// Responses to a prior `InputRequiredResult` (mixin from

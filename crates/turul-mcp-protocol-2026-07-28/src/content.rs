@@ -20,6 +20,7 @@ pub struct TextResourceContents {
     pub mime_type: Option<String>,
     /// Meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
     /// The text content
     pub text: String,
@@ -36,6 +37,7 @@ pub struct BlobResourceContents {
     pub mime_type: Option<String>,
     /// Meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
     /// Base64-encoded binary data
     pub blob: String,
@@ -90,6 +92,7 @@ pub struct ResourceReference {
     pub annotations: Option<Annotations>,
     /// Additional metadata for this resource
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -104,6 +107,7 @@ pub enum ContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         annotations: Option<Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<HashMap<String, Value>>,
     },
     /// Image content
@@ -117,6 +121,7 @@ pub enum ContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         annotations: Option<Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<HashMap<String, Value>>,
     },
     /// Audio content
@@ -130,6 +135,7 @@ pub enum ContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         annotations: Option<Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<HashMap<String, Value>>,
     },
     /// Resource link (ResourceLink from MCP spec).
@@ -151,6 +157,7 @@ pub enum ContentBlock {
         #[serde(skip_serializing_if = "Option::is_none")]
         annotations: Option<Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<HashMap<String, Value>>,
     },
     /// Tool use content block.
@@ -166,8 +173,10 @@ pub enum ContentBlock {
         /// Name of the tool being called
         name: String,
         /// Input arguments for the tool
+        #[serde(serialize_with = "crate::serde_maps::sorted")]
         input: HashMap<String, Value>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<HashMap<String, Value>>,
     },
     /// Tool result content block.
@@ -190,6 +199,7 @@ pub enum ContentBlock {
         #[serde(rename = "isError", skip_serializing_if = "Option::is_none")]
         is_error: Option<bool>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         meta: Option<HashMap<String, Value>>,
     },
 }

@@ -61,6 +61,7 @@ pub enum JsonSchema {
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         properties: Option<HashMap<String, JsonSchema>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         required: Option<Vec<String>>,

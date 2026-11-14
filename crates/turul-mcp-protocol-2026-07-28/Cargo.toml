@@ -3,7 +3,7 @@ name = "turul-mcp-protocol-2026-07-28"
 # Independently versioned per workspace policy: this crate begins life at 0.4.0
 # (first release of the MCP 2026-07-28 spec line). Workspace stays at 0.3.47
 # until cutover. After 0.4.0, individual crates may continue to drift.
-version = "0.4.2"
+version = "0.4.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true

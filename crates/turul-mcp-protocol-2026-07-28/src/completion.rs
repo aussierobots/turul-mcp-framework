@@ -75,6 +75,7 @@ impl<'de> Deserialize<'de> for CompletionReference {
 pub struct CompletionContext {
     /// Arguments context
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub arguments: Option<HashMap<String, String>>,
 }
 

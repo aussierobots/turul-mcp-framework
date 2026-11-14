@@ -360,6 +360,7 @@ pub struct ElicitationSchema {
     pub schema_dialect: Option<String>,
     #[serde(rename = "type")]
     pub schema_type: String, // Always "object"
+    #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub properties: HashMap<String, PrimitiveSchemaDefinition>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<Vec<String>>,
@@ -647,6 +648,7 @@ pub struct ElicitResult {
     pub action: ElicitAction,
     /// The submitted form data, only present when action is `"accept"` and mode was `"form"`.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
     pub content: Option<HashMap<String, ElicitResultValue>>,
 }
 
