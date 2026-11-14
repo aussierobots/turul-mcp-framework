@@ -102,7 +102,7 @@ fn resources_other_values_rejected() {
 
 /// ADR-033 §1: every caller routes through the owner constructors — no
 /// `skill://` or `sha256:` literal is formatted in non-test code outside
-/// `uri.rs` and `manifest.rs`, in this crate or the server's ext_skills module.
+/// `uri.rs` and `manifest.rs`, in this crate, the server's ext_skills module or the client.
 #[test]
 fn owners_route_through_constructors() {
     let here = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -110,20 +110,34 @@ fn owners_route_through_constructors() {
     for e in std::fs::read_dir(here.join("src/v2026_07_28")).unwrap() {
         files.push(e.unwrap().path());
     }
-    let server = here.join("../turul-mcp-server/src/ext_skills.rs");
-    if server.exists() {
-        files.push(server);
+    // Consumers hold no such literal anywhere, tests included: scanned whole.
+    let mut whole = Vec::new();
+    for consumer in [
+        "../turul-mcp-server/src/ext_skills.rs",
+        "../turul-mcp-client/src/client.rs",
+    ] {
+        let path = here.join(consumer);
+        assert!(path.exists(), "{consumer} moved; update this guard");
+        whole.push(path);
     }
-    for f in files {
+    let crate_files = files.into_iter().map(|f| (f, false));
+    for (f, scan_whole) in crate_files.chain(whole.into_iter().map(|f| (f, true))) {
         let name = f.file_name().unwrap().to_string_lossy().to_string();
-        if matches!(
-            name.as_str(),
-            "uri.rs" | "manifest.rs" | "compliance_test.rs"
-        ) {
+        if !scan_whole
+            && matches!(
+                name.as_str(),
+                "uri.rs" | "manifest.rs" | "compliance_test.rs"
+            )
+        {
             continue;
         }
         let text = std::fs::read_to_string(&f).unwrap();
-        let code = text.split("#[cfg(test)]").next().unwrap();
+        // A crate file's unit tests are its trailing `mod tests`, which may quote URIs.
+        let code = if scan_whole {
+            text.as_str()
+        } else {
+            text.split("#[cfg(test)]\nmod tests {").next().unwrap()
+        };
         let code: String = code
             .lines()
             .filter(|l| !l.trim_start().starts_with("//"))
