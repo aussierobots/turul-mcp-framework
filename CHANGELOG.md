@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-`turul-mcp-ext-apps` 0.1.1 → 0.1.2, `turul-mcp-ext-skills` 0.1.0 (new),
-`turul-mcp-server` → 0.4.10, `turul-mcp-client` → 0.4.11.
+## [0.4.22] - 2026-11-14
+
+`turul-mcp-ext-apps` 0.1.1 → 0.1.3, `turul-mcp-ext-skills` 0.1.0 (new),
+`turul-mcp-server` 0.4.8 → 0.4.11, `turul-mcp-client` 0.4.9 → 0.4.11,
+`turul-mcp-builders` 0.4.2 → 0.4.3, `turul-http-mcp-server` 0.4.8 → 0.4.9.
 
 ### Added
 
@@ -56,33 +59,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Not yet: frontmatter with typed (non-string) values, `"dynamic"` skills,
   `resources/directory/read`, and Lambda.
 
-
-### Fixed
-
-- **Apps docs no longer list host duties as missing server MUSTs.** Hiding non-`model` tools
-  and rejecting app `tools/call` belong to the host (Apps spec §Visibility). Corrected in the
-  `turul-mcp-ext-apps` README, `docs/compliance/extensions.md` §3 and ADR-028. `UiResourceMeta`
-  now documents `_meta.ui` on the `resources/read` content item only, as the released spec does.
-
-`turul-mcp-server` 0.4.8 → 0.4.9, `turul-mcp-builders` 0.4.2 → 0.4.3.
-
-### Fixed
-
-- **`ResourceBuilder` and `PromptBuilder` output can be served.** `turul-mcp-server` now
-  implements `McpResource` for `DynamicResource` and `McpPrompt` for `DynamicPrompt`, as it already
-  did `McpTool` for `DynamicTool`, so `.resource(builder.build()?)` and
-  `.prompt(builder.build()?)` compile and serve. Before this, nothing could register what either
-  builder built, though the crate docs said they work like `ToolBuilder`. A builder prompt
-  receives only string arguments. Bug fix, patch release.
-- **A `ResourceBuilder` resource reads with the MIME type it lists.** `text_content` stamped
-  `text/plain` on the content item whatever `mime_type` declared, so `resources/list` and
-  `resources/read` disagreed. Static text content now takes the declared type. Bug fix, patch
-  release.
-
-`turul-mcp-client` 0.4.9 → 0.4.10, `turul-mcp-ext-apps` 0.1.2 → 0.1.3.
-
-### Added
-
 - **MCP Apps client surface, opt-in.** A new `ext-apps` feature on `turul-mcp-client`, off by
   default. `DeclaredCapabilities::ext_apps` declares `io.modelcontextprotocol/ui` with
   `mimeTypes: ["text/html;profile=mcp-app"]` on every 2026-07-28 request.
@@ -95,26 +71,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and own the spec's visibility default (`["model", "app"]` when omitted). **Classification:
   patch, additive.**
 
+- **`McpServerBuilder::listener` and `HttpMcpServerBuilder::listener` serve on a socket the
+  caller already bound** (ADR-034), through `turul_http_mcp_server::PreboundListener`. Bind
+  `127.0.0.1:0`, read `local_addr()`, and pass the same listener; the port is never released, so
+  no other test or process can take it. `bind_address` is set to the listener's address.
+
 ### Changed
 
+- **CI waits up to 60 s for DynamoDB Local** instead of 10 s; its start-up overran the old wait
+  three times on 2026-11-14 and failed the default lane before any test ran.
 - **Publish order:** `turul-mcp-ext-apps` now publishes before `turul-mcp-client`, which
   depends on it optionally.
 - **CI lints `turul-mcp-client`'s test targets.** The workspace clippy gate covers only
   `default-members`, so a needless borrow in the client's unit tests reached `main`. Fixed, and
   `cargo clippy -p turul-mcp-client --all-targets -- -D warnings` now runs in `ci-gates.sh` and CI.
 
-`turul-http-mcp-server` 0.4.8 → 0.4.9, `turul-mcp-server` 0.4.10 → 0.4.11; examples
-`pagination-server`, `resource-test-server`, `roots-server`, `prompts-test-server`,
-`sampling-server`, `elicitation-server` 0.4.0 → 0.4.1.
-
-### Added
-
-- **`McpServerBuilder::listener` and `HttpMcpServerBuilder::listener` serve on a socket the
-  caller already bound** (ADR-034), through `turul_http_mcp_server::PreboundListener`. Bind
-  `127.0.0.1:0`, read `local_addr()`, and pass the same listener; the port is never released, so
-  no other test or process can take it. `bind_address` is set to the listener's address.
-
 ### Fixed
+
+- **Apps docs no longer list host duties as missing server MUSTs.** Hiding non-`model` tools
+  and rejecting app `tools/call` belong to the host (Apps spec §Visibility). Corrected in the
+  `turul-mcp-ext-apps` README, `docs/compliance/extensions.md` §3 and ADR-028. `UiResourceMeta`
+  now documents `_meta.ui` on the `resources/read` content item only, as the released spec does.
+
+- **`ResourceBuilder` and `PromptBuilder` output can be served.** `turul-mcp-server` now
+  implements `McpResource` for `DynamicResource` and `McpPrompt` for `DynamicPrompt`, as it already
+  did `McpTool` for `DynamicTool`, so `.resource(builder.build()?)` and
+  `.prompt(builder.build()?)` compile and serve. Before this, nothing could register what either
+  builder built, though the crate docs said they work like `ToolBuilder`. A builder prompt
+  receives only string arguments. Bug fix, patch release.
+- **A `ResourceBuilder` resource reads with the MIME type it lists.** `text_content` stamped
+  `text/plain` on the content item whatever `mime_type` declared, so `resources/list` and
+  `resources/read` disagreed. Static text content now takes the declared type. Bug fix, patch
+  release.
 
 - **Tests and examples no longer race for ports.** Every in-process test that started a server
   bound a free port, dropped it and let the server rebind it; another test or process could take
@@ -2954,7 +2942,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.21...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.22...HEAD
+[0.4.22]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.21...v0.4.22
 [0.4.21]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.20...v0.4.21
 [0.4.20]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.19...v0.4.20
 [0.4.19]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.18...v0.4.19
