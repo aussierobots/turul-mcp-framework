@@ -358,16 +358,17 @@ Before publishing a new version:
 5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
 6. **Publish order** (dependency-first, derived from the actual non-dev dependency graph):
    ```
-   protocol-2026-07-28 → ext-tasks → protocol → session-storage → http-server → builders →
+   protocol-2026-07-28 → ext-tasks → ext-skills → protocol → session-storage → http-server → builders →
    derive* → oauth → schema-validation → server-state-storage → task-storage →
    server → aws-lambda → client → ext-apps
    ```
    *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
 
    External sibling crates are **not** in this sequence — they publish from their
-   own repos and must already be on crates.io: `turul-rpc` (0.2) and
+   own repos and must already be on crates.io: `turul-rpc` (0.2),
    `turul-jwt-validator` (>= 0.3.2, required by `turul-mcp-oauth` — the
-   `rust_crypto` feature does not exist before 0.3.2).
+   `rust_crypto` feature does not exist before 0.3.2) and `turul-agent-skills`
+   (0.1, required by `turul-mcp-ext-skills`).
 
    Frozen `turul-mcp-json-rpc-server`, `turul-mcp-protocol-2025-06-18` and
    `turul-mcp-protocol-2025-11-25` stay published at `0.3.47` — no republish step.

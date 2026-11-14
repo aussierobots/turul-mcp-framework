@@ -1,0 +1,33 @@
+# Spec-NEUTRAL extension crate (ADR-028): lanes are feature-gated modules.
+# Extension crates version independently — literal version, never
+# version.workspace = true.
+[package]
+name = "turul-mcp-ext-skills"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "MCP Skills extension (io.modelcontextprotocol/skills, SEP-2640) — wire types, skill:// URIs and sha256 manifests over turul-agent-skills"
+readme = "README.md"
+documentation = "https://docs.rs/turul-mcp-ext-skills"
+keywords.workspace = true
+categories = ["network-programming"]
+
+[features]
+default = ["protocol-2026-07-28"]
+protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
+
+[dependencies]
+turul-mcp-protocol-2026-07-28 = { version = "0.4", path = "../turul-mcp-protocol-2026-07-28", optional = true }
+turul-agent-skills.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# Independent YAML implementation for the frontmatter-identity test (ADR-033 §Tests).
+serde_yml.workspace = true
+tempfile.workspace = true
