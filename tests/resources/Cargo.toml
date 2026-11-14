@@ -19,14 +19,14 @@ serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
-mcp-e2e-shared.workspace = true
 
 [lib]
 name = "mcp_resources_tests"
 path = "src/lib.rs"
 
 [dev-dependencies]
+tracing-subscriber.workspace = true
+mcp-e2e-shared.workspace = true
 serial_test.workspace = true
 turul-mcp-client.workspace = true
 

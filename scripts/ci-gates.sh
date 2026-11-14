@@ -25,9 +25,7 @@ gate_default() {
   run "build (default = protocol-2026-07-28)" cargo build
   run "clippy (deny warnings)" cargo clippy --all-targets -- -D warnings
   run "test" cargo test
-  echo "=== warning sweep on the test build ==="
-  n=$(cargo test --no-run 2>&1 | grep -c 'warning:' || true)
-  echo "  test-build warnings: $n"; [ "$n" = "0" ] || { echo "  FAIL"; fail=1; }
+  run "warning sweep on the test builds (default lane)" ./scripts/warning-sweep.sh default
   run "2026 stateless acceptance (real HTTP)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test discover_stateless_2026
   run "2026 HTTP surface (GET/DELETE 405, session-id ignored)" \
@@ -77,6 +75,7 @@ gate_default() {
 }
 
 gate_opt_in_2025() {
+  run "warning sweep on the test builds (2025-11-25 lane)" ./scripts/warning-sweep.sh opt-in-2025
   run "server 2025-11-25 test"   cargo test   -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25
   run "server 2025-11-25 clippy" cargo clippy -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25 -- -D warnings
   run "builders 2025-11-25"      cargo test   -p turul-mcp-builders    --no-default-features --features protocol-2025-11-25

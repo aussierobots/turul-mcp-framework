@@ -541,7 +541,7 @@ mod derive_macro_tests {
         // Check that the implementation contains expected elements (use contains_pattern for whitespace-insensitive matching)
         assert!(contains_pattern(
             &generated_str,
-            "impl turul_mcp_server::McpTool"
+            "turul_mcp_server::McpTool for"
         ));
         assert!(contains_pattern(&generated_str, "fn name(&self)"));
         assert!(contains_pattern(&generated_str, "fn description(&self)"));
@@ -655,7 +655,7 @@ mod function_attribute_tests {
         assert!(generated_str.contains("struct Multiply"));
         assert!(contains_pattern(
             &generated_str,
-            "impl turul_mcp_server::McpTool"
+            "turul_mcp_server::McpTool for"
         ));
         assert!(contains_pattern(&generated_str, "fn name(&self)"));
         assert!(generated_str.contains("multiply"));
@@ -781,7 +781,7 @@ mod edge_case_tests {
         // Should still generate valid implementation even with no fields
         assert!(contains_pattern(
             &generated_str,
-            "impl turul_mcp_server::McpTool"
+            "turul_mcp_server::McpTool for"
         ));
     }
 

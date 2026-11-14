@@ -191,12 +191,8 @@ exclude = [
 ]
 
 [workspace.package]
-# Per-crate independent versioning: individual crates carry their own literal
-# `version = "..."` declarations and do NOT inherit from this field. The value
-# here is a default for tooling that still references
-# `[workspace.package].version` (e.g. some IDE plugins); it does not flow into
-# any published crate.
-version = "0.4.0"
+# Per-crate independent versioning: each crate carries its own literal
+# `version = "..."`; there is deliberately no workspace version to inherit.
 edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
 license = "MIT OR Apache-2.0"
@@ -258,7 +254,6 @@ turul-jwt-validator = { version = "0.3", default-features = false, features = ["
 # `2025-11-25`) stay at their last 0.3.x publish — everything else moves on
 # its own cadence.
 turul-mcp-json-rpc-server = { version = "0.3", path = "crates/turul-mcp-json-rpc-server" }
-turul-mcp-protocol-2025-06-18 = { version = "0.3", path = "crates/turul-mcp-protocol-2025-06-18" }
 turul-mcp-protocol-2025-11-25 = { version = "0.3", path = "crates/turul-mcp-protocol-2025-11-25" }
 turul-mcp-protocol-2026-07-28 = { version = "0.4", path = "crates/turul-mcp-protocol-2026-07-28" }
 turul-mcp-schema-validation = { version = "0.4", path = "crates/turul-mcp-schema-validation" }

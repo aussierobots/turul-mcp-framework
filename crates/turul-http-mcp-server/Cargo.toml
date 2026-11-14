@@ -1,6 +1,6 @@
 [package]
 name = "turul-http-mcp-server"
-version = "0.4.6"
+version = "0.4.7"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -34,7 +34,6 @@ async-stream.workspace = true
 tokio.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
-tower.workspace = true
 tokio-stream.workspace = true
 http.workspace = true
 http-body-util.workspace = true

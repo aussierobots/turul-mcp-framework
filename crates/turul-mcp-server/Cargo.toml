@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-server"
-version = "0.4.6"
+version = "0.4.7"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ categories = ["network-programming"]
 [features]
 default = ["http", "sse", "protocol-2026-07-28"]
 protocol-2025-11-25 = ["turul-mcp-derive/protocol-2025-11-25", "turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-builders/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25", "dep:turul-mcp-task-storage", "turul-mcp-task-storage/protocol-2025-11-25", "turul-http-mcp-server?/protocol-2025-11-25", "turul-mcp-session-storage/in-memory", "turul-mcp-task-storage/in-memory"]
-protocol-2026-07-28 = ["turul-mcp-derive/protocol-2026-07-28", "turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-http-mcp-server?/protocol-2026-07-28", "turul-mcp-session-storage/in-memory"]
+protocol-2026-07-28 = ["turul-mcp-derive/protocol-2026-07-28", "turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-builders/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "turul-http-mcp-server?/protocol-2026-07-28", "turul-mcp-session-storage/in-memory", "dep:turul-mcp-schema-validation"]
 http = ["turul-http-mcp-server"]
 sse = ["turul-http-mcp-server/sse"]
 sqlite = ["turul-mcp-session-storage/sqlite", "turul-mcp-task-storage?/sqlite", "turul-mcp-server-state-storage?/sqlite"]
@@ -24,7 +24,7 @@ dynamodb = ["turul-mcp-session-storage/dynamodb", "turul-mcp-task-storage?/dynam
 dynamic-tools = ["turul-mcp-server-state-storage"]
 # Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) on the 2026 lane.
 # Off by default: SEP-2133 requires extensions disabled unless opted into.
-ext-tasks = ["protocol-2026-07-28", "dep:turul-mcp-ext-tasks"]
+ext-tasks = ["protocol-2026-07-28", "dep:turul-mcp-ext-tasks", "dep:turul-mcp-oauth"]
 test-utils = []
 
 [dependencies]
@@ -35,8 +35,10 @@ turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4", default-features = false }
 turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
 turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4", default-features = false }
-turul-mcp-schema-validation = { workspace = true }
-turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4", default-features = false }
+# 2026-07-28 lane only: tools/list inputSchema validation.
+turul-mcp-schema-validation = { workspace = true, optional = true }
+# ext-tasks only: binds a task to the OAuth `sub` claim.
+turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4", default-features = false, optional = true }
 turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4", default-features = false, optional = true }
 turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4", default-features = false, optional = true }
 turul-mcp-server-state-storage = {workspace = true, optional = true}
@@ -60,6 +62,8 @@ once_cell.workspace = true
 urlencoding.workspace = true
 
 [dev-dependencies]
+# tests/oauth_2026.rs wires the resource server without the ext-tasks feature.
+turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4", default-features = false }
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
 # Protocol feature comes from the server's own normal-dep forwarding; the dev-dep
 # must not also pull a default (protocol-2025-11-25), or the alias sees both specs.

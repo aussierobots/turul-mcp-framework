@@ -634,7 +634,10 @@ impl Drop for SseTransport {
     }
 }
 
+// The tests exercise the deprecated type on purpose: it stays supported for
+// <= 2024-11-05 servers until the spec removes the transport.
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use super::*;
 

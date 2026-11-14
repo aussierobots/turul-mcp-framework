@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+`turul-mcp-derive` 0.4.5 → 0.4.6, `turul-http-mcp-server` 0.4.6 → 0.4.7,
+`turul-mcp-server` 0.4.6 → 0.4.7, `turul-mcp-client` 0.4.7 → 0.4.8,
+`turul-mcp-server-state-storage` 0.4.1 → 0.4.2.
+
+### Fixed
+
+- **The workspace builds warning-free and clippy-clean on rustc 1.100, on both spec lanes.** That release adds
+  cargo's `unused_dependencies` lint and clippy's `duplicated_attributes`, which failed the
+  test-build warning sweep and `clippy -D warnings` on `main`. No public API or behaviour
+  changes. Patch release.
+  - `turul-mcp-derive` no longer depends on `serde`, `serde_json`, `async-trait`, `schemars`
+    or `turul-mcp-protocol`. The macro never used them; its doc examples and tests do, so they
+    are dev-dependencies now. A proc-macro's dependencies build for the host, so the
+    `protocol-*` features never reached a consumer's `turul-mcp-protocol` through it.
+  - `turul-http-mcp-server` drops the unused `tower` dependency.
+  - `turul-mcp-server`: `turul-mcp-schema-validation` is enabled by `protocol-2026-07-28` and
+    `turul-mcp-oauth` by `ext-tasks`, the only code paths that use them; a 2025-11-25 build no
+    longer links either.
+  - `turul-mcp-client`: `turul-mcp-schema-validation` is enabled by the 2026-07-28 wire
+    features (`client-bilingual`, `client-2026-07-28-only`); the unused `anyhow` is dropped. Its own tests of the deprecated
+    `SseTransport` allow the deprecation, so the client test builds are warning-free on all three
+    client lanes.
+  - `turul-mcp-server-state-storage` needs `tracing` only for its `sqlite`, `postgres` and
+    `dynamodb` backends, so it is now optional and enabled by them.
+  - `turul-mcp-server`: removed a duplicated `#[allow(deprecated)]` on `SessionContext::notify_log`.
+  - Unpublished test crates and `client-initialise-server` move test-only dependencies to
+    `[dev-dependencies]` or drop unused ones.
+  - The workspace drops the unused `turul-mcp-protocol-2025-06-18` dependency entry and the
+    unused `[workspace.package].version`; crate versions were already per-crate literals.
+
+### Changed
+
+- **The test-build warning sweep covers every package the gates test, on both lanes.** It ran
+  only on `default-members`, so `turul-mcp-client` (not a default member) carried 9 warnings
+  unseen. `scripts/warning-sweep.sh default|opt-in-2025` holds the one list, built with the same
+  features the gates use; `ci-gates.sh` and CI both call it. No crate changes.
+
 ## [0.4.20] - 2026-11-12
 
 `turul-mcp-derive` 0.4.4 → 0.4.5.
