@@ -42,16 +42,13 @@ impl McpMiddleware for ForceChallenge {
 }
 
 async fn start_server(with_auth: bool) -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
 
     let mut builder = McpServer::builder()
         .name("ping-auth-2025-test")
         .version("0.4.0")
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap());
+        .listener(listener);
     if with_auth {
         builder = builder.middleware(Arc::new(ForceChallenge));
     }

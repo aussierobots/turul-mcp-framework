@@ -58,12 +58,13 @@ async fn wait_listening(addr: SocketAddr) {
 }
 
 async fn start_2025_server() -> SocketAddr {
-    let addr: SocketAddr = format!("127.0.0.1:{}", free_port()).parse().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
     let server = McpServer::builder()
         .name("upgrade-e2e-2025")
         .version("0.4.0")
         .tool(EchoTool::default())
-        .bind_address(addr)
+        .listener(listener)
         .build()
         .expect("build 2025-11-25 server");
     tokio::spawn(async move {

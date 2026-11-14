@@ -326,16 +326,13 @@ async fn e2e_real_server_list_get_fetch() {
             )
             .unwrap();
     }
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     let server = McpServer::builder()
         .name("skills-e2e")
         .version("0.0.0")
         .with_ext_skills(catalog)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .unwrap();
     tokio::spawn(async move { server.run().await.ok() });

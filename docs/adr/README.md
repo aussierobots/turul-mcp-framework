@@ -7,7 +7,7 @@ This directory contains Architecture Decision Records (ADRs) that document impor
 Each ADR follows the standard format:
 - **Status**: current state. The vocabulary actually in use in the table below,
   with counts as of 2026-11-14:
-  - **Accepted** (32) — decided and implemented.
+  - **Accepted** (33) — decided and implemented.
   - **Mandatory** (5) — ADRs 001–005, the always-on architectural rules. Stronger
     than Accepted: these are not per-slice decisions but standing constraints.
   - **Proposed** (0 in use) — decided in principle, but an alternative path
@@ -64,6 +64,7 @@ Each ADR follows the standard format:
 | [031](./031-origin-validation-dns-rebinding.md) | Origin validation (DNS-rebinding protection) on the HTTP transport | Accepted | 2026-06-11 | `Origin` enforcement in `turul-http-mcp-server`, builder passthrough in `turul-mcp-server` |
 | [032](./032-adopt-turul-jwt-validator.md) | Adopt `turul-jwt-validator`; `turul-mcp-oauth` stops owning JWT validation | Accepted | 2026-08-02 | Delegate JWT/JWKS to the extracted sibling crate; forces `jsonwebtoken` 10→11. Must land before 0.4.0 publishes |
 | [033](./033-skills-over-mcp.md) | Skills over MCP — `turul-mcp-ext-skills` on `turul-agent-skills` | Accepted | 2026-11-14 | Skills extension (SEP-2640): owners of `skill://` URIs, `sha256:` manifests and the capability value; opt-in `ext-skills` server feature |
+| [034](./034-prebound-listener.md) | Pre-bound listener for the HTTP transport | Accepted | 2026-11-14 | Servers serve on a caller-bound `TcpListener`; removes the release-then-rebind port race in tests |
 
 ## Tasks Architecture ADRs
 

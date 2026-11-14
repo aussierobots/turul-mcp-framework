@@ -12,8 +12,7 @@ use turul_mcp_protocol::resources::{ResourceContent, TextResourceContents};
 use turul_mcp_server::prelude::*;
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let static_resource = ResourceBuilder::new("file:///builder/readme.md")
         .name("readme")
@@ -49,7 +48,7 @@ async fn start_server() -> String {
         .resource(static_resource)
         .resource(dynamic_resource)
         .prompt(prompt)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

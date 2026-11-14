@@ -119,6 +119,8 @@ pub struct McpServer {
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
     #[cfg(feature = "http")]
+    listener: Option<turul_http_mcp_server::PreboundListener>,
+    #[cfg(feature = "http")]
     mcp_path: String,
     #[cfg(feature = "http")]
     enable_cors: bool,
@@ -160,6 +162,7 @@ impl McpServer {
             Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
         >,
         #[cfg(feature = "http")] bind_address: SocketAddr,
+        #[cfg(feature = "http")] listener: Option<turul_http_mcp_server::PreboundListener>,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
         #[cfg(feature = "http")] enable_sse: bool,
@@ -257,6 +260,8 @@ impl McpServer {
             coordination_enabled,
             #[cfg(feature = "http")]
             bind_address,
+            #[cfg(feature = "http")]
+            listener,
             #[cfg(feature = "http")]
             mcp_path,
             #[cfg(feature = "http")]
@@ -512,6 +517,10 @@ impl McpServer {
                 vec!["notifications/initialized".to_string()],
                 initialized_bridge,
             );
+        }
+
+        if let Some(ref listener) = self.listener {
+            builder = builder.prebound_listener(listener.clone());
         }
 
         builder

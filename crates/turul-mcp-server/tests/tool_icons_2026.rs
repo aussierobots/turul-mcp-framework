@@ -57,8 +57,7 @@ impl PlainTool {
 }
 
 async fn tools_list() -> serde_json::Value {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("tool-icons-2026")
@@ -66,7 +65,7 @@ async fn tools_list() -> serde_json::Value {
         .tool(DerivedIconTool::default())
         .tool_fn(function_icon_tool)
         .tool(PlainTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 
@@ -82,7 +81,6 @@ async fn tools_list() -> serde_json::Value {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    drop(reserved);
 
     client
         .post(&url)

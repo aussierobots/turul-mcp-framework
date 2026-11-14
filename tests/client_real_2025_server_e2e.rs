@@ -66,17 +66,14 @@ impl EchoTool {
 /// `2026 test servers race on port binding under load` already cost this repo
 /// once).
 async fn start_2025_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
 
     let server = McpServer::builder()
         .name("client-real-2025-e2e")
         .version("0.4.0")
         .tool(EchoTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2025-11-25 server");
 

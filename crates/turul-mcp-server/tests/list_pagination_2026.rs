@@ -106,8 +106,7 @@ impl McpPrompt for ArgPrompt {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("list-pagination-2026")
@@ -125,7 +124,7 @@ async fn start_server() -> String {
         .prompt(NamedPrompt("gamma"))
         .prompt(ArgPrompt)
         .test_mode()
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

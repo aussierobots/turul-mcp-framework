@@ -19,8 +19,7 @@ use turul_mcp_server::prelude::*;
 
 /// Server with one slow tool that flips `completed` only if it runs to the end.
 async fn start_server(completed: Arc<AtomicBool>) -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let slow_tool = ToolBuilder::new("slow")
         .description("Sleeps, then records completion")
@@ -40,7 +39,7 @@ async fn start_server(completed: Arc<AtomicBool>) -> String {
         .name("cancel-2026-test")
         .version("0.4.0")
         .tool(slow_tool)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

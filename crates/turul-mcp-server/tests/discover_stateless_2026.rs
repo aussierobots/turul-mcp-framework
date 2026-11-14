@@ -33,8 +33,7 @@ impl EchoTool {
 /// Start a 2026 server on an ephemeral port and return its `/mcp` URL once it
 /// accepts connections.
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("discover-2026-test")
@@ -45,7 +44,7 @@ async fn start_server() -> String {
         .tool(EchoTool::default())
         .with_resources()
         .with_prompts()
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 
@@ -510,14 +509,13 @@ async fn completion_complete_dispatches_statelessly() {
     // completion/complete is part of the 2026 core; with completion enabled
     // the request must dispatch sessionless and return the CompleteResult
     // wire shape ({ completion: { values, ... } }).
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("completion-2026-test")
         .version("0.4.0")
         .tool(EchoTool::default())
         .with_completion()
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -531,8 +529,6 @@ async fn completion_complete_dispatches_statelessly() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    // The server owns the port now; let another test reserve one.
-    drop(reserved);
 
     // Capability must be advertised…
     let resp = client
@@ -658,15 +654,14 @@ impl turul_mcp_server::McpCompletion for FloodCompleter {
 }
 
 async fn start_completion_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("completion-provider-2026-test")
         .version("0.4.0")
         .tool(EchoTool::default())
         .completion_provider(GreetNameCompleter)
         .completion_provider(FloodCompleter)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -1074,8 +1069,7 @@ async fn every_modelled_capability_field_is_builder_reachable() {
         .expect("serialize ServerCapabilities"),
     );
 
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("caps-reachability")
         .version("0.4.0")
@@ -1084,7 +1078,7 @@ async fn every_modelled_capability_field_is_builder_reachable() {
         .with_prompts()
         .experimental_capability("x", serde_json::json!({}))
         .extension_capability("com.example/ext", serde_json::json!({}))
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {

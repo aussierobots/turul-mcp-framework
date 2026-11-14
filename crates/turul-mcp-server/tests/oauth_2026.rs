@@ -28,8 +28,7 @@ impl EchoTool {
 /// OAuth-protected 2026 server. The JWKS URI is unreachable on purpose —
 /// missing/garbage bearers must be rejected before any JWKS fetch.
 async fn start_oauth_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let metadata = ProtectedResourceMetadata::new(
         format!("http://127.0.0.1:{port}/mcp"),
@@ -47,7 +46,7 @@ async fn start_oauth_server() -> String {
         .version("0.4.0")
         .tool(EchoTool::default())
         .middleware(auth_middleware)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap());
+        .listener(listener);
     for (path, handler) in routes {
         builder = builder.route(&path, handler);
     }

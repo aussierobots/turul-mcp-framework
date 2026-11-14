@@ -129,11 +129,8 @@ fn ui(visibility: Option<Vec<UiToolVisibility>>) -> HashMap<String, Value> {
 }
 
 async fn start_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     let server = McpServer::builder()
         .name("ext-apps-client-2026")
         .version("0.4.0")
@@ -145,7 +142,7 @@ async fn start_server() -> String {
         ))
         .tool(UiTool::new("plain", HashMap::new()))
         .resource(View)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {

@@ -17,11 +17,10 @@ use turul_mcp_server::prelude::*;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 async fn start_test_server_with_tools() -> String {
-    // Find an available port
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    // Bind an ephemeral port; the server takes this listener
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
-    drop(listener);
 
     use turul_mcp_derive::mcp_tool;
     use turul_mcp_protocol::McpResult;
@@ -38,7 +37,7 @@ async fn start_test_server_with_tools() -> String {
         .version("1.0.0")
         .tool_fn(test_add)
         .with_session_storage(session_storage)
-        .bind_address(addr)
+        .listener(listener)
         .build()
         .unwrap();
 
@@ -55,11 +54,10 @@ async fn start_test_server_with_tools() -> String {
 }
 
 async fn start_test_server_with_strict_lifecycle() -> String {
-    // Find an available port
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    // Bind an ephemeral port; the server takes this listener
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
-    drop(listener);
 
     use turul_mcp_derive::mcp_tool;
     use turul_mcp_protocol::McpResult;
@@ -80,7 +78,7 @@ async fn start_test_server_with_strict_lifecycle() -> String {
         .tool_fn(strict_test_add)
         .with_session_storage(session_storage)
         .with_strict_lifecycle() // Enable strict enforcement
-        .bind_address(addr)
+        .listener(listener)
         .build()
         .unwrap();
 
@@ -1048,10 +1046,9 @@ async fn test_version_negotiation_ancient_client_error() {
 
 /// Start a test server with allow_unauthenticated_ping disabled
 async fn start_test_server_no_unauthenticated_ping() -> String {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
-    drop(listener);
 
     use turul_mcp_derive::mcp_tool;
     use turul_mcp_protocol::McpResult;
@@ -1067,7 +1064,7 @@ async fn start_test_server_no_unauthenticated_ping() -> String {
         .version("1.0.0")
         .tool_fn(noop)
         .with_session_storage(session_storage)
-        .bind_address(addr)
+        .listener(listener)
         .allow_unauthenticated_ping(false)
         .build()
         .unwrap();
@@ -1474,10 +1471,9 @@ impl McpMiddleware for TestRateLimitMiddleware {
 
 /// Start a test server with auth middleware
 async fn start_test_server_with_auth_middleware() -> String {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
-    drop(listener);
 
     use turul_mcp_derive::mcp_tool;
     use turul_mcp_protocol::McpResult;
@@ -1494,7 +1490,7 @@ async fn start_test_server_with_auth_middleware() -> String {
         .tool_fn(noop_auth)
         .with_session_storage(session_storage)
         .middleware(Arc::new(TestAuthMiddleware))
-        .bind_address(addr)
+        .listener(listener)
         .build()
         .unwrap();
 
@@ -1510,10 +1506,9 @@ async fn start_test_server_with_auth_middleware() -> String {
 
 /// Start a test server with rate-limiting middleware
 async fn start_test_server_with_rate_limit(max_calls: usize) -> String {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
-    drop(listener);
 
     use turul_mcp_derive::mcp_tool;
     use turul_mcp_protocol::McpResult;
@@ -1530,7 +1525,7 @@ async fn start_test_server_with_rate_limit(max_calls: usize) -> String {
         .tool_fn(noop_rate)
         .with_session_storage(session_storage)
         .middleware(Arc::new(TestRateLimitMiddleware::new(max_calls)))
-        .bind_address(addr)
+        .listener(listener)
         .build()
         .unwrap();
 
@@ -1740,10 +1735,9 @@ impl McpMiddleware for AfterDispatchErrorMiddleware {
 async fn start_test_server_with_after_dispatch_middleware(
     middleware: Arc<dyn McpMiddleware>,
 ) -> String {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
-    drop(listener);
 
     use turul_mcp_derive::mcp_tool;
     use turul_mcp_protocol::McpResult;
@@ -1766,7 +1760,7 @@ async fn start_test_server_with_after_dispatch_middleware(
         .tool_fn(secret_tool)
         .with_session_storage(session_storage)
         .middleware(middleware)
-        .bind_address(addr)
+        .listener(listener)
         .build()
         .unwrap();
 

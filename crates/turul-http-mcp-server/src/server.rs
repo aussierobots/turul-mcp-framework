@@ -83,6 +83,35 @@ impl Default for ServerConfig {
     }
 }
 
+/// A socket the caller bound before the server starts (ADR-034).
+///
+/// `HttpMcpServer::run` serves on it instead of binding `bind_address`, so a
+/// port chosen with `127.0.0.1:0` is never released before the server owns it.
+/// The server takes the listener on its first `run`.
+#[derive(Clone, Debug)]
+pub struct PreboundListener(Arc<std::sync::Mutex<Option<std::net::TcpListener>>>);
+
+impl PreboundListener {
+    /// Wrap a bound listener.
+    pub fn new(listener: std::net::TcpListener) -> Self {
+        Self(Arc::new(std::sync::Mutex::new(Some(listener))))
+    }
+
+    /// The listener's address, if it has not been taken yet.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.0
+            .lock()
+            .ok()?
+            .as_ref()
+            .and_then(|l| l.local_addr().ok())
+    }
+
+    /// Take the listener; `None` once a `run` has taken it.
+    pub fn take(&self) -> Option<std::net::TcpListener> {
+        self.0.lock().ok()?.take()
+    }
+}
+
 /// Builder for HTTP MCP server with pluggable storage
 pub struct HttpMcpServerBuilder {
     config: ServerConfig,
@@ -95,6 +124,7 @@ pub struct HttpMcpServerBuilder {
     tool_fingerprint: Option<String>,
     tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
     server_info: Option<turul_mcp_protocol::Implementation>,
+    listener: Option<PreboundListener>,
 }
 
 impl HttpMcpServerBuilder {
@@ -111,6 +141,7 @@ impl HttpMcpServerBuilder {
             tool_fingerprint: None,
             server_info: None,
             tool_notifier: None,
+            listener: None,
         }
     }
 }
@@ -131,6 +162,7 @@ impl HttpMcpServerBuilder {
             tool_fingerprint: None,
             server_info: None,
             tool_notifier: None,
+            listener: None,
         }
     }
 
@@ -174,6 +206,23 @@ impl HttpMcpServerBuilder {
     /// Set the bind address
     pub fn bind_address(mut self, addr: SocketAddr) -> Self {
         self.config.bind_address = addr;
+        self
+    }
+
+    /// Serve on a socket the caller has already bound (ADR-034). Sets
+    /// `bind_address` to its local address. Use this, not a dropped
+    /// `127.0.0.1:0` listener, to start a server on a free port.
+    pub fn listener(self, listener: std::net::TcpListener) -> Self {
+        self.prebound_listener(PreboundListener::new(listener))
+    }
+
+    /// Serve on a [`PreboundListener`] (ADR-034); the form `turul-mcp-server`
+    /// passes through. Sets `bind_address` to its local address.
+    pub fn prebound_listener(mut self, listener: PreboundListener) -> Self {
+        if let Some(addr) = listener.local_addr() {
+            self.config.bind_address = addr;
+        }
+        self.listener = Some(listener);
         self
     }
 
@@ -326,6 +375,7 @@ impl HttpMcpServerBuilder {
             route_registry: self.route_registry,
             tool_fingerprint: self.tool_fingerprint,
             tool_notifier: self.tool_notifier,
+            listener: self.listener,
         }
     }
 }
@@ -353,6 +403,8 @@ pub struct HttpMcpServer {
     tool_fingerprint: Option<String>,
     // Tool change notifier for restart/redeploy fingerprint mismatch
     tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
+    // Caller-bound socket, taken on the first run (ADR-034)
+    listener: Option<PreboundListener>,
 }
 
 impl HttpMcpServer {
@@ -389,7 +441,13 @@ impl HttpMcpServer {
         // Start session cleanup task
         self.start_session_cleanup().await;
 
-        let listener = TcpListener::bind(&self.config.bind_address).await?;
+        let listener = match self.listener.as_ref().and_then(PreboundListener::take) {
+            Some(bound) => {
+                bound.set_nonblocking(true)?;
+                TcpListener::from_std(bound)?
+            }
+            None => TcpListener::bind(&self.config.bind_address).await?,
+        };
         info!("HTTP MCP server listening on {}", self.config.bind_address);
         info!("MCP endpoint available at: {}", self.config.mcp_path);
         info!("Session storage: {}", self.session_storage.backend_name());
@@ -631,6 +689,31 @@ pub struct ServerStats {
 
 #[cfg(test)]
 mod tests {
+
+    /// ADR-034: the server serves on the caller's bound socket and reports
+    /// its address as `bind_address`.
+    #[tokio::test]
+    async fn prebound_listener_serves_on_the_given_socket() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = HttpMcpServerBuilder::new().listener(listener).build();
+        assert_eq!(server.config.bind_address, addr);
+        tokio::spawn(async move {
+            server.run().await.ok();
+        });
+
+        let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+        stream
+            .write_all(b"GET /mcp HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n")
+            .await
+            .unwrap();
+        let mut head = [0u8; 9];
+        stream.read_exact(&mut head).await.unwrap();
+        assert_eq!(&head, b"HTTP/1.1 ");
+    }
+
     use super::*;
     use std::net::{IpAddr, Ipv4Addr};
     use std::sync::Arc;

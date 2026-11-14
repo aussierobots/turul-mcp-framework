@@ -52,16 +52,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     // Use specified port or OS ephemeral allocation if 0
-    let port = if args.port == 0 {
-        // Use OS ephemeral port allocation - reliable for parallel testing
-        let listener = std::net::TcpListener::bind("127.0.0.1:0")
-            .map_err(|e| format!("Failed to bind to ephemeral port: {}", e))?;
-        let port = listener.local_addr()?.port();
-        drop(listener); // Release immediately so server can bind to it
-        port
-    } else {
-        args.port
-    };
+    let listener = std::net::TcpListener::bind(("127.0.0.1", args.port))?;
+    let port = listener.local_addr()?.port();
 
     info!("🚀 Starting MCP Roots Test Server on port {}", port);
     info!("📡 Server URL: http://127.0.0.1:{}/mcp", port);
@@ -98,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .root(Root::new("file:///tmp").with_name("Temporary Files"))
         .root(Root::new("file:///config").with_name("Configuration Files"))
         .root(Root::new("file:///logs").with_name("Log Files"))
-        .bind_address(format!("127.0.0.1:{}", port).parse()?)
+        .listener(listener)
         .build()?;
 
     info!("🚀 Roots server listening on http://127.0.0.1:{}/mcp", port);

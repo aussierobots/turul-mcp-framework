@@ -125,6 +125,9 @@ pub struct McpServerBuilder {
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
+    /// Caller-bound socket the server serves on instead of binding (ADR-034)
+    #[cfg(feature = "http")]
+    listener: Option<turul_http_mcp_server::PreboundListener>,
     #[cfg(feature = "http")]
     mcp_path: String,
     #[cfg(feature = "http")]
@@ -321,6 +324,8 @@ impl McpServerBuilder {
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
+            #[cfg(feature = "http")]
+            listener: None,
             #[cfg(feature = "http")]
             mcp_path: "/mcp".to_string(),
             #[cfg(feature = "http")]
@@ -1674,6 +1679,20 @@ impl McpServerBuilder {
         self
     }
 
+    /// Serve on a socket the caller has already bound (ADR-034), instead of
+    /// binding `bind_address`. Sets `bind_address` to its local address. To
+    /// start on a free port, bind `127.0.0.1:0` and pass that listener here;
+    /// the port is never released, so nothing else can take it.
+    #[cfg(feature = "http")]
+    pub fn listener(mut self, listener: std::net::TcpListener) -> Self {
+        let listener = turul_http_mcp_server::PreboundListener::new(listener);
+        if let Some(addr) = listener.local_addr() {
+            self.bind_address = addr;
+        }
+        self.listener = Some(listener);
+        self
+    }
+
     /// Set MCP endpoint path (requires "http" feature)
     #[cfg(feature = "http")]
     pub fn mcp_path(mut self, path: impl Into<String>) -> Self {
@@ -2208,6 +2227,8 @@ impl McpServerBuilder {
             self.server_state_storage,
             #[cfg(feature = "http")]
             self.bind_address,
+            #[cfg(feature = "http")]
+            self.listener,
             #[cfg(feature = "http")]
             self.mcp_path,
             #[cfg(feature = "http")]

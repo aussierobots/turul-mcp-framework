@@ -17,11 +17,10 @@ use turul_mcp_server::McpServer;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 async fn start_test_server() -> String {
-    // Find an available port
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    // Bind an ephemeral port; the server takes this listener
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
-    drop(listener);
 
     use turul_mcp_derive::mcp_tool;
     use turul_mcp_protocol::McpResult;
@@ -38,7 +37,7 @@ async fn start_test_server() -> String {
         .version("1.0.0")
         .tool_fn(test_tool)
         .with_session_storage(session_storage)
-        .bind_address(addr)
+        .listener(listener)
         .build()
         .unwrap();
 
