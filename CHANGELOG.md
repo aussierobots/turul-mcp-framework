@@ -22,6 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the sibling's current version, and the release rule (CLAUDE.md, `docs/rules/crate-versioning.md`)
   raises the pins on every bump. The crates whose dependency lines changed are republished. No
   code changes. Patch release.
+- **New gate: `scripts/check-internal-pins.sh`** (in `ci-gates.sh default` and CI) fails when a
+  published framework crate pins a sibling below that sibling's current version.
 
 ## [0.4.24] - 2026-11-14
 

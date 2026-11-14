@@ -22,6 +22,7 @@ gate_fmt() {
 gate_default() {
   run "schema pin integrity" ./scripts/check-schema-pin.sh
   run "protocol crate purity" ./scripts/check-protocol-purity.sh
+  run "internal pins name current versions" ./scripts/check-internal-pins.sh
   run "build (default = protocol-2026-07-28)" cargo build
   run "clippy (deny warnings)" cargo clippy --all-targets -- -D warnings
   run "test" cargo test
