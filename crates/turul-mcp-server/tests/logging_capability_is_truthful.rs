@@ -37,14 +37,13 @@ struct Fixture {
 /// Builds the server the bug report described — one tool, `.logger()` never
 /// called — and completes the 2025-11-25 handshake against it.
 async fn handshake() -> (Fixture, serde_json::Value) {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("logging-truthfulness")
         .version("0.4.0")
         .tool_fn(echo)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2025-11-25 server");
 
@@ -60,7 +59,6 @@ async fn handshake() -> (Fixture, serde_json::Value) {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    drop(reserved);
 
     let init = client
         .post(&url)

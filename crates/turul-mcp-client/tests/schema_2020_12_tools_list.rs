@@ -78,18 +78,15 @@ impl EchoTool {
 }
 
 async fn start_2026_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
 
     let server = McpServer::builder()
         .name("schema-2020-12-client")
         .version("0.4.0")
         .tool(RenderTool::default())
         .tool(EchoTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

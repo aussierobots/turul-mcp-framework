@@ -140,8 +140,7 @@ impl McpResource for WeatherView {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let refresh = ToolBuilder::new("refresh_weather")
         .description("Refresh the weather view")
@@ -163,7 +162,7 @@ async fn start_server() -> String {
         .tool(WeatherTool::new())
         .tool(refresh)
         .resource(WeatherView)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

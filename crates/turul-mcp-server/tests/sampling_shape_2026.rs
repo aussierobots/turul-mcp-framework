@@ -73,14 +73,13 @@ impl GoodShapeSamplerTool {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("sampling-shape-2026")
         .version("0.4.0")
         .tool(BadShapeSamplerTool::default())
         .tool(GoodShapeSamplerTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {

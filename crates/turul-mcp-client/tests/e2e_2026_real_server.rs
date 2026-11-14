@@ -32,17 +32,14 @@ impl EchoTool {
 }
 
 async fn start_2026_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
 
     let server = McpServer::builder()
         .name("e2e-2026-real")
         .version("0.4.0")
         .tool(EchoTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 
@@ -148,16 +145,13 @@ impl GatedEchoTool {
 #[tokio::test]
 async fn mrtr_round_trip_through_the_bilingual_client() {
     // Server with the gated tool.
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     let server = McpServer::builder()
         .name("e2e-2026-mrtr")
         .version("0.4.0")
         .tool(GatedEchoTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -277,16 +271,13 @@ async fn client_mirrors_mcp_param_headers_from_x_mcp_header_annotations() {
     // The server VALIDATES Mcp-Param-* (an annotated argument without its
     // header is rejected -32020), so a green call below proves the client
     // actually emitted the mirror header.
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     let server = McpServer::builder()
         .name("e2e-2026-param")
         .version("0.4.0")
         .tool(ExecuteSqlTool::new())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -337,18 +328,15 @@ async fn client_subscriptions_listen_receives_filtered_notifications() {
     // Real server with the broadcast-triggering tool; the client opens a
     // listen stream, a second request triggers server-wide broadcasts, and
     // only the opted-in type arrives — stamped with the subscription id.
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     let server = McpServer::builder()
         .name("e2e-2026-listen")
         .version("0.4.0")
         .tool(EmitOnceTool::default())
         .with_resources()
         .with_prompts()
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -549,17 +537,14 @@ impl turul_mcp_server::McpPrompt for GatedPrompt {
 }
 
 async fn start_gated_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     let server = McpServer::builder()
         .name("e2e-2026-mrtr-full")
         .version("0.4.0")
         .resource(GatedResource)
         .prompt(GatedPrompt)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -681,17 +666,14 @@ impl ProgressWorkerTool {
 /// capabilities and instructions.
 #[tokio::test]
 async fn progress_feed_and_discovered_server_accessors() {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     let server = McpServer::builder()
         .name("e2e-2026-progress")
         .version("0.4.0")
         .instructions("Use progress_worker for long jobs.")
         .tool(ProgressWorkerTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {

@@ -245,15 +245,14 @@ impl McpTool for GatherThenTaskTool {
 /// Like [`start_server`] but over a caller-supplied store, so two servers can
 /// share one — the whole point of a durable backend.
 async fn start_server_with_store(store: Arc<InMemoryTaskStore>) -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("ext-tasks-2026-shared-store")
         .version("0.4.0")
         .with_ext_tasks(store)
         .ext_task_tool(ApprovalTool::new())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build server");
 
@@ -273,8 +272,7 @@ async fn start_server_with_store(store: Arc<InMemoryTaskStore>) -> String {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("ext-tasks-2026-test")
@@ -287,7 +285,7 @@ async fn start_server() -> String {
             GatherThenTaskTool::new(),
             ExtTaskElection::required().with_mrtr_first(),
         )
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build server");
 
@@ -339,8 +337,7 @@ impl McpMiddleware for TestPrincipalMiddleware {
 /// Same server as [`start_server`] but with [`TestPrincipalMiddleware`]
 /// installed, so `tasks/*` requests carry a caller principal.
 async fn start_server_with_principals() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("ext-tasks-2026-owner-test")
@@ -349,7 +346,7 @@ async fn start_server_with_principals() -> String {
         .ext_task_tool(SlowDoubleTool::new())
         .ext_task_tool(ApprovalTool::new())
         .middleware(Arc::new(TestPrincipalMiddleware))
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build server");
 

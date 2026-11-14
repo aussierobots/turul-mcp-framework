@@ -45,7 +45,6 @@ async fn test_tools_capability_truthfulness() {
     let listener =
         std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
-    drop(listener); // Release for server to bind
 
     // Start server with tools
     let server_handle = tokio::spawn(async move {
@@ -53,7 +52,7 @@ async fn test_tools_capability_truthfulness() {
             .name("capability-test-server")
             .version("1.0.0")
             .tool_fn(test_tool)
-            .bind_address(format!("127.0.0.1:{}", port).parse().unwrap())
+            .listener(listener)
             .build()
             .expect("Failed to build server");
 
@@ -112,7 +111,6 @@ async fn test_prompts_capability_truthfulness() {
     let listener =
         std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
-    drop(listener); // Release for server to bind
 
     // Start server with prompts
     let server_handle = tokio::spawn(async move {
@@ -122,7 +120,7 @@ async fn test_prompts_capability_truthfulness() {
             .prompt(TestPrompt {
                 input: "test".to_string(),
             })
-            .bind_address(format!("127.0.0.1:{}", port).parse().unwrap())
+            .listener(listener)
             .build()
             .expect("Failed to build server");
 
@@ -181,14 +179,13 @@ async fn test_empty_server_capabilities() {
     let listener =
         std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
-    drop(listener); // Release for server to bind
 
     // Start server with no components
     let server_handle = tokio::spawn(async move {
         let server = McpServer::builder()
             .name("empty-server")
             .version("1.0.0")
-            .bind_address(format!("127.0.0.1:{}", port).parse().unwrap())
+            .listener(listener)
             .build()
             .expect("Failed to build server");
 
@@ -246,14 +243,13 @@ async fn test_json_rpc_protocol_compliance() {
     let listener =
         std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
-    drop(listener); // Release for server to bind
 
     let server_handle = tokio::spawn(async move {
         let server = McpServer::builder()
             .name("protocol-test-server")
             .version("1.0.0")
             .tool_fn(test_tool)
-            .bind_address(format!("127.0.0.1:{}", port).parse().unwrap())
+            .listener(listener)
             .build()
             .expect("Failed to build server");
 
@@ -324,14 +320,13 @@ mod integration {
         let listener =
             std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
         let port = listener.local_addr().unwrap().port();
-        drop(listener); // Release for server to bind
 
         let server_handle = tokio::spawn(async move {
             let server = McpServer::builder()
                 .name("compliance-test-server")
                 .version("1.0.0")
                 .tool_fn(test_tool)
-                .bind_address(format!("127.0.0.1:{}", port).parse().unwrap())
+                .listener(listener)
                 .build()
                 .expect("Failed to build server");
 

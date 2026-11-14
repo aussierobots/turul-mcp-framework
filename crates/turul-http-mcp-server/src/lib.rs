@@ -99,7 +99,9 @@ pub use protocol::{
 };
 pub use routes::{RouteBody, RouteHandler, RouteRegistry, RouteValidationError};
 /// HTTP MCP server implementation with builder pattern and configuration
-pub use server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig, ServerStats};
+pub use server::{
+    HttpMcpServer, HttpMcpServerBuilder, PreboundListener, ServerConfig, ServerStats,
+};
 /// Session-aware request handler with SSE streaming capabilities
 pub use session_handler::{SessionMcpHandler, SessionSseStream};
 /// SSE stream management with connection tracking and event delivery

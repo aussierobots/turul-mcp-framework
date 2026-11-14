@@ -32,8 +32,7 @@ impl EchoTool {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("headers-2026-test")
@@ -41,7 +40,7 @@ async fn start_server() -> String {
         .tool(EchoTool::default())
         .with_resources()
         .with_prompts()
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

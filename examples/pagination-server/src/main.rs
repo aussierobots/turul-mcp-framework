@@ -761,14 +761,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     DB.set(db).expect("Database already initialized");
 
     // Dynamic port binding
-    let port = if args.port == 0 {
-        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
-        let port = listener.local_addr()?.port();
-        drop(listener);
-        port
-    } else {
-        args.port
-    };
+    let listener = std::net::TcpListener::bind(("127.0.0.1", args.port))?;
+    let port = listener.local_addr()?.port();
 
     let server = McpServer::builder()
         .name("pagination-server")
@@ -778,7 +772,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(ListUsersTool::default())
         .tool(SearchUsersTool::default())
         .tool(RefreshDataTool::default())
-        .bind_address(format!("127.0.0.1:{}", port).parse()?)
+        .listener(listener)
         .build()?;
 
     info!(

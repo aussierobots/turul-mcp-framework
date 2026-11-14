@@ -108,8 +108,7 @@ impl EmitChangesTool {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("subscriptions-2026-test")
@@ -118,7 +117,7 @@ async fn start_server() -> String {
         .tool(EmitChangesTool::default())
         .with_resources()
         .with_prompts()
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 
@@ -360,13 +359,12 @@ async fn listen_requires_sse_accept() {
 async fn listen_ack_omits_unsupported_types() {
     // Server WITHOUT prompts: promptsListChanged requested but unsupported →
     // omitted from the acknowledged filter.
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("subscriptions-2026-noprompts")
         .version("0.4.0")
         .tool(EchoTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -380,8 +378,6 @@ async fn listen_ack_omits_unsupported_types() {
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    // The server owns the port now; let another test reserve one.
-    drop(reserved);
 
     let resp = client
         .post(&url)

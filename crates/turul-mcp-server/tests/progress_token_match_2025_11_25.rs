@@ -72,14 +72,13 @@ fn data_payloads(body: &str) -> Vec<serde_json::Value> {
 
 #[tokio::test]
 async fn a_progress_notification_carries_the_requests_own_token() {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("progress-correlation")
         .version("0.4.0")
         .tool(ProgressTool)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2025-11-25 server");
 
@@ -95,7 +94,6 @@ async fn a_progress_notification_carries_the_requests_own_token() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    drop(reserved);
 
     let init = client
         .post(&url)

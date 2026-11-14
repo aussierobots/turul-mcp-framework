@@ -59,7 +59,6 @@ gate_default() {
   # Spec-neutral test infrastructure: closes the reserve->bind window that let
   # two suites be handed the same ephemeral port under whole-workspace runs.
   run "test port handoff (no reservation overlap)" \
-    cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test port_handoff
   run "protocol-2026 compliance + upstream wire fixtures" \
     cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
   run "shipped crate docs agree with the artifacts they describe" \

@@ -54,12 +54,11 @@ fn catalog(entries: Vec<SkillEntry>) -> SkillCatalog {
 }
 
 async fn start(builder: McpServerBuilder) -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = builder
         .name("ext-skills-2026")
         .version("0.0.0")
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build");
     tokio::spawn(async move {

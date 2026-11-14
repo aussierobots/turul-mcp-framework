@@ -144,8 +144,7 @@ impl McpResource for JsonResource {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("resource-mime-2026")
@@ -154,7 +153,7 @@ async fn start_server() -> String {
         .resource(JsonResource)
         .resource(BinaryResource)
         .test_mode()
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 
@@ -182,8 +181,7 @@ async fn start_server() -> String {
 /// verified by re-introducing a restrictive allowlist and watching the test
 /// still pass. This helper exercises the real path.
 async fn start_server_with_security() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("resource-mime-2026-secured")
@@ -191,7 +189,7 @@ async fn start_server_with_security() -> String {
         .resource(MarkdownResource)
         .resource(JsonResource)
         .resource(BinaryResource)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

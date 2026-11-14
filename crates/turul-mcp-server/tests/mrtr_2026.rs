@@ -70,14 +70,13 @@ impl GatedEchoTool {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("mrtr-2026-test")
         .version("0.4.0")
         .tool(GatedEchoTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 
@@ -271,14 +270,13 @@ impl SamplingGatedTool {
 }
 
 async fn start_subcap_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("mrtr-2026-subcap")
         .version("0.4.0")
         .tool(UrlGatedTool::default())
         .tool(SamplingGatedTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -508,15 +506,14 @@ impl turul_mcp_server::McpPrompt for GatedPrompt {
 }
 
 async fn start_full_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("mrtr-2026-full")
         .version("0.4.0")
         .tool(GatedEchoTool::default())
         .resource(GatedResource)
         .prompt(GatedPrompt)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -676,13 +673,12 @@ impl BrokenMrtrTool {
 /// error, never as a resultType:"input_required" result.
 #[tokio::test]
 async fn input_required_with_neither_field_is_a_server_error() {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("mrtr-neg-2026")
         .version("0.4.0")
         .tool(BrokenMrtrTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -696,8 +692,6 @@ async fn input_required_with_neither_field_is_a_server_error() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    // The server owns the port now; let another test reserve one.
-    drop(reserved);
 
     let client = reqwest::Client::new();
     let resp = client
@@ -774,14 +768,13 @@ impl turul_mcp_server::McpCompletion for EscapingCompleter {
 
 #[tokio::test]
 async fn input_required_escaping_a_non_mrtr_method_is_an_error() {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("mrtr-escape-2026")
         .version("0.4.0")
         .tool(GatedEchoTool::default())
         .completion_provider(EscapingCompleter)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -795,8 +788,6 @@ async fn input_required_escaping_a_non_mrtr_method_is_an_error() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    // The server owns the port now; let another test reserve one.
-    drop(reserved);
 
     let client = reqwest::Client::new();
     let resp = client
@@ -876,14 +867,13 @@ impl PlainSamplerTool {
 }
 
 async fn start_caparm_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("mrtr-2026-caparms")
         .version("0.4.0")
         .tool(RootsGatedTool::default())
         .tool(PlainSamplerTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -979,13 +969,12 @@ impl AdaptiveCapabilityTool {
 }
 
 async fn start_adaptive_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("mrtr-2026-adaptive")
         .version("0.4.0")
         .tool(AdaptiveCapabilityTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {

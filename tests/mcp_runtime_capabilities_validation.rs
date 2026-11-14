@@ -237,11 +237,10 @@ impl turul_mcp_server::McpResource for RuntimeCapabilitiesProbeResource {
 async fn start_test_server() -> TestServerHandle {
     use turul_mcp_server::McpServer;
 
-    // Ephemeral port allocation: bind then release, then hand the address to the server.
+    // Ephemeral port allocation: the server takes the bound listener.
     let listener =
         std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
-    drop(listener);
 
     // Create a server with a real prompt, resource, and tool registered so
     // capability truthfulness reflects actual server contents, not bare flags.
@@ -253,7 +252,7 @@ async fn start_test_server() -> TestServerHandle {
         .prompt(RuntimeCapabilitiesProbePrompt { input: None })
         .resource(RuntimeCapabilitiesProbeResource)
         .tool_fn(runtime_capabilities_probe)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("Failed to build test server");
 

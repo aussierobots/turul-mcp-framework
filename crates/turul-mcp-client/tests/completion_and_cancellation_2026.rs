@@ -68,18 +68,15 @@ impl turul_mcp_server::McpCompletion for GreetNameCompleter {
 }
 
 async fn start_2026_server() -> String {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
 
     let server = McpServer::builder()
         .name("completion-cancel-2026")
         .version("0.4.0")
         .tool(EchoTool::default())
         .completion_provider(GreetNameCompleter)
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

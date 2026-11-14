@@ -140,8 +140,7 @@ impl turul_mcp_server::McpResource for BadBlobResource {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("wire-edges-2026")
@@ -152,7 +151,7 @@ async fn start_server() -> String {
         .prompt(TitledPrompt)
         .resource(BadBlobResource)
         .test_mode() // resource security allowlist off — the blob test targets encoding, not ACLs
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 

@@ -79,14 +79,13 @@ impl McpTool for ExecuteSqlTool {
 }
 
 async fn start_server() -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let server = McpServer::builder()
         .name("mcp-param-2026-test")
         .version("0.4.0")
         .tool(ExecuteSqlTool::new())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
 
@@ -241,13 +240,12 @@ impl McpTool for ShardTool {
 
 #[tokio::test]
 async fn integer_params_compare_numerically() {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
     let server = McpServer::builder()
         .name("mcp-param-numeric")
         .version("0.4.0")
         .tool(ShardTool::new())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap())
+        .listener(listener)
         .build()
         .expect("build 2026 server");
     tokio::spawn(async move {
@@ -261,8 +259,6 @@ async fn integer_params_compare_numerically() {
         }
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
     }
-    // The server owns the port now; let another test reserve one.
-    drop(reserved);
 
     let client = reqwest::Client::new();
     // "42.0" header vs integer 42 body: numerically equal → accepted.

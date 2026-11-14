@@ -28,14 +28,13 @@ impl EchoTool {
 }
 
 async fn start_server(policy: Option<OriginPolicy>) -> String {
-    let reserved = common::reserve_port().await;
-    let port = reserved.port;
+    let (listener, port) = common::bind_ephemeral();
 
     let mut builder = McpServer::builder()
         .name("origin-2026-test")
         .version("0.4.0")
         .tool(EchoTool::default())
-        .bind_address(format!("127.0.0.1:{port}").parse().unwrap());
+        .listener(listener);
     if let Some(policy) = policy {
         builder = builder.origin_policy(policy);
     }
