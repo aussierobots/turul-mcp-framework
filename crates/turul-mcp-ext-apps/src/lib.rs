@@ -31,7 +31,7 @@
 //!
 //! - [`UiResourceMeta`] for CSP, sandbox permissions and border preference
 //! - [`client_supports_html_views`] to check a client's declared capability
-//! - [`capability`] for the server's `capabilities.extensions` entry
+//! - [`capability()`] for the server's `capabilities.extensions` entry
 //! - [MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps)
 
 #[cfg(feature = "protocol-2026-07-28")]
