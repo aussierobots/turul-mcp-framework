@@ -264,6 +264,7 @@ can catch a contract both halves of this repo get wrong the same way.
 ./scripts/interop-typescript-sdk.sh   # TypeScript SDK peer   — needs: node, npm, jq
 ./scripts/interop-go-sdk.sh           # Go SDK v1.7.0 peer    — needs: go
 ./scripts/interop-turul-client.sh     # our client → FastMCP  — needs: uv
+./scripts/interop-ext-apps.sh         # upstream ext-apps host code → ext-apps-server — needs: node, npm
 ```
 
 Each SKIPs with a named reason if its toolchain is absent rather than reporting a
