@@ -103,6 +103,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `default-members`, so a needless borrow in the client's unit tests reached `main`. Fixed, and
   `cargo clippy -p turul-mcp-client --all-targets -- -D warnings` now runs in `ci-gates.sh` and CI.
 
+`turul-http-mcp-server` 0.4.8 → 0.4.9, `turul-mcp-server` 0.4.10 → 0.4.11; examples
+`pagination-server`, `resource-test-server`, `roots-server`, `prompts-test-server`,
+`sampling-server`, `elicitation-server` 0.4.0 → 0.4.1.
+
+### Added
+
+- **`McpServerBuilder::listener` and `HttpMcpServerBuilder::listener` serve on a socket the
+  caller already bound** (ADR-034), through `turul_http_mcp_server::PreboundListener`. Bind
+  `127.0.0.1:0`, read `local_addr()`, and pass the same listener; the port is never released, so
+  no other test or process can take it. `bind_address` is set to the listener's address.
+
+### Fixed
+
+- **Tests and examples no longer race for ports.** Every in-process test that started a server
+  bound a free port, dropped it and let the server rebind it; another test or process could take
+  it in between, which caused "address already in use" and requests reaching the wrong server.
+  They now pass the listener. `reserve_port` and its handoff mutex in the server test support,
+  and `port_handoff.rs`, are deleted. The six examples that picked an ephemeral port do the same.
+  Ports handed to child processes (`--port N`) are out of scope; see ADR-034.
+
 ## [0.4.21] - 2026-11-14
 
 `turul-mcp-derive` 0.4.5 → 0.4.6, `turul-http-mcp-server` 0.4.6 → 0.4.8,
