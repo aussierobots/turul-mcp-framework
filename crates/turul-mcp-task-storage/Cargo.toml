@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-task-storage"
-version = "0.4.0"
+version = "0.4.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -24,7 +24,7 @@ uuid = { workspace = true, features = ["v4", "v7"] }
 chrono = { workspace = true, features = ["serde"] }
 
 # Protocol types
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.2", default-features = false }
 # Optional database support
 sqlx = { workspace = true, optional = true }
 

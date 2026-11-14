@@ -2,7 +2,7 @@
 # same pattern as turul-mcp-ext-tasks. Independent semver (SEP-2133 §Evolution).
 [package]
 name = "turul-mcp-ext-apps"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -19,6 +19,6 @@ default = ["protocol-2026-07-28"]
 protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
 
 [dependencies]
-turul-mcp-protocol-2026-07-28 = { version = "0.4", path = "../turul-mcp-protocol-2026-07-28", optional = true }
+turul-mcp-protocol-2026-07-28 = { version = "0.4.3", path = "../turul-mcp-protocol-2026-07-28", optional = true }
 serde.workspace = true
 serde_json.workspace = true

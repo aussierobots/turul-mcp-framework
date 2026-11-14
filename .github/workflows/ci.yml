@@ -118,6 +118,10 @@ jobs:
       # Offline grep guard: keeps framework machinery out of the protocol crates.
       - name: Protocol crate purity
         run: ./scripts/check-protocol-purity.sh
+      # Offline. Every internal pin names the sibling's current version, so a
+      # dependent can never resolve to a sibling older than an API it calls.
+      - name: Internal pins name current versions
+        run: ./scripts/check-internal-pins.sh
       - name: protocol-2026 compliance + upstream wire fixtures
         run: cargo test -p turul-mcp-protocol-2026-07-28 --features compliance
       - name: Shipped crate docs agree with the artifacts they describe

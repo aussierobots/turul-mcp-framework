@@ -4,7 +4,7 @@
 # version, never version.workspace = true.
 [package]
 name = "turul-mcp-ext-tasks"
-version = "0.1.7"
+version = "0.1.8"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -38,7 +38,7 @@ dynamodb = ["dep:aws-config", "dep:aws-sdk-dynamodb", "parity-harness"]
 [dependencies]
 # Extension modules bind to their protocol-schema-version sibling directly,
 # behind the matching feature gate.
-turul-mcp-protocol-2026-07-28 = { version = "0.4", path = "../turul-mcp-protocol-2026-07-28", optional = true }
+turul-mcp-protocol-2026-07-28 = { version = "0.4.3", path = "../turul-mcp-protocol-2026-07-28", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
