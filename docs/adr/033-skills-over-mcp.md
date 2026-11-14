@@ -1,13 +1,14 @@
 # ADR-033: Skills over MCP — `turul-mcp-ext-skills` on `turul-agent-skills`
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-14
-**Crates:** `turul-mcp-ext-skills` (new, 0.1.0: wire types and the MCP-specific producers), `turul-mcp-server` (feature `ext-skills`: handlers, discover advertisement, resource registration)
-**External owner:** `turul-agent-skills` 0.1 (sibling repo `aussierobots/turul-agent-skills`)
+**Crates:** `turul-mcp-ext-skills` (new, 0.1.0: wire types and the MCP-specific producers), `turul-mcp-server` (feature `ext-skills`: handlers, discover advertisement, resource registration), `turul-mcp-client` (feature `ext-skills`: host verification)
+**External owner:** `turul-agent-skills` 0.1.3 (sibling repo `aussierobots/turul-agent-skills`; boundary accepted there as its ADR-011)
 **Related:** ADR-028 (extensions strategy), ADR-007 (auto-detected resource security), ADR-003 (zero-configuration)
 
-Stays **Proposed** until every alternative path named in §Owners is deleted and the
-gates in §Tests pass on the merged tree.
+Accepted with the client slice: no alternative path to any owner in §1 exists, and every
+gate in §Tests runs (server and client lanes in `ci-gates.sh`/`ci.yml`; the live readback
+and conformance gate in `ci-gates.sh conformance`).
 
 ## Context
 
@@ -252,6 +253,8 @@ Each test is named after the clause it proves.
 
 ## Revision log
 
+- **2026-11-14 (Accepted)**: server slices merged (#52); client slice (#53) completes the
+  owner table and the test contract; turul-agent-skills accepted the boundary (its ADR-011).
 - **2026-11-14 (S6, client)**: §6 Client added — host clauses C-1 to C-8 mapped to
   `turul-mcp-client` feature `ext-skills`; two `McpClientError` variants. Host scenarios
   first run: no-prefetch, digest, size and frontmatter each 1/1, each rejected for its own
