@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-04
-**Context:** Cold-init amplification under fan-out for `turul-mcp-aws-lambda`-built Lambdas. Filed from gps-trust-space-data-mcp handoff (issue #15).
+**Context:** Cold-init amplification under fan-out for `turul-mcp-aws-lambda`-built Lambdas. Reported by a downstream Lambda consumer.
 
 ## Decision
 
@@ -81,7 +81,7 @@ Caller-side empirical verification (deferred to consumers): CloudWatch `handler_
 
 ## Status of the originating problem
 
-The space-data-mcp cold-init amplification (10-call fan-out from `current_conditions`) was resolved upstream by collapsing the fan-out to 1 call against `get_historical_current_conditions(at_utc=now)`. Post-collapse readback: n=21, p50=932 ms, p95=992 ms, **0 cold calls** in the 30-min steady-state window. This ADR exists so the analysis and recommended pattern aren't lost when a future caller develops similar amplification.
+The reporting consumer's cold-init amplification (a 10-call fan-out from one tool) was resolved on its side by collapsing the fan-out to a single call. Post-collapse readback: n=21, p50=932 ms, p95=992 ms, **0 cold calls** in the 30-min steady-state window. This ADR exists so the analysis and recommended pattern aren't lost when a future caller develops similar amplification.
 
 ## Revision triggers
 
