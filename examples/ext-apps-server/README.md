@@ -7,21 +7,34 @@ generic hooks and `turul-mcp-ext-apps`. No server feature is involved.
 cargo run -p ext-apps-server   # http://127.0.0.1:8660/mcp
 ```
 
-- `ui://weather/view.html` — the view: `mimeType: text/html;profile=mcp-app`,
-  `_meta.ui` (CSP, `prefersBorder`) on the `resources/read` content item.
-- `get_weather` — `_meta.ui.resourceUri` links it to the view. It returns text
+- `ui://weather/view.html` is the view, with `mimeType: text/html;profile=mcp-app`
+  and `_meta.ui` (CSP, `prefersBorder`) on the `resources/read` content item. Its
+  Refresh button calls `refresh_weather` through the host with the MCP Apps SDK.
+- `get_weather` is linked to the view by `_meta.ui.resourceUri`. It returns text
   `content` either way, and notes the view only when the request's
   `clientCapabilities.extensions["io.modelcontextprotocol/ui"].mimeTypes` lists
   the profile.
-- `refresh_weather` — `visibility: ["app"]`. It is listed: hiding it from the
-  model is the host's job.
+- `refresh_weather` has `visibility: ["app"]`. The server still lists it: hiding
+  it from the model is the host's job.
 
-Read it back:
+## The SDK the view loads
+
+The view imports `@modelcontextprotocol/ext-apps` 2.1.0 (`dist/src/app-with-deps.js`)
+from one exact-version jsDelivr URL. Its import map carries the file's sha384,
+so the browser refuses the script if those bytes ever change. The view's
+`_meta.ui.csp.resourceDomains` admits only `https://cdn.jsdelivr.net`.
+
+To move the pin, change the version in both URLs and recompute the hash:
 
 ```bash
-curl -s http://127.0.0.1:8660/mcp \
-  -H 'Accept: application/json' -H 'Content-Type: application/json' \
-  -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: resources/read' \
-  -H 'Mcp-Name: ui://weather/view.html' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"resources/read","params":{"uri":"ui://weather/view.html","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}'
+curl -s https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps@<version>/dist/src/app-with-deps.js \
+  | openssl dgst -sha384 -binary | openssl base64 -A
 ```
+
+## Checks
+
+- `scripts/interop-ext-apps.sh` runs upstream `basic-host`'s server-facing code
+  (the official TypeScript SDK and ext-apps packages) against this server.
+- Upstream `basic-host` renders the view in a browser once its client uses
+  `versionNegotiation: { mode: 'auto' }`
+  ([modelcontextprotocol/ext-apps#857](https://github.com/modelcontextprotocol/ext-apps/issues/857)).

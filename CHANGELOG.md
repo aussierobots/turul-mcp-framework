@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and in-call degradation on the request's client capabilities. It runs in the default lane.
   `turul-mcp-ext-apps` becomes a dev-dependency of `turul-mcp-server`, which needs no version
   bump. New example: `examples/ext-apps-server`.
+- **`scripts/interop-ext-apps.sh`.** Runs upstream ext-apps `basic-host`'s server-facing code,
+  with the official TypeScript SDK and ext-apps packages, against `examples/ext-apps-server` and
+  asserts what a host needs. It needs npm, so it is run by hand and not gated. The view loads
+  the MCP Apps SDK from one exact-version URL checked by an import-map sha384, so its Refresh
+  button calls the app-only `refresh_weather` through the host.
 
 ### Fixed
 

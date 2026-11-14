@@ -29,13 +29,49 @@ use turul_mcp_protocol::tools::{CallToolResult, ToolResult};
 use turul_mcp_server::prelude::*;
 
 const VIEW_URI: &str = "ui://weather/view.html";
+/// The App SDK the view loads, pinned to one published file. The import map's
+/// `integrity` entry makes the browser refuse it if its bytes ever change, and
+/// `SDK_ORIGIN` is the only origin the view's CSP admits.
+const SDK_ORIGIN: &str = "https://cdn.jsdelivr.net";
 const VIEW_HTML: &str = r#"<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><title>Weather</title></head>
+<head>
+<meta charset="utf-8">
+<title>Weather</title>
+<script type="importmap">
+{
+  "imports": {
+    "@modelcontextprotocol/ext-apps": "https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps@2.1.0/dist/src/app-with-deps.js"
+  },
+  "integrity": {
+    "https://cdn.jsdelivr.net/npm/@modelcontextprotocol/ext-apps@2.1.0/dist/src/app-with-deps.js": "sha384-bjsAPLYL21mbv3hZB/TVEqrI1rAAzwxupvAkIHxgOe9u8vInXZrRrMxxcjOc7TIj"
+  }
+}
+</script>
+</head>
 <body>
 <p id="out">Sunny, 22°C</p>
-<p>The host renders this view in a sandboxed iframe; the view calls
-<code>refresh_weather</code> through the host's <code>tools/call</code>.</p>
+<button id="refresh">Refresh</button>
+<script type="module">
+import { App } from "@modelcontextprotocol/ext-apps";
+
+const out = document.getElementById("out");
+const show = (result) => {
+  out.textContent = result?.content?.find((c) => c.type === "text")?.text ?? "(no text)";
+};
+const app = new App({ name: "Weather View", version: "1.0.0" });
+app.ontoolresult = show;
+app.onerror = console.error;
+document.getElementById("refresh").addEventListener("click", async () => {
+  try {
+    show(await app.callServerTool({ name: "refresh_weather", arguments: {} }));
+  } catch (e) {
+    console.error(e);
+    out.textContent = "Refresh failed";
+  }
+});
+await app.connect();
+</script>
 </body>
 </html>
 "#;
@@ -137,7 +173,7 @@ impl McpResource for WeatherView {
     ) -> McpResult<Vec<ResourceContent>> {
         let meta = UiResourceMeta {
             csp: Some(UiResourceCsp {
-                connect_domains: Some(vec!["https://api.openweathermap.org".into()]),
+                resource_domains: Some(vec![SDK_ORIGIN.into()]),
                 ..Default::default()
             }),
             prefers_border: Some(true),
@@ -170,7 +206,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             .to_meta(),
         )
-        .execute(|_| async { Ok(json!("Sunny, 22°C")) })
+        .execute(|_| async {
+            let secs = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            Ok(json!(format!("Sunny, 22°C (refreshed at {secs})")))
+        })
         .build()?;
 
     let server = McpServer::builder()
