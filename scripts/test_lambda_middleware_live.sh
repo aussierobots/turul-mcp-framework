@@ -42,6 +42,7 @@ for _ in $(seq 1 45); do
     LAST_BODY=$(curl -s -X POST "$URL" \
         -H "Content-Type: application/json" -H "Accept: application/json" \
         -H "MCP-Protocol-Version: 2026-07-28" -H "Mcp-Method: server/discover" \
+        -H "X-API-Key: secret-key-123" \
         -d "{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"server/discover\",\"params\":{\"_meta\":$(mcp2026_meta)}}" \
         2>/dev/null || true)
     if echo "$LAST_BODY" | jq -e '.result or .error' > /dev/null 2>&1; then
@@ -68,8 +69,9 @@ if [ "$DYNAMODB_UNAVAILABLE" = "1" ]; then
     exit 0
 fi
 
-# Test 1: server/discover without API key (should succeed - discover skips auth)
-echo "📋 Test 1: server/discover without API key (should succeed)"
+# Test 1: server/discover with a valid API key. The auth middleware gates
+# every method, discover included; the readiness probe above sent the key.
+echo "📋 Test 1: server/discover with API key (should succeed)"
 DISCOVER_RESPONSE="$LAST_BODY"
 echo "$DISCOVER_RESPONSE" | jq .
 
@@ -80,6 +82,19 @@ if [ "$SERVER_NAME" = "middleware-auth-lambda" ]; then
 else
     echo "❌ server/discover failed"
     echo "Response: $DISCOVER_RESPONSE"
+    exit 1
+fi
+
+echo ""
+
+# Test 1b: server/discover without an API key is rejected like any other method.
+echo "📋 Test 1b: server/discover without API key (should fail with -32001)"
+DISCOVER_NOKEY=$(mcp2026_request "$URL" "server/discover" "" '{}')
+echo "$DISCOVER_NOKEY" | jq .
+if [ "$(echo "$DISCOVER_NOKEY" | jq -r '.error.code // "NONE"')" = "-32001" ]; then
+    echo "✅ server/discover without API key correctly rejected"
+else
+    echo "❌ Expected -32001 for server/discover without API key"
     exit 1
 fi
 

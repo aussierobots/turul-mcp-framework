@@ -44,14 +44,15 @@ Every in-process test and example that started a server on a dropped port
 moves to `.listener(...)` in the same slice, and `reserve_port()` with its
 mutex is deleted.
 
-Out of scope: a port handed to a **child process** (`--port N`). A listener
-cannot cross that boundary, so `.listener(...)` cannot close it. The sites are
-`TestServerManager` in `tests/shared/src/e2e_utils.rs` (narrowed by its own
-`PORT_HANDOFF` lock and a start retry), `free_port()` in
-`tests/client_server_upgrade_e2e.rs`, and
+A port handed to a **child process** cannot use `.listener(...)`, because a
+listener cannot cross the process boundary. The harness starts such children
+with `--port 0` instead; the child binds the port itself and prints
+`MCP_LISTEN_ADDR=<addr>` on stdout right after binding, and the harness reads
+that line (`TestServerManager` in `tests/shared/src/e2e_utils.rs`, and the
+`minimal-server` child in `tests/client_server_upgrade_e2e.rs`). The only
+remaining release-then-bind site is
 `crates/turul-mcp-client/tests/legacy_0_3_47_discover_probe.rs`, which runs the
-frozen 0.3.47 server that has no `.listener`. Closing the child-process gap
-needs the child to bind port 0 and report its port, a separate decision.
+frozen 0.3.47 server; that crate is frozen and has no `.listener`.
 
 Rejected: a retry loop on bind failure (hides the race instead of removing
 it, and a retry can still land on another server); a cross-process lock file
@@ -76,3 +77,4 @@ it, and a retry can still land on another server); a cross-process lock file
 
 - **2026-11-14**: Initial, Proposed.
 - **2026-11-14**: Accepted. 45 server and client test files, 9 integration test files and 6 examples migrated; `reserve_port`, `ReservedPort` and `PORT_HANDOFF` in the server test support, and `crates/turul-mcp-server/tests/port_handoff.rs`, deleted. Child-process sites recorded as out of scope.
+- **2026-11-14**: Child processes covered: the nine harness-started examples bind `--port 0` themselves and announce `MCP_LISTEN_ADDR=`; `find_available_port`, the harness `PORT_HANDOFF` lock, its start retry and `free_port()` are deleted.

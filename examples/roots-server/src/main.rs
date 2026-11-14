@@ -53,6 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Use specified port or OS ephemeral allocation if 0
     let listener = std::net::TcpListener::bind(("127.0.0.1", args.port))?;
+    println!("MCP_LISTEN_ADDR={}", listener.local_addr()?);
     let port = listener.local_addr()?.port();
 
     info!("🚀 Starting MCP Roots Test Server on port {}", port);

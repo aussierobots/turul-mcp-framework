@@ -17,6 +17,7 @@ cd "$PROJECT_ROOT"
 # Source shared utilities
 source "$SCRIPT_DIR/../tests/shared/bin/wait_for_server.sh"
 source "$SCRIPT_DIR/lib/mcp2026.sh"
+source "$SCRIPT_DIR/lib/examples.sh"
 
 echo "======================================================================"
 echo "Advanced/Composite Servers - Intent-Based Verification"
@@ -81,7 +82,7 @@ test_advanced_server() {
     echo "Starting server..."
     cleanup_old_logs "$server_name" "$actual_port"
 
-    if ! ensure_binary_built "$server_name"; then
+    if ! example_build "$server_name" "$protocol"; then
         echo -e "${RED}FAILED${NC}: Build error"
         FAILED=$((FAILED + 1))
         return 1
@@ -90,10 +91,10 @@ test_advanced_server() {
     # Launch (handle full-address format)
     if [[ "$port" == *":"* ]]; then
         # Full address format - pass as positional argument
-        RUST_LOG=error ./target/debug/"$server_name" "$port" > "/tmp/${server_name}_${actual_port}.log" 2>&1 &
+        RUST_LOG=error "$(example_bin "$server_name" "$protocol")" "$port" > "/tmp/${server_name}_${actual_port}.log" 2>&1 &
     else
         # Port number only - use --port flag
-        RUST_LOG=error ./target/debug/"$server_name" --port "$port" > "/tmp/${server_name}_${actual_port}.log" 2>&1 &
+        RUST_LOG=error "$(example_bin "$server_name" "$protocol")" --port "$port" > "/tmp/${server_name}_${actual_port}.log" 2>&1 &
     fi
     SERVER_PID=$!
 

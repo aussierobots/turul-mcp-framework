@@ -9,6 +9,7 @@
 //! sees the proxy's address, and `switch` repoints it and drops open
 //! connections, as a deploy does.
 
+use std::io::{BufRead, BufReader};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -37,14 +38,6 @@ impl EchoTool {
     ) -> McpResult<String> {
         Ok(format!("Echo: {}", self.text))
     }
-}
-
-fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
 }
 
 async fn wait_listening(addr: SocketAddr) {
@@ -103,16 +96,39 @@ async fn start_2026_server() -> Server2026 {
         .expect("run cargo build for the 2026 server");
     assert!(built.success(), "building the 2026 minimal-server failed");
 
-    let port = free_port();
-    let child = Command::new(target.join("debug").join("minimal-server"))
-        .args(["--port", &port.to_string()])
-        .stdout(Stdio::null())
+    // The child binds port 0 itself and announces the address it got.
+    let mut child = Command::new(target.join("debug").join("minimal-server"))
+        .args(["--port", "0"])
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .expect("spawn the 2026 minimal-server");
-    let addr: SocketAddr = format!("127.0.0.1:{port}").parse().unwrap();
+    let stdout = child.stdout.take().expect("piped stdout");
+    let (tx, rx) = std::sync::mpsc::channel();
+    // Keeps draining after the announce so the child never blocks on a full pipe.
+    std::thread::spawn(move || {
+        let mut tx = Some(tx);
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+            if let Some(addr) = line.strip_prefix("MCP_LISTEN_ADDR=")
+                && let Some(tx) = tx.take()
+            {
+                tx.send(addr.trim().to_string()).ok();
+            }
+        }
+    });
+    let announced = rx.recv_timeout(std::time::Duration::from_secs(60));
+    let mut server = Server2026 {
+        child,
+        addr: SocketAddr::from(([127, 0, 0, 1], 0)),
+    };
+    let announced = announced.unwrap_or_else(|_| {
+        let status = server.child.try_wait().ok().flatten();
+        panic!("minimal-server did not announce MCP_LISTEN_ADDR (exit status {status:?})")
+    });
+    server.addr = announced.parse().expect("parse MCP_LISTEN_ADDR");
+    let addr = server.addr;
     wait_listening(addr).await;
-    Server2026 { child, addr }
+    server
 }
 
 /// A TCP forwarder with a switchable backend. `switch` repoints it and cuts

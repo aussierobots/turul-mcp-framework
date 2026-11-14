@@ -16,6 +16,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 source "$SCRIPT_DIR/lib/mcp2026.sh"
+source "$SCRIPT_DIR/lib/examples.sh"
 
 echo "======================================================================"
 echo "Calculator Learning Progression - Intent-Based Verification"
@@ -28,6 +29,7 @@ echo ""
 PASSED=0
 FAILED=0
 TOTAL=5
+SKIPPED=0
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -64,16 +66,25 @@ test_server() {
     echo "Description: $test_description"
     echo "----------------------------------------"
 
-    # Start server (use pre-built binary to avoid compilation delays)
-    echo "Starting server..."
-    if [ ! -f "./target/debug/$server_name" ]; then
-        echo "Building $server_name..."
-        cargo build --bin "$server_name" > /dev/null 2>&1
+    # These examples bind a hardcoded address and ignore --port, so a foreign
+    # listener on that port would answer our probes and be mistaken for the
+    # example. Refuse to test through it.
+    if port_in_use "$port"; then
+        echo -e "${YELLOW}SKIPPED${NC}: port $port is already in use by another process"
+        SKIPPED=$((SKIPPED + 1))
+        return 0
     fi
-    RUST_LOG=error ./target/debug/"$server_name" --port "$port" > "/tmp/${server_name}_${port}.log" 2>&1 &
+
+    echo "Starting server..."
+    if ! example_build "$server_name" 2026; then
+        echo -e "${RED}FAILED${NC}: Build error"
+        FAILED=$((FAILED + 1))
+        return 1
+    fi
+    RUST_LOG=error "$(example_bin "$server_name" 2026)" --port "$port" > "/tmp/${server_name}_${port}.log" 2>&1 &
     SERVER_PID=$!
 
-    if ! mcp2026_wait_for_server "$port"; then
+    if ! mcp2026_wait_for_server "$port" || ! kill -0 "$SERVER_PID" 2>/dev/null; then
         echo -e "${RED}FAILED${NC}: Server did not answer server/discover within 15s"
         kill $SERVER_PID 2>/dev/null || true
         FAILED=$((FAILED + 1))
@@ -168,10 +179,11 @@ echo "======================================================================"
 echo "Total: $TOTAL servers"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
 echo -e "Failed: ${RED}$FAILED${NC}"
+echo -e "Skipped: ${YELLOW}$SKIPPED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ CALCULATOR EXAMPLES COMPLETE${NC}: All calculator patterns verified"
+    echo -e "${GREEN}✅ CALCULATOR EXAMPLES COMPLETE${NC}: $PASSED passed, $SKIPPED skipped"
     exit 0
 else
     echo -e "${RED}❌ CALCULATOR EXAMPLES FAILED${NC}: $FAILED server(s) failed verification"

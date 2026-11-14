@@ -6,21 +6,12 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::time::Duration;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::time::sleep;
 use tracing::{debug, info};
-
-/// Serializes the gap between choosing an ephemeral port and the child binding it.
-///
-/// `find_available_port` binds `127.0.0.1:0`, reads the number, then releases the
-/// listener so the child can take it. Between those two events the port belongs to
-/// nobody, and tests in one binary run on parallel threads — so two of them can be
-/// handed the same number and the loser dies with "address in use", surfacing as a
-/// startup timeout. Holding this from allocation until just after `spawn()` narrows
-/// the window to the child's own bind.
-static PORT_HANDOFF: std::sync::LazyLock<tokio::sync::Mutex<()>> =
-    std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 /// Path of a debug binary in the same target directory `cargo build` writes to.
 ///
@@ -386,30 +377,6 @@ pub struct TestServerManager {
 }
 
 impl TestServerManager {
-    /// Find an available port using OS ephemeral port allocation only
-    /// This eliminates the port thrashing that caused 60s+ delays in sandbox environments
-    fn find_available_port() -> Option<u16> {
-        // Use OS ephemeral port allocation (bind to 0) - this is the most reliable approach
-        // The OS will assign an available port from the ephemeral range
-        for attempt in 1..=5 {
-            if let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:0")
-                && let Ok(addr) = listener.local_addr()
-            {
-                let port = addr.port();
-                drop(listener); // Release the port immediately
-                debug!("OS assigned ephemeral port {} (attempt {})", port, attempt);
-                return Some(port);
-            }
-            // Small delay between attempts to avoid tight loops
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-
-        // No fallback to portpicker - it fails in sandbox environments with "Operation not permitted"
-        // If OS ephemeral port allocation fails, this indicates network binding is restricted
-        debug!("Failed to allocate port via OS ephemeral binding - likely sandboxed environment");
-        None
-    }
-
     /// Map server binary name to its package name
     fn server_package(server_name: &str) -> Option<&'static str> {
         match server_name {
@@ -426,119 +393,27 @@ impl TestServerManager {
         }
     }
 
-    /// Start a test server with additional CLI arguments
-    pub async fn start_with_args(
+    /// Build the example's package so the binary matches the fixture's
+    /// current spec pin, not a stale artifact from a prior build.
+    fn build_server(
         server_name: &str,
-        extra_args: &[&str],
-    ) -> Result<Self, Box<dyn std::error::Error>> {
-        let workspace_root =
-            find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
-
-        let binary_path = debug_binary_path(&workspace_root, server_name);
-
-        // Always rebuild before spawning so the binary matches the fixture's
-        // current spec pin, not a stale artifact from a prior build.
-        if let Some(package) = Self::server_package(server_name) {
-            let build_status = std::process::Command::new("cargo")
-                .args(["build", "--package", package, "--bin", server_name])
-                .current_dir(&workspace_root)
-                .status();
-            match build_status {
-                Ok(status) if status.success() => {}
-                Ok(status) => {
-                    return Err(format!(
-                        "Failed to build {} (exit: {:?})",
-                        server_name,
-                        status.code()
-                    )
-                    .into());
-                }
-                Err(e) => {
-                    return Err(format!("Failed to build {}: {}", server_name, e).into());
-                }
-            }
-        }
-
-        // Allocate and spawn under the handoff lock — see PORT_HANDOFF.
-        let (port, server_process) = {
-            let _handoff = PORT_HANDOFF.lock().await;
-            let port = Self::find_available_port().ok_or("Failed to find available port")?;
-
-            let mut cmd_args: Vec<String> = vec!["--port".to_string(), port.to_string()];
-            for arg in extra_args {
-                cmd_args.push(arg.to_string());
-            }
-
-            let child = Command::new(&binary_path)
-                .args(&cmd_args)
-                .current_dir(&workspace_root)
-                .spawn()
-                .map_err(|e| format!("Failed to start {}: {}", server_name, e))?;
-            (port, child)
-        };
-
-        // Wait for server to start (match the wait time in start())
-        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
-
-        Ok(Self {
-            server_process: Some(server_process),
-            port,
-            _server_name: server_name.to_string(),
-        })
-    }
-
-    /// Start a test server by name on a random port.
-    ///
-    /// Retries the whole allocate-and-spawn cycle: the port handoff is narrowed but
-    /// not eliminated (the child, not this process, performs the real bind), so a
-    /// collision stays possible and is worth one more roll rather than a failed run.
-    pub async fn start(server_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut last_err = None;
-        for attempt in 1..=3 {
-            match Self::start_once(server_name).await {
-                Ok(server) => return Ok(server),
-                Err(e) => {
-                    info!("Start attempt {attempt}/3 for {server_name} failed: {e}");
-                    last_err = Some(e);
-                }
-            }
-        }
-        Err(last_err.expect("loop runs at least once"))
-    }
-
-    async fn start_once(server_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        // Find workspace root dynamically instead of using hardcoded path
-        let workspace_root =
-            find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
-
-        let binary_path = debug_binary_path(&workspace_root, server_name);
-
-        // Always rebuild before spawning so the binary matches the fixture's
-        // current spec pin, not a stale artifact from a prior build.
+        workspace_root: &Path,
+        binary_path: &Path,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         if let Some(package) = Self::server_package(server_name) {
             info!("Building package {} ({})...", package, server_name);
-            let build_status = std::process::Command::new("cargo")
+            let status = std::process::Command::new("cargo")
                 .args(["build", "--package", package, "--bin", server_name])
-                .current_dir(&workspace_root)
-                .status();
-
-            match build_status {
-                Ok(status) if status.success() => {
-                    info!("Successfully built {}", server_name);
-                }
-                Ok(status) => {
-                    return Err(format!(
-                        "Failed to build {} (exit code: {:?})",
-                        server_name,
-                        status.code()
-                    )
-                    .into());
-                }
-                Err(e) => {
-                    return Err(
-                        format!("Failed to run cargo build for {}: {}", server_name, e).into(),
-                    );
-                }
+                .current_dir(workspace_root)
+                .status()
+                .map_err(|e| format!("Failed to run cargo build for {}: {}", server_name, e))?;
+            if !status.success() {
+                return Err(format!(
+                    "Failed to build {} (exit code: {:?})",
+                    server_name,
+                    status.code()
+                )
+                .into());
             }
         } else if !binary_path.exists() {
             return Err(format!(
@@ -547,48 +422,116 @@ impl TestServerManager {
             )
             .into());
         }
+        Ok(())
+    }
 
-        // Allocate and spawn under the handoff lock so a sibling test on another
-        // thread cannot be handed the same port before this child binds it. The
-        // build above stays outside the lock — it is slow and needs no exclusion.
-        let (port, mut server_process) = {
-            let _handoff = PORT_HANDOFF.lock().await;
-            let port = Self::find_available_port()
-                .ok_or("Failed to find available port after exhaustive search - network binding may be restricted in this environment")?;
-            info!("Starting {} on port {}", server_name, port);
-            let child = Command::new(&binary_path)
-                .args(["--port", &port.to_string()])
-                .current_dir(&workspace_root)
-                .spawn()
-                .map_err(|e| {
-                    format!(
-                        "Failed to start server {}: {}. Binary path: {:?}, Workspace: {:?}",
-                        server_name, e, binary_path, workspace_root
-                    )
-                })?;
-            (port, child)
+    /// Spawn the server on `--port 0` and read the port it bound from its
+    /// `MCP_LISTEN_ADDR=<addr>` stdout line. The child owns the listener from
+    /// the start, so no port is ever released and re-bound.
+    async fn spawn(
+        server_name: &str,
+        extra_args: &[&str],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        let workspace_root =
+            find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
+        let binary_path = debug_binary_path(&workspace_root, server_name);
+        Self::build_server(server_name, &workspace_root, &binary_path)?;
+
+        let mut child = Command::new(&binary_path)
+            .args(["--port", "0"])
+            .args(extra_args)
+            .current_dir(&workspace_root)
+            .stdout(Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                format!(
+                    "Failed to start server {}: {}. Binary path: {:?}, Workspace: {:?}",
+                    server_name, e, binary_path, workspace_root
+                )
+            })?;
+        let mut lines =
+            BufReader::new(child.stdout.take().ok_or("child stdout not piped")?).lines();
+
+        let announced = tokio::time::timeout(Duration::from_secs(60), async {
+            while let Some(line) = lines.next_line().await? {
+                if let Some(addr) = line.strip_prefix("MCP_LISTEN_ADDR=") {
+                    return Ok(Some(addr.trim().to_string()));
+                }
+                println!("{line}");
+            }
+            Ok::<_, std::io::Error>(None)
+        })
+        .await;
+
+        let port = match announced {
+            Ok(Ok(Some(addr))) => addr
+                .parse::<std::net::SocketAddr>()
+                .map_err(|e| format!("Bad MCP_LISTEN_ADDR {addr:?} from {server_name}: {e}"))?
+                .port(),
+            Ok(Ok(None)) => {
+                let status = child.wait().await?;
+                return Err(format!(
+                    "Test server {server_name} exited before announcing its port (status {status})"
+                )
+                .into());
+            }
+            Ok(Err(e)) => {
+                child.kill().await.ok();
+                return Err(format!("Reading stdout of {server_name} failed: {e}").into());
+            }
+            Err(_) => {
+                child.kill().await.ok();
+                return Err(format!(
+                    "Test server {server_name} did not announce its port within 60s"
+                )
+                .into());
+            }
         };
 
-        // Wait for server to start
-        let mut attempts = 0;
+        // Keep draining so the child never blocks on a full stdout pipe.
+        tokio::spawn(async move {
+            while let Ok(Some(line)) = lines.next_line().await {
+                println!("{line}");
+            }
+        });
+
+        info!("Started {} on port {}", server_name, port);
+        Ok(Self {
+            server_process: Some(child),
+            port,
+            _server_name: server_name.to_string(),
+        })
+    }
+
+    /// Start a test server with additional CLI arguments
+    pub async fn start_with_args(
+        server_name: &str,
+        extra_args: &[&str],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::spawn(server_name, extra_args).await
+    }
+
+    /// Start a test server by name on an OS-assigned port, returning once it
+    /// answers an `initialize` probe.
+    pub async fn start(server_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut server = Self::spawn(server_name, &[]).await?;
+        let port = server.port;
+
         let client = reqwest::Client::new();
         let health_url = format!("http://127.0.0.1:{}/mcp", port);
+        let test_request = json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "health-check", "version": "1.0.0"}
+            }
+        });
 
-        while attempts < 50 {
+        for _ in 0..50 {
             sleep(Duration::from_millis(300)).await;
-
-            // Try to make a simple POST request to check if server is responding
-            let test_request = json!({
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-11-25",
-                    "capabilities": {},
-                    "clientInfo": {"name": "health-check", "version": "1.0.0"}
-                }
-            });
-
             if let Ok(response) = client
                 .post(&health_url)
                 .header("Content-Type", "application/json")
@@ -597,33 +540,21 @@ impl TestServerManager {
                 .await
                 && response.status().is_success()
             {
-                info!(
-                    "Server {} started successfully on port {}",
-                    server_name, port
-                );
-                return Ok(Self {
-                    server_process: Some(server_process),
-                    port,
-                    _server_name: server_name.to_string(),
-                });
+                info!("Server {} ready on port {}", server_name, port);
+                return Ok(server);
             }
-            attempts += 1;
         }
 
-        // "Failed to start" alone cannot tell a lost port race (child already dead,
-        // usually "address in use") from a server that is merely slow, which is what
-        // made this flake expensive to diagnose. Report which it was.
-        let exited = server_process.try_wait().ok().flatten();
-        server_process.kill().await.ok();
+        let exited = server
+            .server_process
+            .as_mut()
+            .and_then(|p| p.try_wait().ok().flatten());
         Err(match exited {
-            Some(status) => format!(
-                "Test server {server_name} exited before becoming ready on port {port} \
-                 (status {status}) — most likely lost the port to another process \
-                 between allocation and bind"
-            ),
+            Some(status) => {
+                format!("Test server {server_name} exited before becoming ready (status {status})")
+            }
             None => format!(
-                "Test server {server_name} still running but never answered on port \
-                 {port} after {attempts} probes over ~15s"
+                "Test server {server_name} still running but never answered on port {port} after ~15s"
             ),
         }
         .into())

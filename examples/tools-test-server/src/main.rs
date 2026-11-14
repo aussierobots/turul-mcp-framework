@@ -37,7 +37,6 @@
 //! ```
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
 // Note: Removed LazyLock and Mutex imports as we now use proper SessionStorage integration
 use std::time::Duration;
 
@@ -740,6 +739,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🔧 MCP Tools Test Server starting...");
 
     // Create server with comprehensive tool collection (with strict lifecycle for testing)
+    let listener = std::net::TcpListener::bind(("0.0.0.0", args.port))?;
+    let addr = listener.local_addr()?;
+    println!("MCP_LISTEN_ADDR={addr}");
+
     let server = McpServer::builder()
         .name("tools-test-server")
         .version(env!("CARGO_PKG_VERSION"))
@@ -764,10 +767,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Custom output field tools for MCP compliance testing
         .tool_fn(word_count_analyzer)
         .tool_fn(custom_calculator)
-        .bind_address(SocketAddr::from(([0, 0, 0, 0], args.port)))
+        .listener(listener)
         .build()?;
 
-    info!("🚀 Tools Test Server running on port {}", args.port);
+    info!("🚀 Tools Test Server running on {}", addr);
     info!(
         "📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator, legacy_calculator (deprecated), word_count_analyzer (custom output: analysisResult), custom_calculator (custom output: calculationResult)"
     );

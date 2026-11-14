@@ -18,6 +18,7 @@ cd "$PROJECT_ROOT"
 # Source shared utilities
 source "$SCRIPT_DIR/../tests/shared/bin/wait_for_server.sh"
 source "$SCRIPT_DIR/lib/mcp2026.sh"
+source "$SCRIPT_DIR/lib/examples.sh"
 
 echo "======================================================================"
 echo "Session Storage Backends - Intent-Based Verification"
@@ -68,28 +69,40 @@ test_storage_server() {
     echo "Protocol lane: $protocol"
     echo "----------------------------------------"
 
+    # External backends run only against a service the caller points us at via
+    # env vars (no credentials live in this script); otherwise SKIPPED.
     if [ "$requires_external" = "true" ]; then
-        echo -e "${YELLOW}NOTE${NC}: This server requires external dependencies"
-        echo "         (PostgreSQL/DynamoDB). Testing basic startup only."
+        case "$server_name" in
+            simple-postgres-session)
+                if [ -z "${TURUL_TEST_PG_URL:-}" ]; then
+                    echo -e "${YELLOW}SKIPPED${NC}: PostgreSQL - set TURUL_TEST_PG_URL to a postgres:// URL for a database the example may create tables in"
+                    SKIPPED=$((SKIPPED + 1))
+                    return 0
+                fi
+                export DATABASE_URL="$TURUL_TEST_PG_URL"
+                ;;
+            simple-dynamodb-session)
+                if [ -z "${TURUL_TEST_DDB_URL:-}" ]; then
+                    echo -e "${YELLOW}SKIPPED${NC}: DynamoDB - set TURUL_TEST_DDB_URL to a DynamoDB endpoint (e.g. DynamoDB Local) and AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY in the environment"
+                    SKIPPED=$((SKIPPED + 1))
+                    return 0
+                fi
+                export AWS_ENDPOINT_URL_DYNAMODB="$TURUL_TEST_DDB_URL"
+                ;;
+        esac
     fi
 
     # Start server with build guard
     echo "Starting server..."
     cleanup_old_logs "$server_name" "$port"
 
-    if ! ensure_binary_built "$server_name"; then
-        if [ "$requires_external" = "true" ]; then
-            echo -e "${YELLOW}SKIPPED${NC}: Build requires external dependencies (SQLite/PostgreSQL/DynamoDB)"
-            SKIPPED=$((SKIPPED + 1))
-            return 0
-        else
-            echo -e "${RED}FAILED${NC}: Build error"
-            FAILED=$((FAILED + 1))
-            return 1
-        fi
+    if ! example_build "$server_name" "$protocol"; then
+        echo -e "${RED}FAILED${NC}: Build error"
+        FAILED=$((FAILED + 1))
+        return 1
     fi
 
-    RUST_LOG=error ./target/debug/"$server_name" --port "$port" > "/tmp/${server_name}_${port}.log" 2>&1 &
+    RUST_LOG=error "$(example_bin "$server_name" "$protocol")" --port "$port" > "/tmp/${server_name}_${port}.log" 2>&1 &
     SERVER_PID=$!
 
     local session_header=()
@@ -101,21 +114,12 @@ test_storage_server() {
     fi
 
     if [ "$ready" -ne 1 ]; then
-        if [ "$requires_external" = "true" ]; then
-            echo -e "${YELLOW}SKIPPED${NC}: Server requires external dependencies not available"
-            echo "Last 5 lines of log:"
-            tail -5 "/tmp/${server_name}_${port}.log" 2>/dev/null || echo "(no log)"
-            kill $SERVER_PID 2>/dev/null || true
-            SKIPPED=$((SKIPPED + 1))
-            return 0
-        else
-            echo -e "${RED}FAILED${NC}: Server did not respond within 15s"
-            echo "Last 10 lines of log:"
-            tail -10 "/tmp/${server_name}_${port}.log" 2>/dev/null || echo "(no log)"
-            kill $SERVER_PID 2>/dev/null || true
-            FAILED=$((FAILED + 1))
-            return 1
-        fi
+        echo -e "${RED}FAILED${NC}: Server did not respond within 15s"
+        echo "Last 10 lines of log:"
+        tail -10 "/tmp/${server_name}_${port}.log" 2>/dev/null || echo "(no log)"
+        kill $SERVER_PID 2>/dev/null || true
+        FAILED=$((FAILED + 1))
+        return 1
     fi
 
     if [ "$protocol" = "2025" ]; then
@@ -128,17 +132,10 @@ test_storage_server() {
             2>/dev/null | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
 
         if [ -z "$SESSION_ID" ]; then
-            if [ "$requires_external" = "true" ]; then
-                echo -e "${YELLOW}SKIPPED${NC}: Could not initialize (external dependencies required)"
-                kill $SERVER_PID 2>/dev/null || true
-                SKIPPED=$((SKIPPED + 1))
-                return 0
-            else
-                echo -e "${RED}FAILED${NC}: Could not get session ID from header"
-                kill $SERVER_PID 2>/dev/null || true
-                FAILED=$((FAILED + 1))
-                return 1
-            fi
+            echo -e "${RED}FAILED${NC}: Could not get session ID from header"
+            kill $SERVER_PID 2>/dev/null || true
+            FAILED=$((FAILED + 1))
+            return 1
         fi
 
         echo "Session ID: $SESSION_ID"
