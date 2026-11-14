@@ -7,9 +7,7 @@ use syn::{Data, DeriveInput, Result};
 use crate::utils::extract_resource_meta;
 
 pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
-    let json_crate = crate::utils::serde_json_path();
     let mcp_builders = crate::utils::builders_path();
-    let mcp_protocol = crate::utils::protocol_path();
     let struct_name = &input.ident;
     let _vis = &input.vis;
 
@@ -30,6 +28,19 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
         Some(mt) => quote! { Some(#mt).as_deref() },
         None => quote! { None },
     };
+
+    let meta_impl = crate::tool_derive::generate_meta_impl(
+        struct_name,
+        "HasResourceMeta",
+        "resource_meta",
+        resource_meta.meta.as_ref(),
+    );
+    let icons_impl =
+        crate::tool_derive::generate_icons_impl(struct_name, resource_meta.icons.as_ref());
+    let annotations_impl = crate::tool_derive::generate_resource_annotations_impl(
+        struct_name,
+        resource_meta.annotations.as_ref(),
+    );
 
     // Check if it's a struct
     let _data = match &input.data {
@@ -85,21 +96,13 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl #mcp_builders::traits::HasResourceAnnotations for #struct_name {
-            fn annotations(&self) -> Option<&#mcp_protocol::meta::Annotations> {
-                None
-            }
-        }
+        #annotations_impl
 
         #[automatically_derived]
-        impl #mcp_builders::traits::HasResourceMeta for #struct_name {
-            fn resource_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
-                None
-            }
-        }
+        #meta_impl
 
         #[automatically_derived]
-        impl #mcp_builders::traits::HasIcons for #struct_name {}
+        #icons_impl
 
         // ResourceDefinition automatically implemented via blanket impl in resources.rs
         // No need for explicit impl - blanket impl handles it

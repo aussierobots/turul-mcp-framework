@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.26] - 2026-11-15
+
+`turul-mcp-derive` 0.4.6 → 0.4.7, `turul-mcp-server` 0.4.14 → 0.4.15,
+`turul-mcp-aws-lambda` 0.4.5 → 0.4.6 (pin raise only).
+
+### Added
+
+- **Macros declare `_meta`, `icons`, `annotations` and `title` (ADR-037).** Previously
+  every macro form hard-coded `_meta` to `None`, so an MCP Apps tool could not carry
+  `_meta.ui.resourceUri` without falling back to a builder or a manual impl (a manual
+  `HasToolMeta` beside a derive conflicts, E0119).
+  - `meta = <expr>` (a `HashMap<String, Value>`) on `#[mcp_tool]`, `#[derive(McpTool)]`,
+    `#[mcp_resource]`, `#[derive(McpResource)]` and `#[derive(McpPrompt)]`, and `meta:` on
+    `tool!`. For MCP Apps: `meta = UiToolMeta { .. }.to_meta()`.
+  - `icons = <expr>` on both resource forms and `derive(McpPrompt)`, and `icons:` on `tool!`.
+  - `annotations = <expr>` on both resource forms.
+  - `title = "..."` on `derive(McpPrompt)`.
+  - `#[mcp_resource(mime_type = ...)]` accepts a `&'static str` expression such as
+    `MCP_APP_HTML_MIME`, as well as a literal.
+- The per-form field table, with deliberate omissions, is in
+  `docs/compliance/server-features.md`.
+
+### Fixed
+
+- **`resources/templates/list` served only name, description and mime type.** It now also
+  serves title, icons, annotations and `_meta` from the registered resource, as
+  `resources/list` does. A template resource that already declared these now serves them.
+- **`#[derive(McpPrompt)]` on a struct with no fields failed to compile** (the emitted empty
+  `vec![]` had no inferable type).
+
+### Changed
+
+- `examples/ext-apps-server` declares its `ui://` view with `#[mcp_resource]`. Its served
+  JSON is unchanged apart from `serverInfo.version`.
+
+With none of the new attributes in use, no served byte changes. Patch release.
+
 ## [0.4.25] - 2026-11-15
 
 `turul-http-mcp-server` 0.4.11, `turul-mcp-server` 0.4.14, `turul-mcp-aws-lambda` 0.4.5,
@@ -3072,7 +3109,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.25...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.26...HEAD
+[0.4.26]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.25...v0.4.26
 [0.4.25]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.24...v0.4.25
 [0.4.24]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.23...v0.4.24
 [0.4.23]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.22...v0.4.23

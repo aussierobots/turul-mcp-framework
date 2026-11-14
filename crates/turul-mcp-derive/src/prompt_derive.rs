@@ -7,7 +7,6 @@ use syn::{Data, DeriveInput, Fields, Result};
 use crate::utils::{extract_field_meta, extract_prompt_meta};
 
 pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
-    let json_crate = crate::utils::serde_json_path();
     let mcp_builders = crate::utils::builders_path();
     let mcp_protocol = crate::utils::protocol_path();
     let struct_name = &input.ident;
@@ -16,6 +15,19 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
     let prompt_meta = extract_prompt_meta(&input.attrs)?;
     let name = &prompt_meta.name;
     let description = &prompt_meta.description;
+
+    let title_expr = match &prompt_meta.title {
+        Some(t) => quote! { Some(#t) },
+        None => quote! { None },
+    };
+    let meta_impl = crate::tool_derive::generate_meta_impl(
+        struct_name,
+        "HasPromptMeta",
+        "prompt_meta",
+        prompt_meta.meta.as_ref(),
+    );
+    let icons_impl =
+        crate::tool_derive::generate_icons_impl(struct_name, prompt_meta.icons.as_ref());
 
     // Check if it's a struct
     let data = match &input.data {
@@ -37,6 +49,10 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
             fn name(&self) -> &str {
                 #name
             }
+
+            fn title(&self) -> Option<&str> {
+                #title_expr
+            }
         }
 
         #[automatically_derived]
@@ -51,11 +67,9 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
             fn arguments(&self) -> Option<&Vec<#mcp_protocol::prompts::PromptArgument>> {
                 static ARGS: std::sync::OnceLock<Option<Vec<#mcp_protocol::prompts::PromptArgument>>> = std::sync::OnceLock::new();
                 ARGS.get_or_init(|| {
-                    if vec![#(#argument_fields),*].is_empty() {
-                        None
-                    } else {
-                        Some(vec![#(#argument_fields),*])
-                    }
+                    let args: Vec<#mcp_protocol::prompts::PromptArgument> =
+                        vec![#(#argument_fields),*];
+                    if args.is_empty() { None } else { Some(args) }
                 }).as_ref()
             }
         }
@@ -68,14 +82,10 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl #mcp_builders::traits::HasPromptMeta for #struct_name {
-            fn prompt_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
-                None
-            }
-        }
+        #meta_impl
 
         #[automatically_derived]
-        impl #mcp_builders::traits::HasIcons for #struct_name {}
+        #icons_impl
 
         // PromptDefinition automatically implemented via blanket impl in prompts.rs
         // No need for explicit impl - blanket impl handles it

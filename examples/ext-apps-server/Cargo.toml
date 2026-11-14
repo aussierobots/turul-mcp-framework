@@ -1,6 +1,6 @@
 [package]
 name = "ext-apps-server"
-version = "0.4.0"
+version = "0.4.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -10,6 +10,7 @@ turul-mcp-server.workspace = true
 turul-mcp-protocol.workspace = true
 turul-mcp-builders.workspace = true
 turul-mcp-ext-apps.workspace = true
+turul-mcp-derive.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 tracing.workspace = true

@@ -19,6 +19,7 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use serde_json::{Value, json};
 use turul_mcp_builders::ToolBuilder;
+use turul_mcp_derive::mcp_resource;
 use turul_mcp_ext_apps::{
     EXTENSION_IDENTIFIER, MCP_APP_HTML_MIME, UiResourceCsp, UiResourceMeta, UiToolMeta,
     UiToolVisibility, capability, client_supports_html_views,
@@ -76,8 +77,10 @@ await app.connect();
 </html>
 "#;
 
-/// A tool linked to the view. `_meta` comes from a manual `HasToolMeta`
-/// impl because the call also reads the session's client capabilities.
+/// A tool linked to the view. A manual impl because the view displays the
+/// result's text: a macro tool returning `String` also serves
+/// `structuredContent`, and its text is the JSON `{"result": ...}`. A tool
+/// with no such constraint declares `_meta` with `#[mcp_tool(meta = ...)]`.
 struct WeatherTool {
     input_schema: ToolSchema,
     meta: HashMap<String, Value>,
@@ -136,56 +139,30 @@ impl McpTool for WeatherTool {
     }
 }
 
-/// The view. `_meta.ui` rides the `resources/read` content item.
-struct WeatherView;
-
-impl HasResourceMetadata for WeatherView {
-    fn name(&self) -> &str {
-        "weather_view"
-    }
-}
-impl HasResourceUri for WeatherView {
-    fn uri(&self) -> &str {
-        VIEW_URI
-    }
-}
-impl HasResourceDescription for WeatherView {
-    fn description(&self) -> Option<&str> {
-        Some("Interactive weather view")
-    }
-}
-impl HasResourceMimeType for WeatherView {
-    fn mime_type(&self) -> Option<&str> {
-        Some(MCP_APP_HTML_MIME)
-    }
-}
-impl HasResourceSize for WeatherView {}
-impl HasResourceAnnotations for WeatherView {}
-impl HasResourceMeta for WeatherView {}
-impl HasIcons for WeatherView {}
-
-#[async_trait]
-impl McpResource for WeatherView {
-    async fn read(
-        &self,
-        _params: Option<Value>,
-        _session: Option<&SessionContext>,
-    ) -> McpResult<Vec<ResourceContent>> {
-        let meta = UiResourceMeta {
-            csp: Some(UiResourceCsp {
-                resource_domains: Some(vec![SDK_ORIGIN.into()]),
-                ..Default::default()
-            }),
-            prefers_border: Some(true),
+/// The view. `_meta.ui` rides the `resources/read` content item. The `uri`
+/// attribute must be a literal; `resources/read` serves `VIEW_URI`, and a
+/// mismatch would fail the interop probe's view read.
+#[mcp_resource(
+    uri = "ui://weather/view.html",
+    name = "weather_view",
+    description = "Interactive weather view",
+    mime_type = MCP_APP_HTML_MIME
+)]
+async fn weather_view() -> McpResult<Vec<ResourceContent>> {
+    let meta = UiResourceMeta {
+        csp: Some(UiResourceCsp {
+            resource_domains: Some(vec![SDK_ORIGIN.into()]),
             ..Default::default()
-        };
-        Ok(vec![ResourceContent::Text(TextResourceContents {
-            uri: VIEW_URI.into(),
-            mime_type: Some(MCP_APP_HTML_MIME.into()),
-            meta: Some(meta.to_meta()),
-            text: VIEW_HTML.into(),
-        })])
-    }
+        }),
+        prefers_border: Some(true),
+        ..Default::default()
+    };
+    Ok(vec![ResourceContent::Text(TextResourceContents {
+        uri: VIEW_URI.into(),
+        mime_type: Some(MCP_APP_HTML_MIME.into()),
+        meta: Some(meta.to_meta()),
+        text: VIEW_HTML.into(),
+    })])
 }
 
 #[tokio::main]
@@ -221,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .extension_capability(EXTENSION_IDENTIFIER, capability())
         .tool(WeatherTool::new())
         .tool(refresh)
-        .resource(WeatherView)
+        .resource_fn(weather_view)
         .bind_address("127.0.0.1:8660".parse()?)
         .build()?;
 

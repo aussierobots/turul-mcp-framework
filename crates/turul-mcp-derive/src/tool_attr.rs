@@ -26,9 +26,13 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     let mut idempotent = None;
     let mut open_world = None;
     let mut icons: Option<syn::Expr> = None;
+    let mut meta: Option<syn::Expr> = None;
 
     for arg in args {
         match arg {
+            Meta::NameValue(nv) if nv.path.is_ident("meta") => {
+                meta = Some(nv.value.clone());
+            }
             Meta::NameValue(nv) if nv.path.is_ident("icons") => {
                 icons = Some(nv.value.clone());
             }
@@ -273,6 +277,12 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     let annotations_impl = crate::utils::generate_annotations_impl(&struct_name, &annotation_meta);
 
     let icons_impl = crate::tool_derive::generate_icons_impl(&struct_name, icons.as_ref());
+    let meta_impl = crate::tool_derive::generate_meta_impl(
+        &struct_name,
+        "HasToolMeta",
+        "tool_meta",
+        meta.as_ref(),
+    );
 
     // Generate HasExecution impl based on task_support attribute
     let execution_impl = match task_support.as_deref() {
@@ -366,9 +376,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         #annotations_impl
 
         #[automatically_derived]
-        impl #mcp_builders::traits::HasToolMeta for #struct_name {
-            fn tool_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> { None }
-        }
+        #meta_impl
 
         #[automatically_derived]
         #icons_impl
