@@ -360,7 +360,7 @@ Before publishing a new version:
    ```
    protocol-2026-07-28 → ext-tasks → ext-skills → protocol → session-storage → http-server → builders →
    derive* → oauth → schema-validation → server-state-storage → task-storage →
-   server → aws-lambda → client → ext-apps
+   server → aws-lambda → ext-apps → client
    ```
    *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
 

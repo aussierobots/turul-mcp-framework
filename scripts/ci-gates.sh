@@ -67,6 +67,7 @@ gate_default() {
   run "bilingual client (not in default-members)" cargo test -p turul-mcp-client
   run "2026 client 404 is method-not-found, not session recovery" \
     cargo test -p turul-mcp-client --test unknown_method_404_is_not_session_recovery
+  run "MCP Apps client (opt-in ext-apps feature)" cargo test -p turul-mcp-client --features ext-apps --test ext_apps_client_2026
   run "2026 client example (pairs with minimal-server)" cargo build -p streamable-http-client
   run "client-using examples (not in default-members)" cargo build -p mrtr-elicitation-server -p bilingual-fleet-client -p ext-tasks-server --bins
   run "Tasks extension (SEP-2663, opt-in feature)" cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-tasks --test ext_tasks_2026

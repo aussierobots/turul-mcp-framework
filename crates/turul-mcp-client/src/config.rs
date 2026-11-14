@@ -66,6 +66,13 @@ pub struct DeclaredCapabilities {
     /// instead of the normal result. Use the `call_tool_or_task`/`task_*`
     /// client APIs (requires the `ext-tasks` cargo feature).
     pub ext_tasks: bool,
+    /// Declares MCP Apps (`io.modelcontextprotocol/ui`) with
+    /// `mimeTypes: ["text/html;profile=mcp-app"]` in every 2026 request's
+    /// `_meta` `clientCapabilities.extensions`. Set it only when the
+    /// application renders the views: this client renders nothing. Read
+    /// `_meta.ui` with [`crate::ext_apps`].
+    #[cfg(feature = "ext-apps")]
+    pub ext_apps: bool,
 }
 
 /// Client identification information
