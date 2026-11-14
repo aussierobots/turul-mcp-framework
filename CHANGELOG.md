@@ -10,29 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 `turul-mcp-ext-apps` 0.1.1 → 0.1.2, `turul-mcp-ext-skills` 0.1.0 (new),
 `turul-mcp-server` → 0.4.10.
 
-`turul-mcp-client` 0.4.9 → 0.4.10, `turul-mcp-ext-apps` 0.1.2 → 0.1.3.
-
-### Added
-
-- **MCP Apps client surface, opt-in.** A new `ext-apps` feature on `turul-mcp-client`, off by
-  default. `DeclaredCapabilities::ext_apps` declares `io.modelcontextprotocol/ui` with
-  `mimeTypes: ["text/html;profile=mcp-app"]` on every 2026-07-28 request.
-  `turul_mcp_client::ext_apps::{tool_ui_meta, resource_ui_meta}` read `_meta.ui` and return an
-  error for malformed metadata. `partition_tools` splits model-visible tools from app-only ones.
-  The client renders nothing; enforcing visibility stays the host application's job.
-  **Classification: patch, additive.**
-- **`turul-mcp-ext-apps`: `UiToolMeta::from_meta`, `UiResourceMeta::from_meta`,
-  `UiToolMeta::is_model_visible` and `is_app_callable`.** These are the inverse of `to_meta`
-  and own the spec's visibility default (`["model", "app"]` when omitted). **Classification:
-  patch, additive.**
-
-### Changed
-
-- **Publish order:** `turul-mcp-ext-apps` now publishes before `turul-mcp-client`, which
-  depends on it optionally.
-
-`turul-mcp-ext-apps` 0.1.1 → 0.1.2.
-
 ### Added
 
 - **`turul-mcp-ext-apps` helpers for serving MCP Apps.** `capability()` (the server's
@@ -92,6 +69,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `text/plain` on the content item whatever `mime_type` declared, so `resources/list` and
   `resources/read` disagreed. Static text content now takes the declared type. Bug fix, patch
   release.
+
+`turul-mcp-client` 0.4.9 → 0.4.10, `turul-mcp-ext-apps` 0.1.2 → 0.1.3.
+
+### Added
+
+- **MCP Apps client surface, opt-in.** A new `ext-apps` feature on `turul-mcp-client`, off by
+  default. `DeclaredCapabilities::ext_apps` declares `io.modelcontextprotocol/ui` with
+  `mimeTypes: ["text/html;profile=mcp-app"]` on every 2026-07-28 request.
+  `turul_mcp_client::ext_apps::{tool_ui_meta, resource_ui_meta}` read `_meta.ui` and return an
+  error for malformed metadata. `partition_tools` splits model-visible tools from app-only ones.
+  The client renders nothing; enforcing visibility stays the host application's job.
+  **Classification: patch, additive.**
+- **`turul-mcp-ext-apps`: `UiToolMeta::from_meta`, `UiResourceMeta::from_meta`,
+  `UiToolMeta::is_model_visible` and `is_app_callable`.** These are the inverse of `to_meta`
+  and own the spec's visibility default (`["model", "app"]` when omitted). **Classification:
+  patch, additive.**
+
+### Changed
+
+- **Publish order:** `turul-mcp-ext-apps` now publishes before `turul-mcp-client`, which
+  depends on it optionally.
+- **CI lints `turul-mcp-client`'s test targets.** The workspace clippy gate covers only
+  `default-members`, so a needless borrow in the client's unit tests reached `main`. Fixed, and
+  `cargo clippy -p turul-mcp-client --all-targets -- -D warnings` now runs in `ci-gates.sh` and CI.
 
 ## [0.4.21] - 2026-11-14
 

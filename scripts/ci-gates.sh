@@ -65,6 +65,7 @@ gate_default() {
   run "shipped crate docs agree with the artifacts they describe" \
     cargo test -p turul-mcp-protocol-2026-07-28 --features compliance --test docs_consistency
   run "bilingual client (not in default-members)" cargo test -p turul-mcp-client
+  run "bilingual client clippy, test targets included" cargo clippy -p turul-mcp-client --all-targets -- -D warnings
   run "2026 client 404 is method-not-found, not session recovery" \
     cargo test -p turul-mcp-client --test unknown_method_404_is_not_session_recovery
   run "MCP Apps client (opt-in ext-apps feature)" cargo test -p turul-mcp-client --features ext-apps --test ext_apps_client_2026

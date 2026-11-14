@@ -128,6 +128,8 @@ jobs:
         run: cargo test -p turul-mcp-protocol-2026-07-28 --features compliance --test docs_consistency
       - name: Bilingual client (not in default-members)
         run: cargo test -p turul-mcp-client
+      - name: Bilingual client clippy, test targets included
+        run: cargo clippy -p turul-mcp-client --all-targets -- -D warnings
       - name: 2026 client 404 is method-not-found, not session recovery
         run: cargo test -p turul-mcp-client --test unknown_method_404_is_not_session_recovery
       - name: MCP Apps client (opt-in ext-apps feature)
