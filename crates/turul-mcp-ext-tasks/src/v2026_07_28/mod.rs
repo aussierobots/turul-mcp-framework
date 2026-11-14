@@ -28,10 +28,12 @@ pub mod parity;
 
 #[cfg(test)]
 mod compliance_test;
+#[cfg(test)]
+mod released_schema_test;
 
 pub use capability::{
     EXTENSION_IDENTIFIER, InvalidExtensionIdentifier, capability, declared_by_client,
-    declared_by_server, validate_identifier,
+    declared_by_server, missing_capability_error, validate_identifier,
 };
 pub use in_memory::InMemoryTaskStore;
 pub use lifecycle::{

@@ -1,5 +1,5 @@
-//! Wire-shape tests against the vendored SEP-2663 draft schema
-//! (`schema/draft-schema.ts` / `schema/draft-schema.json`).
+//! Wire-shape tests against the vendored released schema
+//! (`schema/schema.ts`, `specification/2026-07-28/tasks.md`).
 
 use serde_json::{Value, json};
 

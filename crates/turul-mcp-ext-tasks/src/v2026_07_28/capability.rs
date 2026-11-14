@@ -17,6 +17,15 @@ pub fn capability() -> Value {
     serde_json::json!({})
 }
 
+/// The `-32021` error for a request that needs the extension from a client
+/// that did not declare it: `data.requiredCapabilities.extensions` names
+/// [`EXTENSION_IDENTIFIER`] (tasks.md §Capability Negotiation).
+pub fn missing_capability_error() -> turul_mcp_protocol_2026_07_28::McpError {
+    turul_mcp_protocol_2026_07_28::McpError::MissingRequiredClientCapability {
+        required: serde_json::json!({ "extensions": { EXTENSION_IDENTIFIER: capability() } }),
+    }
+}
+
 /// True when the client declared the Tasks extension.
 pub fn declared_by_client(caps: &ClientCapabilities) -> bool {
     caps.extensions

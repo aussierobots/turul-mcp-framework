@@ -2035,7 +2035,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                     return serde_json::to_value(result).map_err(McpError::SerializationError);
                 }
             } else if election.required {
-                return Err(crate::ext_tasks::missing_capability_error());
+                return Err(turul_mcp_ext_tasks::missing_capability_error());
             }
         }
 

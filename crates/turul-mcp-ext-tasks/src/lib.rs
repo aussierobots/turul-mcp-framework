@@ -79,5 +79,6 @@ pub use v2026_07_28::{
     Nullable, RESULT_TYPE_TASK, RetentionPolicy, SweepAction, SweepReport, Task, TaskAckResult,
     TaskFields, TaskState, TaskStatus, TaskStatusNotificationParams, TaskStore, TaskStoreError,
     TaskSubscriptionAcknowledgedNotifications, TaskSubscriptionNotifications, UpdateTaskParams,
-    capability, declared_by_client, declared_by_server, validate_identifier,
+    capability, declared_by_client, declared_by_server, missing_capability_error,
+    validate_identifier,
 };

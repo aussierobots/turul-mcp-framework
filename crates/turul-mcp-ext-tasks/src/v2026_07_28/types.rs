@@ -1,6 +1,6 @@
 //! Task state types for the MCP Tasks extension (SEP-2663).
 //!
-//! Maps directly to the vendored extension schema (`schema/draft-schema.ts`):
+//! Maps directly to the vendored extension schema (`schema/schema.ts`, released 2026-07-28):
 //! - `TaskStatus`    → [`TaskStatus`]
 //! - `Task`          → [`Task`] (status + [`TaskFields`])
 //! - `DetailedTask`  → [`DetailedTask`] (status-tagged union with

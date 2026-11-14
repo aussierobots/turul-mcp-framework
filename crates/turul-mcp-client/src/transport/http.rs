@@ -222,7 +222,8 @@ impl HttpTransport {
     /// SEP-2243 request-metadata headers, emitted on 2026-07-28 connections:
     /// mirror the body's `method` into `Mcp-Method` (all requests and
     /// notifications) and `params.name` / `params.uri` into `Mcp-Name` for
-    /// `tools/call`, `prompts/get`, and `resources/read`. 2025-11-25
+    /// `tools/call`, `prompts/get`, and `resources/read`, and `params.taskId`
+    /// for the Tasks extension's `tasks/get|update|cancel`. 2025-11-25
     /// connections keep their original wire shape (no extra headers).
     fn apply_request_metadata_headers(
         &self,
@@ -239,6 +240,10 @@ impl HttpTransport {
                     message.pointer("/params/name").and_then(|v| v.as_str())
                 }
                 "resources/read" => message.pointer("/params/uri").and_then(|v| v.as_str()),
+                // Tasks extension (tasks.md §Streamable HTTP: Routing Headers).
+                "tasks/get" | "tasks/update" | "tasks/cancel" => {
+                    message.pointer("/params/taskId").and_then(|v| v.as_str())
+                }
                 _ => None,
             };
             if let Some(name) = name {
@@ -1441,6 +1446,31 @@ mod tests {
         let transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
         assert_eq!(transport.transport_type(), TransportType::Http);
         assert!(!transport.is_connected());
+    }
+
+    /// tasks.md §Streamable HTTP: Routing Headers: `tasks/get`, `tasks/update`
+    /// and `tasks/cancel` MUST carry `Mcp-Name` = `params.taskId`.
+    #[test]
+    fn task_methods_set_mcp_name_to_task_id() {
+        let transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+        transport.set_protocol_version("2026-07-28");
+        let client = reqwest::Client::new();
+        for method in ["tasks/get", "tasks/update", "tasks/cancel"] {
+            let message = serde_json::json!({
+                "jsonrpc": "2.0", "id": 1, "method": method,
+                "params": { "taskId": "786512e2-9e0d-44bd-8f29-789f320fe840" }
+            });
+            let request = transport
+                .apply_request_metadata_headers(client.post("http://localhost:8080/mcp"), &message)
+                .build()
+                .unwrap();
+            assert_eq!(request.headers()["Mcp-Method"], method);
+            assert_eq!(
+                request.headers()["Mcp-Name"],
+                "786512e2-9e0d-44bd-8f29-789f320fe840",
+                "{method}"
+            );
+        }
     }
 
     #[test]

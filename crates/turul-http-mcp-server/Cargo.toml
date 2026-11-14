@@ -1,6 +1,6 @@
 [package]
 name = "turul-http-mcp-server"
-version = "0.4.7"
+version = "0.4.8"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -15,13 +15,16 @@ categories = ["network-programming"]
 [features]
 default = ["sse", "protocol-2026-07-28"]
 protocol-2025-11-25 = ["turul-mcp-protocol/protocol-2025-11-25", "turul-mcp-session-storage/protocol-2025-11-25"]
-protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28"]
+protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28", "turul-mcp-session-storage/protocol-2026-07-28", "dep:turul-mcp-ext-tasks"]
 sse = []          # Server-Sent Events support
 
 [dependencies]
 turul-rpc = { workspace = true, features = ["async", "streams"] }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4", default-features = false }
+# Owner of the Tasks extension identifier and its -32021 payload (ADR-028,
+# 2026-11-14): wire layer only, no storage features.
+turul-mcp-ext-tasks = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
