@@ -18,7 +18,8 @@ pub use manifest::{
 };
 pub use types::{
     GetSkillRequestParams, GetSkillResult, ListSkillsResult, META_PREFIX,
-    METHOD_RESOURCES_DIRECTORY_READ, METHOD_SKILLS_GET, METHOD_SKILLS_LIST, RESOURCES_DYNAMIC,
-    Skill, SkillResources,
+    METHOD_RESOURCES_DIRECTORY_READ, METHOD_SKILLS_GET, METHOD_SKILLS_LIST, MIME_TYPE_DIRECTORY,
+    RESOURCES_DYNAMIC, ReadResourceDirectoryRequestParams, ReadResourceDirectoryResult, Skill,
+    SkillResources,
 };
 pub use uri::{SkillPath, UriError};

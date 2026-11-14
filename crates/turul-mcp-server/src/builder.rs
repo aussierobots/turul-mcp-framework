@@ -470,26 +470,31 @@ impl McpServerBuilder {
     }
 
     /// Serve the Skills extension (`io.modelcontextprotocol/skills`, ADR-033):
-    /// advertises the extension with `directoryRead` false, forces the
-    /// `resources` capability, registers `skills/list` and `skills/get`, and
-    /// registers every manifest file as a static resource serving exactly the
-    /// hashed bytes. Call once.
+    /// advertises the extension with `directoryRead: true`, forces the
+    /// `resources` capability, registers `skills/list`, `skills/get` and
+    /// `resources/directory/read`, registers every manifest file as a static
+    /// resource serving exactly the hashed bytes, and registers one
+    /// `<root>/{+file}` template resource per dynamic skill. Call once.
     ///
     /// A manifest URI the `resources/read` policy would reject (it contains
     /// `..`, `/etc/` or `/proc/`) makes `build()` fail, naming the file, so no
     /// unreadable URI is ever advertised (ADR-033 §5).
     #[cfg(feature = "ext-skills")]
     pub fn with_ext_skills(mut self, catalog: crate::ext_skills::SkillCatalog) -> Self {
+        use crate::ext_skills::{
+            DirectoryReadHandler, DynamicSkillResource, SkillFileResource, SkillsGetHandler,
+            SkillsListHandler, SkillsRuntime, directory_index,
+        };
         use turul_mcp_ext_skills::v2026_07_28::{
             EXTENSION_IDENTIFIER, SkillsCapability, capability,
         };
-        let catalog = Arc::new(catalog);
+        self.validation_errors.extend(catalog.overlap_errors());
         // One URI, one content: nested skills list files their enclosing skill
         // also lists. The entry's own SKILL.md wins the resource metadata.
-        let mut files: std::collections::BTreeMap<String, crate::ext_skills::SkillFileResource> =
+        let mut files: std::collections::BTreeMap<String, SkillFileResource> =
             std::collections::BTreeMap::new();
         for entry in catalog.entries() {
-            for file in crate::ext_skills::SkillFileResource::for_entry(entry) {
+            for file in SkillFileResource::for_entry(entry) {
                 match files.get(file.uri()) {
                     Some(prev) if prev.digest() != file.digest() => {
                         self.validation_errors.push(format!(
@@ -505,6 +510,12 @@ impl McpServerBuilder {
                 }
             }
         }
+        // Directory index from the registered files, so a directory listing
+        // shows exactly the metadata resources/list does (ADR-033 §7).
+        let directories = directory_index(
+            catalog.entries().map(|e| e.path().root_uri()),
+            files.values(),
+        );
         let mut uris = Vec::new();
         for (uri, file) in files {
             if self.resources.contains_key(&uri) {
@@ -518,9 +529,18 @@ impl McpServerBuilder {
             self.ext_skill_uris.insert(uri.clone());
             uris.push(uri);
         }
+        // Dynamic skills: one `{+file}` template each (ADR-033 §8).
+        let slot: crate::ext_skills::RuntimeSlot = Default::default();
+        for (path, skill) in catalog.dynamic_skills() {
+            self = self.resource(DynamicSkillResource::new(
+                path.clone(),
+                Arc::clone(skill),
+                Arc::clone(&slot),
+            ));
+        }
         // Checked through the read path's own policy: the blocklist keeps one
         // definition (build_resource_security).
-        let policy = self.build_resource_security();
+        let policy = Arc::new(self.build_resource_security());
         for uri in uris {
             let probe = serde_json::json!({ "uri": uri });
             if let Err(e) = policy.validate_request("resources/read", Some(&probe), None) {
@@ -530,13 +550,22 @@ impl McpServerBuilder {
                 ));
             }
         }
+        let runtime = Arc::new(SkillsRuntime {
+            catalog,
+            directories,
+            policy,
+        });
+        let _ = slot.set(Arc::clone(&runtime));
         self.with_resources()
             .extension_capability(
                 EXTENSION_IDENTIFIER,
-                capability(SkillsCapability::default()),
+                capability(SkillsCapability {
+                    directory_read: true,
+                }),
             )
-            .handler(crate::ext_skills::SkillsListHandler(Arc::clone(&catalog)))
-            .handler(crate::ext_skills::SkillsGetHandler(catalog))
+            .handler(SkillsListHandler(Arc::clone(&runtime)))
+            .handler(SkillsGetHandler(Arc::clone(&runtime)))
+            .handler(DirectoryReadHandler(runtime))
     }
 
     /// Run the task retention sweep on a timer.
@@ -1834,8 +1863,14 @@ impl McpServerBuilder {
             // Add the escaped literal part before this match
             result.push_str(&regex::escape(&template[last_end..mat.start()]));
 
-            // Add the regex pattern for the template variable
-            result.push_str("[a-zA-Z0-9_.-]+"); // Allow dots for IDs like announcement_id
+            // Add the regex pattern for the template variable. A reserved
+            // expansion `{+var}` (RFC 6570) may span path segments and carry
+            // percent-encoding; the blocklist still applies to the whole URI.
+            if mat.as_str().starts_with("{+") {
+                result.push_str("[a-zA-Z0-9_.~%/-]+");
+            } else {
+                result.push_str("[a-zA-Z0-9_.-]+"); // Allow dots for IDs like announcement_id
+            }
 
             last_end = mat.end();
         }

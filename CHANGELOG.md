@@ -7,8 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-`turul-mcp-aws-lambda` 0.4.3 → 0.4.4, `turul-mcp-server` 0.4.11 → 0.4.12,
-`turul-http-mcp-server` 0.4.9 → 0.4.10.
+`turul-mcp-aws-lambda` 0.4.3 → 0.4.4, `turul-mcp-server` 0.4.11 → 0.4.13,
+`turul-http-mcp-server` 0.4.9 → 0.4.10, `turul-mcp-ext-skills` 0.1.0 → 0.1.1,
+`turul-mcp-client` 0.4.11 → 0.4.12, `turul-mcp-protocol-2026-07-28` 0.4.2 → 0.4.3.
+
+### Added
+
+- **Extensions on Lambda:**
+  - `LambdaMcpServerBuilder::extension_capability` (2026-07-28 lane).
+  - `with_ext_skills`, behind the new `turul-mcp-aws-lambda` feature `ext-skills`.
+  - Apps works through the same generic hooks as on the HTTP server.
+  - Tasks on Lambda is deferred, and Lambda does not advertise it (ADR-035 §5).
+- **`McpServer::transport_parts()` / `TransportParts`.** What a transport needs in order to
+  serve an `McpServer` without re-assembling it. `HttpMcpServerBuilder::register_dispatcher`
+  lets the HTTP transport consume the same dispatcher.
+- **`McpServerBuilder::resource_subscriptions(bool)`.** A transport that cannot serve
+  `subscriptions/listen` keeps `resources.subscribe` truthful with it. Lambda passes `false`.
+- **`lambda-skills-server` bin and `scripts/e2e-lambda-skills.sh`** (in `ci-gates.sh lambda`).
+  Skills on a real local Lambda under `cargo lambda watch`: 75 files re-hashed, sep-2640
+  32/32 and 6/6, host scenarios 4/4.
+- **Skills directory reads (`resources/directory/read`, ADR-033 §7).** `with_ext_skills`
+  now declares `directoryRead: true` and answers for every skill root and subdirectory:
+  - files carry the metadata `resources/list` reports for them;
+  - subdirectories are `inode/directory`;
+  - children are direct only, paginated, with `resultType`, `ttlMs` and `cacheScope`;
+  - any URI that is not a directory resource is `-32602`.
+  `turul-mcp-ext-skills` adds the wire types. `turul-mcp-client` adds
+  `skills_directory_read`, which sends nothing unless the server declared `directoryRead`.
+  Upstream conformance `sep-2640-skills-directory` passes 7/7; it was skipped before.
+- **Generated skills (`resources: "dynamic"`, ADR-033 §8).** `SkillCatalog::add_dynamic`
+  takes a `DynamicSkill`: a fixed path plus an async `files()`.
+  - Every `skills/list`, `skills/get`, read and directory read regenerates the skill through
+    the same owners as a static one, and the entry publishes `"dynamic"`.
+  - Reads go through one `<root>/{+file}` template resource per skill.
+  - A dynamic skill may not overlap another skill's directory; `build()` refuses it.
+- **RFC 6570 reserved expansion `{+var}` in `UriTemplate`**, which matches across `/`. The
+  read policy's template pattern accepts it, and its blocklist still applies.
 
 ### Changed
 
@@ -37,23 +71,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `McpServerBuilder::with_session_storage` takes `Arc<BoxedSessionStorage>` instead of a
     generic `Arc<S>`. `Arc<ConcreteStorage>` arguments still coerce; only an explicit
     turbofish breaks.
-
-### Added
-
-- **Extensions on Lambda:**
-  - `LambdaMcpServerBuilder::extension_capability` (2026-07-28 lane).
-  - `with_ext_skills`, behind the new `turul-mcp-aws-lambda` feature `ext-skills`.
-  - Apps works through the same generic hooks as on the HTTP server.
-  - Tasks on Lambda is deferred, and Lambda does not advertise it (ADR-035 §5).
-- **`McpServer::transport_parts()` / `TransportParts`.** What a transport needs in order to
-  serve an `McpServer` without re-assembling it. `HttpMcpServerBuilder::register_dispatcher`
-  lets the HTTP transport consume the same dispatcher.
-- **`McpServerBuilder::resource_subscriptions(bool)`.** A transport that cannot serve
-  `subscriptions/listen` keeps `resources.subscribe` truthful with it. Lambda passes `false`.
-- **`lambda-skills-server` bin and `scripts/e2e-lambda-skills.sh`** (in `ci-gates.sh lambda`).
-  Skills on a real local Lambda under `cargo lambda watch`: 75 files re-hashed, sep-2640
-  32/32 and 6/6, host scenarios 4/4.
-`turul-mcp-protocol-2026-07-28` 0.4.2 → 0.4.3.
+- **Skills servers now declare `directoryRead: true`** (was `{}`), and
+  `resources/directory/read` answers instead of `-32601`. Classification: patch, additive
+  on the wire.
 
 ### Fixed
 

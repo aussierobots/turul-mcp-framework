@@ -1707,6 +1707,43 @@ impl McpClient {
         }
     }
 
+    #[cfg(all(
+        feature = "ext-skills",
+        any(feature = "client-bilingual", feature = "client-2026-07-28-only")
+    ))]
+    /// `resources/directory/read` — a directory resource's direct children
+    /// (ADR-033 §7). Sent only when the server declared `directoryRead: true`
+    /// (C-8). A listing never extends a held manifest: `skill_fetch` still
+    /// refuses files the entry does not list.
+    pub async fn skills_directory_read(
+        &self,
+        uri: &str,
+        cursor: Option<&str>,
+    ) -> McpClientResult<turul_mcp_ext_skills::ReadResourceDirectoryResult> {
+        use turul_mcp_ext_skills::{EXTENSION_IDENTIFIER, declared_by_server};
+        let directory_read = self
+            .server_capabilities()
+            .await
+            .and_then(|caps| serde_json::from_value(caps).ok())
+            .and_then(|caps| declared_by_server(&caps))
+            .is_some_and(|settings| settings.directory_read);
+        if !directory_read {
+            return Err(McpClientError::ExtensionNotDeclared(format!(
+                "{EXTENSION_IDENTIFIER} with directoryRead"
+            )));
+        }
+        let mut extra = json!({ "uri": uri });
+        if let Some(c) = cursor {
+            extra["cursor"] = json!(c);
+        }
+        self.send_2026_07_28(
+            turul_mcp_ext_skills::METHOD_RESOURCES_DIRECTORY_READ,
+            extra,
+            |r| Ok(serde_json::from_value(r.clone())?),
+        )
+        .await
+    }
+
     /// `skills/list` — one page of skill entries (Skills extension, SEP-2640).
     /// Pass the previous page's `next_cursor` to continue. Retrieves no skill
     /// file; use [`skill_fetch`](Self::skill_fetch) for that.

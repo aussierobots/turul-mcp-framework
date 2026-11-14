@@ -129,12 +129,18 @@ impl UriTemplate {
         let mut regex_pattern = regex::escape(&self.pattern);
 
         for captures in var_regex.captures_iter(&self.pattern) {
-            let var_name = captures.get(1).unwrap().as_str();
+            let expression = captures.get(1).unwrap().as_str();
+            // RFC 6570 reserved expansion `{+var}`: the value may contain
+            // reserved characters, `/` included, so it matches across path
+            // segments. A simple `{var}` stays within one segment.
+            let (var_name, capture) = match expression.strip_prefix('+') {
+                Some(name) => (name, "(.+)"),
+                None => (expression, "([^/]+)"),
+            };
             self.variables.push(var_name.to_string());
 
-            // Replace {var_name} with capture group
-            let escaped_var = regex::escape(&format!("{{{}}}", var_name));
-            regex_pattern = regex_pattern.replace(&escaped_var, "([^/]+)");
+            let escaped_var = regex::escape(&format!("{{{}}}", expression));
+            regex_pattern = regex_pattern.replace(&escaped_var, capture);
         }
 
         // Anchor the pattern
@@ -299,6 +305,22 @@ impl UriTemplateRegistry {
 
 #[cfg(test)]
 mod tests {
+    /// RFC 6570 §3.2.3 reserved expansion: `{+var}` spans `/`; `{var}` does not.
+    #[test]
+    fn reserved_expansion_spans_path_segments() {
+        let t = UriTemplate::new("skill://reports/daily/{+file}").unwrap();
+        assert!(t.matches("skill://reports/daily/data/sub/today.md"));
+        assert_eq!(
+            t.extract("skill://reports/daily/data/sub/today.md")
+                .unwrap()["file"],
+            "data/sub/today.md"
+        );
+        assert!(!t.matches("skill://reports/daily/"));
+        let simple = UriTemplate::new("skill://reports/daily/{file}").unwrap();
+        assert!(!simple.matches("skill://reports/daily/data/sub/today.md"));
+        assert!(simple.matches("skill://reports/daily/today.md"));
+    }
+
     use super::*;
 
     #[test]

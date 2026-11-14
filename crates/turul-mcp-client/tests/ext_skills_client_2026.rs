@@ -369,3 +369,63 @@ async fn e2e_real_server_list_get_fetch() {
     }
     assert_eq!(fetched, 6);
 }
+
+/// A peer whose Skills declaration is `settings`, answering
+/// `resources/directory/read` with `children`.
+async fn directory_peer(settings: Value, children: Value) -> MockServer {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(json!({ "method": "server/discover" })))
+        .respond_with(rpc(merged(
+            cache(),
+            json!({
+                "supportedVersions": ["2026-07-28"],
+                "capabilities": {
+                    "resources": {},
+                    "extensions": { "io.modelcontextprotocol/skills": settings }
+                },
+                "_meta": { "io.modelcontextprotocol/serverInfo": { "name": "peer", "version": "1" } }
+            }),
+        )))
+        .mount(&server)
+        .await;
+    Mock::given(method("POST"))
+        .and(body_partial_json(
+            json!({ "method": "resources/directory/read" }),
+        ))
+        .respond_with(rpc(merged(cache(), json!({ "resources": children }))))
+        .mount(&server)
+        .await;
+    server
+}
+
+/// C-8 (:64): no `resources/directory/read` unless `directoryRead: true` was declared.
+#[tokio::test]
+async fn c8_directory_read_refused_without_declaration() {
+    let server = directory_peer(json!({}), json!([])).await;
+    let c = client(&server).await;
+    assert!(matches!(
+        c.skills_directory_read("skill://demo", None).await,
+        Err(McpClientError::ExtensionNotDeclared(_))
+    ));
+    assert!(
+        !methods_sent(&server)
+            .await
+            .contains(&"resources/directory/read".to_string())
+    );
+}
+
+/// ADR-033 §7: with `directoryRead: true`, the call returns the direct children.
+#[tokio::test]
+async fn c8_directory_read_lists_children() {
+    let children = json!([
+        { "uri": "skill://demo/SKILL.md", "name": "demo", "mimeType": "text/markdown" },
+        { "uri": "skill://demo/templates", "name": "templates", "mimeType": "inode/directory" }
+    ]);
+    let server = directory_peer(json!({ "directoryRead": true }), children).await;
+    let c = client(&server).await;
+    let r = c.skills_directory_read("skill://demo", None).await.unwrap();
+    let uris: Vec<&str> = r.resources.iter().map(|x| x.uri.as_str()).collect();
+    assert_eq!(uris, ["skill://demo/SKILL.md", "skill://demo/templates"]);
+    assert_eq!(r.resources[1].mime_type.as_deref(), Some("inode/directory"));
+}

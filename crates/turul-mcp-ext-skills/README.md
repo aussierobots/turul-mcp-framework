@@ -39,7 +39,8 @@ re-implements it.
 
 - Frontmatter must be all strings: a plain scalar a YAML parser would read as null,
   bool, number or timestamp is refused (quote it).
-- `"dynamic"` resources and `resources/directory/read` are not served.
+- Directory reads (`resources/directory/read`) and generated (`"dynamic"`) skills are
+  served by `turul-mcp-server` (ADR-033 §7, §8); this crate supplies their wire types.
 - `from_dir` refuses a skill with a symlink whose target is outside the skill directory.
 
 Design and test contract: [ADR-033](../../docs/adr/033-skills-over-mcp.md). Vendored

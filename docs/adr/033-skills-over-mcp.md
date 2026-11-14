@@ -121,7 +121,7 @@ directory, nested `SKILL.md` included — completeness is the enumerator's contr
 
 `with_ext_skills(catalog)`:
 
-- advertises `capability(SkillsCapability { directory_read: false })` and forces
+- advertises `capability(SkillsCapability { directory_read: true })` (§7) and forces
   the `resources` capability, even for an empty catalog;
 - registers `skills/list` (stable URI order, fixed page size, cursor = last URI
   served, unknown cursor → `-32602`) and `skills/get` (exact `SKILL.md` URI, else
@@ -133,8 +133,7 @@ directory, nested `SKILL.md` included — completeness is the enumerator's contr
   URI some other resource already holds — registered before `with_ext_skills` or after
   it — fails `build()`, naming the URI. `SKILL.md` gets `mimeType:
   text/markdown` and `name`/`description` from the frontmatter;
-- does **not** register `resources/directory/read`; undeclared, it answers as an
-  unknown method (:578).
+- registers `resources/directory/read` (§7).
 
 **Blocklist interaction (Q10).** The auto-generated read policy
 (`McpServerBuilder::build_resource_security`) rejects any URI containing `..`,
@@ -174,7 +173,7 @@ defines no skill type, digest or frontmatter parser of its own.
 | C-5 | After fetching a `SKILL.md`, parse its frontmatter and compare field by field; a discrepancy MUST NOT be loaded (:496-497) | MUST | The fetched `SKILL.md` goes through `Frontmatter::from_skill_md`; its map must equal `entry.frontmatter`. Frontmatter that parser refuses (typed scalars, lenient repair) cannot be verified and fails closed |
 | C-6 | No retrieval ahead of need (:503) | MUST NOT | `skills_list` / `skills_get` never call `resources/read`; only `skill_fetch` does, one file per call |
 | C-7 | `"dynamic"` skills offer no integrity; hosts MAY decline (:231) | MAY | `skill_fetch` declines a `"dynamic"` entry with `SkillVerification` |
-| C-8 | No `resources/directory/read` unless declared (:64) | MUST NOT | The client does not implement the method |
+| C-8 | No `resources/directory/read` unless declared (:64) | MUST NOT | `skills_directory_read` sends nothing unless the server declared `directoryRead: true` (§7) |
 
 Host-application duties — approval binding, the acting window, caching, keying on the
 pair (server, uri), name disambiguation — belong to the application holding the
@@ -185,7 +184,59 @@ entry; the client gives it verified bytes and typed errors to build them on.
 formally semver-breaking; it ships as a patch under the 0.4 rule and the CHANGELOG
 says so.
 
-### 7. Versioning
+### 7. Directory reads (S-G7)
+
+The server declares `directoryRead: true` and serves `resources/directory/read`
+(:514-585) for every directory in its skill namespace.
+
+- **Directory resources.** Every skill root (`SkillPath::root_uri`) and every proper
+  prefix of a file URI below a root is a directory resource, `mimeType: inode/directory`,
+  written without a trailing slash (:520). They are not added to `resources/list` (:520 allows
+  this) and are derived from the manifests: one owner, `SkillCatalog`, computes them, and
+  nothing re-formats a `skill://` string.
+- **Result.** Direct children only: files with the same `Resource` metadata
+  `resources/list` reports for them; subdirectories as `{uri, name, mimeType:
+  inode/directory}`. Ordered by URI, paginated like `resources/list` (cursor = last URI served;
+  unknown cursor `-32602`), `resultType: complete`, `ttlMs`, `cacheScope`.
+- **Errors.** A URI that is not a directory resource, including a file URI, is `-32602`.
+- **Client.** `turul-mcp-client` gains `skills_directory_read(uri, cursor)`, sent only when
+  the server declared `directoryRead: true` (:64); a directory result never extends a held
+  manifest (:577-580), so `skill_fetch` keeps refusing unlisted URIs.
+
+### 8. Dynamic skills (`resources: "dynamic"`)
+
+A skill whose content is generated (:231) is served from a `DynamicSkill` the application
+implements: a fixed `SkillPath`, and an async `files()` that generates the skill's current
+files. Every operation regenerates and composes through the same owners as a static skill
+— `SkillEntry::from_files` validates, projects frontmatter and builds URIs — so a generated
+skill obeys every rule a static one does except that its entry publishes
+`resources: "dynamic"` and no manifest.
+
+- **Reads.** Each dynamic skill registers one URI template, `<root>/{+file}`, using RFC 6570
+  reserved expansion (`{+var}` matches across `/`), added to the framework's
+  `UriTemplate`; the read-policy pattern for a `{+var}` admits `/` and `%`, and the
+  blocklist still applies. A read regenerates and returns the bytes of the file at that URI,
+  or `-32602`.
+- **Directory reads** answer from the generated files: for a dynamic skill they are the only
+  way to discover its files (:584).
+- **Static and dynamic paths never overlap**: a dynamic skill whose root equals or contains
+  another skill's root, or lies inside one, fails `build()`.
+- **Client.** `skill_fetch` keeps declining `"dynamic"` entries (C-7: no integrity);
+  `skills_get` and `skills_directory_read` work, and an application that accepts dynamic
+  content reads it with `read_resource`, outside the verified path.
+
+### 9. Typed frontmatter values
+
+The spec renders frontmatter "verbatim as a JSON object" (:208) and hosts compare after
+their own YAML parse (:496) but name no YAML schema. Decision, pending the
+`turul-agent-skills` resolver (handoff H2): a plain scalar is served with its **YAML 1.2
+core schema** type (null, bool, int, float) when YAML 1.1 types it the same way, and the
+skill is refused when the two schemas disagree (`yes`, `on`, `0777`, `1:30`, timestamps),
+because a host using a 1.1 parser would then fail its comparison. Typing stays in
+`turul-agent-skills`; this crate maps the resolved value to JSON. Until H2 ships, §3's
+refusal stands.
+
+### 10. Versioning
 
 `turul-mcp-ext-skills` starts at `0.1.0`, versions independently (ADR-028 §5), and
 publishes after `turul-mcp-protocol-2026-07-28`, before `turul-mcp-server`.
@@ -219,10 +270,24 @@ Each test is named after the clause it proves.
   `s_g1_empty_catalog_still_declares_resources`, `default_build_advertises_nothing`,
   `s_g2_list_paginates_atomic_entries`, `s_g2_get_by_uri_and_unknown_is_invalid_params`,
   `s_g6_read_bytes_match_manifest`, `skill_md_resource_metadata`,
-  `nested_skill_publishes_flat`, `s_g7_directory_read_is_method_not_found`,
+  `nested_skill_publishes_flat`,
   `q10_blocklisted_manifest_uri_refused_at_build`,
   `one_uri_one_content_conflicting_digest_refused`,
   `one_uri_one_content_foreign_resource_refused`.
+- §7 (`tests/ext_skills_2026.rs`): `s_g7_capability_declares_directory_read`,
+  `s_g7_directory_read_lists_direct_children` (files with their `resources/list` metadata,
+  subdirectories as `inode/directory`, not recursive), `s_g7_every_directory_is_readable`
+  (root and every subdirectory of every skill, nested included),
+  `s_g7_non_directory_is_invalid_params` (unknown URI and a file URI), `s_g7_paginates`,
+  `s_g7_directories_not_in_resources_list`.
+- §8 (`tests/ext_skills_2026.rs`): `dynamic_entry_publishes_dynamic_resources`,
+  `dynamic_frontmatter_matches_generated_skill_md`, `dynamic_read_serves_generated_bytes`
+  (multi-segment path), `dynamic_unknown_file_is_invalid_params`,
+  `dynamic_directory_read_discovers_files`, `dynamic_overlapping_paths_refused_at_build`;
+  `uri_template` unit tests for `{+var}`; client `c7_dynamic_entry_declined` unchanged.
+- Client (§6/§7): `c8_directory_read_refused_without_declaration`,
+  `c8_directory_read_lists_children`.
+- Peer: the `sep-2640-skills-directory` scenarios (previously skipped) pass once declared.
 - `entry` (directory-backed): `from_dir_matches_from_files` (nested files listed,
   `.git` skipped), `symlink_inside_skill_is_read`, `symlink_outside_skill_is_refused`,
   `s_g8_over_limit_directory_refused` (513 files on disk refused while the entry is built).
