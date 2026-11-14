@@ -9,6 +9,11 @@
 | `apps-2026-01-26.mdx` | `specification/2026-01-26/apps.mdx` | `298e884ec3f02daba085acdb02042d73bd00b355` (tag `v1.0.0`) | `ee452a7d1b9b7fb900acfeb4d6932d3963375b0f3f37d196a4b93eb80312af0e` | 2026-07-29 |
 | `spec.types.ts` | `src/spec.types.ts` | `92f46a574568a3ddac7600343b7d3c4c4ed7b588` (tag `v1.7.5`) | `2ae52b6156f0f1fd2387717f15a8de968501d264e200d5409f09055297f8bc24` | 2026-07-29 |
 
+Re-verified 2026-11-14 against upstream HEAD `ea3e9d0e624a`: `specification/`
+holds only `2026-01-26/` and `draft/` (no newer dated revision);
+`specification/2026-01-26/apps.mdx` has one commit, `298e884e`, and its sha256
+still matches the table.
+
 ## Which artifact is normative
 
 `apps-2026-01-26.mdx` is the **released, dated** Apps specification. It is the

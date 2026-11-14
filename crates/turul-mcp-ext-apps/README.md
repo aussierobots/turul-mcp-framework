@@ -10,65 +10,50 @@ with, not the Apps version. Vendored spec and its pins: [`schema/README.md`](sch
 
 ## What this crate is
 
-Serde type definitions and three helper functions. Nothing else.
+Serde types, constants and helpers. `turul-mcp-server` serves Apps through its
+generic hooks, so no server feature is needed.
 
 | Type | Wire location |
 |---|---|
-| `UiClientCapabilities` | `capabilities.extensions["io.modelcontextprotocol/ui"]` |
+| `UiClientCapabilities` | client `capabilities.extensions["io.modelcontextprotocol/ui"]` |
 | `UiToolMeta` | a tool's `_meta.ui` — `resourceUri`, `visibility` |
-| `UiResourceMeta` | a UI resource's `_meta.ui` — `csp`, `permissions`, `domain`, `prefersBorder` |
+| `UiResourceMeta` | `_meta.ui` on a UI resource's `resources/read` content item — `csp`, `permissions`, `domain`, `prefersBorder` |
 | `UiResourceCsp`, `UiResourcePermissions`, `UiToolVisibility`, `EmptyObject` | nested in the above |
 
-`EXTENSION_IDENTIFIER`, `MCP_APP_HTML_MIME` and `META_KEY_UI` carry the spec's
-string literals. `declared_by_client` / `client_supports_html_views` read the
-capability back out of a `ClientCapabilities` value you already hold.
+`EXTENSION_IDENTIFIER`, `MCP_APP_HTML_MIME`, `META_KEY_UI` and `UI_URI_SCHEME`
+carry the spec's string literals. `capability()` is the server's
+`capabilities.extensions` entry (`{}`); `declared_by_server` reads it back.
+`declared_by_client` / `client_supports_html_views` read a client's declaration.
+`UiToolMeta::to_meta` and `UiResourceMeta::to_meta` build the `{ "ui": … }`
+`_meta` map.
 
-The crate's own tests assert that these types serialize to the bytes the spec
-document shows. That is the full extent of what is verified.
+## Serving an MCP App with `turul-mcp-server`
 
-## What this crate is **not**
+1. **Advertise** the extension:
+   `.extension_capability(EXTENSION_IDENTIFIER, capability())`.
+2. **Link tools** to the view: return `UiToolMeta::to_meta()` from
+   `HasToolMeta::tool_meta`, or pass it to `ToolBuilder::meta`. List every
+   tool, including `visibility: ["app"]` ones; apps call those through
+   `tools/call`.
+3. **Serve the view** from an `McpResource` whose URI starts with
+   `UI_URI_SCHEME`, whose `mimeType` is `MCP_APP_HTML_MIME`, and whose `read`
+   returns an HTML5 document with `_meta` set to `UiResourceMeta::to_meta()`.
+4. **Degrade in the call.** On 2026-07-28 the client's capabilities ride every
+   request's `_meta`; read them with `SessionContext::client_capabilities()` and
+   `client_supports_html_views`. Return meaningful text `content` either way.
 
-**It is not wired into anything.** A repo-wide grep finds no reference to
-`turul-mcp-ext-apps` from `turul-mcp-server`, `turul-mcp-client`, or any
-example — only the workspace member list and documentation. Concretely:
+`examples/ext-apps-server` does all four, and
+`crates/turul-mcp-server/tests/ext_apps_2026.rs` checks them on the wire.
 
-- The server does **not** advertise or negotiate the Apps extension.
-- The server does **not** dispatch, validate, or filter on `_meta.ui`.
-- `tools/list` does **not** hide tools whose `visibility` omits `"model"`, and
-  `tools/call` does **not** reject app-only calls. Those are MUSTs in the Apps
-  spec, and this crate does not enforce them.
-- The client does **not** declare `io.modelcontextprotocol/ui` in its
-  capabilities.
-- Nothing serves `ui://` resources or applies the CSP/permissions metadata.
+## What belongs to the host, not the server
 
-This is a deliberate intermediate step, recorded in `docs/adr/028-extensions-strategy.md`,
-and its unwired status is tracked in `docs/compliance/extensions.md`. It is
-recorded here too so that the state is visible from the crate itself rather
-than only from a document a consumer may never open.
+- Hiding tools whose `visibility` omits `"model"` from the agent, and rejecting
+  app-originated `tools/call` for tools without `"app"`. The Apps spec
+  (§Visibility) makes both host MUSTs.
+- Sandboxing, building CSP from `_meta.ui.csp`, and the `ui/*` postMessage
+  protocol between host and view. This crate binds none of it.
 
-## What a consumer still has to build
-
-Everything between these types and a working MCP App:
-
-1. **Read the client's declared capability.** On the 2026-07-28 core lane,
-   client capabilities ride `_meta["io.modelcontextprotocol/clientCapabilities"]`
-   on every request rather than an `initialize` handshake. Extract the
-   `ClientCapabilities`, then call `client_supports_html_views` to decide
-   whether to expose UI-enabled tools at all.
-2. **Attach the metadata.** Serialize `UiToolMeta` into each tool's `_meta`
-   under the `META_KEY_UI` key, and `UiResourceMeta` into the UI resource's
-   `_meta`. This crate provides the values; placing them in the outgoing
-   `Tool` / `Resource` is yours.
-3. **Serve the view.** Register a resource whose URI uses the `ui://` scheme
-   and whose `mimeType` is `MCP_APP_HTML_MIME`, returning an HTML5 document
-   via `text` or `blob`.
-4. **Enforce visibility.** Filter `visibility: ["app"]` tools out of
-   `tools/list`, and reject app-originated `tools/call` for tools that do not
-   include `"app"`.
-5. **Everything host-side.** Sandboxing, CSP header construction and the
-   `ui/*` postMessage protocol between host and view belong to the host
-   application, not to a server framework. This crate deliberately binds none
-   of it.
+`turul-mcp-client` does not declare the Apps capability: it renders nothing.
 
 ## Feature flags
 

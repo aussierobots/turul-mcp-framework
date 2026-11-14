@@ -5,10 +5,15 @@
 use serde_json::json;
 use turul_mcp_protocol_2026_07_28::initialize::ClientCapabilities;
 
-use super::capability::{EXTENSION_IDENTIFIER, client_supports_html_views, declared_by_client};
+use turul_mcp_protocol_2026_07_28::initialize::ServerCapabilities;
+
+use super::capability::{
+    EXTENSION_IDENTIFIER, capability, client_supports_html_views, declared_by_client,
+    declared_by_server,
+};
 use super::types::{
-    EmptyObject, MCP_APP_HTML_MIME, UiClientCapabilities, UiResourceCsp, UiResourceMeta,
-    UiResourcePermissions, UiToolMeta, UiToolVisibility,
+    EmptyObject, MCP_APP_HTML_MIME, META_KEY_UI, UI_URI_SCHEME, UiClientCapabilities,
+    UiResourceCsp, UiResourceMeta, UiResourcePermissions, UiToolMeta, UiToolVisibility,
 };
 
 /// The capability rides `capabilities.extensions["io.modelcontextprotocol/ui"]`
@@ -130,4 +135,88 @@ fn permission_values_must_be_empty_objects() {
         serde_json::from_value::<UiResourcePermissions>(json!({ "camera": { "hd": true } }))
             .is_err()
     );
+}
+
+/// The server's extension entry is `{}` (core schema: "an empty object
+/// indicates support with no settings"), and `declared_by_server` reads it back.
+#[test]
+fn server_capability_is_empty_object() {
+    assert_eq!(capability(), json!({}));
+    let caps: ServerCapabilities = serde_json::from_value(json!({
+        "extensions": { EXTENSION_IDENTIFIER: capability() }
+    }))
+    .unwrap();
+    assert!(declared_by_server(&caps));
+    let caps: ServerCapabilities = serde_json::from_value(json!({})).unwrap();
+    assert!(!declared_by_server(&caps));
+}
+
+/// `UiToolMeta::to_meta` reproduces both tool `_meta` examples in the spec
+/// (apps-2026-01-26.mdx, "Example (tool visible to both model and app)" and
+/// "Example (app-only tool, hidden from model)"), and never emits the
+/// deprecated flat `ui/resourceUri` key.
+#[test]
+fn tool_to_meta_matches_spec_examples() {
+    let both = UiToolMeta {
+        resource_uri: Some("ui://weather-server/dashboard-template".into()),
+        visibility: Some(vec![UiToolVisibility::Model, UiToolVisibility::App]),
+    }
+    .to_meta();
+    assert_eq!(
+        serde_json::to_value(&both).unwrap(),
+        json!({ "ui": {
+            "resourceUri": "ui://weather-server/dashboard-template",
+            "visibility": ["model", "app"]
+        }})
+    );
+
+    let app_only = UiToolMeta {
+        resource_uri: Some("ui://weather-server/dashboard-template".into()),
+        visibility: Some(vec![UiToolVisibility::App]),
+    }
+    .to_meta();
+    assert_eq!(
+        serde_json::to_value(&app_only).unwrap(),
+        json!({ "ui": {
+            "resourceUri": "ui://weather-server/dashboard-template",
+            "visibility": ["app"]
+        }})
+    );
+
+    assert_eq!(both.len(), 1);
+    assert!(both.contains_key(META_KEY_UI));
+    assert!(!both.contains_key("ui/resourceUri"));
+}
+
+/// `UiResourceMeta::to_meta` reproduces the `_meta` of the spec's
+/// "Resource content with metadata" example.
+#[test]
+fn resource_to_meta_matches_spec_example() {
+    let meta = UiResourceMeta {
+        csp: Some(UiResourceCsp {
+            connect_domains: Some(vec!["https://api.openweathermap.org".into()]),
+            resource_domains: Some(vec!["https://cdn.jsdelivr.net".into()]),
+            ..Default::default()
+        }),
+        prefers_border: Some(true),
+        ..Default::default()
+    }
+    .to_meta();
+    assert_eq!(
+        serde_json::to_value(&meta).unwrap(),
+        json!({ "ui": {
+            "csp": {
+                "connectDomains": ["https://api.openweathermap.org"],
+                "resourceDomains": ["https://cdn.jsdelivr.net"]
+            },
+            "prefersBorder": true
+        }})
+    );
+}
+
+/// The URI scheme constant matches the spec's `ui://` requirement and its examples.
+#[test]
+fn ui_uri_scheme_literal() {
+    assert_eq!(UI_URI_SCHEME, "ui://");
+    assert!("ui://weather-server/dashboard-template".starts_with(UI_URI_SCHEME));
 }

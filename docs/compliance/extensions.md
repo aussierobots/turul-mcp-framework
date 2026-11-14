@@ -6,7 +6,8 @@ are `turul | python | typescript | go`; `—` means not exercised, never "pass".
 Test paths are relative to the repo root. `c/` abbreviates `crates/`.
 
 Extensions are **off by default** in this framework: `ext-tasks` is a non-default
-Cargo feature, and `turul-mcp-ext-apps` is not wired into any crate. That matches
+Cargo feature, and MCP Apps is advertised only by a server that calls
+`extension_capability` itself. That matches
 the spec's rule that SDKs must not enable an extension unless the operator opted
 in, and since this slice it is asserted at runtime as well as guaranteed
 structurally — a default build is checked to advertise no `extensions` map and to
@@ -53,22 +54,28 @@ turul-on-turul.
 
 | Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
 |---|---|---|---|---|---|---|---|---|
-| Tool `_meta.ui` → `UiToolMeta`; UI-resource `_meta.ui` → `UiResourceMeta` | MUST | **Not implemented** (types only) | `c/turul-mcp-ext-apps/src/v2026_07_28/types.rs` | `compliance_test.rs` — wire shapes only, crate-internal | — | — | — | — |
-| Client `mimeTypes` capability including `text/html;profile=mcp-app` | MUST | **Not implemented** | `capability.rs` | crate-internal only | — | — | — | — |
+| Server declares `io.modelcontextprotocol/ui: {}` | convention (core schema: `{}` = support, no settings) | **Implemented** (generic hook) | `extension_capability` + `ext_apps::capability()` | `c/turul-mcp-server/tests/ext_apps_2026.rs::adr028_server_declares_ui_extension_via_extension_capability` | ✅ | — | — | — |
+| Tool `_meta.ui` → `UiToolMeta` | — | **Implemented** (generic hook) | `HasToolMeta` / `ToolBuilder::meta` + `UiToolMeta::to_meta` | `ext_apps_2026.rs::apps_visibility_is_a_host_duty_server_lists_app_only_tools_with_ui_meta` | ✅ | — | — | — |
+| UI resource: `ui://` URI, `text/html;profile=mcp-app`, `_meta.ui` on the read content item | MUST | **Implemented** (generic hook) | `McpResource::read` + `UiResourceMeta::to_meta` | `ext_apps_2026.rs::apps_ui_resource_reads_with_mcp_app_mime_and_content_item_ui_meta` | ✅ | — | — | — |
+| Tools return meaningful `content` with or without UI; server SHOULD check client capability | MUST / SHOULD | **Implemented** (in the call) | `SessionContext::client_capabilities` + `client_supports_html_views` | `ext_apps_2026.rs::apps_graceful_degradation_tool_returns_text_content_with_or_without_ui_capability` | ✅ | — | — | — |
+| Hide non-`model` tools from the agent; reject app `tools/call` for non-`app` tools | MUST (host) | **Out of scope** | Apps spec §Visibility assigns both to the host; the server lists every tool | n/a | n/a | n/a | n/a | n/a |
+| Client `mimeTypes` capability including `text/html;profile=mcp-app` | MUST (host) | **Not implemented** | `turul-mcp-client` renders nothing, so it does not declare it | — | — | — | — | — |
 | Host↔view iframe protocol (`ui/*` over postMessage) | MUST | **Out of scope** | belongs to app/host SDKs, not a server framework | n/a | n/a | n/a | n/a | n/a |
 
-**`turul-mcp-ext-apps` is unwired, and now says so.** A repo-wide grep finds the
-crate referenced only by its own files, the workspace member list and
-documentation — zero references from `turul-mcp-server` or `turul-mcp-client`. It
-defines and self-tests the wire shapes and nothing consumes them: no server-side
-capability advertisement, no client-side `_meta.ui` handling; `tools/list` does
-not hide non-`model` tools and `tools/call` does not reject app-only calls, both
-Apps-spec MUSTs. The crate's `README.md` now states this in its own words, lists
-the five things a consumer must build, and notes that `ClientCapabilities` has to
-be read from `_meta["io.modelcontextprotocol/clientCapabilities"]` because
-2026-07-28 is stateless and there is no handshake to read them from. The
-disclosure does not make the extension usable — it stops someone adding the
-dependency expecting it to be.
+**Served through generic hooks, with no server feature.** `turul-mcp-server` has
+no Apps code: a server advertises the extension with `extension_capability`,
+attaches `_meta.ui` through `HasToolMeta` or `ToolBuilder::meta`, serves the view
+from an ordinary `McpResource`, and degrades inside the tool by reading the
+per-request client capabilities. `examples/ext-apps-server` does this, and its
+`server/discover`, `tools/list`, `resources/read` and `tools/call` responses were
+read back live with curl. Every ✅ above is turul-on-turul: no peer SDK and no
+upstream conformance scenario exercises Apps.
+
+**UI tools are always listed.** The Apps spec's SHOULD (§Server Behavior: check
+client capabilities "before registering UI-enabled tools") assumes a
+registration-time handshake; 2026-07-28 has none, and varying `tools/list` by
+caller would contradict its `ttlMs` / `cacheScope`. A host without Apps support
+ignores `_meta.ui`, and the tool's text `content` covers it.
 
 **The vendored spec was the wrong artifact and is now the right one.** The crate
 shipped `apps-draft.mdx`, a byte-exact copy of upstream `specification/draft/apps.mdx`
@@ -94,10 +101,9 @@ path, so an honestly-recorded pin at a floating path fails the gate.
 
 ## Gap register
 
-1. **`turul-mcp-ext-apps` is not wired into the server or the client.** It is a
-   types-only crate. That is now disclosed in its README rather than discovered,
-   but the extension still cannot be used through the framework: wiring it is a
-   design decision nobody has taken.
+1. **`turul-mcp-client` does not declare the Apps capability.** The server side is
+   served through generic hooks (§3); the client renders nothing, so declaring
+   `mimeTypes` would advertise what the library cannot honour alone.
 2. **No peer has exercised the Tasks extension.** Its coverage is thorough and
    entirely self-referential. Three peers now drive the core surface — the Go
    SDK, the TypeScript SDK and FastMCP — and none of them touches the extension,

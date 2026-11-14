@@ -39,6 +39,7 @@ members = [
   "examples/derive-macro-server",
   "examples/dynamic-tools-server",
   "examples/elicitation-server",
+  "examples/ext-apps-server",
   "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
@@ -150,6 +151,7 @@ default-members = [
   "examples/completion-server",
   "examples/conformance-fixture-server",
   "examples/derive-macro-server",
+  "examples/ext-apps-server",
   "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
@@ -265,6 +267,7 @@ turul-http-mcp-server = { version = "0.4", path = "crates/turul-http-mcp-server"
 turul-mcp-server = { version = "0.4", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.4", path = "crates/turul-mcp-derive" }
 turul-mcp-client = { version = "0.4", path = "crates/turul-mcp-client" }
+turul-mcp-ext-apps = { version = "0.1", path = "crates/turul-mcp-ext-apps" }
 turul-mcp-ext-tasks = { version = "0.1", path = "crates/turul-mcp-ext-tasks" }
 turul-mcp-builders = { version = "0.4", path = "crates/turul-mcp-builders" }
 turul-mcp-aws-lambda = { version = "0.4", path = "crates/turul-mcp-aws-lambda" }

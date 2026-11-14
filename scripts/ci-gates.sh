@@ -52,6 +52,8 @@ gate_default() {
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test tool_icons_2026
   run "2026 resource mimeType agreement (list vs read)" \
     cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test resource_mime_type_2026
+  run "2026 MCP Apps served through generic hooks (no server feature)" \
+    cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test ext_apps_2026
   # Spec-neutral test infrastructure: closes the reserve->bind window that let
   # two suites be handed the same ephemeral port under whole-workspace runs.
   run "test port handoff (no reservation overlap)" \
