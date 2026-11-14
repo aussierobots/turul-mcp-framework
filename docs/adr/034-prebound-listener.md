@@ -75,4 +75,4 @@ it, and a retry can still land on another server); a cross-process lock file
 ## Revision log
 
 - **2026-11-14**: Initial, Proposed.
-- **2026-11-14**: Accepted. 43 server and client test files, 9 integration test files and 6 examples migrated; `reserve_port`, `ReservedPort` and `PORT_HANDOFF` in the server test support, and `crates/turul-mcp-server/tests/port_handoff.rs`, deleted. Child-process sites recorded as out of scope.
+- **2026-11-14**: Accepted. 45 server and client test files, 9 integration test files and 6 examples migrated; `reserve_port`, `ReservedPort` and `PORT_HANDOFF` in the server test support, and `crates/turul-mcp-server/tests/port_handoff.rs`, deleted. Child-process sites recorded as out of scope.
