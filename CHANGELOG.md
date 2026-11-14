@@ -7,12 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-`turul-mcp-derive` 0.4.5 → 0.4.6, `turul-http-mcp-server` 0.4.6 → 0.4.7,
-`turul-mcp-server` 0.4.6 → 0.4.7, `turul-mcp-client` 0.4.7 → 0.4.8,
-`turul-mcp-server-state-storage` 0.4.1 → 0.4.2.
+## [0.4.21] - 2026-11-14
+
+`turul-mcp-derive` 0.4.5 → 0.4.6, `turul-http-mcp-server` 0.4.6 → 0.4.8,
+`turul-mcp-server` 0.4.6 → 0.4.8, `turul-mcp-client` 0.4.7 → 0.4.9,
+`turul-mcp-server-state-storage` 0.4.1 → 0.4.2, `turul-mcp-ext-tasks` 0.1.6 → 0.1.7.
 
 ### Fixed
 
+- **`subscriptions/listen` refuses `taskIds` from a client that did not declare the Tasks
+  extension.** It now answers `-32021` with `data.requiredCapabilities.extensions`, as
+  tasks.md §Task Status Notifications requires, instead of opening a stream that silently drops
+  the filter. A server that does not advertise the extension still ignores `taskIds`.
+  Spec-compliance fix; behaviour change for non-declaring clients. Patch release.
+- **The client sends `Mcp-Name` = `params.taskId` on `tasks/get`, `tasks/update` and
+  `tasks/cancel`** (tasks.md §Streamable HTTP: Routing Headers), so intermediaries can route a
+  task's requests to the instance holding it. Spec-compliance fix. Patch release.
 - **The workspace builds warning-free and clippy-clean on rustc 1.100, on both spec lanes.** That release adds
   cargo's `unused_dependencies` lint and clippy's `duplicated_attributes`, which failed the
   test-build warning sweep and `clippy -D warnings` on `main`. No public API or behaviour
@@ -39,27 +49,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **The test-build warning sweep covers every package the gates test, on both lanes.** It ran
-  only on `default-members`, so `turul-mcp-client` (not a default member) carried 9 warnings
-  unseen. `scripts/warning-sweep.sh default|opt-in-2025` holds the one list, built with the same
-  features the gates use; `ci-gates.sh` and CI both call it. No crate changes.
-
-`turul-mcp-ext-tasks` 0.1.6 → 0.1.7, `turul-http-mcp-server` → 0.4.8,
-`turul-mcp-server` → 0.4.8, `turul-mcp-client` → 0.4.9.
-
-### Fixed
-
-- **`subscriptions/listen` refuses `taskIds` from a client that did not declare the Tasks
-  extension.** It now answers `-32021` with `data.requiredCapabilities.extensions`, as
-  tasks.md §Task Status Notifications requires, instead of opening a stream that silently drops
-  the filter. A server that does not advertise the extension still ignores `taskIds`.
-  Spec-compliance fix; behaviour change for non-declaring clients. Patch release.
-- **The client sends `Mcp-Name` = `params.taskId` on `tasks/get`, `tasks/update` and
-  `tasks/cancel`** (tasks.md §Streamable HTTP: Routing Headers), so intermediaries can route a
-  task's requests to the instance holding it. Spec-compliance fix. Patch release.
-
-### Changed
-
 - **Tasks re-pinned to the released 2026-07-28 artifacts.** `turul-mcp-ext-tasks` vendors
   ext-tasks `specification/2026-07-28/tasks.md` (`899c1bbc`) and
   `schema/2026-07-28/schema.{ts,json}` (`0d0a6bd4`) in place of the `schema/draft/` copies, and
@@ -72,6 +61,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`missing_capability_error` moved from `turul_mcp_server::ext_tasks` to
   `turul_mcp_ext_tasks`.** Removing the server path is formally semver-breaking; it ships as a
   patch under the 0.4 rule. Call `turul_mcp_ext_tasks::missing_capability_error()` instead.
+- **The test-build warning sweep covers every package the gates test, on both lanes.** It ran
+  only on `default-members`, so `turul-mcp-client` (not a default member) carried 9 warnings
+  unseen. `scripts/warning-sweep.sh default|opt-in-2025` holds the one list, built with the same
+  features the gates use; `ci-gates.sh` and CI both call it. No crate changes.
 
 ## [0.4.20] - 2026-11-12
 
@@ -2845,7 +2838,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.20...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.21...HEAD
+[0.4.21]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.20...v0.4.21
 [0.4.20]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.19...v0.4.20
 [0.4.19]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.18...v0.4.19
 [0.4.18]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.17...v0.4.18
