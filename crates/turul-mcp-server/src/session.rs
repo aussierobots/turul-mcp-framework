@@ -465,7 +465,6 @@ impl SessionContext {
     // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
     // remains a valid feature the framework supports.
     #[allow(deprecated)]
-    #[allow(deprecated)] // SEP-2577 migration window
     pub async fn notify_log(
         &self,
         level: turul_mcp_protocol::logging::LoggingLevel,

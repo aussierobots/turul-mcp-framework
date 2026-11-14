@@ -342,7 +342,7 @@ git commit        # Only when user explicitly requests a commit
 
 Before publishing a new version:
 
-1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml`. The `[workspace.dependencies]` pins are **minor**-level (`turul-http-mcp-server = { version = "0.4", path = ... }`), so a patch bump needs no pin edit — the existing caret range already admits `0.4.2`. Touch a pin only when that crate's minor moves. Per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md), `[workspace.package].version` is *not* authoritative — updating only it changes nothing that ships.
+1. **Crate versions**: Bump the literal `version = "X.Y.Z"` in each changed crate's `Cargo.toml`. The `[workspace.dependencies]` pins are **minor**-level (`turul-http-mcp-server = { version = "0.4", path = ... }`), so a patch bump needs no pin edit — the existing caret range already admits `0.4.2`. Touch a pin only when that crate's minor moves. Per [docs/rules/crate-versioning.md](docs/rules/crate-versioning.md), there is no workspace-level version; each crate's literal is the only one.
 2. **Example server versions**: nothing to hand-edit — all examples that set a server
    version use `.version(env!("CARGO_PKG_VERSION"))`, so bumping the example's own
    `[package] version` in `examples/<name>/Cargo.toml` is what moves the wire value.
@@ -374,7 +374,8 @@ Before publishing a new version:
    `turul-mcp-framework-integration-tests` is `publish = false`.
 
    Regenerate this list rather than hand-editing it — `turul-mcp-server` depends on
-   `turul-mcp-oauth` non-optionally, so an order that publishes the server first fails:
+   `turul-mcp-oauth` (optional, via `ext-tasks`), and crates.io resolves optional deps too, so
+   an order that publishes the server first fails:
    ```bash
    cargo metadata --format-version 1 --no-deps   # then topo-sort on kind == null deps
    ```

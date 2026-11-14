@@ -78,11 +78,8 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: Test
         run: cargo test
-      - name: Warning sweep on the test build
-        run: |
-          n=$(cargo test --no-run 2>&1 | grep -c 'warning:' || true)
-          echo "test-build warnings: $n"
-          test "$n" = "0"
+      - name: Warning sweep on the test builds (default lane)
+        run: ./scripts/warning-sweep.sh default
       - name: 2026 stateless acceptance (real HTTP)
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,protocol-2026-07-28 --test discover_stateless_2026
       - name: 2026 HTTP surface (GET/DELETE 405, session-id ignored)
@@ -176,6 +173,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Warning sweep on the test builds (2025-11-25 lane)
+        run: ./scripts/warning-sweep.sh opt-in-2025
       - name: Per-crate 2025-11-25 build matrix
         run: |
           set -euxo pipefail

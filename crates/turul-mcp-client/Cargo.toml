@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-client"
-version = "0.4.7"
+version = "0.4.8"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -30,7 +30,8 @@ turul-rpc = { workspace = true }
 # JSON Schema 2020-12 dialect validation, client-side trust boundary.
 # A dedicated leaf crate with no dependency on any protocol crate (normal or
 # alias) — safe to link unconditionally without any alias-mutex risk.
-turul-mcp-schema-validation = { workspace = true }
+# 2026-07-28 wire path only: validates tools/list inputSchema.
+turul-mcp-schema-validation = { workspace = true, optional = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
@@ -48,7 +49,6 @@ serde_json = { workspace = true }
 # Utilities
 url = { workspace = true }
 thiserror = { workspace = true }
-anyhow = { workspace = true }
 rand = { workspace = true }
 parking_lot = { workspace = true }
 
@@ -67,7 +67,7 @@ sse = ["tokio-util"]
 # Spec-coexistence (mutually exclusive — enforced by compile_error! in lib.rs).
 # Bilingual (default) links both protocol crates; one McpClient negotiates the
 # wire spec per connection at connect() time.
-client-bilingual = ["dep:turul-mcp-protocol-2026-07-28"]
+client-bilingual = ["dep:turul-mcp-protocol-2026-07-28", "dep:turul-mcp-schema-validation"]
 # Tasks extension (io.modelcontextprotocol/tasks, SEP-2663) client surface —
 # 2026-07-28 connections only; off by default per SEP-2133.
 ext-tasks = ["dep:turul-mcp-ext-tasks"]
@@ -76,7 +76,7 @@ ext-tasks = ["dep:turul-mcp-ext-tasks"]
 # 2025-11-25 protocol crate is always linked as the shared type vocabulary;
 # narrowing controls which WIRE paths compile.
 client-2025-11-25-only = []
-client-2026-07-28-only = ["dep:turul-mcp-protocol-2026-07-28"]
+client-2026-07-28-only = ["dep:turul-mcp-protocol-2026-07-28", "dep:turul-mcp-schema-validation"]
 
 [dev-dependencies]
 tokio-test.workspace = true
