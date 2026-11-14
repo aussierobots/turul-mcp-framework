@@ -105,6 +105,12 @@ points at the server, so a bare `cargo run -p simple-sqlite-session` works.
 | **logging-test-server** | 2025-11-25 (pinned) | 8003 | `logging/setLevel` plus per-session SSE log delivery |
 | **logging-test-client** | 2025-11-25 (pinned) | targets `:8003` | Drives the server across three thresholds with PASS/FAIL counts |
 
+## Skills
+
+| Example | Lane | Port | Demonstrates |
+|---|---|---|---|
+| **ext-skills-server** | 2026-07-28 | 8650 | The Skills *extension* (SEP-2640): serves `plugins/turul-mcp-skills/skills/*` through `skills/list`, `skills/get` and digest-verified `resources/read` (ADR-033) |
+
 ## Tasks
 
 | Example | Lane | Port | Demonstrates |

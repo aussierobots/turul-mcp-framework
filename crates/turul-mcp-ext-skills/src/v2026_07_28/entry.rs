@@ -3,8 +3,9 @@
 //! `turul-agent-skills`, then [`Frontmatter`], [`SkillPath`] and [`Manifest`].
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
-use turul_agent_skills::{ErrorCode, load_str};
+use turul_agent_skills::{ErrorCode, bundled_files, load, load_str};
 
 use super::frontmatter::{Frontmatter, FrontmatterError};
 use super::manifest::{Manifest, ManifestError, SkillResource};
@@ -50,6 +51,16 @@ pub enum EntryError {
         skill: String,
         source: ManifestError,
     },
+    /// A file of the skill directory could not be listed or read.
+    #[error("skill {skill}: cannot read {file}: {message}")]
+    Read {
+        skill: String,
+        file: String,
+        message: String,
+    },
+    /// A symlink in the skill resolves outside the skill directory.
+    #[error("skill {skill}: {file} is a symlink to a target outside the skill directory")]
+    SymlinkEscapes { skill: String, file: String },
 }
 
 /// A publishable skill: its path, frontmatter, manifest and the exact bytes the
@@ -63,6 +74,52 @@ pub struct SkillEntry {
 }
 
 impl SkillEntry {
+    /// Build the entry for the skill directory `dir` (ADR-033 §5,
+    /// "Directory-backed entries"): validated by `turul_agent_skills::load`, files
+    /// listed by `turul_agent_skills::bundled_files`, bytes read here. A symlink is
+    /// read only when its canonical target is inside the canonical `dir`.
+    pub fn from_dir(path: SkillPath, dir: &Path) -> Result<Self, EntryError> {
+        let skill = path.skill_md_uri();
+        let read_err = |file: &str, e: std::io::Error| EntryError::Read {
+            skill: skill.clone(),
+            file: file.to_string(),
+            message: e.to_string(),
+        };
+        let loaded = load(dir).map_err(|skip| EntryError::Invalid {
+            skill: skill.clone(),
+            errors: skip.errors.iter().map(ToString::to_string).collect(),
+        })?;
+        let skill_md = loaded
+            .skill
+            .location()
+            .ok_or_else(|| EntryError::NoSkillMd(skill.clone()))?;
+        let root = dir.canonicalize().map_err(|e| read_err(".", e))?;
+        let mut files = vec![SkillFile::new(
+            "SKILL.md",
+            std::fs::read(skill_md).map_err(|e| read_err("SKILL.md", e))?,
+        )];
+        let listed = bundled_files(&loaded.skill).map_err(|e| read_err(".", e))?;
+        for relative in listed {
+            let full = dir.join(&relative);
+            let is_link = std::fs::symlink_metadata(&full)
+                .map_err(|e| read_err(&relative, e))?
+                .file_type()
+                .is_symlink();
+            if is_link {
+                let target = full.canonicalize().map_err(|e| read_err(&relative, e))?;
+                if !target.starts_with(&root) {
+                    return Err(EntryError::SymlinkEscapes {
+                        skill,
+                        file: relative,
+                    });
+                }
+            }
+            let bytes = std::fs::read(&full).map_err(|e| read_err(&relative, e))?;
+            files.push(SkillFile::new(relative, bytes));
+        }
+        Self::from_files(path, files)
+    }
+
     /// Build the entry for the skill at `path` from all of its files.
     ///
     /// `files` must be the complete contents of the skill directory, nested
@@ -234,6 +291,82 @@ mod tests {
             .to_wire();
         assert_eq!(wire.frontmatter["tags"], serde_json::json!(["x"]));
         assert_eq!(wire.frontmatter["x-future"], "v");
+    }
+
+    fn write(dir: &std::path::Path, rel: &str, body: &str) {
+        let p = dir.join(rel);
+        std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+        std::fs::write(p, body).unwrap();
+    }
+
+    fn skill_dir(name: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join(name);
+        write(
+            &dir,
+            "SKILL.md",
+            &format!("---\nname: {name}\ndescription: Does {name}.\n---\nBody\n"),
+        );
+        (tmp, dir)
+    }
+
+    /// ADR-033 §5: a directory-backed entry equals the in-memory entry built from
+    /// the same files, nested skill files included; `.git` is not content.
+    #[test]
+    fn from_dir_matches_from_files() {
+        let (_tmp, dir) = skill_dir("outer");
+        write(&dir, "references/GUIDE.md", "# Guide\n");
+        write(
+            &dir,
+            "inner/SKILL.md",
+            "---\nname: inner\ndescription: In.\n---\n",
+        );
+        write(&dir, ".git/HEAD", "ref: refs/heads/main\n");
+        let from_dir = SkillEntry::from_dir(path(&[], "outer"), &dir).unwrap();
+        let from_files = SkillEntry::from_files(
+            path(&[], "outer"),
+            vec![
+                SkillFile::new("SKILL.md", std::fs::read(dir.join("SKILL.md")).unwrap()),
+                SkillFile::new("references/GUIDE.md", "# Guide\n"),
+                SkillFile::new(
+                    "inner/SKILL.md",
+                    "---\nname: inner\ndescription: In.\n---\n",
+                ),
+            ],
+        )
+        .unwrap();
+        assert_eq!(from_dir.manifest(), from_files.manifest());
+    }
+
+    /// ADR-033 §5: a symlink whose target stays inside the skill is served.
+    #[cfg(unix)]
+    #[test]
+    fn symlink_inside_skill_is_read() {
+        let (_tmp, dir) = skill_dir("linked");
+        write(&dir, "real.md", "real\n");
+        std::os::unix::fs::symlink("real.md", dir.join("alias.md")).unwrap();
+        let e = SkillEntry::from_dir(path(&[], "linked"), &dir).unwrap();
+        let alias = e
+            .files()
+            .find(|(r, _)| r.uri() == "skill://linked/alias.md")
+            .expect("alias listed");
+        assert_eq!(alias.1, b"real\n");
+    }
+
+    /// ADR-033 §5: a symlink out of the skill directory refuses the skill.
+    #[cfg(unix)]
+    #[test]
+    fn symlink_outside_skill_is_refused() {
+        let (tmp, dir) = skill_dir("leaky");
+        write(tmp.path(), "secret.txt", "secret\n");
+        std::os::unix::fs::symlink(tmp.path().join("secret.txt"), dir.join("s.txt")).unwrap();
+        assert_eq!(
+            SkillEntry::from_dir(path(&[], "leaky"), &dir).unwrap_err(),
+            EntryError::SymlinkEscapes {
+                skill: "skill://leaky/SKILL.md".into(),
+                file: "s.txt".into()
+            }
+        );
     }
 
     /// Nested skills: the enclosing manifest lists the nested files; the nested

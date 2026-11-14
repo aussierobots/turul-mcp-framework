@@ -41,6 +41,7 @@ members = [
   "examples/dynamic-tools-server",
   "examples/elicitation-server",
   "examples/ext-apps-server",
+  "examples/ext-skills-server",
   "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
@@ -154,6 +155,7 @@ default-members = [
   "examples/conformance-fixture-server",
   "examples/derive-macro-server",
   "examples/ext-apps-server",
+  "examples/ext-skills-server",
   "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
@@ -220,7 +222,7 @@ hmac = "0.13"
 sha2 = "0.11"
 # Agent Skills parsing and validation (sibling repo, crates.io); owner of the
 # SKILL.md format for turul-mcp-ext-skills (ADR-033).
-turul-agent-skills = "0.1"
+turul-agent-skills = "0.1.3"
 getrandom = "0.4"
 thiserror = "2.0"
 async-trait = "0.1"

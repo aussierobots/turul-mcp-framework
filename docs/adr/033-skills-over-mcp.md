@@ -53,7 +53,7 @@ behaves so; no change.
 | Thing | Owner symbol (entrypoint) | Notes |
 |---|---|---|
 | SKILL.md parsing, YAML scalar typing flag, name rules, skill validation | `turul_agent_skills::{parse_skill_md, load_str, SkillName}` | Imported, never re-implemented here |
-| Enumerating a skill directory's files | `turul_agent_skills::bundled_files(&Skill)` (handoff H1; built, release pending) | The framework contains no directory walker; until that release is on crates.io, catalogs take caller-supplied `(relative path, bytes)` |
+| Enumerating a skill directory's files | `turul_agent_skills::bundled_files(&Skill)` (turul-agent-skills 0.1.3) | The framework contains no directory walker; `SkillEntry::from_dir` lists through it and reads the bytes |
 | Extension identifier, capability value | `turul_mcp_ext_skills::v2026_07_28::capability::{EXTENSION_IDENTIFIER, SkillsCapability, capability}` | `capability(SkillsCapability)` is the only producer of the `extensions[...]` value |
 | `skill://` URI | `v2026_07_28::uri::SkillPath` (`SkillPath::new`, `.skill_md_uri()`, `.file_uri()`) | The only place a `skill://` string is formatted |
 | Digest and size | `v2026_07_28::manifest::SkillResource::of(uri, bytes)` | The only producer of a `sha256:` digest |
@@ -149,7 +149,7 @@ shadowing, which is right for a host but wrong here: the spec makes names labels
 allows `acme/billing/refunds` beside `acme/support/refunds` (:214-221). The catalog
 takes explicit `(SkillPath, files)` pairs.
 
-**Directory-backed entries (lands with turul-agent-skills 0.1.3, which adds `bundled_files`; the dependency is then pinned `"0.1.3"`, since `"0.1"` admits patches without it).** `SkillEntry::from_dir(path,
+**Directory-backed entries (turul-agent-skills 0.1.3, which adds `bundled_files`; pinned `"0.1.3"`, since `"0.1"` admits patches without it).** `SkillEntry::from_dir(path,
 dir)` = `load(dir)` with empty diagnostics, then `bundled_files(&skill)` plus the loaded
 `SKILL.md`, then the bytes of each, then `from_files`. `bundled_files` lists symlinks
 without following them (turul-agent-skills ADR-011 D19); `from_dir` reads through a
@@ -197,9 +197,13 @@ Each test is named after the clause it proves.
   `q10_blocklisted_manifest_uri_refused_at_build`,
   `one_uri_one_content_conflicting_digest_refused`,
   `one_uri_one_content_foreign_resource_refused`.
-- Peer (not yet run; blocked on turul-agent-skills 0.1.3 for the directory-backed
-  example): conformance `0.2.0-alpha.12` `sep-2640-*` server checks against
-  `examples/ext-skills-server`, serving `plugins/turul-mcp-skills/skills/*`.
+- `entry` (directory-backed): `from_dir_matches_from_files` (nested files listed,
+  `.git` skipped), `symlink_inside_skill_is_read`, `symlink_outside_skill_is_refused`.
+- Peer and readback: `scripts/ext-skills-conformance.sh` (in `ci-gates.sh conformance`)
+  starts `examples/ext-skills-server` serving `plugins/turul-mcp-skills/skills/*`,
+  re-hashes every served file with `sha256sum` and against the bytes on disk, then runs
+  the conformance `sep-2640-skills-enumeration`, `-manifest` and `-directory` scenarios
+  at the harness version pinned in `conformance-suite.sh`.
 
 ## Consequences
 
@@ -207,11 +211,15 @@ Each test is named after the clause it proves.
   static for the process lifetime. A changed skill needs a restart.
 - Skills with typed frontmatter, or with files under `etc/`, `proc/` or containing
   `..`, cannot be served yet; the error says which and why.
-- Directory-backed catalogs wait on H1. Until then the catalog is built from
-  in-memory files, which also serves skills embedded in a binary.
+- Catalogs are built from skill directories (`from_dir`) or from in-memory files
+  (`from_files`), which also serves skills embedded in a binary.
 
 ## Revision log
 
+- **2026-11-14 (S4)**: directory-backed entries through `bundled_files` (turul-agent-skills
+  0.1.3) with the in-directory symlink rule; `examples/ext-skills-server` and the live gate.
+  First run: 12 plugin skills, 75 files re-hashed, conformance enumeration 32/32, manifest 6/6,
+  directory checks skipped (`directoryRead` not declared).
 - **2026-11-14**: Proposed. Same day, after review: `UnknownField` diagnostics no longer
   refuse a skill (:208 passthrough); one-URI-one-content rule added to §5; Q10 text names
   the call actually made.

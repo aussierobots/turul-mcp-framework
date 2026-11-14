@@ -31,8 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crate `turul-mcp-ext-skills` holds the wire types and the only producers of `skill://`
   URIs (`SkillPath`), `sha256:` digests (`SkillResource::of`), complete manifests within
   the 512-file / 16 MiB limits (`Manifest::new`), verbatim frontmatter
-  (`Frontmatter::from_skill_md`) and entries (`SkillEntry::from_files`). SKILL.md parsing
-  and validation come from `turul-agent-skills` 0.1. Vendored `specification/beta/skills.mdx`
+  (`Frontmatter::from_skill_md`) and entries (`SkillEntry::from_dir`, `from_files`).
+  SKILL.md parsing, validation and the directory walk come from `turul-agent-skills` 0.1.3;
+  a symlink pointing outside the skill directory refuses the skill. Vendored `specification/beta/skills.mdx`
   at `ff224337`, checked by `scripts/check-schema-pin.sh`.
 - **`turul-mcp-server` feature `ext-skills`** (off by default): `with_ext_skills(catalog)`
   declares the extension and the `resources` capability, serves `skills/list` and
@@ -40,8 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bytes. A manifest URI the `resources/read` policy would reject (`..`, `/etc/`, `/proc/`)
   fails `build()` with the file named, as does a skill-file URI that two skills list with
   different bytes or that another resource already holds. Additive patch release.
+- **`examples/ext-skills-server`** serves the repo's 12 plugin skills; `scripts/ext-skills-conformance.sh`
+  (in `ci-gates.sh conformance`) re-hashes every served file and runs the upstream
+  `sep-2640-*` server scenarios: enumeration 32/32, manifest 6/6.
 - Not yet: frontmatter with typed (non-string) values, `"dynamic"` skills,
-  `resources/directory/read`, directory-backed catalogs, and Lambda.
+  `resources/directory/read`, and Lambda.
 
 
 ### Fixed

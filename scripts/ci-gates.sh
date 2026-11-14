@@ -244,6 +244,13 @@ gate_conformance() {
   elif [ "$rc" = "78" ]; then echo "  STALE PIN (suite passed at the pinned version; upstream has a newer alpha)"; fail=1
   else echo "  FAIL"; fail=1
   fi
+  echo "=== Skills extension live gate (readback re-hash + sep-2640 scenarios) ==="
+  ./scripts/ext-skills-conformance.sh
+  rc=$?
+  if [ "$rc" = "0" ]; then echo "  PASS"
+  elif [ "$rc" = "77" ]; then echo "  SKIPPED (npx unavailable)"
+  else echo "  FAIL"; fail=1
+  fi
 }
 
 case "${1:-all}" in
