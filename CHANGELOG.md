@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.23] - 2026-11-14
+
 `turul-mcp-protocol-2026-07-28` 0.4.1 → 0.4.2; examples `minimal-server`, `tools-test-server`,
 `tasks-e2e-inmemory-server`, `dynamic-tools-server` → 0.4.1 and `resource-test-server`,
 `prompts-test-server`, `sampling-server`, `roots-server`, `elicitation-server` → 0.4.2.
@@ -2971,7 +2973,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.22...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.23...HEAD
+[0.4.23]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.22...v0.4.23
 [0.4.22]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.21...v0.4.22
 [0.4.21]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.20...v0.4.21
 [0.4.20]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.19...v0.4.20
