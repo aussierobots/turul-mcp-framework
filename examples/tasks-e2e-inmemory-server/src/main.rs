@@ -69,7 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let args = Args::parse();
-    let addr = format!("127.0.0.1:{}", args.port);
+    let listener = std::net::TcpListener::bind(("127.0.0.1", args.port))?;
+    let addr = listener.local_addr()?;
+    println!("MCP_LISTEN_ADDR={addr}");
 
     let server = McpServer::builder()
         .name("tasks-e2e-inmemory-server")
@@ -77,7 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
         .tool_fn(slow_add)
         .tool_fn(slow_cancelable)
-        .bind_address(addr.parse()?)
+        .listener(listener)
         .build()?;
 
     println!("Tasks E2E server running at: http://{}/mcp", addr);

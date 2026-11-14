@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+`turul-mcp-protocol-2026-07-28` 0.4.1 → 0.4.2; examples `minimal-server`, `tools-test-server`,
+`tasks-e2e-inmemory-server`, `dynamic-tools-server` → 0.4.1 and `resource-test-server`,
+`prompts-test-server`, `sampling-server`, `roots-server`, `elicitation-server` → 0.4.2.
+
+### Fixed
+
+- **A tool result with no `structuredContent` sends a string as the string itself.**
+  `CallToolResult::from_result_with_schema` and `from_result_auto` JSON-encoded every result
+  into the text block, so a `String` returned by a builder tool arrived as `"\"Sunny\""`. With
+  no `structuredContent` the text is now the raw string; with it, the text is still the
+  serialized JSON, as tools.md asks (ADR-010 §4). Bug fix, patch release.
+- **No test hands a port to a child process through a release-then-rebind gap.** The test
+  harness starts example servers with `--port 0`; each binds the port itself and prints
+  `MCP_LISTEN_ADDR=<addr>` on stdout, which the harness reads (ADR-034).
+  `find_available_port`, its `PORT_HANDOFF` lock, the start retry and `free_port()` are deleted.
+  The nine harness-started examples announce their bound address. No crate changes.
+- **The client wire-compliance tests read their own request.** They took `received[0]`, which
+  can be another test's request on a recycled wiremock server; they now select the POST
+  carrying their method. No crate changes.
+- **`scripts/test_lambda_middleware_live.sh` matches the example's middleware.** It expected
+  `server/discover` to skip authentication; the middleware gates every method, as the example
+  documents. The script now sends the key on discover and checks that discover without it is
+  rejected. Passes live. No crate changes.
+- **`scripts/verify_all_examples_unattended.sh` passes.** Examples are built per spec lane
+  into that lane's target directory (`scripts/lib/examples.sh`); PostgreSQL and DynamoDB run
+  only when `TURUL_TEST_PG_URL` / `TURUL_TEST_DDB_URL` are set, instead of a hardcoded
+  credential, and print SKIPPED otherwise; a hardcoded-port example whose port another process
+  holds is SKIPPED rather than tested through that process. No crate changes.
+
 ## [0.4.22] - 2026-11-14
 
 `turul-mcp-ext-apps` 0.1.1 → 0.1.3, `turul-mcp-ext-skills` 0.1.0 (new),

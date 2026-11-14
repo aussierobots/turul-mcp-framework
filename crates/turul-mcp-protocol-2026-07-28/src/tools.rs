@@ -595,19 +595,20 @@ impl CallToolResult {
         result: &T,
         schema: Option<&ToolSchema>,
     ) -> Result<Self, crate::McpError> {
-        let text_content = serde_json::to_string(result)
+        let value = serde_json::to_value(result)
             .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-
-        let response = Self::success(vec![ToolResult::text(text_content)]);
 
         // Auto-add structured content if schema exists
         if schema.is_some() {
-            let structured = serde_json::to_value(result).map_err(|e| {
-                crate::McpError::tool_execution(&format!("Structured content error: {}", e))
+            // Serialize the original value so field order matches the caller's type.
+            let text = serde_json::to_string(result).map_err(|e| {
+                crate::McpError::tool_execution(&format!("Serialization error: {}", e))
             })?;
-            Ok(response.with_structured_content(structured))
+            Ok(Self::success(vec![ToolResult::text(text)]).with_structured_content(value))
         } else {
-            Ok(response)
+            Ok(Self::success(vec![ToolResult::text(unstructured_text(
+                value,
+            ))]))
         }
     }
 
@@ -640,7 +641,9 @@ impl CallToolResult {
         if should_add_structured {
             Ok(response.with_structured_content(structured))
         } else {
-            Ok(response)
+            Ok(Self::success(vec![ToolResult::text(unstructured_text(
+                structured,
+            ))]))
         }
     }
 
@@ -799,12 +802,52 @@ impl HasParams for CallToolRequest {
     }
 }
 
+/// The text block for a result with no `structuredContent` (ADR-010 §4): a JSON
+/// string is the string itself; anything else is its serialized JSON.
+fn unstructured_text(value: Value) -> String {
+    match value {
+        Value::String(text) => text,
+        other => other.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::content::ResourceContents;
     use crate::schema::JsonSchema;
     use serde_json::json;
+
+    fn text_of(r: &CallToolResult) -> String {
+        serde_json::to_value(r).unwrap()["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    }
+
+    /// ADR-010 §4: with no `structuredContent`, a string result is sent as the
+    /// string itself, not as a quoted JSON literal.
+    #[test]
+    fn string_result_without_structured_content_is_raw_text() {
+        let with_schema = CallToolResult::from_result_with_schema(&json!("Sunny"), None).unwrap();
+        assert_eq!(text_of(&with_schema), "Sunny");
+        assert!(with_schema.structured_content.is_none());
+        let auto = CallToolResult::from_result_auto(&"Sunny".to_string(), None).unwrap();
+        assert_eq!(text_of(&auto), "Sunny");
+        assert!(auto.structured_content.is_none());
+    }
+
+    /// ADR-010 §4 and tools.md: with `structuredContent`, the text block carries
+    /// its serialized JSON, so a string stays a JSON literal there.
+    #[test]
+    fn structured_content_text_is_the_serialized_json() {
+        let schema = ToolSchema::object();
+        let r = CallToolResult::from_result_with_schema(&json!("Sunny"), Some(&schema)).unwrap();
+        assert_eq!(text_of(&r), "\"Sunny\"");
+        let n = CallToolResult::from_result_auto(&json!(42), None).unwrap();
+        assert_eq!(text_of(&n), "42");
+        assert_eq!(n.structured_content, Some(json!(42)));
+    }
 
     #[test]
     fn test_tool_creation() {

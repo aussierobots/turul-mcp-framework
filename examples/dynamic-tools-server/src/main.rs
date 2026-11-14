@@ -134,8 +134,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .and_then(|w| w[1].parse().ok())
         .unwrap_or(8484);
 
+    let listener = std::net::TcpListener::bind(("127.0.0.1", port))?;
+    let addr = listener.local_addr()?;
+    println!("MCP_LISTEN_ADDR={addr}");
+
     info!("=== Dynamic Tools Server ===");
-    info!("Endpoint: http://127.0.0.1:{}/mcp", port);
+    info!("Endpoint: http://{}/mcp", addr);
     info!(
         "multiply starts {}",
         if multiply_active {
@@ -154,7 +158,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(GreetTool::default())
         .tool(ActivateMultiplyTool::default())
         .tool(DeactivateMultiplyTool::default())
-        .bind_address(format!("127.0.0.1:{}", port).parse()?)
+        .listener(listener)
         .build()?;
 
     let registry = server

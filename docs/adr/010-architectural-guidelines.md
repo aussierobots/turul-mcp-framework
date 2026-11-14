@@ -87,6 +87,10 @@ client.call("tools/list", Some(RequestParams::List(ListToolsParams {
 **Implementation**:
 - `mcp_tool` macro automatically uses `CallToolResult::from_result_with_schema()`
 - Smart response builder adds `structuredContent` when `outputSchema` exists
+- The `TextContent` block carries the serialized JSON when `structuredContent` is present,
+  as the spec asks ("a tool that returns structured content SHOULD also return the
+  serialized JSON in a TextContent block"). When there is no `structuredContent`, a result
+  that is a JSON string is sent as that string, not as a quoted JSON literal (2026-11-14).
 - Custom output field names supported via `output_field` attribute
 
 **Pattern**:
@@ -188,6 +192,10 @@ impl HasAnnotations for LegacyTool {
 - Clear migration guides for breaking changes
 - Comprehensive examples demonstrating correct patterns
 - Test-driven validation of specification compliance
+
+## Revision log
+
+- **2026-11-14**: §4 — the text block of a result with no `structuredContent` is the raw string when the result is a JSON string; `CallToolResult::from_result_with_schema` and `from_result_auto` (2026-07-28 crate) own the rule.
 
 ## References
 

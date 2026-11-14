@@ -3,8 +3,11 @@
 # Clients & Test Utilities - Intent-Based Verification
 # Tests CLIENT applications and integration tests (NOT servers)
 #
-# Uses pre-built binaries from target/debug/ for fast execution.
-# Run `cargo build --workspace` first, or this script will build for you.
+# Each binary is built with `-p` into its lane's target dir (see
+# scripts/lib/examples.sh): the 2025-11-25-pinned examples
+# (client-initialise-server, logging-test-server/-client) cannot share a build
+# with the 2026-07-28 default, so a bare `cargo build --workspace` cannot make
+# them. The raw-wire / client utilities build in the default lane.
 #
 
 set -e
@@ -13,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-BIN_DIR="$PROJECT_ROOT/target/debug"
+source "$SCRIPT_DIR/lib/examples.sh"
 
 echo "======================================================================"
 echo "Clients & Test Utilities - Intent-Based Verification"
@@ -23,16 +26,27 @@ echo "Testing Objective: Verify CLIENT applications and test utilities"
 echo "                   work correctly with MCP servers"
 echo ""
 
-# Build all binaries if not already built
-if [ ! -f "$BIN_DIR/minimal-server" ]; then
-    echo "Pre-built binaries not found. Building workspace..."
-    cargo build --workspace
-    echo ""
-fi
+# lane per binary
+declare -A LANE=(
+    [client-initialise-server]=2025
+    [logging-test-server]=2025
+    [logging-test-client]=2025
+    [client-initialise-report]=2026
+    [streamable-http-client]=2026
+    [streamable-http-client-2025-11-25]=2026
+    [session-management-compliance-test]=2026
+    [minimal-server]=2026
+)
+BUILD_FAILED=0
+for b in "${!LANE[@]}"; do
+    if ! example_build "$b" "${LANE[$b]}"; then BUILD_FAILED=1; fi
+done
+[ "$BUILD_FAILED" -eq 0 ] || { echo "FAILED: build error"; exit 1; }
+bin() { example_bin "$1" "${LANE[$1]}"; }
 
 PASSED=0
 FAILED=0
-TOTAL=6
+TOTAL=5
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -77,7 +91,7 @@ test_client_initialization() {
 
     # Start the test server
     echo "Starting client-initialise-server..."
-    RUST_LOG=error timeout 30s "$BIN_DIR/client-initialise-server" --port 52935 &
+    RUST_LOG=error timeout 30s "$(bin client-initialise-server)" --port 52935 &
     SERVER_PID=$!
     PIDS+=($SERVER_PID)
     sleep 3
@@ -91,7 +105,7 @@ test_client_initialization() {
 
     # Run the client report
     echo "Running client-initialise-report..."
-    RUST_LOG=error timeout 10s "$BIN_DIR/client-initialise-report" --url http://127.0.0.1:52935/mcp > /tmp/client_report.log 2>&1 &
+    RUST_LOG=error timeout 10s "$(bin client-initialise-report)" --url http://127.0.0.1:52935/mcp > /tmp/client_report.log 2>&1 &
     CLIENT_PID=$!
 
     # Wait for client to complete
@@ -121,7 +135,7 @@ test_streamable_client() {
 
     # Start minimal-server as test target
     echo "Starting minimal-server as test target..."
-    RUST_LOG=error timeout 30s "$BIN_DIR/minimal-server" --port 8641 &
+    RUST_LOG=error timeout 30s "$(bin minimal-server)" --port 8641 &
     SERVER_PID=$!
     PIDS+=($SERVER_PID)
     sleep 3
@@ -136,7 +150,7 @@ test_streamable_client() {
     # Run streamable client. It takes the server URL as a bare positional
     # argument, not a --url flag.
     echo "Running streamable-http-client..."
-    capture env RUST_LOG=error timeout 10s "$BIN_DIR/streamable-http-client" \
+    capture env RUST_LOG=error timeout 10s "$(bin streamable-http-client)" \
         http://127.0.0.1:8641/mcp > /tmp/streamable_client.log 2>&1
     CLIENT_EXIT=$CAPTURED_EXIT
 
@@ -165,7 +179,7 @@ test_logging_client() {
 
     # Start logging test server
     echo "Starting logging-test-server..."
-    RUST_LOG=error timeout 30s "$BIN_DIR/logging-test-server" --port 8052 &
+    RUST_LOG=error timeout 30s "$(bin logging-test-server)" --port 8052 &
     SERVER_PID=$!
     PIDS+=($SERVER_PID)
     sleep 3
@@ -180,7 +194,7 @@ test_logging_client() {
     # Run logging test client. It takes --port (matching the server),
     # --quick-test keeps this bounded for a CI gate.
     echo "Running logging-test-client..."
-    capture env RUST_LOG=error timeout 20s "$BIN_DIR/logging-test-client" \
+    capture env RUST_LOG=error timeout 20s "$(bin logging-test-client)" \
         --port 8052 --quick-test > /tmp/logging_client.log 2>&1
     CLIENT_EXIT=$CAPTURED_EXIT
 
@@ -210,7 +224,7 @@ test_session_compliance() {
     echo "----------------------------------------"
 
     echo "Starting client-initialise-server as test target..."
-    RUST_LOG=error timeout 30s "$BIN_DIR/client-initialise-server" --port 52951 &
+    RUST_LOG=error timeout 30s "$(bin client-initialise-server)" --port 52951 &
     SERVER_PID=$!
     PIDS+=($SERVER_PID)
     sleep 3
@@ -222,7 +236,7 @@ test_session_compliance() {
     fi
 
     echo "Running session management compliance test..."
-    capture env RUST_LOG=error timeout 20s "$BIN_DIR/session-management-compliance-test" \
+    capture env RUST_LOG=error timeout 20s "$(bin session-management-compliance-test)" \
         http://127.0.0.1:52951/mcp > /tmp/session_compliance.log 2>&1
     TEST_EXIT=$CAPTURED_EXIT
 
@@ -253,7 +267,7 @@ test_progress_token_echo() {
     echo "Description: progress notifications echo the request's progressToken"
     echo "----------------------------------------"
 
-    RUST_LOG=error timeout 30s "$BIN_DIR/client-initialise-server" --port 52952 &
+    RUST_LOG=error timeout 30s "$(bin client-initialise-server)" --port 52952 &
     SERVER_PID=$!
     PIDS+=($SERVER_PID)
     sleep 3
@@ -264,7 +278,7 @@ test_progress_token_echo() {
         return 1
     fi
 
-    capture env RUST_LOG=error timeout 20s "$BIN_DIR/streamable-http-client-2025-11-25" \
+    capture env RUST_LOG=error timeout 20s "$(bin streamable-http-client-2025-11-25)" \
         --url http://127.0.0.1:52952/mcp > /tmp/progress_token_echo.log 2>&1
     TEST_EXIT=$CAPTURED_EXIT
 

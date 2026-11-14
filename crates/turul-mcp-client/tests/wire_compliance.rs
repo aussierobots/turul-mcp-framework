@@ -318,6 +318,24 @@ use turul_rpc::{JsonRpcNotification, JsonRpcRequest, RequestId, RequestParams};
 #[cfg(any(feature = "client-bilingual", feature = "client-2025-11-25-only"))]
 use wiremock::matchers::body_partial_json;
 
+/// The JSON-RPC body this test POSTed for `rpc_method`. Reads the recorded
+/// requests by content, not position: wiremock recycles mock servers across
+/// tests, so another test's in-flight request can be recorded on the same
+/// server, and `received[0]` is not necessarily ours.
+fn posted_body(received: &[wiremock::Request], rpc_method: &str) -> serde_json::Value {
+    received
+        .iter()
+        .filter(|r| r.method == wiremock::http::Method::POST)
+        .filter_map(|r| serde_json::from_slice::<serde_json::Value>(&r.body).ok())
+        .find(|b| b["method"] == rpc_method)
+        .unwrap_or_else(|| {
+            panic!(
+                "no POST for {rpc_method} among {} recorded requests",
+                received.len()
+            )
+        })
+}
+
 #[tokio::test]
 async fn test_typed_request_serializes_to_compliant_jsonrpc_envelope_on_wire() {
     let mock_server = MockServer::start().await;
@@ -351,10 +369,9 @@ async fn test_typed_request_serializes_to_compliant_jsonrpc_envelope_on_wire() {
         .expect("send_request must reach the wiremock server");
 
     // Capture the actual bytes that hit the wire.
+    // `.expect(1)` on the POST mock already pins it to exactly one request.
     let received = mock_server.received_requests().await.unwrap();
-    assert_eq!(received.len(), 1);
-    let body: serde_json::Value =
-        serde_json::from_slice(&received[0].body).expect("wire body must be valid JSON");
+    let body = posted_body(&received, "tools/list");
 
     assert_eq!(
         body["jsonrpc"],
@@ -400,7 +417,7 @@ async fn test_typed_request_with_empty_object_params_preserves_field_on_wire() {
         .expect("send_request must reach the wiremock server");
 
     let received = mock_server.received_requests().await.unwrap();
-    let body: serde_json::Value = serde_json::from_slice(&received[0].body).unwrap();
+    let body = posted_body(&received, "ping");
 
     assert_eq!(body["jsonrpc"], serde_json::json!("2.0"));
     assert_eq!(body["method"], serde_json::json!("ping"));
@@ -739,7 +756,7 @@ async fn test_typed_notification_omits_id_field_on_wire() {
         .expect("send_notification must reach the wiremock server");
 
     let received = mock_server.received_requests().await.unwrap();
-    let body: serde_json::Value = serde_json::from_slice(&received[0].body).unwrap();
+    let body = posted_body(&received, "notifications/initialized");
 
     assert_eq!(body["jsonrpc"], serde_json::json!("2.0"));
     assert_eq!(

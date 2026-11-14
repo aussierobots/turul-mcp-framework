@@ -1,6 +1,6 @@
 [package]
 name = "roots-server"
-version = "0.4.1"
+version = "0.4.2"
 edition.workspace = true
 
 # 2025-11-25 regression example, pinned to the 2025 opt-in (this branch's 2026

@@ -30,7 +30,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let bind_address: std::net::SocketAddr = format!("127.0.0.1:{port}").parse()?;
+    let listener = std::net::TcpListener::bind(("127.0.0.1", port))?;
+    let addr = listener.local_addr()?;
+    println!("MCP_LISTEN_ADDR={addr}");
 
     println!("Starting Truly Minimal MCP Server");
 
@@ -39,10 +41,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("minimal-server") // Required: Server name
         .version(env!("CARGO_PKG_VERSION")) // Required: Server version
         .tool_fn(echo) // Use function name directly
-        .bind_address(bind_address)
+        .listener(listener)
         .build()?;
 
-    println!("Minimal MCP server running at: http://{bind_address}/mcp");
+    println!("Minimal MCP server running at: http://{}/mcp", addr);
     println!("This server has ONE tool: echo");
 
     server.run().await?;
