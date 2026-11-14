@@ -1684,6 +1684,141 @@ impl McpClient {
         }
     }
 
+    /// C-1 (ADR-033 §6): `skills/*` may be issued only after the server
+    /// declared the extension in `server/discover`.
+    #[cfg(all(
+        feature = "ext-skills",
+        any(feature = "client-bilingual", feature = "client-2026-07-28-only")
+    ))]
+    async fn require_skills_declared(&self) -> McpClientResult<()> {
+        use turul_mcp_ext_skills::{EXTENSION_IDENTIFIER, declared_by_server};
+        let declared = self
+            .server_capabilities()
+            .await
+            .and_then(|caps| serde_json::from_value(caps).ok())
+            .and_then(|caps| declared_by_server(&caps))
+            .is_some();
+        if declared {
+            Ok(())
+        } else {
+            Err(McpClientError::ExtensionNotDeclared(
+                EXTENSION_IDENTIFIER.to_string(),
+            ))
+        }
+    }
+
+    /// `skills/list` — one page of skill entries (Skills extension, SEP-2640).
+    /// Pass the previous page's `next_cursor` to continue. Retrieves no skill
+    /// file; use [`skill_fetch`](Self::skill_fetch) for that.
+    #[cfg(all(
+        feature = "ext-skills",
+        any(feature = "client-bilingual", feature = "client-2026-07-28-only")
+    ))]
+    pub async fn skills_list(
+        &self,
+        cursor: Option<&str>,
+    ) -> McpClientResult<turul_mcp_ext_skills::ListSkillsResult> {
+        self.require_skills_declared().await?;
+        let extra = match cursor {
+            Some(c) => json!({ "cursor": c }),
+            None => json!({}),
+        };
+        self.send_2026_07_28(turul_mcp_ext_skills::METHOD_SKILLS_LIST, extra, |r| {
+            Ok(serde_json::from_value(r.clone())?)
+        })
+        .await
+    }
+
+    /// `skills/get` — the entry for one skill by its `SKILL.md` URI, whether or
+    /// not it appears in `skills/list`. Retrieves no skill file.
+    #[cfg(all(
+        feature = "ext-skills",
+        any(feature = "client-bilingual", feature = "client-2026-07-28-only")
+    ))]
+    pub async fn skills_get(&self, uri: &str) -> McpClientResult<turul_mcp_ext_skills::Skill> {
+        self.require_skills_declared().await?;
+        self.send_2026_07_28(
+            turul_mcp_ext_skills::METHOD_SKILLS_GET,
+            json!({ "uri": uri }),
+            |r| {
+                let r: turul_mcp_ext_skills::GetSkillResult = serde_json::from_value(r.clone())?;
+                Ok(r.skill)
+            },
+        )
+        .await
+    }
+
+    /// Read one file of `entry` and return its bytes only if they verify
+    /// (ADR-033 §6, C-3 to C-7): `uri` must be listed in the entry's manifest,
+    /// the bytes must match its `size` and `digest`, and a `SKILL.md` must have
+    /// frontmatter equal to `entry.frontmatter`. A `"dynamic"` entry offers no
+    /// integrity and is declined. On failure nothing is returned:
+    /// [`McpClientError::SkillVerification`].
+    #[cfg(all(
+        feature = "ext-skills",
+        any(feature = "client-bilingual", feature = "client-2026-07-28-only")
+    ))]
+    pub async fn skill_fetch(
+        &self,
+        entry: &turul_mcp_ext_skills::Skill,
+        uri: &str,
+    ) -> McpClientResult<Vec<u8>> {
+        use base64::Engine;
+        use turul_mcp_ext_skills::{Frontmatter, SkillResource, SkillResources};
+        use turul_mcp_protocol_2025_11_25::ResourceContent;
+
+        let fail = |reason: String| McpClientError::SkillVerification {
+            uri: uri.to_string(),
+            reason,
+        };
+        self.require_skills_declared().await?;
+        let listed = match &entry.resources {
+            SkillResources::Dynamic => {
+                return Err(fail(
+                    "the entry is \"dynamic\" and offers no integrity".into(),
+                ));
+            }
+            SkillResources::Manifest(files) => files
+                .iter()
+                .find(|f| f.uri() == uri)
+                .ok_or_else(|| fail(format!("not listed in the manifest of {}", entry.uri)))?,
+        };
+
+        let contents = self.read_resource(uri).await?;
+        let bytes = match contents.into_iter().next() {
+            Some(ResourceContent::Text(t)) => t.text.into_bytes(),
+            Some(ResourceContent::Blob(b)) => base64::engine::general_purpose::STANDARD
+                .decode(&b.blob)
+                .map_err(|e| fail(format!("blob is not base64: {e}")))?,
+            None => return Err(fail("resources/read returned no content".into())),
+        };
+        if bytes.len() as u64 != listed.size() {
+            return Err(fail(format!(
+                "size {} differs from the manifest's {}",
+                bytes.len(),
+                listed.size()
+            )));
+        }
+        if SkillResource::of(uri.to_string(), &bytes) != *listed {
+            return Err(fail(format!(
+                "digest differs from the manifest's {}",
+                listed.digest()
+            )));
+        }
+        if uri == entry.uri {
+            let text =
+                std::str::from_utf8(&bytes).map_err(|_| fail("SKILL.md is not UTF-8".into()))?;
+            let parsed = Frontmatter::from_skill_md(text)
+                .map_err(|e| fail(format!("frontmatter cannot be verified: {e}")))?;
+            if parsed.as_map() != &entry.frontmatter {
+                return Err(fail(
+                    "frontmatter differs from the entry's frontmatter".into(),
+                ));
+            }
+        }
+        Ok(bytes)
+    }
+
     /// List available resources (returns cached result if available)
     ///
     /// Returns the FIRST page only — use

@@ -5,9 +5,11 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 publish = false
+default-run = "ext-skills-server"
 
 [dependencies]
 turul-mcp-server = { workspace = true, features = ["ext-skills"] }
 turul-mcp-ext-skills.workspace = true
+turul-mcp-client = { workspace = true, features = ["ext-skills"] }
 tokio.workspace = true
 tracing-subscriber.workspace = true

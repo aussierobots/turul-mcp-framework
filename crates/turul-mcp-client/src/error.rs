@@ -63,6 +63,18 @@ pub enum McpClientError {
     /// Generic error with context
     #[error("Error: {message}")]
     Generic { message: String },
+
+    /// The server did not declare the extension this call belongs to, so the
+    /// call was not sent (an extension's methods may be issued only after the
+    /// server declares it).
+    #[error("Server did not declare extension {0}")]
+    ExtensionNotDeclared(String),
+
+    /// A skill file failed verification against its entry (size, digest,
+    /// frontmatter, or not listed in the manifest). Its content must not be
+    /// used; refresh the entry with `skills_get` and retry.
+    #[error("Skill verification failed for {uri}: {reason}")]
+    SkillVerification { uri: String, reason: String },
 }
 
 /// Transport-specific errors

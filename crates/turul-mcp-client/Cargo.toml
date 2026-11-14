@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-client"
-version = "0.4.10"
+version = "0.4.11"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -26,6 +26,8 @@ categories = ["network-programming"]
 turul-mcp-protocol-2025-11-25 = { workspace = true }
 turul-mcp-ext-tasks = { workspace = true, optional = true }
 turul-mcp-ext-apps = { workspace = true, optional = true }
+turul-mcp-ext-skills = { workspace = true, optional = true }
+base64 = { workspace = true, optional = true }
 turul-mcp-protocol-2026-07-28 = { workspace = true, optional = true }
 turul-rpc = { workspace = true }
 # JSON Schema 2020-12 dialect validation, client-side trust boundary.
@@ -75,6 +77,9 @@ ext-tasks = ["dep:turul-mcp-ext-tasks"]
 # MCP Apps extension (io.modelcontextprotocol/ui) declaration and `_meta.ui`
 # accessors; 2026-07-28 connections only; off by default per SEP-2133. No rendering.
 ext-apps = ["dep:turul-mcp-ext-apps"]
+# Skills extension (io.modelcontextprotocol/skills, SEP-2640; ADR-033 §6) client surface —
+# 2026-07-28 connections only; off by default per SEP-2133.
+ext-skills = ["dep:turul-mcp-ext-skills", "dep:base64"]
 # Narrowing: each speaks exactly ONE wire spec. Requires --no-default-features
 # (otherwise client-bilingual is also active and the mutex fires). The frozen
 # 2025-11-25 protocol crate is always linked as the shared type vocabulary;
@@ -88,7 +93,7 @@ wiremock.workspace = true
 # Real-server e2e: bilingual client against an in-process 2026 stateless server.
 # Default features (http, sse -> protocol-2026-07-28); no alias-mutex conflict
 # because this crate links the versioned protocol crates directly, not the alias.
-turul-mcp-server = { path = "../turul-mcp-server", version = "0.4", features = ["ext-tasks"] }
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.4", features = ["ext-tasks", "ext-skills"] }
 # NOTE: the four-backend Tasks e2e deliberately does NOT live here. It links
 # sqlx and aws-sdk-dynamodb, and an MCP *client* library has no business
 # dev-depending on Postgres and DynamoDB drivers — it also coupled

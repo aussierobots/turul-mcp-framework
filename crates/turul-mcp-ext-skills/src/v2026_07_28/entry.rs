@@ -338,6 +338,29 @@ mod tests {
         assert_eq!(from_dir.manifest(), from_files.manifest());
     }
 
+    /// S-G8 (:233-243), end to end: a skill directory with 513 files (SKILL.md
+    /// plus 512) is refused while its entry is built, so it never reaches a
+    /// server; 512 files in all is accepted.
+    #[test]
+    fn s_g8_over_limit_directory_refused() {
+        let (_tmp, dir) = skill_dir("big");
+        for i in 0..511 {
+            write(&dir, &format!("f/{i:03}.md"), "x");
+        }
+        assert!(SkillEntry::from_dir(path(&[], "big"), &dir).is_ok());
+        write(&dir, "f/511.md", "x");
+        assert!(matches!(
+            SkillEntry::from_dir(path(&[], "big"), &dir),
+            Err(EntryError::Manifest {
+                source: crate::v2026_07_28::manifest::ManifestError::TooManyFiles {
+                    count: 513,
+                    ..
+                },
+                ..
+            })
+        ));
+    }
+
     /// ADR-033 §5: a symlink whose target stays inside the skill is served.
     #[cfg(unix)]
     #[test]
