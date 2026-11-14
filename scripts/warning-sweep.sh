@@ -17,6 +17,7 @@ case "${1:-}" in
       ""
       "-p turul-mcp-client"
       "-p turul-mcp-client --features ext-apps"
+      "-p turul-mcp-client --features ext-skills"
       "-p turul-mcp-server --no-default-features --features http,sse,ext-tasks"
       "-p turul-mcp-server --no-default-features --features http,sse,ext-skills"
       "-p turul-mcp-ext-tasks -p turul-mcp-ext-apps -p turul-mcp-ext-skills"

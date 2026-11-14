@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 `turul-mcp-ext-apps` 0.1.1 → 0.1.2, `turul-mcp-ext-skills` 0.1.0 (new),
-`turul-mcp-server` → 0.4.10.
+`turul-mcp-server` → 0.4.10, `turul-mcp-client` → 0.4.11.
 
 ### Added
 
@@ -44,6 +44,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`examples/ext-skills-server`** serves the repo's 12 plugin skills; `scripts/ext-skills-conformance.sh`
   (in `ci-gates.sh conformance`) re-hashes every served file and runs the upstream
   `sep-2640-*` server scenarios: enumeration 32/32, manifest 6/6.
+- **`turul-mcp-client` feature `ext-skills`** (off by default; 2026-07-28 lanes):
+  `skills_list`, `skills_get` and `skill_fetch`, which returns a file's bytes only if it is
+  listed in the entry's manifest and matches its size and digest, and, for `SKILL.md`,
+  only if its frontmatter equals the entry's. `"dynamic"` entries are declined; nothing is
+  fetched ahead of a call (ADR-033 §6). `McpClientError` gains `ExtensionNotDeclared` and
+  `SkillVerification`: new variants on an exhaustive enum are formally semver-breaking and
+  ship as a patch under the 0.4 rule. The example gains an `ext-skills-client` bin, which
+  the live gate runs under the upstream host scenarios (`sep-2640-client-*`: no-prefetch,
+  digest, size and frontmatter verification, each 1/1).
 - Not yet: frontmatter with typed (non-string) values, `"dynamic"` skills,
   `resources/directory/read`, and Lambda.
 

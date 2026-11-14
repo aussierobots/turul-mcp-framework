@@ -73,6 +73,7 @@ gate_default() {
   run "client-using examples (not in default-members)" cargo build -p mrtr-elicitation-server -p bilingual-fleet-client -p ext-tasks-server --bins
   run "Tasks extension (SEP-2663, opt-in feature)" cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-tasks --test ext_tasks_2026
   run "Skills extension (SEP-2640, opt-in feature)" cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-skills --test ext_skills_2026
+  run "Skills extension client (SEP-2640, opt-in feature)" cargo test -p turul-mcp-client --features ext-skills --test ext_skills_client_2026
   run "ext crates standalone" cargo test -p turul-mcp-ext-tasks -p turul-mcp-ext-apps -p turul-mcp-ext-skills
   # The Tasks client e2e is NOT run here: it needs Postgres and DynamoDB Local,
   # which only the backends script provisions. Running it bare passed for as

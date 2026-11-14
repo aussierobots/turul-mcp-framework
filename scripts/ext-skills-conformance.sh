@@ -5,7 +5,10 @@
 #   1. readback probe: every manifest file is read through resources/read and
 #      re-hashed with sha256sum, independent of the framework's digest code,
 #      and compared with the bytes on disk;
-#   2. the upstream conformance harness's Skills server scenarios.
+#   2. the upstream conformance harness's Skills server scenarios;
+#   3. its host scenarios (no prefetch; digest, size and frontmatter
+#      verification) against turul-mcp-client, via the example's
+#      ext-skills-client driver.
 # The harness version is read from conformance-suite.sh, its one definition.
 #
 # Exit 0 = probe passed and every Skills scenario reported 0 failed; 77 = no npx.
@@ -20,7 +23,8 @@ VERSION=$(grep -oE '^CONFORMANCE_VERSION="[^"]+"' scripts/conformance-suite.sh |
 [ -n "$VERSION" ] || { echo "FAIL: no CONFORMANCE_VERSION in conformance-suite.sh"; exit 1; }
 
 command -v npx >/dev/null || { echo "  SKIP: npx unavailable"; exit 77; }
-cargo build -q -p ext-skills-server || exit 1
+cargo build -q -p ext-skills-server --bins || exit 1
+CLIENT="$(cargo metadata -q --format-version 1 --no-deps | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')/debug/ext-skills-client"
 cargo run -q -p ext-skills-server -- "$PORT" >/dev/null 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null' EXIT
@@ -63,6 +67,16 @@ code=$(mcp2026_request "$URL" skills/get "" '{"uri":"skill://nope/SKILL.md"}' | 
 # --- 2. upstream conformance scenarios ----------------------------------------
 for scenario in sep-2640-skills-enumeration sep-2640-skills-manifest sep-2640-skills-directory; do
   out=$(npx -y "@modelcontextprotocol/conformance@$VERSION" server --url "$URL" --scenario "$scenario" 2>&1 \
+        | sed 's/\x1b\[[0-9;]*m//g')
+  line=$(grep -E '^Passed: ' <<<"$out" | tail -1)
+  echo "  $scenario: ${line:-no result line}"
+  [[ "$line" =~ ,\ 0\ failed ]] || { bad "$scenario"; grep -E 'FAILURE|ERROR' <<<"$out" | head -20; }
+done
+
+# --- 3. upstream host scenarios against turul-mcp-client ----------------------
+for scenario in sep-2640-client-no-prefetch sep-2640-client-verify-digest \
+                sep-2640-client-verify-size sep-2640-client-verify-frontmatter; do
+  out=$(npx -y "@modelcontextprotocol/conformance@$VERSION" client --command "$CLIENT" --scenario "$scenario" 2>&1 \
         | sed 's/\x1b\[[0-9;]*m//g')
   line=$(grep -E '^Passed: ' <<<"$out" | tail -1)
   echo "  $scenario: ${line:-no result line}"

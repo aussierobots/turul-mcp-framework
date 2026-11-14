@@ -6,11 +6,11 @@ This directory contains Architecture Decision Records (ADRs) that document impor
 
 Each ADR follows the standard format:
 - **Status**: current state. The vocabulary actually in use in the table below,
-  with counts as of 2026-08-02:
-  - **Accepted** (31) — decided and implemented.
+  with counts as of 2026-11-14:
+  - **Accepted** (32) — decided and implemented.
   - **Mandatory** (5) — ADRs 001–005, the always-on architectural rules. Stronger
     than Accepted: these are not per-slice decisions but standing constraints.
-  - **Proposed** (1 in use: ADR-033) — decided in principle, but an alternative path
+  - **Proposed** (0 in use) — decided in principle, but an alternative path
     still ships. An ADR that ratifies an intent before the duplicate is deleted
     is a claim, not a decision; it stays Proposed until the duplicate is gone.
     ADR-032 was authored this way and moved to Accepted once its gate was met.
@@ -63,7 +63,7 @@ Each ADR follows the standard format:
 | [030](./030-turul-mcp-client-bilingual-spec-coexistence.md) | `turul-mcp-client` spec coexistence — bilingual default | Accepted | 2026-05-31 | Client links both versioned protocol crates and negotiates per connection |
 | [031](./031-origin-validation-dns-rebinding.md) | Origin validation (DNS-rebinding protection) on the HTTP transport | Accepted | 2026-06-11 | `Origin` enforcement in `turul-http-mcp-server`, builder passthrough in `turul-mcp-server` |
 | [032](./032-adopt-turul-jwt-validator.md) | Adopt `turul-jwt-validator`; `turul-mcp-oauth` stops owning JWT validation | Accepted | 2026-08-02 | Delegate JWT/JWKS to the extracted sibling crate; forces `jsonwebtoken` 10→11. Must land before 0.4.0 publishes |
-| [033](./033-skills-over-mcp.md) | Skills over MCP — `turul-mcp-ext-skills` on `turul-agent-skills` | Proposed | 2026-11-14 | Skills extension (SEP-2640): owners of `skill://` URIs, `sha256:` manifests and the capability value; opt-in `ext-skills` server feature |
+| [033](./033-skills-over-mcp.md) | Skills over MCP — `turul-mcp-ext-skills` on `turul-agent-skills` | Accepted | 2026-11-14 | Skills extension (SEP-2640): owners of `skill://` URIs, `sha256:` manifests and the capability value; opt-in `ext-skills` server feature |
 
 ## Tasks Architecture ADRs
 

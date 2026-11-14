@@ -1,13 +1,14 @@
 # ADR-033: Skills over MCP — `turul-mcp-ext-skills` on `turul-agent-skills`
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-11-14
-**Crates:** `turul-mcp-ext-skills` (new, 0.1.0: wire types and the MCP-specific producers), `turul-mcp-server` (feature `ext-skills`: handlers, discover advertisement, resource registration)
-**External owner:** `turul-agent-skills` 0.1 (sibling repo `aussierobots/turul-agent-skills`)
+**Crates:** `turul-mcp-ext-skills` (new, 0.1.0: wire types and the MCP-specific producers), `turul-mcp-server` (feature `ext-skills`: handlers, discover advertisement, resource registration), `turul-mcp-client` (feature `ext-skills`: host verification)
+**External owner:** `turul-agent-skills` 0.1.3 (sibling repo `aussierobots/turul-agent-skills`; boundary accepted there as its ADR-011)
 **Related:** ADR-028 (extensions strategy), ADR-007 (auto-detected resource security), ADR-003 (zero-configuration)
 
-Stays **Proposed** until every alternative path named in §Owners is deleted and the
-gates in §Tests pass on the merged tree.
+Accepted with the client slice: no alternative path to any owner in §1 exists, and every
+gate in §Tests runs (server and client lanes in `ci-gates.sh`/`ci.yml`; the live readback
+and conformance gate in `ci-gates.sh conformance`).
 
 ## Context
 
@@ -159,7 +160,32 @@ the directory it was pointed at.
 
 Lambda: not covered (`LambdaMcpServerBuilder` cannot advertise extensions; drift D-L).
 
-### 6. Versioning
+### 6. Client (`turul-mcp-client`, feature `ext-skills`, default off)
+
+The client side reuses the wire types and producers of `turul-mcp-ext-skills`; it
+defines no skill type, digest or frontmatter parser of its own.
+
+| Id | Host clause (skills.mdx line) | Level | Client behaviour |
+|---|---|---|---|
+| C-1 | Issue `skills/list` / `skills/get` only after observing the server's declaration (:67) | MUST | Both methods return `ExtensionNotDeclared` without sending anything when `server/discover` did not declare `io.modelcontextprotocol/skills` |
+| C-2 | An entry whose `resources` is absent or neither an array nor `"dynamic"` is invalid; MUST NOT load (:231) | MUST | Deserialization into `Skill` fails; the call errors |
+| C-3 | Verify every retrieved file against the entry's `digest` and `size`; a mismatch MUST NOT be used (:229, :482-483) | MUST | `skill_fetch` checks size, then compares `SkillResource::of(uri, bytes)` with the listed entry (one digest producer); a mismatch is `SkillVerification` and no bytes are returned |
+| C-4 | Resolve a skill's reads only to URIs in the held entry; an unlisted file is a verification failure (:491-492) | MUST | `skill_fetch` refuses a URI absent from `entry.resources` before any request |
+| C-5 | After fetching a `SKILL.md`, parse its frontmatter and compare field by field; a discrepancy MUST NOT be loaded (:496-497) | MUST | The fetched `SKILL.md` goes through `Frontmatter::from_skill_md`; its map must equal `entry.frontmatter`. Frontmatter that parser refuses (typed scalars, lenient repair) cannot be verified and fails closed |
+| C-6 | No retrieval ahead of need (:503) | MUST NOT | `skills_list` / `skills_get` never call `resources/read`; only `skill_fetch` does, one file per call |
+| C-7 | `"dynamic"` skills offer no integrity; hosts MAY decline (:231) | MAY | `skill_fetch` declines a `"dynamic"` entry with `SkillVerification` |
+| C-8 | No `resources/directory/read` unless declared (:64) | MUST NOT | The client does not implement the method |
+
+Host-application duties — approval binding, the acting window, caching, keying on the
+pair (server, uri), name disambiguation — belong to the application holding the
+entry; the client gives it verified bytes and typed errors to build them on.
+
+`McpClientError` gains `ExtensionNotDeclared(String)` and
+`SkillVerification { uri, reason }`. Adding variants to an exhaustive public enum is
+formally semver-breaking; it ships as a patch under the 0.4 rule and the CHANGELOG
+says so.
+
+### 7. Versioning
 
 `turul-mcp-ext-skills` starts at `0.1.0`, versions independently (ADR-028 §5), and
 publishes after `turul-mcp-protocol-2026-07-28`, before `turul-mcp-server`.
@@ -198,12 +224,23 @@ Each test is named after the clause it proves.
   `one_uri_one_content_conflicting_digest_refused`,
   `one_uri_one_content_foreign_resource_refused`.
 - `entry` (directory-backed): `from_dir_matches_from_files` (nested files listed,
-  `.git` skipped), `symlink_inside_skill_is_read`, `symlink_outside_skill_is_refused`.
+  `.git` skipped), `symlink_inside_skill_is_read`, `symlink_outside_skill_is_refused`,
+  `s_g8_over_limit_directory_refused` (513 files on disk refused while the entry is built).
 - Peer and readback: `scripts/ext-skills-conformance.sh` (in `ci-gates.sh conformance`)
   starts `examples/ext-skills-server` serving `plugins/turul-mcp-skills/skills/*`,
   re-hashes every served file with `sha256sum` and against the bytes on disk, then runs
   the conformance `sep-2640-skills-enumeration`, `-manifest` and `-directory` scenarios
-  at the harness version pinned in `conformance-suite.sh`.
+  at the harness version pinned in `conformance-suite.sh`, then the host scenarios
+  `sep-2640-client-no-prefetch`, `-verify-digest`, `-verify-size` and `-verify-frontmatter`
+  against `turul-mcp-client` through the example's `ext-skills-client` driver.
+
+- Client (`turul-mcp-client/tests/ext_skills_client_2026.rs`, wiremock peer plus the real
+  server): `c1_methods_refuse_without_declaration`, `c2_invalid_resources_entry_rejected`,
+  `c3_size_mismatch_refused`, `c3_digest_mismatch_refused`, `c3_verified_bytes_returned`
+  (text and blob), `c4_unlisted_uri_refused_without_request`,
+  `c5_frontmatter_discrepancy_refused`, `c5_typed_frontmatter_fails_closed`,
+  `c6_list_and_get_never_read_resources`, `c7_dynamic_entry_declined`,
+  `e2e_real_server_list_get_fetch`.
 
 ## Consequences
 
@@ -216,6 +253,12 @@ Each test is named after the clause it proves.
 
 ## Revision log
 
+- **2026-11-14 (Accepted)**: server slices merged (#52); client slice (#53) completes the
+  owner table and the test contract; turul-agent-skills accepted the boundary (its ADR-011).
+- **2026-11-14 (S6, client)**: §6 Client added — host clauses C-1 to C-8 mapped to
+  `turul-mcp-client` feature `ext-skills`; two `McpClientError` variants. Host scenarios
+  first run: no-prefetch, digest, size and frontmatter each 1/1, each rejected for its own
+  reason (digest; size 139 vs 97; frontmatter).
 - **2026-11-14 (S4)**: directory-backed entries through `bundled_files` (turul-agent-skills
   0.1.3) with the in-directory symlink rule; `examples/ext-skills-server` and the live gate.
   First run: 12 plugin skills, 75 files re-hashed, conformance enumeration 32/32, manifest 6/6,

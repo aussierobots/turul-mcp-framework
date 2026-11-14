@@ -109,7 +109,7 @@ points at the server, so a bare `cargo run -p simple-sqlite-session` works.
 
 | Example | Lane | Port | Demonstrates |
 |---|---|---|---|
-| **ext-skills-server** | 2026-07-28 | 8650 | The Skills *extension* (SEP-2640): serves `plugins/turul-mcp-skills/skills/*` through `skills/list`, `skills/get` and digest-verified `resources/read` (ADR-033) |
+| **ext-skills-server** | 2026-07-28 | 8650 | The Skills *extension* (SEP-2640): serves `plugins/turul-mcp-skills/skills/*` through `skills/list`, `skills/get` and digest-verified `resources/read` (ADR-033). Ships the paired `ext-skills-client` bin, which loads skills with full verification |
 
 ## Tasks
 
