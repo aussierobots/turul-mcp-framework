@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-builders"
-version = "0.4.3"
+version = "0.4.4"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -19,7 +19,7 @@ protocol-2026-07-28 = ["turul-mcp-protocol/protocol-2026-07-28"]
 
 [dependencies]
 # Protocol alias for current version
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.2", default-features = false }
 turul-rpc = { workspace = true, features = ["async"] }
 serde.workspace = true
 serde_json.workspace = true

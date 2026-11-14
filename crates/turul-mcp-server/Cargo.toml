@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-server"
-version = "0.4.13"
+version = "0.4.14"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -34,16 +34,16 @@ turul-mcp-ext-tasks = { workspace = true, optional = true }
 turul-mcp-ext-skills = { workspace = true, optional = true }
 # Framework dependencies
 turul-rpc = { workspace = true, features = ["async"] }
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
-turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4", default-features = false }
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
-turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4", default-features = false }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.2", default-features = false }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.2", default-features = false }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.4", default-features = false }
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4.6", default-features = false }
 # 2026-07-28 lane only: tools/list inputSchema validation.
 turul-mcp-schema-validation = { workspace = true, optional = true }
 # ext-tasks only: binds a task to the OAuth `sub` claim.
-turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4", default-features = false, optional = true }
-turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4", default-features = false, optional = true }
-turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4", default-features = false, optional = true }
+turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4.2", default-features = false, optional = true }
+turul-mcp-task-storage = { path = "../turul-mcp-task-storage", version = "0.4.1", default-features = false, optional = true }
+turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.11", default-features = false, optional = true }
 turul-mcp-server-state-storage = {workspace = true, optional = true}
 
 # Runtime utilities for task cancellation
@@ -66,11 +66,11 @@ urlencoding.workspace = true
 
 [dev-dependencies]
 # tests/oauth_2026.rs wires the resource server without the ext-tasks feature.
-turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4", default-features = false }
+turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4.2", default-features = false }
 tokio = { workspace = true, features = ["test-util", "macros", "rt-multi-thread"] }
 # Protocol feature comes from the server's own normal-dep forwarding; the dev-dep
 # must not also pull a default (protocol-2025-11-25), or the alias sees both specs.
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.4", default-features = false }
 reqwest = { workspace = true, features = ["stream"] }
 turul-mcp-ext-apps.workspace = true
 bytes.workspace = true

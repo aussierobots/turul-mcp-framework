@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+`turul-http-mcp-server` 0.4.11, `turul-mcp-server` 0.4.14, `turul-mcp-aws-lambda` 0.4.5,
+`turul-mcp-client` 0.4.13, `turul-mcp-builders` 0.4.4, `turul-mcp-oauth` 0.4.2,
+`turul-mcp-protocol` 0.4.2, `turul-mcp-session-storage` 0.4.2, `turul-mcp-task-storage` 0.4.1,
+`turul-mcp-ext-apps` 0.1.4, `turul-mcp-ext-skills` 0.1.2, `turul-mcp-ext-tasks` 0.1.8.
+
+### Fixed
+
+- **Internal dependencies name the version they need.** Every pin between framework crates was
+  `"0.4"`, so cargo could pair a crate with an older sibling that lacks an API it calls:
+  `turul-mcp-server` 0.4.13 calls `register_dispatcher` from `turul-http-mcp-server` 0.4.10 but
+  accepted 0.4.9, and `cargo update -p turul-mcp-server` alone left a lock failing with E0599.
+  Every internal pin, in `[workspace.dependencies]` and in explicit path dependencies, now names
+  the sibling's current version, and the release rule (CLAUDE.md, `docs/rules/crate-versioning.md`)
+  raises the pins on every bump. The crates whose dependency lines changed are republished. No
+  code changes. Patch release.
+
 ## [0.4.24] - 2026-11-14
 
 `turul-mcp-aws-lambda` 0.4.3 → 0.4.4, `turul-mcp-server` 0.4.11 → 0.4.13,

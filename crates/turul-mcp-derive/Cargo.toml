@@ -33,10 +33,10 @@ toml.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 schemars.workspace = true
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4", default-features = false }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.2", default-features = false }
 tokio = { workspace = true, features = ["test-util"] }
 async-trait.workspace = true
 tracing-test = { workspace = true }
 turul-mcp-server = { workspace = true }
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4", default-features = false }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.4", default-features = false }
 

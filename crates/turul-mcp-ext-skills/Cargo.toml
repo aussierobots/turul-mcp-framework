@@ -3,7 +3,7 @@
 # version.workspace = true.
 [package]
 name = "turul-mcp-ext-skills"
-version = "0.1.1"
+version = "0.1.2"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -20,7 +20,7 @@ default = ["protocol-2026-07-28"]
 protocol-2026-07-28 = ["dep:turul-mcp-protocol-2026-07-28"]
 
 [dependencies]
-turul-mcp-protocol-2026-07-28 = { version = "0.4", path = "../turul-mcp-protocol-2026-07-28", optional = true }
+turul-mcp-protocol-2026-07-28 = { version = "0.4.3", path = "../turul-mcp-protocol-2026-07-28", optional = true }
 turul-agent-skills.workspace = true
 serde.workspace = true
 serde_json.workspace = true

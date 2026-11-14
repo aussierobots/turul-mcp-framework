@@ -27,7 +27,7 @@
 - After 0.4.0, crates may be patched and published independently — bump only the crate(s) that changed, not the whole workspace.
 - Frozen crates (`2025-06-18`, `2025-11-25`) stay at `0.3.47` regardless of what the rest of the workspace does.
 - There is no `[workspace.package].version`; per-crate literal versions are the only source of truth.
-- When bumping a crate, update both the crate's `Cargo.toml` AND the matching `[workspace.dependencies]` pin in the root `Cargo.toml`.
+- When bumping a crate, update both the crate's `Cargo.toml` AND every internal pin on it (the `[workspace.dependencies]` entry and explicit path-dependency lines) to the exact new version; see `docs/rules/crate-versioning.md`.
 
 External dependencies (`serde`, `tokio`, etc.) continue to use `workspace = true` references — only internal crate versions are independent.
 

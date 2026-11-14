@@ -5,7 +5,7 @@
 - Frozen crates (`turul-mcp-protocol-2025-06-18`, `turul-mcp-protocol-2025-11-25`) stay at `0.3.47`. They are historical spec snapshots and don't move.
 - All other crates start the 0.4.x line at `0.4.0`.
 - There is no `[workspace.package].version`; per-crate `version = "..."` is the only source of truth.
-- `[workspace.dependencies]` pins the version for each internal crate path at **minor** granularity — `version = "0.4"`, never `"0.4.2"`. A patch bump therefore needs no pin edit: the caret range on `"0.4"` already admits every `0.4.x`. Bump the pin only when a crate's minor moves (and the frozen `0.3` crates never move at all).
+- Every internal dependency names the sibling's **current version** — `version = "0.4.11"`, not `"0.4"` — in `[workspace.dependencies]` and in every explicit `{ path = ..., version = ... }` line. A bare `"0.4"` lets cargo resolve an older sibling that predates an API the dependent calls, so a consumer running `cargo update -p <one crate>` gets a lock that does not compile. When a crate is bumped, raise every pin on it; any published crate whose dependency lines change is bumped and republished too. The frozen `0.3` crates keep `"0.3"`.
 
 ## Version References: what is stale, and what is not
 
