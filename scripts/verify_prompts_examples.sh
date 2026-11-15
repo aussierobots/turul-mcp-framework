@@ -184,7 +184,7 @@ test_prompts_server() {
     # multi_message_prompt (user_input), validation_prompt (email, age), etc.
     if [ "$MESSAGE_COUNT" -eq 0 ]; then
         echo "  Note: Prompt requires arguments, retrying with defaults..."
-        local args_json='{"language":"rust","requirements":"Build a simple calculator","code":"fn main() {}","project_type":"web_application","enable_feature":"true","user_input":"test","email":"test@example.com","age":"25","mode":"creative"}'
+        local args_json='{"language":"rust","requirements":"Build a simple calculator","code":"fn main() {}","project_type":"web-app","enable_feature":"true","user_input":"test","email":"test@example.com","age":"25","mode":"creative"}'
         if [ "$protocol" = "2026" ]; then
             GET_RESPONSE=$(mcp2026_request "$url" "prompts/get" "$FIRST_PROMPT" \
                 "{\"name\":\"$FIRST_PROMPT\",\"arguments\":$args_json}")

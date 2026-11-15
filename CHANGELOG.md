@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.27] - 2026-11-15
+
+`turul-mcp-derive` 0.4.7 → 0.4.8, `turul-mcp-server` 0.4.15 → 0.4.16,
+`turul-mcp-aws-lambda` 0.4.6 → 0.4.7 (pin raise only).
+
+### Added
+
+- **`resource!` and `prompt!` declare spec fields (ADR-037 rev 2).** `resource!` takes
+  `mime_type:`, `size:`, `meta:`, `icons:` and `annotations:`; `prompt!` takes `meta:` and
+  `icons:`. Both previously hard-coded them to `None`.
+- **`size = <expr>`** (`u64`) on `#[mcp_resource]` and `#[derive(McpResource)]`, served on
+  `resources/list`.
+
+### Fixed
+
+- **`prompts/get` bypassed `McpPrompt::get_response`.** The handler built its own
+  `GetPromptResult` from `render`, so no prompt could set result `_meta`, and overrides of
+  `validate_args` and `transform_messages` never ran. It now returns `get_response`; a prompt
+  sets result `_meta` by overriding it, and the caller's echoed `_meta` extras no longer
+  replace the prompt's keys. A `validate_args` error now reaches the client as a JSON-RPC
+  error, as the hook documents. Prompts that override none of these serve the same bytes.
+
 ## [0.4.26] - 2026-11-15
 
 `turul-mcp-derive` 0.4.6 → 0.4.7, `turul-mcp-server` 0.4.14 → 0.4.15,
@@ -3109,7 +3131,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.26...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.27...HEAD
+[0.4.27]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.26...v0.4.27
 [0.4.26]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.25...v0.4.26
 [0.4.25]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.24...v0.4.25
 [0.4.24]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.23...v0.4.24

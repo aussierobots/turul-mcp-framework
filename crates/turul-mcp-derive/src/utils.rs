@@ -749,6 +749,7 @@ pub struct ResourceMeta {
     pub meta: Option<syn::Expr>,
     pub icons: Option<syn::Expr>,
     pub annotations: Option<syn::Expr>,
+    pub size: Option<syn::Expr>,
 }
 
 /// Extract prompt metadata from #[prompt(...)] attributes
@@ -810,6 +811,7 @@ pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
     let mut meta_expr = None;
     let mut icons = None;
     let mut annotations = None;
+    let mut size = None;
 
     for attr in attrs {
         if attr.path().is_ident("resource") {
@@ -820,6 +822,8 @@ pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
                     icons = Some(meta.value()?.parse::<syn::Expr>()?);
                 } else if meta.path.is_ident("annotations") {
                     annotations = Some(meta.value()?.parse::<syn::Expr>()?);
+                } else if meta.path.is_ident("size") {
+                    size = Some(meta.value()?.parse::<syn::Expr>()?);
                 } else if meta.path.is_ident("name") {
                     let value = meta.value()?;
                     let s: syn::LitStr = value.parse()?;
@@ -871,6 +875,7 @@ pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
         meta: meta_expr,
         icons,
         annotations,
+        size,
     })
 }
 

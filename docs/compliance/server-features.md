@@ -151,28 +151,30 @@ per form) and `tool_icons_2026.rs`.
 | Tool | `outputSchema` | from return type | `output =` | — omitted | `.output_schema()` |
 | Tool | `_meta` | `meta =` | `meta =` | `meta:` | `.meta()` |
 | Resource | `title` | `title =` | `title =` | `title:` | `.title()` |
-| Resource | `mimeType` | `mime_type =` (literal or `&'static str` expr) | `mime_type =` | — omitted | `.mime_type()` |
-| Resource | `icons` | `icons =` | `icons =` | — omitted | `.icons()` |
-| Resource | `annotations` | `annotations =` | `annotations =` | — omitted | `.annotations()` |
-| Resource | `size` | — omitted | — omitted | — omitted | `.size()` |
-| Resource | `_meta` | `meta =` | `meta =` | — omitted | `.meta()` |
-| ResourceTemplate | all of the above | from the registered resource | same | same | same |
+| Resource | `mimeType` | `mime_type =` (literal or `&'static str` expr) | `mime_type =` | `mime_type:` | `.mime_type()` |
+| Resource | `icons` | `icons =` | `icons =` | `icons:` | `.icons()` |
+| Resource | `annotations` | `annotations =` | `annotations =` | `annotations:` | `.annotations()` |
+| Resource | `size` | `size =` | `size =` | `size:` | `.size()` |
+| Resource | `_meta` | `meta =` | `meta =` | `meta:` | `.meta()` |
+| ResourceTemplate | all of the above except `size` (not a template field) | from the registered resource | same | same | same |
 | Prompt | `title` | n/a (no attribute macro) | `title =` | `title:` | `.title()` |
-| Prompt | `icons` | n/a | `icons =` | — omitted | `.icons()` |
-| Prompt | `_meta` | n/a | `meta =` | — omitted | `.meta()` |
+| Prompt | `icons` | n/a | `icons =` | `icons:` | `.icons()` |
+| Prompt | `_meta` | n/a | `meta =` | `meta:` | `.meta()` |
 
 Results:
 - `CallToolResult.structuredContent` comes from the macro tool's return type
   and `isError` from `ToolExecutionError`.
-- Result `_meta` on `CallToolResult` and `GetPromptResult` needs a manual
-  `McpTool` / `McpPrompt` impl.
+- Result `_meta` is a per-call value, not a declaration. `CallToolResult._meta`
+  needs a manual `McpTool` impl (its `call` returns the result); a macro tool
+  keeps its framework-built result. `GetPromptResult._meta` is set, for every
+  prompt form, by overriding `McpPrompt::get_response`, which `prompts/get`
+  returns; the caller's echoed `_meta` extras never replace its keys.
+- `prompts/get` runs the prompt's `validate_args` and `transform_messages`.
 - Resource content `_meta` is set in the handler, in every form, by
   returning `TextResourceContents` / `BlobResourceContents` with `meta`.
 
-Deliberate omissions, with reasons:
-- `resource!` and `prompt!` are minimal shorthands.
-- Resource `size` describes the content, which a static attribute cannot know.
-- Macro tools wrap a plain return value, so they cannot carry result `_meta`.
+Not attributes, with reasons:
+- Result `_meta` is per call (above).
 - `Prompt` has no `annotations` field in 2026-07-28.
 
 ---

@@ -33,6 +33,24 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         Some(t) => quote! { Some(#t) },
         None => quote! { None },
     };
+    let mime_type_expr = match &input.mime_type {
+        Some(m) => quote! { Some(#m) },
+        None => quote! { None },
+    };
+    let size_impl =
+        crate::tool_derive::generate_resource_size_impl(&resource_name_ident, input.size.as_ref());
+    let annotations_impl = crate::tool_derive::generate_resource_annotations_impl(
+        &resource_name_ident,
+        input.annotations.as_ref(),
+    );
+    let meta_impl = crate::tool_derive::generate_meta_impl(
+        &resource_name_ident,
+        "HasResourceMeta",
+        "resource_meta",
+        input.meta.as_ref(),
+    );
+    let icons_impl =
+        crate::tool_derive::generate_icons_impl(&resource_name_ident, input.icons.as_ref());
 
     let expanded = quote! {
         {
@@ -70,29 +88,17 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
             impl #mcp_builders::HasResourceMimeType for #resource_name_ident {
                 fn mime_type(&self) -> Option<&str> {
-                    None
+                    #mime_type_expr
                 }
             }
 
-            impl #mcp_builders::HasResourceSize for #resource_name_ident {
-                fn size(&self) -> Option<u64> {
-                    None
-                }
-            }
+            #size_impl
 
-            impl #mcp_builders::HasResourceAnnotations for #resource_name_ident {
-                fn annotations(&self) -> Option<&#mcp_protocol::meta::Annotations> {
-                    None
-                }
-            }
+            #annotations_impl
 
-            impl #mcp_builders::HasResourceMeta for #resource_name_ident {
-                fn resource_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
-                    None
-                }
-            }
+            #meta_impl
 
-            impl #mcp_builders::HasIcons for #resource_name_ident {}
+            #icons_impl
 
             // ResourceDefinition automatically implemented via blanket impl!
 
@@ -117,6 +123,11 @@ pub struct ResourceMacroInput {
     pub name: String,
     pub description: String,
     pub title: Option<String>,
+    pub mime_type: Option<Expr>,
+    pub size: Option<Expr>,
+    pub meta: Option<Expr>,
+    pub icons: Option<Expr>,
+    pub annotations: Option<Expr>,
     pub content: Expr,
 }
 
@@ -126,6 +137,11 @@ impl Parse for ResourceMacroInput {
         let mut name = None;
         let mut description = None;
         let mut title = None;
+        let mut mime_type = None;
+        let mut size = None;
+        let mut meta = None;
+        let mut icons = None;
+        let mut annotations = None;
         let mut content = None;
 
         while !input.is_empty() {
@@ -149,6 +165,11 @@ impl Parse for ResourceMacroInput {
                     let lit: LitStr = input.parse()?;
                     title = Some(lit.value());
                 }
+                "mime_type" => mime_type = Some(input.parse::<Expr>()?),
+                "size" => size = Some(input.parse::<Expr>()?),
+                "meta" => meta = Some(input.parse::<Expr>()?),
+                "icons" => icons = Some(input.parse::<Expr>()?),
+                "annotations" => annotations = Some(input.parse::<Expr>()?),
                 "content" => {
                     let expr: Expr = input.parse()?;
                     content = Some(expr);
@@ -172,6 +193,11 @@ impl Parse for ResourceMacroInput {
             description: description
                 .ok_or_else(|| syn::Error::new(input.span(), "Missing 'description' field"))?,
             title,
+            mime_type,
+            size,
+            meta,
+            icons,
+            annotations,
             content: content
                 .ok_or_else(|| syn::Error::new(input.span(), "Missing 'content' field"))?,
         })
@@ -212,5 +238,31 @@ mod tests {
         assert_eq!(parsed.uri, "file://test.txt");
         assert_eq!(parsed.name, "Test Resource");
         assert_eq!(parsed.title, Some("My Custom Title".to_string()));
+    }
+
+    #[test]
+    fn test_resource_macro_parse_spec_fields() {
+        let input = quote::quote! {
+            uri: "ui://test/view.html",
+            name: "view",
+            description: "A view",
+            mime_type: MIME,
+            size: 4,
+            meta: meta(),
+            icons: vec![],
+            annotations: Annotations::new(),
+            content: |_, _| async { Ok(vec![]) }
+        };
+
+        let parsed = syn::parse2::<ResourceMacroInput>(input).unwrap();
+        for (field, expr) in [
+            ("mime_type", &parsed.mime_type),
+            ("size", &parsed.size),
+            ("meta", &parsed.meta),
+            ("icons", &parsed.icons),
+            ("annotations", &parsed.annotations),
+        ] {
+            assert!(expr.is_some(), "{field} not parsed");
+        }
     }
 }

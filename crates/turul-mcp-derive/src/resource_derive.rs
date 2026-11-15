@@ -37,6 +37,8 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
     );
     let icons_impl =
         crate::tool_derive::generate_icons_impl(struct_name, resource_meta.icons.as_ref());
+    let size_impl =
+        crate::tool_derive::generate_resource_size_impl(struct_name, resource_meta.size.as_ref());
     let annotations_impl = crate::tool_derive::generate_resource_annotations_impl(
         struct_name,
         resource_meta.annotations.as_ref(),
@@ -89,11 +91,7 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl #mcp_builders::traits::HasResourceSize for #struct_name {
-            fn size(&self) -> Option<u64> {
-                None
-            }
-        }
+        #size_impl
 
         #[automatically_derived]
         #annotations_impl
