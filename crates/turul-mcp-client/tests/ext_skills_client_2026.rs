@@ -250,9 +250,9 @@ async fn c5_frontmatter_discrepancy_refused() {
 }
 
 /// C-5 / ADR-033 §6: frontmatter our parser cannot render faithfully (a typed
-/// scalar) cannot be verified, so it fails closed.
+/// C-5 / ADR-033 §9: a typed value both YAML schemas agree on verifies.
 #[tokio::test]
-async fn c5_typed_frontmatter_fails_closed() {
+async fn c5_typed_frontmatter_verifies() {
     let md = "---\nname: demo\ndescription: Does demo.\nversion: 1.0\n---\n";
     let digest = SkillResource::of(SKILL_URI.into(), md.as_bytes());
     let typed = json!({
@@ -261,6 +261,23 @@ async fn c5_typed_frontmatter_fails_closed() {
         "resources": [digest],
     });
     let server = peer(true, typed, &[(SKILL_URI, text(SKILL_URI, md))]).await;
+    let c = client(&server).await;
+    let skill = c.skills_get(SKILL_URI).await.unwrap();
+    c.skill_fetch(&skill, SKILL_URI).await.unwrap();
+}
+
+/// C-5 / ADR-033 §9: a value YAML 1.1 and 1.2 read differently cannot be
+/// verified and fails closed.
+#[tokio::test]
+async fn c5_schema_disagreement_fails_closed() {
+    let md = "---\nname: demo\ndescription: Does demo.\nflag: yes\n---\n";
+    let digest = SkillResource::of(SKILL_URI.into(), md.as_bytes());
+    let entry = json!({
+        "uri": SKILL_URI,
+        "frontmatter": { "name": "demo", "description": "Does demo.", "flag": "yes" },
+        "resources": [digest],
+    });
+    let server = peer(true, entry, &[(SKILL_URI, text(SKILL_URI, md))]).await;
     let c = client(&server).await;
     let skill = c.skills_get(SKILL_URI).await.unwrap();
     let reason = verification(c.skill_fetch(&skill, SKILL_URI).await.unwrap_err());

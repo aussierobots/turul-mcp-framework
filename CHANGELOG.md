@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.29] - 2026-11-16
+
+`turul-mcp-ext-skills` 0.1.2 → 0.1.3, `turul-mcp-server` 0.4.17 → 0.4.18,
+`turul-mcp-aws-lambda` 0.4.8 → 0.4.9, `turul-mcp-client` 0.4.13 → 0.4.14 (pin raise only);
+`turul-agent-skills` 0.1.3 → 0.1.4.
+
+### Changed
+
+- **Skills frontmatter serves typed values (ADR-033 §9).** A plain scalar is served with
+  its YAML 1.2 core type (null, bool, int, float) when YAML 1.1 reads it the same way, so
+  `version: 1.0` is now served as `1.0` instead of refusing the skill. A value the two
+  schemas read differently (`yes`, `off`, `0777`, `1:30`, `1e3`, timestamps) still refuses
+  the skill, now as `FrontmatterError::SchemaDisagreement`; `.inf`, `.nan` and integers
+  outside `i64` refuse as `FrontmatterError::Unrepresentable`. The client's C-5 check
+  verifies typed frontmatter through the same parser.
+- Semver: removing `FrontmatterError::Typed` is formally breaking; it ships as a patch
+  under the 0.4 rule.
+
 ## [0.4.28] - 2026-11-16
 
 `turul-mcp-derive` 0.4.8 → 0.4.9, `turul-mcp-server` 0.4.16 → 0.4.17,
@@ -3160,7 +3178,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.28...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.29...HEAD
+[0.4.29]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.28...v0.4.29
 [0.4.28]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.27...v0.4.28
 [0.4.27]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.26...v0.4.27
 [0.4.26]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.25...v0.4.26
