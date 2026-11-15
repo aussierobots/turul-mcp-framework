@@ -123,7 +123,9 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     let re = regex::Regex::new(r"\{([^}]+)\}").unwrap();
     for capture in re.captures_iter(&resource_uri) {
         if let Some(var_name) = capture.get(1) {
-            template_vars.push(var_name.as_str().to_string());
+            // `{+path}` (RFC 6570 reserved expansion) binds the argument `path`.
+            let name = var_name.as_str();
+            template_vars.push(name.strip_prefix('+').unwrap_or(name).to_string());
         }
     }
 

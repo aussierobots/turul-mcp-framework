@@ -1869,7 +1869,10 @@ impl McpServerBuilder {
             if mat.as_str().starts_with("{+") {
                 result.push_str("[a-zA-Z0-9_.~%/-]+");
             } else {
-                result.push_str("[a-zA-Z0-9_.-]+"); // Allow dots for IDs like announcement_id
+                // One raw segment of unreserved characters or percent-encoded
+                // octets (RFC 6570: `id%23x`, `a%2Fb`). Decoded dot segments
+                // are refused at extraction (ADR-007).
+                result.push_str("(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2})+");
             }
 
             last_end = mat.end();
