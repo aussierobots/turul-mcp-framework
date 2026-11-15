@@ -136,6 +136,47 @@ deprecation window.
 
 ---
 
+## Declaring per-object fields (ADR-037)
+
+Which declaration form can set each optional per-object field. "builder" is
+`ToolBuilder` / `ResourceBuilder` / `PromptBuilder`; a manual trait impl can
+set every field. Verified by `macro_spec_fields_2026.rs` (exact served JSON
+per form) and `tool_icons_2026.rs`.
+
+| Object | Field | `#[mcp_tool]` / `#[mcp_resource]` | `derive` | `tool!` / `resource!` / `prompt!` | builder |
+|---|---|---|---|---|---|
+| Tool | `title` | `title =` | `title =` | `title:` | `.title()` |
+| Tool | `icons` | `icons =` | `icons =` | `icons:` | `.icons()` |
+| Tool | `annotations` | `read_only =` etc. | `read_only =` etc. | `read_only:` etc. | `.annotations()` |
+| Tool | `outputSchema` | from return type | `output =` | — omitted | `.output_schema()` |
+| Tool | `_meta` | `meta =` | `meta =` | `meta:` | `.meta()` |
+| Resource | `title` | `title =` | `title =` | `title:` | `.title()` |
+| Resource | `mimeType` | `mime_type =` (literal or `&'static str` expr) | `mime_type =` | — omitted | `.mime_type()` |
+| Resource | `icons` | `icons =` | `icons =` | — omitted | `.icons()` |
+| Resource | `annotations` | `annotations =` | `annotations =` | — omitted | `.annotations()` |
+| Resource | `size` | — omitted | — omitted | — omitted | `.size()` |
+| Resource | `_meta` | `meta =` | `meta =` | — omitted | `.meta()` |
+| ResourceTemplate | all of the above | from the registered resource | same | same | same |
+| Prompt | `title` | n/a (no attribute macro) | `title =` | `title:` | `.title()` |
+| Prompt | `icons` | n/a | `icons =` | — omitted | `.icons()` |
+| Prompt | `_meta` | n/a | `meta =` | — omitted | `.meta()` |
+
+Results:
+- `CallToolResult.structuredContent` comes from the macro tool's return type
+  and `isError` from `ToolExecutionError`.
+- Result `_meta` on `CallToolResult` and `GetPromptResult` needs a manual
+  `McpTool` / `McpPrompt` impl.
+- Resource content `_meta` is set in the handler, in every form, by
+  returning `TextResourceContents` / `BlobResourceContents` with `meta`.
+
+Deliberate omissions, with reasons:
+- `resource!` and `prompt!` are minimal shorthands.
+- Resource `size` describes the content, which a static attribute cannot know.
+- Macro tools wrap a plain return value, so they cannot carry result `_meta`.
+- `Prompt` has no `annotations` field in 2026-07-28.
+
+---
+
 ## Gap register
 
 1. **Tool `annotations` are never asserted on the `tools/list` wire.**

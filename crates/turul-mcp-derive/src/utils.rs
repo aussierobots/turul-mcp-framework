@@ -732,6 +732,9 @@ pub struct FieldMeta {
 pub struct PromptMeta {
     pub name: String,
     pub description: String,
+    pub title: Option<String>,
+    pub meta: Option<syn::Expr>,
+    pub icons: Option<syn::Expr>,
 }
 
 /// Resource metadata extracted from attributes
@@ -743,17 +746,29 @@ pub struct ResourceMeta {
     pub description: String,
     pub title: Option<String>,
     pub mime_type: Option<String>,
+    pub meta: Option<syn::Expr>,
+    pub icons: Option<syn::Expr>,
+    pub annotations: Option<syn::Expr>,
 }
 
 /// Extract prompt metadata from #[prompt(...)] attributes
 pub fn extract_prompt_meta(attrs: &[Attribute]) -> Result<PromptMeta> {
     let mut name = None;
     let mut description = None;
+    let mut title = None;
+    let mut meta_expr = None;
+    let mut icons = None;
 
     for attr in attrs {
         if attr.path().is_ident("prompt") {
             attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("name") {
+                if meta.path.is_ident("title") {
+                    title = Some(meta.value()?.parse::<syn::LitStr>()?.value());
+                } else if meta.path.is_ident("meta") {
+                    meta_expr = Some(meta.value()?.parse::<syn::Expr>()?);
+                } else if meta.path.is_ident("icons") {
+                    icons = Some(meta.value()?.parse::<syn::Expr>()?);
+                } else if meta.path.is_ident("name") {
                     let value = meta.value()?;
                     let s: syn::LitStr = value.parse()?;
                     name = Some(s.value());
@@ -776,7 +791,13 @@ pub fn extract_prompt_meta(attrs: &[Attribute]) -> Result<PromptMeta> {
 
     let description = description.unwrap_or_else(|| "Generated prompt".to_string());
 
-    Ok(PromptMeta { name, description })
+    Ok(PromptMeta {
+        name,
+        description,
+        title,
+        meta: meta_expr,
+        icons,
+    })
 }
 
 /// Extract resource metadata from #[resource(...)] attributes
@@ -786,11 +807,20 @@ pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
     let mut description = None;
     let mut title = None;
     let mut mime_type = None;
+    let mut meta_expr = None;
+    let mut icons = None;
+    let mut annotations = None;
 
     for attr in attrs {
         if attr.path().is_ident("resource") {
             attr.parse_nested_meta(|meta| {
-                if meta.path.is_ident("name") {
+                if meta.path.is_ident("meta") {
+                    meta_expr = Some(meta.value()?.parse::<syn::Expr>()?);
+                } else if meta.path.is_ident("icons") {
+                    icons = Some(meta.value()?.parse::<syn::Expr>()?);
+                } else if meta.path.is_ident("annotations") {
+                    annotations = Some(meta.value()?.parse::<syn::Expr>()?);
+                } else if meta.path.is_ident("name") {
                     let value = meta.value()?;
                     let s: syn::LitStr = value.parse()?;
                     name = Some(s.value());
@@ -838,6 +868,9 @@ pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
         description,
         title,
         mime_type,
+        meta: meta_expr,
+        icons,
+        annotations,
     })
 }
 

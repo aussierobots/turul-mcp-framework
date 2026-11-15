@@ -17,10 +17,18 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     let mut resource_name = None;
     let mut resource_description = None;
     let mut resource_title = None;
-    let mut mime_type = None;
+    let mut mime_type: Option<syn::Expr> = None;
+    let mut meta: Option<syn::Expr> = None;
+    let mut icons: Option<syn::Expr> = None;
+    let mut annotations: Option<syn::Expr> = None;
 
     for arg in args {
         match arg {
+            Meta::NameValue(nv) if nv.path.is_ident("meta") => meta = Some(nv.value.clone()),
+            Meta::NameValue(nv) if nv.path.is_ident("icons") => icons = Some(nv.value.clone()),
+            Meta::NameValue(nv) if nv.path.is_ident("annotations") => {
+                annotations = Some(nv.value.clone())
+            }
             Meta::NameValue(nv) if nv.path.is_ident("uri") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
                     && let Lit::Str(s) = &expr_lit.lit
@@ -49,12 +57,9 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
                     resource_title = Some(s.value());
                 }
             }
+            // A string literal or any `&'static str` expression, e.g. a constant.
             Meta::NameValue(nv) if nv.path.is_ident("mime_type") => {
-                if let syn::Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(s) = &expr_lit.lit
-                {
-                    mime_type = Some(s.value());
-                }
+                mime_type = Some(nv.value.clone());
             }
             _ => {}
         }
@@ -77,6 +82,16 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
         fn_name.span(),
     );
 
+    let meta_impl = crate::tool_derive::generate_meta_impl(
+        &struct_name,
+        "HasResourceMeta",
+        "resource_meta",
+        meta.as_ref(),
+    );
+    let icons_impl = crate::tool_derive::generate_icons_impl(&struct_name, icons.as_ref());
+    let annotations_impl =
+        crate::tool_derive::generate_resource_annotations_impl(&struct_name, annotations.as_ref());
+
     // Use function name as resource name if not provided
     let resource_name = resource_name.unwrap_or_else(|| fn_name.to_string());
 
@@ -92,7 +107,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
 
     // Handle mime_type properly for quote! generation
     let mime_type_expr = match mime_type {
-        Some(mt) => quote! { Some(#mt).as_deref() },
+        Some(mt) => quote! { Some(#mt) },
         None => quote! { None },
     };
 
@@ -224,19 +239,11 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             }
         }
 
-        impl #mcp_builders::traits::HasResourceAnnotations for #struct_name {
-            fn annotations(&self) -> Option<&#mcp_protocol::meta::Annotations> {
-                None
-            }
-        }
+        #annotations_impl
 
-        impl #mcp_builders::traits::HasResourceMeta for #struct_name {
-            fn resource_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
-                None
-            }
-        }
+        #meta_impl
 
-        impl #mcp_builders::traits::HasIcons for #struct_name {}
+        #icons_impl
 
         // Implement McpResource trait with session-aware signature
         #[#async_trait::async_trait]

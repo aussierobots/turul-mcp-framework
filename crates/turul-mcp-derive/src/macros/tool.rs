@@ -26,6 +26,15 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         proc_macro2::Span::call_site(),
     );
 
+    let meta_impl = crate::tool_derive::generate_meta_impl(
+        &tool_name_ident,
+        "HasToolMeta",
+        "tool_meta",
+        input.meta.as_ref(),
+    );
+    let icons_impl =
+        crate::tool_derive::generate_icons_impl(&tool_name_ident, input.icons.as_ref());
+
     // Generate parameter extraction
     let mut param_extractions = Vec::new();
     let mut param_names = Vec::new();
@@ -309,13 +318,9 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
             #annotations_impl
 
-            impl #mcp_builders::HasToolMeta for #tool_name_ident {
-                fn tool_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
-                    None
-                }
-            }
+            #meta_impl
 
-            impl #mcp_builders::HasIcons for #tool_name_ident {}
+            #icons_impl
 
             impl #mcp_builders::HasExecution for #tool_name_ident {}
 
@@ -367,6 +372,8 @@ pub struct ToolMacroInput {
     pub destructive: Option<bool>,
     pub idempotent: Option<bool>,
     pub open_world: Option<bool>,
+    pub meta: Option<Expr>,  // → HasToolMeta::tool_meta() (ADR-037)
+    pub icons: Option<Expr>, // → HasIcons::icons()
 }
 
 pub struct ToolParam {
@@ -391,6 +398,8 @@ impl Parse for ToolMacroInput {
         let mut destructive = None;
         let mut idempotent = None;
         let mut open_world = None;
+        let mut meta = None;
+        let mut icons = None;
 
         while !input.is_empty() {
             let ident: Ident = input.parse()?;
@@ -534,6 +543,8 @@ impl Parse for ToolMacroInput {
                     let expr: Expr = input.parse()?;
                     execute = Some(expr);
                 }
+                "meta" => meta = Some(input.parse::<Expr>()?),
+                "icons" => icons = Some(input.parse::<Expr>()?),
                 _ => {
                     return Err(syn::Error::new_spanned(
                         &ident,
@@ -560,6 +571,8 @@ impl Parse for ToolMacroInput {
             destructive,
             idempotent,
             open_world,
+            meta,
+            icons,
         })
     }
 }

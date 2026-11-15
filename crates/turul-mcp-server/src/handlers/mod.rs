@@ -1563,6 +1563,19 @@ impl McpHandler for ResourceTemplatesHandler {
                 if let Some(mime_type) = resource.mime_type() {
                     template = template.with_mime_type(mime_type);
                 }
+                // ADR-037: the template serves every field the resource declares.
+                if let Some(title) = resource.title() {
+                    template = template.with_title(title);
+                }
+                if let Some(annotations) = resource.annotations() {
+                    template = template.with_annotations(annotations.clone());
+                }
+                if let Some(icons) = resource.icons() {
+                    template = template.with_icons(icons.clone());
+                }
+                if let Some(meta) = resource.resource_meta() {
+                    template = template.with_meta(meta.clone());
+                }
                 template
             })
             .collect();

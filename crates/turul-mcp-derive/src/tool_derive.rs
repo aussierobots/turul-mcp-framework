@@ -50,17 +50,26 @@ fn camel_to_readable(input: &str) -> String {
     result
 }
 
-/// Lift `icons = <expr>` out of `#[tool(...)]`, returning the expression and the
-/// attribute list with that entry removed.
+/// Lift the expression-valued keys `icons = <expr>` and `meta = <expr>` out of
+/// `#[tool(...)]`, returning the expressions and the attribute list with those
+/// entries removed.
 ///
 /// `extract_tool_meta` treats a `#[tool(...)]` key it does not recognise as a
-/// parse failure, so `icons` has to be removed before the remaining keys are
+/// parse failure, so these keys have to be removed before the remaining keys are
 /// handed to it. Splitting happens on token trees rather than parsed `Meta`
 /// because `output = Vec<T>` is a type, not an expression.
-fn split_icons_attr(attrs: &[syn::Attribute]) -> Result<(Option<syn::Expr>, Vec<syn::Attribute>)> {
+struct ToolExprAttrs {
+    icons: Option<syn::Expr>,
+    meta: Option<syn::Expr>,
+}
+
+fn split_expr_attrs(attrs: &[syn::Attribute]) -> Result<(ToolExprAttrs, Vec<syn::Attribute>)> {
     use proc_macro2::{TokenStream as TokenStream2, TokenTree};
 
-    let mut icons: Option<syn::Expr> = None;
+    let mut out = ToolExprAttrs {
+        icons: None,
+        meta: None,
+    };
     let mut kept_attrs = Vec::new();
 
     for attr in attrs {
@@ -83,29 +92,36 @@ fn split_icons_attr(attrs: &[syn::Attribute]) -> Result<(Option<syn::Expr>, Vec<
 
         let mut kept_entries: Vec<TokenStream2> = Vec::new();
         for entry in entries {
-            let is_icons = matches!(entry.first(), Some(TokenTree::Ident(i)) if i == "icons");
-            if !is_icons {
-                if !entry.is_empty() {
-                    kept_entries.push(entry.into_iter().collect());
+            let key = match entry.first() {
+                Some(TokenTree::Ident(i)) if i == "icons" || i == "meta" => i.to_string(),
+                _ => {
+                    if !entry.is_empty() {
+                        kept_entries.push(entry.into_iter().collect());
+                    }
+                    continue;
                 }
-                continue;
-            }
-            // `icons` `=` <expr>
+            };
+            // `<key>` `=` <expr>
             let value: TokenStream2 = entry.into_iter().skip(2).collect();
             if value.is_empty() {
                 return Err(syn::Error::new_spanned(
                     attr,
-                    "icons must be `icons = <expr>` yielding Vec<::turul_mcp_server::__private::turul_mcp_protocol::icons::Icon>",
+                    format!("{key} must be `{key} = <expr>`"),
                 ));
             }
-            icons = Some(syn::parse2(value)?);
+            let expr = Some(syn::parse2(value)?);
+            if key == "icons" {
+                out.icons = expr;
+            } else {
+                out.meta = expr;
+            }
         }
 
         let rebuilt = quote! { #(#kept_entries),* };
         kept_attrs.push(syn::parse_quote!(#[tool(#rebuilt)]));
     }
 
-    Ok((icons, kept_attrs))
+    Ok((out, kept_attrs))
 }
 
 /// `HasIcons` for a macro-authored tool. With no `icons = <expr>` the default
@@ -130,6 +146,62 @@ pub(crate) fn generate_icons_impl(name: &syn::Ident, icons: Option<&syn::Expr>) 
     }
 }
 
+/// The `_meta` trait (`HasToolMeta`, `HasResourceMeta` or `HasPromptMeta`) for a
+/// macro-authored object (ADR-037). `meta = <expr>` yields a
+/// `HashMap<String, Value>` built once per type; without it the method returns
+/// `None`, which is what every form emitted before the attribute existed.
+pub(crate) fn generate_meta_impl(
+    name: &syn::Ident,
+    trait_name: &str,
+    method: &str,
+    meta: Option<&syn::Expr>,
+) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let json_crate = crate::utils::serde_json_path();
+    let trait_ident = syn::Ident::new(trait_name, proc_macro2::Span::call_site());
+    let method_ident = syn::Ident::new(method, proc_macro2::Span::call_site());
+    let body = match meta {
+        Some(expr) => quote! {
+            static META: std::sync::OnceLock<std::collections::HashMap<String, #json_crate::Value>> =
+                std::sync::OnceLock::new();
+            Some(META.get_or_init(|| #expr))
+        },
+        None => quote! { None },
+    };
+    quote! {
+        impl #mcp_builders::traits::#trait_ident for #name {
+            fn #method_ident(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
+                #body
+            }
+        }
+    }
+}
+
+/// `HasResourceAnnotations` for a macro-authored resource (ADR-037):
+/// `annotations = <expr>` yields an `Annotations` built once per type.
+pub(crate) fn generate_resource_annotations_impl(
+    name: &syn::Ident,
+    annotations: Option<&syn::Expr>,
+) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let mcp_protocol = crate::utils::protocol_path();
+    let body = match annotations {
+        Some(expr) => quote! {
+            static ANNOTATIONS: std::sync::OnceLock<#mcp_protocol::meta::Annotations> =
+                std::sync::OnceLock::new();
+            Some(ANNOTATIONS.get_or_init(|| #expr))
+        },
+        None => quote! { None },
+    };
+    quote! {
+        impl #mcp_builders::traits::HasResourceAnnotations for #name {
+            fn annotations(&self) -> Option<&#mcp_protocol::meta::Annotations> {
+                #body
+            }
+        }
+    }
+}
+
 pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let async_trait = crate::utils::async_trait_path();
     let json_crate = crate::utils::serde_json_path();
@@ -141,7 +213,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     // AUTO-DETERMINE tool name from struct name (ZERO CONFIGURATION!)
     let auto_name = auto_determine_tool_name(name.to_string());
 
-    let (icons_expr, attrs) = split_icons_attr(&input.attrs)?;
+    let (expr_attrs, attrs) = split_expr_attrs(&input.attrs)?;
+    let icons_expr = expr_attrs.icons;
 
     // Try to extract attributes, but use auto-determined values as defaults.
     // extract_tool_meta requires name+description; if missing, we parse partial
@@ -259,6 +332,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         crate::utils::generate_annotations_impl(name, &tool_meta.to_annotation_meta());
 
     let icons_impl = generate_icons_impl(name, icons_expr.as_ref());
+    let meta_impl = generate_meta_impl(name, "HasToolMeta", "tool_meta", expr_attrs.meta.as_ref());
 
     // Determine the output field name consistently for both schema and runtime
     let runtime_field_name = if let Some(ref output_type) = tool_meta.output_type {
@@ -476,11 +550,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
         #annotations_impl
 
-        impl #mcp_builders::traits::HasToolMeta for #name {
-            fn tool_meta(&self) -> Option<&std::collections::HashMap<String, #json_crate::Value>> {
-                None
-            }
-        }
+        #meta_impl
 
         #icons_impl
 
