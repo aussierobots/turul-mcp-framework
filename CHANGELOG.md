@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.28] - 2026-11-16
+
+`turul-mcp-derive` 0.4.8 → 0.4.9, `turul-mcp-server` 0.4.16 → 0.4.17,
+`turul-mcp-aws-lambda` 0.4.7 → 0.4.8 (pin raise only).
+
+### Fixed
+
+- **A simple `{var}` template refused every percent-encoded value (ADR-007).** Its
+  auto-generated allow pattern was `[a-zA-Z0-9_.-]+`, so a value containing a reserved
+  character could not be read in any form: `id#1` starts a fragment and `a/b` spans two
+  segments, and their RFC 6570 forms `id%231` and `a%2Fb` were refused with `-32602`. The
+  pattern now admits percent-encoded octets in one raw segment; the handler receives the
+  decoded value. A decoded value that is rooted (leading `/` or `\`), contains a NUL, or is
+  or contains a `.` or `..` segment is refused, for `{var}` and `{+var}` alike.
+- **`#[mcp_resource]` did not bind a `{+path}` variable.** The argument `path` was looked up
+  as `+path` and the read failed with "Missing required parameter: path".
+
+### Security
+
+- **`resources/read` refuses every `..` path segment, literal or percent-encoded (ADR-007).**
+  A `%2e%2e` segment passed the resource policy whenever an allowed pattern admitted `%`
+  (a static resource's directory pattern, or a `{+var}` template), and template extraction
+  percent-decoded it, so the handler received `..` as a variable. `validate_uri` now refuses
+  any segment equal to `..` after decoding, in any position, before the configured patterns
+  and before template matching, so a custom `ResourceAccessControl` gets the check too.
+  The read handler applies it as well, whatever policy is attached, so a server built with
+  `.test_mode()` (which removes the policy, and with it the literal `..` refusal) refuses
+  them too. Refusal is `-32602`; the handler is not called.
+
 ## [0.4.27] - 2026-11-15
 
 `turul-mcp-derive` 0.4.7 → 0.4.8, `turul-mcp-server` 0.4.15 → 0.4.16,
@@ -3131,7 +3160,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.27...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.28...HEAD
+[0.4.28]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.27...v0.4.28
 [0.4.27]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.26...v0.4.27
 [0.4.26]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.25...v0.4.26
 [0.4.25]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.24...v0.4.25

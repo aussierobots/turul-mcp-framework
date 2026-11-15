@@ -94,7 +94,8 @@ fn build_resource_security(&self) -> SecurityMiddleware {
 | Resource URI | Generated Pattern | Allows |
 |-------------|------------------|---------|
 | `file:///asx/data.csv` | `^file:///asx/[^/]+$` | Files in `/asx/` directory |
-| `file:///api/{id}.json` | `^file:///api/[a-zA-Z0-9_.-]+\.json$` | Template instantiations |
+| `file:///api/{id}.json` | `^file:///api/(?:[a-zA-Z0-9_.~-]\|%[0-9A-Fa-f]{2})+\.json$` | Template instantiations, percent-encoded octets included |
+| `file:///docs/{+path}` | `^file:///docs/[a-zA-Z0-9_.~%/-]+$` | Reserved expansion, may span `/` |
 
 ## Benefits
 
@@ -113,6 +114,39 @@ fn build_resource_security(&self) -> SecurityMiddleware {
 - Executable files (`.exe`, etc.)
 - Unauthorized file extensions
 - Content size limits (50MB default)
+
+### Template variables admit percent-encoded octets
+
+A simple `{var}` matches one raw segment (no raw `/`) of unreserved
+characters or percent-encoded octets. Per RFC 6570 a simple variable
+percent-encodes reserved characters, so `id%23x` carries `id#x` (a raw `#`
+starts the fragment) and `a%2Fb` carries `a/b`. A reserved `{+var}` also
+admits a raw `/`. `UriTemplate::extract` decodes each value and refuses
+(`-32602`) one that is rooted (starts with `/` or `\`, which a path join
+would take in place of its base), contains a NUL, or is or contains a `.` or
+`..` segment, split on `/` and `\`: the handler never receives one.
+
+### Dot segments are refused in every policy
+
+`ResourceAccessControl::validate_uri` refuses a URI any of whose path
+segments is `..`, after percent-decoding, before the blocked and allowed
+patterns run. That covers a leading, inner, trailing or bare `..`, and its
+encoded forms (`%2e%2e`, `%2E%2E`, `.%2e`). The part of the URI before any
+`?` or `#` is decoded and then split on `/` and `\`, so an encoded separator
+(`%2e%2e%2Fx`) cannot hide a segment. A dot run inside a segment
+(`a..b`) is not a dot segment; whether it is allowed is the patterns'
+decision. The refusal is `-32602`, and the resource handler is not called.
+
+It lives in `validate_uri` rather than in `blocked_patterns` because the
+patterns are configuration: a custom `ResourceAccessControl` replaces them,
+and they see the URI still encoded. Template extraction percent-decodes
+variables, so a `%2e%2e` that a pattern admitted (a static resource's
+`[^/]+`, or a `{+var}` template's `%`) reached a handler as `..`.
+
+`ResourcesReadHandler` applies the same check (`security::has_dot_dot_segment`,
+the one definition) before template matching, whether or not a policy is
+attached, so `.test_mode()`, which removes the policy, does not let a `..`
+segment through either.
 
 ### ✅ Now Allows
 - Custom URI schemes registered by resources
@@ -180,6 +214,19 @@ let server = McpServer::builder()
 - All registered resources accessible
 - Security restrictions still effective
 - Zero manual configuration required
+
+## Revision log
+
+- **2026-11-16**: Dot segments refused in `validate_uri` and, unconditionally,
+  in `ResourcesReadHandler` (so also under `.test_mode()`), literal and
+  percent-encoded, in every position. A simple `{var}` admits
+  percent-encoded octets, `%2F` included (a value containing `#` or `/`
+  was unreadable: its allow pattern was `[a-zA-Z0-9_.-]+`); a decoded
+  variable that is rooted, contains a NUL, or is or contains a `.` or `..`
+  segment is refused. Before, the auto-detected policy
+  refused a literal `..` only through its `\.\.` blocklist pattern, and an
+  encoded `%2e%2e` reached a template handler as `..` whenever an allowed
+  pattern admitted `%`. Test: `crates/turul-mcp-server/tests/resource_uri_dot_segments_2026.rs`.
 
 ## Notes
 

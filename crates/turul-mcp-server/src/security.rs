@@ -111,6 +111,17 @@ impl RateLimiter {
     }
 }
 
+/// Whether any path segment of `uri` is `..` once percent-decoded (ADR-007).
+/// The part before any `?` or `#` is decoded first and then split on `/` and
+/// `\\`, so an encoded separator (`%2e%2e%2Fx`) cannot hide a segment.
+/// `a..b` is not one.
+pub(crate) fn has_dot_dot_segment(uri: &str) -> bool {
+    let path = uri.split(['?', '#']).next().unwrap_or(uri);
+    urlencoding::decode_binary(path.as_bytes())
+        .split(|&b| b == b'/' || b == b'\\')
+        .any(|segment| segment == b"..")
+}
+
 /// Resource access control levels
 #[derive(Debug, Clone, PartialEq)]
 pub enum AccessLevel {
@@ -166,6 +177,15 @@ impl Default for ResourceAccessControl {
 impl ResourceAccessControl {
     /// Validate if a URI is allowed
     pub fn validate_uri(&self, uri: &str) -> Result<(), McpError> {
+        // Dot segments first, independent of the configured patterns (ADR-007).
+        if has_dot_dot_segment(uri) {
+            return Err(McpError::invalid_param_type(
+                "uri",
+                "URI without '..' path segments",
+                uri,
+            ));
+        }
+
         // Check blocked patterns first (highest priority)
         for blocked_pattern in &self.blocked_patterns {
             if blocked_pattern.is_match(uri) {
@@ -546,6 +566,45 @@ mod tests {
 
         let invalid_json = json!({"key": "this string is too long"});
         assert!(validator.validate_json(&invalid_json).is_err());
+    }
+
+    #[test]
+    fn test_dot_dot_segments_refused_without_any_pattern() {
+        // A custom policy with no patterns at all still refuses dot segments.
+        let control = ResourceAccessControl {
+            access_level: AccessLevel::Public,
+            allowed_patterns: vec![],
+            blocked_patterns: vec![],
+            max_size: None,
+            allowed_mime_types: None,
+        };
+        for uri in [
+            "test://items/..",
+            "test://../items/x",
+            "..",
+            "test://items/a/../b",
+            "test://items/%2e%2e",
+            "test://items/%2E%2E",
+            "test://items/.%2e",
+            "test://items/%2e%2e/x",
+            "test://items\\..",
+            "test://items/..?q=1",
+            "test://items/..#f",
+            "test://items/%2e%2e%2Fx",
+            "test://items/a%2F..%2Fb",
+            "test://items/a%5C..",
+        ] {
+            assert!(control.validate_uri(uri).is_err(), "{uri} accepted");
+        }
+        for uri in [
+            "test://items/a..b",
+            "test://items/v1.2",
+            "test://items/.",
+            "test://items/x?next=..",
+            "test://items/%252e%252e",
+        ] {
+            assert!(control.validate_uri(uri).is_ok(), "{uri} refused");
+        }
     }
 
     #[test]

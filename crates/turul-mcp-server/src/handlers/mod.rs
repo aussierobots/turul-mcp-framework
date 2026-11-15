@@ -994,6 +994,16 @@ impl McpHandler for ResourcesReadHandler {
             )?;
         }
 
+        // A `..` segment never reaches a resource, whatever the policy, and
+        // also under `.test_mode()` (ADR-007).
+        if crate::security::has_dot_dot_segment(&read_params.uri) {
+            return Err(McpError::invalid_param_type(
+                "uri",
+                "URI without '..' path segments",
+                &read_params.uri,
+            ));
+        }
+
         // First try to match against URI templates
         if let Some(template) = self.uri_registry.find_matching(&read_params.uri) {
             debug!("Found matching URI template: {}", template.pattern());

@@ -223,6 +223,23 @@ impl UriTemplate {
                     })?
                     .into_owned();
 
+                // RFC 6570: a simple `{var}` carries `/` as `%2F`, so a decoded
+                // value may contain `/`. It must stay relative and in place: not
+                // rooted (a path join would discard its base), no NUL, and not
+                // be, or contain, a `.` or `..` segment (ADR-007).
+                if value.starts_with(['/', '\\'])
+                    || value.contains('\0')
+                    || value
+                        .split(['/', '\\'])
+                        .any(|seg| seg == "." || seg == "..")
+                {
+                    return Err(McpError::invalid_param_type(
+                        var_name,
+                        "a relative value without '.' or '..' segments",
+                        &value,
+                    ));
+                }
+
                 // Validate decoded value
                 if let Some(validator) = self.validators.get(var_name) {
                     validator.validate(&value).map_err(|e| {
@@ -446,6 +463,41 @@ mod tests {
         );
         assert_eq!(UriTemplate::detect_mime_type("file.unknown"), None);
         assert_eq!(UriTemplate::detect_mime_type("file"), None);
+    }
+
+    #[test]
+    fn test_extract_decodes_and_refuses_dot_segments() {
+        let template = UriTemplate::new("test://items/{id}").unwrap();
+        assert_eq!(template.extract("test://items/a%2Fb").unwrap()["id"], "a/b");
+        assert_eq!(template.extract("test://items/A%23b").unwrap()["id"], "A#b");
+        assert!(
+            !template.matches("test://items/a/b"),
+            "raw '/' in a simple var"
+        );
+        for uri in [
+            "test://items/.",
+            "test://items/%2e",
+            "test://items/..",
+            "test://items/a%2F.%2Fb",
+            "test://items/a%2F..%2Fb",
+            "test://items/a%5C..",
+            "test://items/%2Fetc%2Fpasswd",
+            "test://items/%5Cetc",
+            "test://items/a%00b",
+        ] {
+            assert!(template.extract(uri).is_err(), "{uri} accepted");
+        }
+
+        let reserved = UriTemplate::new("test://files/{+path}").unwrap();
+        assert_eq!(
+            reserved.extract("test://files/a%2Fb").unwrap()["path"],
+            "a/b"
+        );
+        assert_eq!(reserved.extract("test://files/a/b").unwrap()["path"], "a/b");
+        assert!(reserved.extract("test://files/a/./b").is_err());
+        assert!(reserved.extract("test://files/a/../b").is_err());
+        assert!(reserved.extract("test://files//etc/passwd").is_err());
+        assert!(reserved.extract("test://files/%2Fetc").is_err());
     }
 
     #[test]
