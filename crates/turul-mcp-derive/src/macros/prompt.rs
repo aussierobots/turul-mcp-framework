@@ -17,6 +17,8 @@ pub struct PromptMacro {
     pub description: Option<LitStr>,
     pub title: Option<LitStr>,
     pub arguments: Vec<PromptArgument>,
+    pub meta: Option<Expr>,
+    pub icons: Option<Expr>,
     pub template: Expr,
 }
 
@@ -34,6 +36,8 @@ impl Parse for PromptMacro {
         let mut description = None;
         let mut title = None;
         let mut arguments = Vec::new();
+        let mut meta = None;
+        let mut icons = None;
         let mut template = None;
 
         while !input.is_empty() {
@@ -57,6 +61,8 @@ impl Parse for PromptMacro {
                         content.parse_terminated(PromptArgument::parse, Token![,])?;
                     arguments = args.into_iter().collect();
                 }
+                "meta" => meta = Some(input.parse::<Expr>()?),
+                "icons" => icons = Some(input.parse::<Expr>()?),
                 "template" => {
                     template = Some(input.parse::<Expr>()?);
                 }
@@ -78,6 +84,8 @@ impl Parse for PromptMacro {
             description,
             title,
             arguments,
+            meta,
+            icons,
             template: template.ok_or_else(|| input.error("Missing required 'template' field"))?,
         })
     }
@@ -139,6 +147,15 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         .unwrap_or_else(|| quote! { None });
 
     let template = &prompt_def.template;
+    let prompt_ident = syn::Ident::new("GeneratedPrompt", proc_macro2::Span::call_site());
+    let meta_impl = crate::tool_derive::generate_meta_impl(
+        &prompt_ident,
+        "HasPromptMeta",
+        "prompt_meta",
+        prompt_def.meta.as_ref(),
+    );
+    let icons_impl =
+        crate::tool_derive::generate_icons_impl(&prompt_ident, prompt_def.icons.as_ref());
 
     // Generate arguments
     let prompt_args = if prompt_def.arguments.is_empty() {
@@ -203,11 +220,9 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 fn annotations(&self) -> Option<&#mcp_builders::traits::PromptAnnotations> { None }
             }
 
-            impl #mcp_builders::HasPromptMeta for GeneratedPrompt {
-                fn prompt_meta(&self) -> Option<&HashMap<String, Value>> { None }
-            }
+            #meta_impl
 
-            impl #mcp_builders::HasIcons for GeneratedPrompt {}
+            #icons_impl
 
             // PromptDefinition automatically implemented via blanket impl!
 
@@ -228,4 +243,34 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     };
 
     Ok(result.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_prompt_macro_parse_spec_fields() {
+        let input = quote::quote! {
+            name: "p",
+            title: "P",
+            meta: meta(),
+            icons: vec![],
+            template: |_args| async move { Ok(vec![]) }
+        };
+        let parsed = syn::parse2::<PromptMacro>(input).unwrap();
+        assert!(parsed.title.is_some());
+        assert!(parsed.meta.is_some(), "meta not parsed");
+        assert!(parsed.icons.is_some(), "icons not parsed");
+    }
+
+    #[test]
+    fn test_prompt_macro_parse_without_spec_fields() {
+        let input = quote::quote! {
+            name: "p",
+            template: |_args| async move { Ok(vec![]) }
+        };
+        let parsed = syn::parse2::<PromptMacro>(input).unwrap();
+        assert!(parsed.meta.is_none() && parsed.icons.is_none());
+    }
 }

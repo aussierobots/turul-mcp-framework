@@ -564,7 +564,6 @@ impl PromptsGetHandler {
 impl McpHandler for PromptsGetHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         use std::collections::HashMap as StdHashMap;
-        use turul_mcp_protocol::prompts::GetPromptResult;
 
         let request_meta_extra = extract_request_meta_extra(&params);
 
@@ -635,9 +634,10 @@ impl McpHandler for PromptsGetHandler {
             arguments
         };
 
-        // Generate prompt messages using the prompt implementation
-        // Note: MCP 2025-11-25 spec enforces only 'user' and 'assistant' roles via Role enum - no 'system' role
-        let messages = match prompt.render(Some(arguments)).await {
+        // `get_response` is the one GetPromptResult constructor (ADR-037): it
+        // runs validate_args, render and transform_messages, and a prompt that
+        // overrides it sets the result `_meta`.
+        let mut response = match prompt.get_response(Some(arguments)).await {
             #[cfg(feature = "protocol-2026-07-28")]
             Err(McpError::InputRequired {
                 input_requests,
@@ -652,15 +652,22 @@ impl McpHandler for PromptsGetHandler {
             other => other?,
         };
 
-        // Create response with messages
-        let mut response = GetPromptResult::new(messages);
-        if let Some(desc) = prompt.description() {
-            response = response.with_description(desc);
-        }
-
-        // Propagate caller-supplied _meta extras from request to response.
+        // Echo the caller's `_meta` extras without replacing keys the prompt set.
         if !request_meta_extra.is_empty() {
-            response = response.with_meta(request_meta_extra);
+            let mut meta: HashMap<String, Value> = response
+                .meta
+                .take()
+                .map(|m| {
+                    serde_json::to_value(m)
+                        .ok()
+                        .and_then(|v| serde_json::from_value(v).ok())
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default();
+            for (key, value) in request_meta_extra {
+                meta.entry(key).or_insert(value);
+            }
+            response = response.with_meta(meta);
         }
 
         serde_json::to_value(response).map_err(McpError::from)

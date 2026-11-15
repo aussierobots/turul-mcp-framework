@@ -21,6 +21,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     let mut meta: Option<syn::Expr> = None;
     let mut icons: Option<syn::Expr> = None;
     let mut annotations: Option<syn::Expr> = None;
+    let mut size: Option<syn::Expr> = None;
 
     for arg in args {
         match arg {
@@ -29,6 +30,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             Meta::NameValue(nv) if nv.path.is_ident("annotations") => {
                 annotations = Some(nv.value.clone())
             }
+            Meta::NameValue(nv) if nv.path.is_ident("size") => size = Some(nv.value.clone()),
             Meta::NameValue(nv) if nv.path.is_ident("uri") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
                     && let Lit::Str(s) = &expr_lit.lit
@@ -89,6 +91,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
         meta.as_ref(),
     );
     let icons_impl = crate::tool_derive::generate_icons_impl(&struct_name, icons.as_ref());
+    let size_impl = crate::tool_derive::generate_resource_size_impl(&struct_name, size.as_ref());
     let annotations_impl =
         crate::tool_derive::generate_resource_annotations_impl(&struct_name, annotations.as_ref());
 
@@ -233,11 +236,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             }
         }
 
-        impl #mcp_builders::traits::HasResourceSize for #struct_name {
-            fn size(&self) -> Option<u64> {
-                None
-            }
-        }
+        #size_impl
 
         #annotations_impl
 

@@ -202,6 +202,26 @@ pub(crate) fn generate_resource_annotations_impl(
     }
 }
 
+/// `HasResourceSize` for a macro-authored resource (ADR-037): `size = <expr>`
+/// yields the content's byte length as a `u64`.
+pub(crate) fn generate_resource_size_impl(
+    name: &syn::Ident,
+    size: Option<&syn::Expr>,
+) -> TokenStream {
+    let mcp_builders = crate::utils::builders_path();
+    let body = match size {
+        Some(expr) => quote! { Some(#expr) },
+        None => quote! { None },
+    };
+    quote! {
+        impl #mcp_builders::traits::HasResourceSize for #name {
+            fn size(&self) -> Option<u64> {
+                #body
+            }
+        }
+    }
+}
+
 pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let async_trait = crate::utils::async_trait_path();
     let json_crate = crate::utils::serde_json_path();

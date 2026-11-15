@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-11-15
 **Crates:** `turul-mcp-derive` (attribute parsing and emitted trait impls),
-`turul-mcp-server` (`resources/templates/list`)
+`turul-mcp-server` (`resources/templates/list`, `prompts/get`)
 **Related:** ADR-036 (sorted wire maps), MCP Apps 2026-01-26 (`_meta.ui`)
 
 ## Context
@@ -14,12 +14,14 @@ The 2026-07-28 schema lets a server set `_meta`, `title`, `icons` and
 The macros could not set several of them, because they emitted the carrying
 trait with a hard-coded `None`:
 
-| Field | `#[mcp_tool]` | `derive(McpTool)` | `#[mcp_resource]` | `derive(McpResource)` | `derive(McpPrompt)` |
-|---|---|---|---|---|---|
-| `_meta` | None | None | None | None | None |
-| `icons` | settable | settable | none | none | none |
-| `annotations` | settable | settable | None | None | n/a |
-| `title` | settable | settable | settable | settable | absent |
+| Field | `#[mcp_tool]` | `derive(McpTool)` | `tool!` | `#[mcp_resource]` | `derive(McpResource)` | `resource!` | `derive(McpPrompt)` | `prompt!` |
+|---|---|---|---|---|---|---|---|---|
+| `_meta` | None | None | None | None | None | None | None | None |
+| `icons` | settable | settable | none | none | none | none | none | none |
+| `annotations` | settable | settable | settable | None | None | None | n/a | n/a |
+| `title` | settable | settable | settable | settable | settable | settable | absent | settable |
+| `mimeType` | n/a | n/a | n/a | literal | literal | None | n/a | n/a |
+| `size` | n/a | n/a | n/a | None | None | None | n/a | n/a |
 
 A tool that opens an MCP App must carry `_meta.ui.resourceUri`. With no
 `_meta` attribute, every Apps tool had to fall back to `ToolBuilder` or to a
@@ -31,6 +33,15 @@ description and mime type. It dropped title, icons, annotations and `_meta`,
 even when the registered resource declared them. That is non-compliant
 output, whatever form declared the resource.
 
+`size` is knowable at compile time whenever the content is: a resource
+serving an embedded document (`include_str!`) knows its byte length.
+
+`prompts/get` built `GetPromptResult` itself from `McpPrompt::render`,
+bypassing `McpPrompt::get_response`, the trait's own result constructor. So
+no prompt of any form could set result `_meta`, and the trait's
+`validate_args` and `transform_messages` hooks never ran on the wire: an
+override of either was dead code.
+
 A `resources/read` content item carries `_meta`, which is where MCP Apps
 puts `UiResourceMeta`. Every resource form's handler returns its content
 items, so it already sets that `_meta` by building `TextResourceContents` or
@@ -40,7 +51,8 @@ items, so it already sets that `_meta` by building `TextResourceContents` or
 
 1. **`meta = <expr>`** on `#[mcp_tool]`, `#[tool(...)]` (`derive(McpTool)`),
    `#[mcp_resource]`, `#[resource(...)]` (`derive(McpResource)`) and
-   `#[prompt(...)]` (`derive(McpPrompt)`), and `meta: <expr>` on `tool!`. `<expr>` has type
+   `#[prompt(...)]` (`derive(McpPrompt)`), and `meta: <expr>` on `tool!`,
+   `resource!` and `prompt!`. `<expr>` has type
    `HashMap<String, serde_json::Value>`. The macro emits the carrying trait
    (`HasToolMeta`, `HasResourceMeta`, `HasPromptMeta`) returning a value
    built once per type into a `OnceLock`, the same pattern `icons` already
@@ -49,9 +61,10 @@ items, so it already sets that `_meta` by building `TextResourceContents` or
    dependency on `turul-mcp-ext-apps`. That crate owns the `ui` key, and the
    macro stays generic.
 2. **`icons = <expr>`** (`Vec<Icon>`) on the two resource forms and on
-   `derive(McpPrompt)`, and `icons: <expr>` on `tool!`, reusing the tool
-   macros' `generate_icons_impl`.
-3. **`annotations = <expr>`** (`Annotations`) on the two resource forms.
+   `derive(McpPrompt)`, and `icons: <expr>` on `tool!`, `resource!` and
+   `prompt!`, reusing the tool macros' `generate_icons_impl`.
+3. **`annotations = <expr>`** (`Annotations`) on the two resource forms, and
+   `annotations: <expr>` on `resource!`.
 4. **`title = "..."`** on `derive(McpPrompt)`.
 5. `resources/templates/list` copies title, icons, annotations and `_meta`
    from the registered resource, as `resources/list` already does.
@@ -59,7 +72,23 @@ items, so it already sets that `_meta` by building `TextResourceContents` or
    expression, so `mime_type = MCP_APP_HTML_MIME` names the extension's
    constant instead of repeating its value. A string literal still works.
    (`uri` stays a literal: template variables are parsed from it at compile
-   time.)
+   time.) `resource!` takes `mime_type: <expr>` the same way.
+7. **`size = <expr>`** (`u64`) on `#[mcp_resource]` and `#[resource(...)]`,
+   and `size: <expr>` on `resource!`, emitting `HasResourceSize`. It is
+   served on `resources/list`; `ResourceTemplate` has no `size` field.
+8. **`prompts/get` returns `McpPrompt::get_response`**, which runs
+   `validate_args`, `render` and `transform_messages`. The handler keeps
+   its required-argument check and its MRTR conversion, then adds the
+   caller's echoed `_meta` extras to the result without replacing keys the
+   prompt set. A prompt sets `GetPromptResult._meta` by overriding
+   `get_response`, the same way a tool sets `CallToolResult._meta` by
+   implementing `McpTool::call`. The handler's own `GetPromptResult`
+   construction is deleted, so there is one.
+
+Every declarative field takes an expression, as `tool!` does. Each shared
+emitter (`generate_meta_impl`, `generate_icons_impl`,
+`generate_resource_annotations_impl`, `generate_resource_size_impl` in
+`tool_derive.rs`) is the one source of its trait impl for every form.
 
 `derive(McpPrompt)` on a struct with no fields failed to compile (the
 emitted empty `vec![]` had no inferable type). The emitted argument list is
@@ -70,19 +99,16 @@ before, so no served byte changes. The one exception is item 5: a template
 resource that already declared title, icons, annotations or `_meta` now
 serves them. That is a spec-compliance fix.
 
-### Deliberate omissions (documented in docs/compliance/server-features.md)
+A `validate_args` error now reaches the client as a JSON-RPC error. That
+is the contract the hook always documented; before, it was never called.
 
-- **`resource!` and `prompt!` declarative macros**: these are shorthands
-  and stay minimal. Use an attribute macro, a derive or a builder.
-- **Resource `size` on macros**: `size` describes the content, which a
-  static attribute cannot know. Use `ResourceBuilder::size` or a manual
-  `HasResourceSize` impl.
-- **Result `_meta` on tools and prompts**: a macro-authored tool returns a
-  value that the framework wraps into `CallToolResult`. The handler can
-  shape `structuredContent` and `isError` through its return type and
-  `ToolExecutionError`, but cannot set result `_meta`. A manual `McpTool`
-  impl returns `CallToolResult` directly and can. `McpPrompt::render`
-  returns messages, so `GetPromptResult._meta` is likewise manual-only.
+### Not macro attributes (documented in docs/compliance/server-features.md)
+
+- **Result `_meta`**: a per-call value, not a per-object declaration, so no
+  static attribute can carry it. A tool sets it by implementing `McpTool`
+  (its `call` returns `CallToolResult`); a prompt by overriding
+  `McpPrompt::get_response`. Both work for every form of prompt; a
+  macro-authored tool keeps its framework-built result.
 - **Prompt `annotations`**: not a field of `Prompt` in 2026-07-28.
 
 `resultType` is set by the protocol layer on every result and needs no
@@ -116,3 +142,8 @@ Rejected:
 ## Revision log
 
 - **2026-11-15**: Initial, Accepted.
+- **2026-11-15**: `resource!` and `prompt!` take `meta`, `icons` (and
+  `resource!` `annotations`, `mime_type`); resource forms take `size`;
+  `prompts/get` returns `McpPrompt::get_response`, so prompt result
+  `_meta`, `validate_args` and `transform_messages` work. Withdraws the
+  omissions for the declarative macros and for `size`.
