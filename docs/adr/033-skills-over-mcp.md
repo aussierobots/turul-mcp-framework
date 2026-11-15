@@ -83,13 +83,12 @@ skill file is mistaken for a URI template by the resource registry.
 ### 3. Frontmatter (S-G3)
 
 The upstream text does not fix a YAML schema, so the JSON type of `1.0`, `yes` or an
-empty value depends on the host's parser. First cut: `Frontmatter::from_skill_md`
-projects `RawSkill::entries` (strings → JSON strings, sequences → arrays, mappings →
+empty value depends on the host's parser. `Frontmatter::from_skill_md`
+projects `RawSkill::entries` (scalars per §9, sequences → arrays, mappings →
 objects, source order) and **refuses** the skill if
 
-- any scalar anywhere carries `RawValue::Str { typed: true }` — `turul-agent-skills`
-  sets that flag for every plain scalar a YAML 1.2-core *or* 1.1 parser would type,
-  a superset, so refusal errs safe;
+- any scalar anywhere is one YAML 1.1 and 1.2 read differently, or one JSON cannot
+  carry exactly (§9);
 - the parse needed lenient repair (`RawSkill::repaired.is_some()`), because a strict
   host parse would then disagree with what we serve;
 - `name` or `description` is absent or not a string.
@@ -101,8 +100,7 @@ included — to pass through (:208). `YamlRepaired` and every other diagnostic r
 the skill.
 
 Residual, accepted: mapping *keys* carry no typed flag; JSON keys are strings in any
-host. Serving typed values needs a public resolver from `turul-agent-skills`
-(handoff H2) and its own revision.
+host. Typed values are served per §9.
 
 ### 4. Manifest (S-G4, S-G8)
 
@@ -170,7 +168,7 @@ defines no skill type, digest or frontmatter parser of its own.
 | C-2 | An entry whose `resources` is absent or neither an array nor `"dynamic"` is invalid; MUST NOT load (:231) | MUST | Deserialization into `Skill` fails; the call errors |
 | C-3 | Verify every retrieved file against the entry's `digest` and `size`; a mismatch MUST NOT be used (:229, :482-483) | MUST | `skill_fetch` checks size, then compares `SkillResource::of(uri, bytes)` with the listed entry (one digest producer); a mismatch is `SkillVerification` and no bytes are returned |
 | C-4 | Resolve a skill's reads only to URIs in the held entry; an unlisted file is a verification failure (:491-492) | MUST | `skill_fetch` refuses a URI absent from `entry.resources` before any request |
-| C-5 | After fetching a `SKILL.md`, parse its frontmatter and compare field by field; a discrepancy MUST NOT be loaded (:496-497) | MUST | The fetched `SKILL.md` goes through `Frontmatter::from_skill_md`; its map must equal `entry.frontmatter`. Frontmatter that parser refuses (typed scalars, lenient repair) cannot be verified and fails closed |
+| C-5 | After fetching a `SKILL.md`, parse its frontmatter and compare field by field; a discrepancy MUST NOT be loaded (:496-497) | MUST | The fetched `SKILL.md` goes through `Frontmatter::from_skill_md`; its map must equal `entry.frontmatter`. Frontmatter that parser refuses (YAML 1.1/1.2 disagreement, unrepresentable values, lenient repair) cannot be verified and fails closed |
 | C-6 | No retrieval ahead of need (:503) | MUST NOT | `skills_list` / `skills_get` never call `resources/read`; only `skill_fetch` does, one file per call |
 | C-7 | `"dynamic"` skills offer no integrity; hosts MAY decline (:231) | MAY | `skill_fetch` declines a `"dynamic"` entry with `SkillVerification` |
 | C-8 | No `resources/directory/read` unless declared (:64) | MUST NOT | `skills_directory_read` sends nothing unless the server declared `directoryRead: true` (§7) |
@@ -228,13 +226,21 @@ skill obeys every rule a static one does except that its entry publishes
 ### 9. Typed frontmatter values
 
 The spec renders frontmatter "verbatim as a JSON object" (:208) and hosts compare after
-their own YAML parse (:496) but name no YAML schema. Decision, pending the
-`turul-agent-skills` resolver (handoff H2): a plain scalar is served with its **YAML 1.2
-core schema** type (null, bool, int, float) when YAML 1.1 types it the same way, and the
-skill is refused when the two schemas disagree (`yes`, `on`, `0777`, `1:30`, timestamps),
-because a host using a 1.1 parser would then fail its comparison. Typing stays in
-`turul-agent-skills`; this crate maps the resolved value to JSON. Until H2 ships, §3's
-refusal stands.
+their own YAML parse (:496) but name no YAML schema. Typing is `turul-agent-skills`'
+`RawValue::core_scalar` (>= 0.1.4, handoff H2); `Frontmatter::from_skill_md` only maps
+its result to JSON:
+
+- a plain scalar is served with its **YAML 1.2 core schema** type (null, bool, int,
+  float) when `yaml_1_1_agrees`; quoted scalars stay strings;
+- `FrontmatterError::SchemaDisagreement(path)` when YAML 1.1 reads it differently
+  (`yes`, `on`, `0777`, `1:30`, `1e3`, timestamps), because a host with a 1.1 parser
+  would then fail its comparison;
+- `FrontmatterError::Unrepresentable(path)` for what JSON cannot carry exactly: an
+  integer outside `i64`, `.inf`, `.nan`, or a resolver shape this crate does not know;
+- `name` and `description` must still resolve to strings (§3).
+
+Removing `FrontmatterError::Typed` is formally semver-breaking; it ships as a patch under
+the 0.4 rule.
 
 ### 10. Versioning
 
@@ -257,8 +263,8 @@ Each test is named after the clause it proves.
 - `manifest`: `s_g4_digest_format_and_size`, `distinct_bytes_produce_distinct_digests`,
   `manifest_is_deterministic_under_input_order`, `s_g4_manifest_requires_skill_md`,
   `s_g4_manifest_refuses_duplicates_and_foreign_uris`, `s_g8_limits`.
-- `frontmatter`: `s_g3_string_fields_round_trip`, `s_g3_typed_scalar_refused`,
-  `s_g3_repaired_refused`, `s_g3_required_fields`, `s_g3_independent_parse_agrees` (projection equals an
+- `frontmatter`: `s_g3_string_fields_round_trip`, `s_g3_typed_scalars_served`,
+  `s_g3_schema_disagreement_refused`, `s_g3_unrepresentable_refused`, `s_g3_required_fields_must_be_strings`, `s_g3_repaired_refused`, `s_g3_required_fields`, `s_g3_independent_parse_agrees` (projection equals an
   independent YAML parse — the workspace's `serde_yml`, a separate implementation
   from `turul-agent-skills`' `saphyr-parser` — of the same bytes).
 - `compliance_test`: `spec_examples_round_trip` (every `skills/list` / `skills/get`
@@ -303,7 +309,7 @@ Each test is named after the clause it proves.
   server): `c1_methods_refuse_without_declaration`, `c2_invalid_resources_entry_rejected`,
   `c3_size_mismatch_refused`, `c3_digest_mismatch_refused`, `c3_verified_bytes_returned`
   (text and blob), `c4_unlisted_uri_refused_without_request`,
-  `c5_frontmatter_discrepancy_refused`, `c5_typed_frontmatter_fails_closed`,
+  `c5_frontmatter_discrepancy_refused`, `c5_typed_frontmatter_verifies`, `c5_schema_disagreement_fails_closed`,
   `c6_list_and_get_never_read_resources`, `c7_dynamic_entry_declined`,
   `e2e_real_server_list_get_fetch`.
 
@@ -311,13 +317,14 @@ Each test is named after the clause it proves.
 
 - Skills a server serves are exactly those whose bytes it hashed at build; content is
   static for the process lifetime. A changed skill needs a restart.
-- Skills with typed frontmatter, or with files under `etc/`, `proc/` or containing
+- Skills whose frontmatter YAML 1.1 and 1.2 read differently, or with files under `etc/`, `proc/` or containing
   `..`, cannot be served yet; the error says which and why.
 - Catalogs are built from skill directories (`from_dir`) or from in-memory files
   (`from_files`), which also serves skills embedded in a binary.
 
 ## Revision log
 
+- **2026-11-16 (typed frontmatter)**: §9 implemented on `turul-agent-skills` 0.1.4's resolver; plain scalars served typed where YAML 1.1 and 1.2 agree, refused otherwise. `turul-mcp-ext-skills` 0.1.3.
 - **2026-11-14 (Lambda)**: Skills on AWS Lambda through ADR-035's single owner; live gate `scripts/e2e-lambda-skills.sh` under `cargo lambda watch` (75 files re-hashed; sep-2640 32/32, 6/6; host scenarios 4/4).
 - **2026-11-14 (Accepted)**: server slices merged (#52); client slice (#53) completes the
   owner table and the test contract; turul-agent-skills accepted the boundary (its ADR-011).
