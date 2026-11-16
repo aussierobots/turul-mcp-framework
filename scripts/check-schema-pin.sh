@@ -137,6 +137,55 @@ for f in "$APPS_DIR"/*; do
 done
 
 # ---------------------------------------------------------------------------
+# Server Cards — turul-mcp-ext-server-card (EXPERIMENTAL upstream, ADR-038)
+# ---------------------------------------------------------------------------
+# Upstream versions by the schema's `vN` segment, not by date, so every row
+# must name the same immutable commit. Files sit in subdirectories (examples/).
+
+CARD_DIR=crates/turul-mcp-ext-server-card/schema
+CARD_README=$CARD_DIR/README.md
+
+card_rows=$(awk -F'|' '
+  /^\|[^|]*`[^`]+`[^|]*\|/ {
+    n = split($0, c, "|")
+    if (n < 5) next
+    file = c[2]; commit = c[4]; sum = c[5]
+    gsub(/[^a-zA-Z0-9._\/-]/, "", file)
+    if (match(commit, /[0-9a-f]{40}/)) commit = substr(commit, RSTART, RLENGTH); else commit = ""
+    if (match(sum, /[0-9a-f]{64}/))    sum    = substr(sum,    RSTART, RLENGTH); else sum    = ""
+    if (file != "" && commit != "" && sum != "") print file, commit, sum
+  }' "$CARD_README")
+
+if [ -z "$card_rows" ]; then
+  bad "ext-server-card provenance table" "no complete rows parsed from $CARD_README"
+else
+  if [ "$(printf '%s\n' "$card_rows" | cut -d' ' -f2 | sort -u | wc -l | tr -d ' ')" != "1" ]; then
+    bad "ext-server-card pin" "rows name more than one upstream commit"
+  fi
+  while read -r file commit sum; do
+    path=$CARD_DIR/$file
+    if [ ! -f "$path" ]; then
+      bad "ext-server-card $file" "listed in README but missing on disk"
+      continue
+    fi
+    disk=$(shasum -a 256 "$path" | cut -d' ' -f1)
+    if [ "$disk" != "$sum" ]; then
+      bad "ext-server-card $file checksum" "on disk $disk != README $sum"
+    else
+      note "ext-server-card $file checksum" "OK (${commit:0:12})"
+    fi
+  done <<< "$card_rows"
+fi
+
+for f in $(find "$CARD_DIR" -type f | sort); do
+  rel=${f#"$CARD_DIR"/}
+  [ "$rel" = "README.md" ] && continue
+  if ! printf '%s\n' "$card_rows" | cut -d' ' -f1 | grep -qx "$rel"; then
+    bad "ext-server-card $rel" "on disk but absent from the $CARD_README table"
+  fi
+done
+
+# ---------------------------------------------------------------------------
 # Tasks extension — turul-mcp-ext-tasks
 # ---------------------------------------------------------------------------
 # Upstream modelcontextprotocol/ext-tasks publishes the released, immutable

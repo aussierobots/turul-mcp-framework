@@ -1,0 +1,24 @@
+# Spec-NEUTRAL extension crate, versioned independently (SEP-2133 §Evolution).
+# Server Cards are EXPERIMENTAL upstream — see README.md and ADR-038.
+[package]
+name = "turul-mcp-ext-server-card"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "MCP Server Cards (experimental, SEP-2127) wire types, validation and the served card document"
+readme = "README.md"
+documentation = "https://docs.rs/turul-mcp-ext-server-card"
+keywords.workspace = true
+categories = ["network-programming"]
+
+[dependencies]
+turul-mcp-protocol-2026-07-28 = { version = "0.4.4", path = "../turul-mcp-protocol-2026-07-28" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+jsonschema.workspace = true

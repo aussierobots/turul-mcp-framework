@@ -127,6 +127,10 @@ pub struct McpServerBuilder {
     /// Custom HTTP route registry (e.g., .well-known paths)
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
+    /// Server Card to serve at `<mcp_path>/server-card` (ADR-038)
+    #[cfg(feature = "ext-server-card")]
+    server_card: Option<turul_mcp_ext_server_card::v1::ServerCard>,
+
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
@@ -329,6 +333,8 @@ impl McpServerBuilder {
             test_mode: false,      // Default: production mode with security
             middleware_stack: crate::middleware::MiddlewareStack::new(),
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            #[cfg(feature = "ext-server-card")]
+            server_card: None,
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             #[cfg(feature = "http")]
@@ -466,6 +472,19 @@ impl McpServerBuilder {
     #[cfg(feature = "ext-tasks")]
     pub fn with_ext_tasks(mut self, store: Arc<dyn turul_mcp_ext_tasks::TaskStore>) -> Self {
         self.ext_task_store = Some(store);
+        self
+    }
+
+    /// Serve a Server Card at `GET <mcp_path>/server-card` (**experimental**
+    /// upstream; ADR-038). `build()` copies `version`, `title`, `description`,
+    /// `websiteUrl`, `icons` and each remote's `supportedProtocolVersions` from
+    /// the server's own `server/discover` data when the card leaves them unset,
+    /// and fails if a value the card sets contradicts it or the card breaks the
+    /// schema. Remote URLs are the caller's: a server cannot know the public
+    /// URL it is reached at.
+    #[cfg(feature = "ext-server-card")]
+    pub fn with_server_card(mut self, card: turul_mcp_ext_server_card::v1::ServerCard) -> Self {
+        self.server_card = Some(card);
         self
     }
 
@@ -2078,6 +2097,27 @@ impl McpServerBuilder {
         }
         if let Some(icons) = self.icons {
             implementation = implementation.with_icons(icons);
+        }
+
+        #[cfg(feature = "ext-server-card")]
+        if let Some(card) = self.server_card.take() {
+            let document = crate::ext_server_card::reconcile(
+                card,
+                &implementation,
+                &crate::server::discover_supported_versions(),
+            )
+            .map_err(|e| McpError::configuration(&e))?;
+            let path = format!(
+                "{}{}",
+                self.mcp_path,
+                turul_mcp_ext_server_card::v1::PATH_SUFFIX
+            );
+            Arc::get_mut(&mut self.route_registry)
+                .expect("route registry is unshared until build")
+                .add_route(
+                    &path,
+                    Arc::new(crate::ext_server_card::ServerCardRoute { document }),
+                );
         }
 
         // Add RootsHandler if roots were configured. 2025 lane only: on 2026

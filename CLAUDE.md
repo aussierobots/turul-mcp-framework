@@ -357,7 +357,7 @@ Before publishing a new version:
 5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
 6. **Publish order** (dependency-first, derived from the actual non-dev dependency graph):
    ```
-   protocol-2026-07-28 → ext-tasks → ext-skills → protocol → session-storage → http-server → builders →
+   protocol-2026-07-28 → ext-tasks → ext-skills → ext-server-card → protocol → session-storage → http-server → builders →
    derive* → oauth → schema-validation → server-state-storage → task-storage →
    ext-apps → server → aws-lambda → client
    ```
