@@ -359,9 +359,9 @@ Before publishing a new version:
    ```
    protocol-2026-07-28 → ext-tasks → ext-skills → protocol → session-storage → http-server → builders →
    derive* → oauth → schema-validation → server-state-storage → task-storage →
-   server → aws-lambda → ext-apps → client
+   ext-apps → server → aws-lambda → client
    ```
-   *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
+   *`turul-mcp-derive` has a circular dev-dep on `turul-mcp-server` — temporarily comment out that one line (its lane features name the other dev-deps), publish with `--allow-dirty`, restore.* `turul-mcp-server` dev-depends on `turul-mcp-ext-apps` with a version, so ext-apps must be on crates.io first.
 
    External sibling crates are **not** in this sequence — they publish from their
    own repos and must already be on crates.io: `turul-rpc` (0.2),
