@@ -7,8 +7,10 @@
 # authority for which examples are 2025.
 
 EX_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-EX_TARGET_2026="${EX_TARGET_2026:-$EX_ROOT/target}"
-EX_TARGET_2025="${EX_TARGET_2025:-$EX_ROOT/target-2025}"
+source "$(dirname "${BASH_SOURCE[0]}")/target-dir.sh"
+# The 2025 lane sits beside the default target dir, wherever cargo puts that.
+EX_TARGET_2026="${EX_TARGET_2026:-$(cd "$EX_ROOT" && cargo_target_dir)}"
+EX_TARGET_2025="${EX_TARGET_2025:-$EX_TARGET_2026-2025}"
 
 # example_target_dir LANE  (LANE: 2025 | 2026)
 example_target_dir() {

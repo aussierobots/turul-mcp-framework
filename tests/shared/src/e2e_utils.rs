@@ -21,7 +21,16 @@ use tracing::{debug, info};
 /// Per-lane target directories are the normal way to work here, so that
 /// divergence is the default case rather than an edge one.
 fn debug_binary_path(workspace_root: &Path, binary_name: &str) -> PathBuf {
-    let target_dir = std::env::var_os("CARGO_TARGET_DIR")
+    cargo_target_dir(workspace_root)
+        .join("debug")
+        .join(binary_name)
+}
+
+/// The directory `cargo build` writes to: `CARGO_TARGET_DIR` (or
+/// `CARGO_BUILD_TARGET_DIR`), relative to `workspace_root` when not absolute,
+/// else `<workspace_root>/target`.
+pub fn cargo_target_dir(workspace_root: &Path) -> PathBuf {
+    std::env::var_os("CARGO_TARGET_DIR")
         .or_else(|| std::env::var_os("CARGO_BUILD_TARGET_DIR"))
         .map(PathBuf::from)
         .map(|dir| {
@@ -31,8 +40,7 @@ fn debug_binary_path(workspace_root: &Path, binary_name: &str) -> PathBuf {
                 workspace_root.join(dir)
             }
         })
-        .unwrap_or_else(|| workspace_root.join("target"));
-    target_dir.join("debug").join(binary_name)
+        .unwrap_or_else(|| workspace_root.join("target"))
 }
 
 /// Find the workspace root directory by looking for Cargo.toml with [workspace]

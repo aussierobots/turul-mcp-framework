@@ -87,7 +87,10 @@ async fn start_2026_server() -> Server2026 {
         .parent()
         .unwrap()
         .to_path_buf();
-    let target = root.join("target-upgrade-e2e");
+    // Beside the caller's target dir, never inside the checkout by assumption.
+    let mut target = mcp_e2e_shared::e2e_utils::cargo_target_dir(&root).into_os_string();
+    target.push("-upgrade-e2e");
+    let target = PathBuf::from(target);
     let built = Command::new("cargo")
         .args(["build", "-p", "minimal-server", "--bin", "minimal-server"])
         .env("CARGO_TARGET_DIR", &target)
