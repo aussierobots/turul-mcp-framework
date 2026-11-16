@@ -13,6 +13,17 @@ in, and since this slice it is asserted at runtime as well as guaranteed
 structurally — a default build is checked to advertise no `extensions` map and to
 answer 404 for every `tasks/*` method.
 
+**Supported extensions** (the list the extensions overview asks SDKs to publish):
+
+| Extension | Identifier | turul surface | Off by default via |
+|---|---|---|---|
+| Tasks | `io.modelcontextprotocol/tasks` | `turul-mcp-ext-tasks`; server feature `ext-tasks` (`with_ext_tasks`); client feature `ext-tasks` | Cargo feature |
+| MCP Apps | `io.modelcontextprotocol/ui` | `turul-mcp-ext-apps` helpers over the server's generic hooks; client feature `ext-apps` | the server calls `extension_capability` itself |
+| Skills | `io.modelcontextprotocol/skills` | `turul-mcp-ext-skills`; server feature `ext-skills` (`with_ext_skills`); client feature `ext-skills` | Cargo feature |
+
+Not implemented: OAuth Client Credentials, Enterprise-Managed Authorization,
+Server Cards.
+
 ---
 
 ## 1. The `extensions` capability map
@@ -21,7 +32,7 @@ answer 404 for every `tasks/*` method.
 |---|---|---|---|---|---|---|---|---|
 | Server advertises extensions in `server/discover` capabilities | MUST | Implemented | `c/turul-mcp-server/src/builder.rs:1925` inserts the tasks identifier | `ext_tasks_2026.rs::discover_advertises_the_tasks_extension` | pass | — | — | — |
 | Client declares extension support in `_meta.clientCapabilities.extensions` | MUST | Implemented | `c/turul-mcp-client/src/protocol/v2026_07_28.rs:42-47` | `ext_tasks_e2e_2026.rs::undeclared_client_gets_synchronous_outcome` (declared/undeclared behaviour) | pass | — | — | — |
-| Extension identifiers validated at the negotiation boundary (SEP-2133) | SHOULD | Implemented | `c/turul-mcp-ext-tasks/src/v2026_07_28/capability.rs:47-60` | `capability.rs` in-crate tests | pass | — | — | — |
+| Extension identifiers follow SEP-2133 naming | SHOULD | **Not validated, by decision** | each extension crate owns its identifier as a constant (`EXTENSION_IDENTIFIER`); `extension_capability` accepts any key the operator names (ADR-028 §4) | — | — | — | — | — |
 | Extensions disabled unless opted in | MUST | Implemented | `ext-tasks` is a non-default Cargo feature | `discover_stateless_2026.rs::a_default_build_advertises_no_extensions` — `capabilities.extensions` absent on a default build, and `tasks/get`/`update`/`cancel` answer 404 + `-32601`; the positive counterpart is `ext_tasks_2026.rs::discover_advertises_the_tasks_extension` under `--features ext-tasks` | pass | — | — | — |
 | A third-party extension can be added without touching the protocol crate | SHOULD | Implemented (by construction) | the protocol crate's only extension surface is an opaque `HashMap<String, Value>` | — | — | — | — | — |
 
@@ -44,6 +55,7 @@ Tasks moved out of core into an extension in 2026-07-28. The frozen
 | Client sets `Mcp-Name` = `params.taskId` on `tasks/get`, `tasks/update`, `tasks/cancel` | MUST | Implemented | `c/turul-mcp-client/src/transport/http.rs` (`apply_request_metadata_headers`) | `transport::http::tests::task_methods_set_mcp_name_to_task_id` | pass | — | — | — |
 | Wire types validate against the released `schema/2026-07-28/schema.json` | MUST | Implemented | `c/turul-mcp-ext-tasks/schema/` pinned at `0d0a6bd4` / `899c1bbc` | `released_schema_test.rs` (every result and status) | pass | — | — | — |
 | Exactly one encoded `Mcp-Name` header on a task-augmented call | MUST | Implemented | client transport | `ext_tasks_e2e_2026.rs::call_tool_or_task_emits_exactly_one_encoded_mcp_name_header` | pass | — | — | — |
+| `notifications/progress` and `notifications/message` never ride a task's `subscriptions/listen` stream | MUST NOT | Implemented | transport filter | `ext_tasks_2026.rs::progress_and_message_never_ride_a_task_listen_stream` (the tool provably emits both) | pass | — | — | — |
 
 Tasks is the best-tested area in the framework by ratio of asserting tests to
 requirements — and the least externally verified: **no peer has exercised it.**
@@ -99,6 +111,29 @@ removed. `scripts/check-schema-pin.sh` now covers this crate and rejects any
 path, so an honestly-recorded pin at a floating path fails the gate.
 
 ---
+
+## 4. Skills (SEP-2640) — `io.modelcontextprotocol/skills`
+
+Governing ADR: ADR-033. Skill parsing is owned by `turul-agent-skills`;
+`turul-mcp-ext-skills` holds the wire types and `turul-mcp-server` the handlers.
+
+| Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
+|---|---|---|---|---|---|---|---|---|
+| Declare `capabilities.resources` and the skills extension in `server/discover` | MUST | Implemented | `with_ext_skills` forces `resources` | `c/turul-mcp-server/tests/ext_skills_2026.rs::s_g1_discover_advertises_skills_and_resources`, `::s_g1_empty_catalog_still_declares_resources` | pass | — | — | — |
+| Extension off unless opted in | MUST | Implemented | non-default `ext-skills` feature | `ext_skills_2026.rs::default_build_advertises_nothing` | pass | — | — | — |
+| `skills/list` paginates without splitting an entry | MUST | Implemented | server handler | `ext_skills_2026.rs::s_g2_list_paginates_atomic_entries` | pass | — | — | — |
+| `skills/get` by URI; unknown URI → `-32602` | MUST | Implemented | server handler | `ext_skills_2026.rs::s_g2_get_by_uri_and_unknown_is_invalid_params` | pass | — | — | — |
+| `resources` manifest digest and size match the bytes `resources/read` serves | MUST | Implemented | catalog built from on-disk bytes | `ext_skills_2026.rs::s_g6_read_bytes_match_manifest` | pass | — | — | — |
+| Frontmatter served as typed JSON where YAML 1.1 and 1.2 agree; disagreement refuses the skill | MUST | Implemented | `turul-agent-skills` 0.1.4 resolver | `turul-agent-skills` tests; client `ext_skills_client_2026.rs::c5_typed_frontmatter_verifies`, `::c5_schema_disagreement_fails_closed` | pass | — | — | — |
+| Nested skills publish flat | MUST | Implemented | catalog | `ext_skills_2026.rs::nested_skill_publishes_flat` | pass | — | — | — |
+| A manifest URI the resource blocklist would refuse is refused at build, never advertised | MUST | Implemented | build-time check (ADR-033) | `ext_skills_2026.rs::q10_blocklisted_manifest_uri_refused_at_build` | pass | — | — | — |
+| `resources/directory/read` when `directoryRead: true` | MUST if declared | Implemented | server handler | `ext_skills_2026.rs::s_g7_*` (6 tests) | pass | — | — | — |
+| Generated skills (`resources: "dynamic"`) | MAY | Implemented | `SkillCatalog::add_dynamic` | `ext_skills_2026.rs::dynamic_*` (6 tests) | pass | — | — | — |
+| Host verifies size, digest and frontmatter; reads only manifest URIs; no prefetch | MUST (host) | Implemented (client `ext-skills`) | `turul-mcp-client` | `c/turul-mcp-client/tests/ext_skills_client_2026.rs::c1_*`…`c7_*` | pass | — | — | — |
+| Served on Lambda | — | Implemented | `LambdaMcpServerBuilder` over `McpServerBuilder` (ADR-035) | `scripts/e2e-lambda-skills.sh` | pass | — | — | — |
+
+`scripts/ext-skills-conformance.sh` runs the upstream host scenarios against
+`examples/ext-skills-server`, the only check here not written by turul.
 
 ## Gap register
 

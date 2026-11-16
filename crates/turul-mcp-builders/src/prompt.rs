@@ -172,7 +172,7 @@ impl PromptBuilder {
             f
         } else {
             // Default template processor
-            let messages = self.messages.clone();
+            let messages = self.messages;
             let description = self.description.clone();
             Box::new(move |args| {
                 let messages = messages.clone();
@@ -194,7 +194,6 @@ impl PromptBuilder {
             title: self.title,
             description: self.description,
             arguments: self.arguments,
-            messages: self.messages,
             icons: self.icons,
             meta: self.meta,
             get_fn,
@@ -208,8 +207,6 @@ pub struct DynamicPrompt {
     title: Option<String>,
     description: Option<String>,
     arguments: Vec<PromptArgument>,
-    #[allow(dead_code)]
-    messages: Vec<PromptMessage>,
     icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
     get_fn: DynamicPromptFn,

@@ -479,6 +479,77 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
 /// Statement closing a generated `inputSchema` (`additionalProperties: false`) held in
 /// the mutable `ToolSchema` binding `schema`. The counterpart of
 /// [`generate_undeclared_arg_check`]: schema and behaviour agree.
+/// The `HasExecution` impl for a tool's `task_support` attribute — the one
+/// generator both tool macros call.
+///
+/// `ToolExecution` / `TaskSupport` exist only in the 2025-11-25 schema. On the
+/// 2026-07-28 lane tasks are the `io.modelcontextprotocol/tasks` extension, so a
+/// `task_support` value there is refused with a compile error naming it, rather
+/// than emitting paths that fail to resolve.
+pub fn generate_execution_impl(name: &syn::Ident, task_support: Option<&str>) -> TokenStream {
+    let mcp_builders = builders_path();
+    #[cfg(feature = "protocol-2025-11-25")]
+    {
+        let mcp_protocol = protocol_path();
+        let variant = match task_support {
+            Some("optional") => quote! { Optional },
+            Some("required") => quote! { Required },
+            Some("forbidden") => quote! { Forbidden },
+            _ => return quote! { impl #mcp_builders::traits::HasExecution for #name {} },
+        };
+        quote! {
+            impl #mcp_builders::traits::HasExecution for #name {
+                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
+                    Some(#mcp_protocol::tools::ToolExecution {
+                        task_support: Some(#mcp_protocol::tools::TaskSupport::#variant),
+                    })
+                }
+            }
+        }
+    }
+    #[cfg(not(feature = "protocol-2025-11-25"))]
+    match task_support {
+        Some(_) => quote! {
+            compile_error!(
+                "`task_support` is a 2025-11-25 attribute; MCP 2026-07-28 has no Tool execution field. \
+                 Serve tasks through the io.modelcontextprotocol/tasks extension (turul-mcp-ext-tasks)."
+            );
+            impl #mcp_builders::traits::HasExecution for #name {}
+        },
+        None => quote! { impl #mcp_builders::traits::HasExecution for #name {} },
+    }
+}
+
+#[cfg(test)]
+mod execution_impl_tests {
+    use super::generate_execution_impl;
+
+    fn emitted(task_support: Option<&str>) -> String {
+        generate_execution_impl(&syn::parse_quote!(T), task_support).to_string()
+    }
+
+    #[test]
+    fn no_task_support_is_the_empty_impl_on_every_lane() {
+        let out = emitted(None);
+        assert!(out.contains("HasExecution for T { }"), "{out}");
+        assert!(!out.contains("compile_error"), "{out}");
+    }
+
+    #[cfg(not(feature = "protocol-2025-11-25"))]
+    #[test]
+    fn task_support_on_2026_is_a_compile_error_not_a_dangling_path() {
+        for value in ["optional", "required", "forbidden"] {
+            let out = emitted(Some(value));
+            assert!(out.contains("compile_error"), "{value}: {out}");
+            assert!(
+                out.contains("io.modelcontextprotocol/tasks"),
+                "{value}: {out}"
+            );
+            assert!(!out.contains("ToolExecution"), "{value}: {out}");
+        }
+    }
+}
+
 pub fn generate_close_input_schema() -> TokenStream {
     let json_crate = crate::utils::serde_json_path();
     quote! {
@@ -739,7 +810,6 @@ pub struct PromptMeta {
 
 /// Resource metadata extracted from attributes
 #[derive(Debug)]
-#[allow(dead_code)] // Some fields may be unused in current implementation
 pub struct ResourceMeta {
     pub name: String,
     pub uri: String,
@@ -1004,206 +1074,6 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
     }
 
     Ok(meta)
-}
-
-pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &str) -> TokenStream {
-    let mcp_builders = crate::utils::builders_path();
-    let mcp_protocol = crate::utils::protocol_path();
-    match ty {
-        syn::Type::Path(type_path) => {
-            // First check if it's a qualified path like serde_json::Value
-            let path_string = type_path
-                .path
-                .segments
-                .iter()
-                .map(|seg| seg.ident.to_string())
-                .collect::<Vec<_>>()
-                .join("::");
-
-            // Special case for serde_json::Value (qualified path)
-            if path_string.contains("serde_json") && path_string.ends_with("Value") {
-                return quote! {
-                    fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                        static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                        Some(OUTPUT_SCHEMA.get_or_init(|| {
-                            use #mcp_protocol::schema::JsonSchema;
-                            use std::collections::HashMap;
-                            #mcp_protocol::tools::ToolSchema::object()
-                                .with_properties(#mcp_builders::tool_props(HashMap::from([
-                                    (#field_name.to_string(), JsonSchema::Object {
-                                        description: Some("JSON object or value".to_string()),
-                                        properties: None,
-                                        required: None,
-                                        additional_properties: Some(true),
-                                    })
-                                ])))
-                                .with_required(vec![#field_name.to_string()])
-                        }))
-                    }
-                };
-            }
-
-            // Check for Vec<T> generic type
-            if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" {
-                return quote! {
-                    fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                        static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                        Some(OUTPUT_SCHEMA.get_or_init(|| {
-                            use #mcp_protocol::schema::JsonSchema;
-                            use std::collections::HashMap;
-                            #mcp_protocol::tools::ToolSchema::object()
-                                .with_properties(#mcp_builders::tool_props(HashMap::from([
-                                    (#field_name.to_string(), JsonSchema::Array {
-                                        description: Some("Array of items".to_string()),
-                                        items: None,
-                                        min_items: None,
-                                        max_items: None,
-                                    })
-                                ])))
-                                .with_required(vec![#field_name.to_string()])
-                        }))
-                    }
-                };
-            }
-
-            // Then check for simple identifiers
-            if let Some(ident) = type_path.path.get_ident() {
-                match ident.to_string().as_str() {
-                    "f64" | "f32" => {
-                        quote! {
-                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                                Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use #mcp_protocol::schema::JsonSchema;
-                                    #mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        #mcp_builders::tool_props(std::collections::HashMap::from([
-                                            (#field_name.to_string(), JsonSchema::number())
-                                        ]))
-                                    ).with_required(vec![#field_name.to_string()])
-                                }))
-                            }
-                        }
-                    }
-                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
-                    | "usize" => {
-                        quote! {
-                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                                Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use #mcp_protocol::schema::JsonSchema;
-                                    #mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        #mcp_builders::tool_props(std::collections::HashMap::from([
-                                            (#field_name.to_string(), JsonSchema::integer())
-                                        ]))
-                                    ).with_required(vec![#field_name.to_string()])
-                                }))
-                            }
-                        }
-                    }
-                    "String" | "str" => {
-                        quote! {
-                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                                Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use #mcp_protocol::schema::JsonSchema;
-                                    #mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        #mcp_builders::tool_props(std::collections::HashMap::from([
-                                            (#field_name.to_string(), JsonSchema::string())
-                                        ]))
-                                    ).with_required(vec![#field_name.to_string()])
-                                }))
-                            }
-                        }
-                    }
-                    "bool" => {
-                        quote! {
-                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                                Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use #mcp_protocol::schema::JsonSchema;
-                                    #mcp_protocol::tools::ToolSchema::object().with_properties(
-                                        #mcp_builders::tool_props(std::collections::HashMap::from([
-                                            (#field_name.to_string(), JsonSchema::boolean())
-                                        ]))
-                                    ).with_required(vec![#field_name.to_string()])
-                                }))
-                            }
-                        }
-                    }
-                    _ => {
-                        // For custom struct types, generate a basic object schema
-                        // This will be enhanced by the generate_enhanced_output_schema function
-                        // when struct introspection is available
-                        quote! {
-                            fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                                static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                                Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    use #mcp_protocol::schema::JsonSchema;
-                                    use std::collections::HashMap;
-                                    #mcp_protocol::tools::ToolSchema::object()
-                                        .with_properties(#mcp_builders::tool_props(HashMap::from([
-                                            (#field_name.to_string(), JsonSchema::object())
-                                        ])))
-                                        .with_required(vec![#field_name.to_string()])
-                                }))
-                            }
-                        }
-                    }
-                }
-            } else {
-                quote! {
-                    fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                        None
-                    }
-                }
-            }
-        }
-        _ => {
-            // For struct types, generate a basic object schema
-            quote! {
-                fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
-                    static OUTPUT_SCHEMA: std::sync::OnceLock<#mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                    Some(OUTPUT_SCHEMA.get_or_init(|| {
-                        #mcp_protocol::tools::ToolSchema::object()
-                    }))
-                }
-            }
-        }
-    }
-}
-
-/// Generate output schema for function return type (handles McpResult<T>)
-#[allow(dead_code)]
-pub fn generate_output_schema_for_return_type(return_type: &syn::Type) -> Option<TokenStream> {
-    generate_output_schema_for_return_type_with_field(return_type, "result")
-}
-
-pub fn generate_output_schema_for_return_type_with_field(
-    return_type: &syn::Type,
-    field_name: &str,
-) -> Option<TokenStream> {
-    // Handle McpResult<T> by extracting the T type
-    if let syn::Type::Path(type_path) = return_type
-        && let Some(segment) = type_path.path.segments.last()
-    {
-        if segment.ident == "McpResult" || segment.ident == "Result" {
-            // Extract the T from Result<T, E>
-            if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
-                && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
-            {
-                return Some(generate_output_schema_for_type_with_field(
-                    inner_type, field_name,
-                ));
-            }
-        } else {
-            // Direct type, not wrapped in Result
-            return Some(generate_output_schema_for_type_with_field(
-                return_type,
-                field_name,
-            ));
-        }
-    }
-    None
 }
 
 /// Determine output field name based on type and user preferences

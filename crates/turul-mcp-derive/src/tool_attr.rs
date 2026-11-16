@@ -135,7 +135,12 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                     ));
                 }
             }
-            _ => {}
+            other => {
+                return Err(syn::Error::new_spanned(
+                    other,
+                    "unknown #[mcp_tool] argument; expected one of: name, description, title, annotation_title, output_field, task_support, read_only, destructive, idempotent, open_world, meta, icons",
+                ));
+            }
         }
     }
 
@@ -284,39 +289,8 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         meta.as_ref(),
     );
 
-    // Generate HasExecution impl based on task_support attribute
-    let execution_impl = match task_support.as_deref() {
-        Some("optional") => quote! {
-            impl #mcp_builders::traits::HasExecution for #struct_name {
-                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
-                    Some(#mcp_protocol::tools::ToolExecution {
-                        task_support: Some(#mcp_protocol::tools::TaskSupport::Optional),
-                    })
-                }
-            }
-        },
-        Some("required") => quote! {
-            impl #mcp_builders::traits::HasExecution for #struct_name {
-                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
-                    Some(#mcp_protocol::tools::ToolExecution {
-                        task_support: Some(#mcp_protocol::tools::TaskSupport::Required),
-                    })
-                }
-            }
-        },
-        Some("forbidden") => quote! {
-            impl #mcp_builders::traits::HasExecution for #struct_name {
-                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
-                    Some(#mcp_protocol::tools::ToolExecution {
-                        task_support: Some(#mcp_protocol::tools::TaskSupport::Forbidden),
-                    })
-                }
-            }
-        },
-        _ => quote! {
-            impl #mcp_builders::traits::HasExecution for #struct_name {}
-        },
-    };
+    let execution_impl =
+        crate::utils::generate_execution_impl(&struct_name, task_support.as_deref());
 
     let close_input_schema = crate::utils::generate_close_input_schema();
     let undeclared_arg_check = crate::utils::generate_undeclared_arg_check();
@@ -531,6 +505,18 @@ fn generate_output_schema_auto_for_function(ty: &syn::Type, field_name: &str) ->
 mod tests {
     use super::*;
     use syn::{Meta, Token, parse_quote, punctuated::Punctuated};
+
+    #[test]
+    fn unknown_argument_is_refused_naming_the_accepted_keys() {
+        let args: Punctuated<Meta, Token![,]> =
+            parse_quote! { name = "t", description = "d", readonly = true };
+        let input = parse_quote! {
+            async fn t() -> McpResult<String> { Ok(String::new()) }
+        };
+        let err = mcp_tool_impl(args, input).unwrap_err().to_string();
+        assert!(err.contains("unknown #[mcp_tool] argument"), "{err}");
+        assert!(err.contains("read_only"), "{err}");
+    }
 
     #[test]
     fn test_capitalize() {

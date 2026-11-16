@@ -251,7 +251,6 @@ pub struct DynamicElicitation {
     message: String,
     title: Option<String>,
     schema: ElicitationSchema,
-    #[allow(dead_code)]
     meta: Option<HashMap<String, Value>>,
 }
 
@@ -263,6 +262,10 @@ impl HasElicitationMetadata for DynamicElicitation {
 
     fn title(&self) -> Option<&str> {
         self.title.as_deref()
+    }
+
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
     }
 }
 
@@ -734,6 +737,18 @@ mod tests {
     use crate::traits::ElicitationDefinition;
     use serde_json::json;
     use turul_mcp_protocol::elicitation::ElicitAction;
+
+    #[cfg(feature = "protocol-2025-11-25")]
+    #[test]
+    fn dynamic_elicitation_sends_its_meta() {
+        let meta = HashMap::from([("trace".to_string(), json!("t1"))]);
+        let dynamic = ElicitationBuilder::new("Name?")
+            .string_field("name", "Your name")
+            .meta(meta.clone())
+            .build_dynamic();
+        let wire = serde_json::to_value(dynamic.to_create_request()).unwrap();
+        assert_eq!(wire["params"]["_meta"]["trace"], json!("t1"), "{wire}");
+    }
 
     // ElicitationBuilder::build() produces the 2025-11-25 ElicitCreateRequest, which
     // the stateless 2026-07-28 core removed; these tests are 2025-11-25 only.

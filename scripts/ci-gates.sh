@@ -84,6 +84,7 @@ gate_opt_in_2025() {
   run "server 2025-11-25 test"   cargo test   -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25
   run "server 2025-11-25 clippy" cargo clippy -p turul-mcp-server      --no-default-features --features http,sse,protocol-2025-11-25 -- -D warnings
   run "builders 2025-11-25"      cargo test   -p turul-mcp-builders    --no-default-features --features protocol-2025-11-25
+  run "task-storage 2025-11-25 (in-memory + sqlite parity)" cargo test -p turul-mcp-task-storage --features sqlite
   run "http-server 2025-11-25"   cargo test   -p turul-http-mcp-server --no-default-features --features sse,protocol-2025-11-25
   # build-only on purpose: turul-mcp-derive dev-depends on turul-mcp-server,
   # whose 2026 default unifies both protocol features and trips the alias mutex.

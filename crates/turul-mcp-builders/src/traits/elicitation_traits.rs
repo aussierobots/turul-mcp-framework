@@ -17,6 +17,11 @@ pub trait HasElicitationMetadata {
     fn title(&self) -> Option<&str> {
         None
     }
+
+    /// Optional `_meta` sent on the request
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 /// Trait for elicitation schema definition (restricted to primitive types per MCP spec)
@@ -173,7 +178,11 @@ pub trait ElicitationDefinition:
     /// Convert this elicitation definition to a protocol ElicitCreateRequest
     #[cfg(feature = "protocol-2025-11-25")]
     fn to_create_request(&self) -> ElicitCreateRequest {
-        ElicitCreateRequest::new(self.message(), self.requested_schema().clone())
+        let request = ElicitCreateRequest::new(self.message(), self.requested_schema().clone());
+        match self.meta() {
+            Some(meta) => request.with_meta(meta.clone()),
+            None => request,
+        }
     }
 }
 

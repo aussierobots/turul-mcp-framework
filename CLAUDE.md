@@ -144,10 +144,9 @@ let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 > **This section does not apply to the default build.** `TaskSupport` and
 > `ToolExecution` exist only in `turul-mcp-protocol-2025-11-25` (0 occurrences in
 > `turul-mcp-protocol-2026-07-28/src/`), and `.with_task_storage()` is
-> `#[cfg(feature = "protocol-2025-11-25")]`. The derive macros
-> emit the attribute's code unconditionally, so a `task_support = "..."` tool on
-> the 2026-07-28 default lane fails to compile with `cannot find TaskSupport in
-> tools` / `cannot find type ToolExecution`. Removing the attribute clears both.
+> `#[cfg(feature = "protocol-2025-11-25")]`. On the 2026-07-28
+> default lane a `task_support = "..."` attribute is a compile error naming the
+> Tasks extension (ADR-037 item 10); remove it and use `turul-mcp-ext-tasks`.
 >
 > On 2026-07-28, tasks moved to the **extension** `io.modelcontextprotocol/tasks`
 > (SEP-2663) — see `crates/turul-mcp-ext-tasks` and `examples/ext-tasks-server`,

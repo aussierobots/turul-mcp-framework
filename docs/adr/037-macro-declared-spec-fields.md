@@ -84,6 +84,16 @@ items, so it already sets that `_meta` by building `TextResourceContents` or
    `get_response`, the same way a tool sets `CallToolResult._meta` by
    implementing `McpTool::call`. The handler's own `GetPromptResult`
    construction is deleted, so there is one.
+9. **An argument the macro does not know is a compile error.**
+   `#[mcp_tool]` and `#[mcp_resource]` refuse an unknown key, naming the
+   accepted ones, so `mimetype = ...` or `readonly = true` fails the build
+   instead of being dropped.
+10. **`task_support` on the 2026-07-28 lane is a compile error naming the
+    Tasks extension.** `ToolExecution` exists only in the 2025-11-25 schema.
+    The derive crate's lane feature decides, through one emitter
+    (`generate_execution_impl` in `utils.rs`) shared by `#[mcp_tool]` and
+    `derive(McpTool)`. Before, the emitted paths failed to resolve with
+    `cannot find TaskSupport`.
 
 Every declarative field takes an expression, as `tool!` does. Each shared
 emitter (`generate_meta_impl`, `generate_icons_impl`,
@@ -147,3 +157,8 @@ Rejected:
   `prompts/get` returns `McpPrompt::get_response`, so prompt result
   `_meta`, `validate_args` and `transform_messages` work. Withdraws the
   omissions for the declarative macros and for `size`.
+- **2026-11-17**: Items 9 and 10. Unknown `#[mcp_tool]` / `#[mcp_resource]`
+  arguments are refused; `task_support` on 2026-07-28 fails with a message
+  naming the Tasks extension; the two copies of the execution-impl `match`
+  become `generate_execution_impl`. Tests: `unknown_argument_is_refused_*` in
+  `tool_attr.rs` and `resource_attr.rs`, `execution_impl_tests` in `utils.rs`.

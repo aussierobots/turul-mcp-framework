@@ -35,8 +35,7 @@ impl std::fmt::Display for McpVersion {
 }
 
 /// Outcome of the `server/discover` probe sent during negotiation.
-// Unused in single-spec `client-2025-11-25-only` builds (no probe), hence dead_code there.
-#[allow(dead_code)]
+#[cfg_attr(not(feature = "client-bilingual"), allow(dead_code))] // the probe runs only on bilingual builds
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum DiscoverProbe {
     /// Server returned a valid `DiscoverResult` — it speaks 2026-07-28.
@@ -55,7 +54,7 @@ pub(crate) enum DiscoverProbe {
 }
 
 /// What to do next, given a probe outcome.
-#[allow(dead_code)]
+#[cfg_attr(not(feature = "client-bilingual"), allow(dead_code))] // the probe runs only on bilingual builds
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ProbeDecision {
     /// Lock the connection to 2026-07-28.
@@ -103,7 +102,7 @@ pub(crate) fn is_missing_session_id(code: i64, message: Option<&str>) -> bool {
 /// `-32001` becomes [`DiscoverProbe::MissingSessionId`] only when its message
 /// names the `Mcp-Session-Id` header; every other `-32001` stays a plain
 /// error code.
-#[allow(dead_code)]
+#[cfg_attr(not(feature = "client-bilingual"), allow(dead_code))] // the probe runs only on bilingual builds
 pub(crate) fn probe_from_jsonrpc_error(
     code: i64,
     message: Option<&str>,
@@ -122,7 +121,7 @@ pub(crate) fn probe_from_jsonrpc_error(
 /// accept HTTP 404/405 — for operators behind gateways that return those codes
 /// for unknown methods instead of tunneling the JSON-RPC envelope. It is off by
 /// default and weakens protocol-downgrade resistance when enabled.
-#[allow(dead_code)]
+#[cfg_attr(not(feature = "client-bilingual"), allow(dead_code))] // the probe runs only on bilingual builds
 pub(crate) fn classify_probe(
     probe: DiscoverProbe,
     allow_legacy_gateway_fallback: bool,

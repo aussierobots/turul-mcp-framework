@@ -13,12 +13,9 @@
 //! `describe_table()` key schema inspection. Both conventions are fully supported.
 
 use std::collections::HashMap;
-#[allow(unused_imports)] // Ordering used in non-DynamoDB cfg fallback
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 use async_trait::async_trait;
-// chrono used via full path (chrono::Utc::now()) in event timestamp fallbacks
 use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
@@ -27,11 +24,8 @@ use turul_mcp_protocol::ServerCapabilities;
 
 use crate::{SessionInfo, SessionStorage, SessionStorageError, SseEvent};
 
-#[cfg(feature = "dynamodb")]
 use aws_config::{BehaviorVersion, Region};
-#[cfg(feature = "dynamodb")]
 use aws_sdk_dynamodb::Client;
-#[cfg(feature = "dynamodb")]
 use aws_sdk_dynamodb::types::{AttributeValue, TableStatus};
 
 /// Naming convention detected from an existing DynamoDB table's key schema.
@@ -120,7 +114,6 @@ impl EventAttrNames {
 /// Detect whether a DynamoDB table uses snake_case or camelCase attribute names
 /// by inspecting its key schema. Any multi-word key containing an underscore
 /// indicates a legacy snake_case table.
-#[cfg(feature = "dynamodb")]
 fn detect_naming_convention(table: &aws_sdk_dynamodb::types::TableDescription) -> NamingConvention {
     for element in table.key_schema() {
         let name = element.attribute_name();
@@ -133,7 +126,6 @@ fn detect_naming_convention(table: &aws_sdk_dynamodb::types::TableDescription) -
 
 /// Read-tolerance helper: tries `primary` attribute name first, falls back to `fallback`.
 /// Used for non-key attributes that may have been written with either naming convention.
-#[cfg(feature = "dynamodb")]
 fn get_attr<'a>(
     item: &'a HashMap<String, AttributeValue>,
     primary: &str,
@@ -210,17 +202,11 @@ pub enum DynamoDbError {
 /// are detected independently.
 pub struct DynamoDbSessionStorage {
     config: DynamoDbConfig,
-    #[cfg(feature = "dynamodb")]
     client: Client,
-    #[allow(dead_code)] // Used only in non-DynamoDB cfg fallback
-    event_counter: AtomicU64,
-    #[cfg(feature = "dynamodb")]
     session_naming: NamingConvention,
-    #[cfg(feature = "dynamodb")]
     event_naming: NamingConvention,
 }
 
-#[cfg(feature = "dynamodb")]
 impl DynamoDbSessionStorage {
     /// Returns the attribute names for the sessions table's detected naming convention.
     fn session_attrs(&self) -> &'static SessionAttrNames {
@@ -252,7 +238,6 @@ impl DynamoDbSessionStorage {
             config.table_name, config.region
         );
 
-        #[cfg(feature = "dynamodb")]
         {
             // Initialize AWS SDK client
             let aws_config = aws_config::defaults(BehaviorVersion::latest())
@@ -266,7 +251,6 @@ impl DynamoDbSessionStorage {
             let mut storage = Self {
                 config: config.clone(),
                 client,
-                event_counter: AtomicU64::new(1),
                 session_naming: NamingConvention::CamelCase,
                 event_naming: NamingConvention::CamelCase,
             };
@@ -287,19 +271,10 @@ impl DynamoDbSessionStorage {
             );
             Ok(storage)
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            error!("DynamoDB feature is not enabled");
-            Err(DynamoDbError::ConfigError(
-                "DynamoDB feature is not enabled".to_string(),
-            ))
-        }
     }
 
     /// Verify that the DynamoDB table exists and has the correct schema, create if it doesn't exist.
     /// Also detects and stores the table's naming convention.
-    #[cfg(feature = "dynamodb")]
     async fn verify_table_schema(&mut self) -> Result<(), DynamoDbError> {
         debug!("Verifying table schema for: {}", self.config.table_name);
 
@@ -392,14 +367,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Verify that the DynamoDB table exists (non-dynamodb stub).
-    #[cfg(not(feature = "dynamodb"))]
-    async fn verify_table_schema(&mut self) -> Result<(), DynamoDbError> {
-        Ok(())
-    }
-
     /// Detect naming convention from the events table (best-effort, non-failing).
-    #[cfg(feature = "dynamodb")]
     async fn detect_event_naming(&mut self) {
         let event_table = self.get_event_table_name();
         match self
@@ -429,7 +397,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Create the DynamoDB table with camelCase key schema and GSI.
-    #[cfg(feature = "dynamodb")]
     async fn create_table(&self) -> Result<(), DynamoDbError> {
         use aws_sdk_dynamodb::types::{
             AttributeDefinition, BillingMode, GlobalSecondaryIndex, KeySchemaElement, KeyType,
@@ -512,7 +479,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Enable TTL on the DynamoDB table
-    #[cfg(feature = "dynamodb")]
     async fn enable_ttl(&self) -> Result<(), DynamoDbError> {
         use aws_sdk_dynamodb::types::TimeToLiveSpecification;
 
@@ -553,7 +519,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Ensure TTL is enabled on the main session table
-    #[cfg(feature = "dynamodb")]
     async fn ensure_ttl_enabled(&self) -> Result<(), DynamoDbError> {
         info!(
             "Checking TTL status on DynamoDB table: {}",
@@ -620,7 +585,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Enable TTL on the DynamoDB events table
-    #[cfg(feature = "dynamodb")]
     async fn enable_ttl_on_events_table(
         &self,
         event_table: &str,
@@ -661,7 +625,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Ensure TTL is enabled on the events table (idempotent — returns early if already enabled)
-    #[cfg(feature = "dynamodb")]
     async fn ensure_ttl_on_events_table(
         &self,
         event_table: &str,
@@ -726,7 +689,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Wait for the table to become active
-    #[cfg(feature = "dynamodb")]
     async fn wait_for_table_active(&self) -> Result<(), DynamoDbError> {
         use tokio::time::{Duration, sleep};
 
@@ -772,7 +734,6 @@ impl DynamoDbSessionStorage {
 
     /// Ensure the events table exists, create if it doesn't.
     /// Also detects and stores the events table's naming convention.
-    #[cfg(feature = "dynamodb")]
     async fn ensure_events_table_exists(
         &self,
         event_table: &str,
@@ -875,7 +836,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Wait for the events table to become active
-    #[cfg(feature = "dynamodb")]
     async fn wait_for_events_table_active(
         &self,
         event_table: &str,
@@ -926,7 +886,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Convert SessionInfo to DynamoDB AttributeValue format
-    #[cfg(feature = "dynamodb")]
     fn session_to_dynamodb_item(
         &self,
         session: &SessionInfo,
@@ -990,7 +949,6 @@ impl DynamoDbSessionStorage {
     }
 
     /// Convert DynamoDB item to SessionInfo, with read tolerance for both naming conventions.
-    #[cfg(feature = "dynamodb")]
     fn dynamodb_item_to_session(
         &self,
         item: &HashMap<String, AttributeValue>,
@@ -1085,10 +1043,7 @@ impl DynamoDbSessionStorage {
             "Converting SessionInfo to legacy JSON format for session: {}",
             session.session_id
         );
-        #[cfg(feature = "dynamodb")]
         let sa = self.session_attrs();
-        #[cfg(not(feature = "dynamodb"))]
-        let sa = SessionAttrNames::for_convention(NamingConvention::CamelCase);
 
         let mut item = HashMap::new();
 
@@ -1139,10 +1094,7 @@ impl DynamoDbSessionStorage {
     /// Convert DynamoDB item to SessionInfo (legacy JSON format for tests)
     fn item_to_session(&self, item: &HashMap<String, Value>) -> Result<SessionInfo, DynamoDbError> {
         debug!("Converting DynamoDB legacy JSON item to SessionInfo");
-        #[cfg(feature = "dynamodb")]
         let sa = self.session_attrs();
-        #[cfg(not(feature = "dynamodb"))]
-        let sa = SessionAttrNames::for_convention(NamingConvention::CamelCase);
 
         let session_id = item
             .get(sa.session_id)
@@ -1236,7 +1188,6 @@ impl DynamoDbSessionStorage {
 
     /// Public method to delete both DynamoDB tables (for teardown utilities)
     pub async fn delete_tables(&self) -> Result<(), DynamoDbError> {
-        #[cfg(feature = "dynamodb")]
         {
             let main_table = &self.config.table_name;
             let event_table = format!("{}-events", self.config.table_name);
@@ -1273,14 +1224,6 @@ impl DynamoDbSessionStorage {
             info!("Table deletion initiated for both tables");
             Ok(())
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            error!("DynamoDB feature is not enabled");
-            Err(DynamoDbError::ConfigError(
-                "DynamoDB feature is not enabled".to_string(),
-            ))
-        }
     }
 }
 
@@ -1299,7 +1242,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         let mut session = SessionInfo::new();
         session.server_capabilities = Some(capabilities);
 
-        #[cfg(feature = "dynamodb")]
         {
             let item = self.session_to_dynamodb_item(&session)?;
 
@@ -1327,14 +1269,6 @@ impl SessionStorage for DynamoDbSessionStorage {
             }
         }
 
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Creating session in DynamoDB (placeholder): {}",
-                session.session_id
-            );
-        }
-
         Ok(session)
     }
 
@@ -1346,7 +1280,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         let mut session = SessionInfo::with_id(session_id.clone());
         session.server_capabilities = Some(capabilities);
 
-        #[cfg(feature = "dynamodb")]
         {
             let item = self.session_to_dynamodb_item(&session)?;
 
@@ -1374,19 +1307,10 @@ impl SessionStorage for DynamoDbSessionStorage {
             }
         }
 
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Creating session with ID in DynamoDB (placeholder): {}",
-                session_id
-            );
-        }
-
         Ok(session)
     }
 
     async fn get_session(&self, session_id: &str) -> Result<Option<SessionInfo>, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
@@ -1427,19 +1351,9 @@ impl SessionStorage for DynamoDbSessionStorage {
                 }
             }
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Getting session from DynamoDB (placeholder): {}",
-                session_id
-            );
-            Ok(None)
-        }
     }
 
     async fn update_session(&self, session_info: SessionInfo) -> Result<(), Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             let item = self.session_to_dynamodb_item(&session_info)?;
 
@@ -1467,15 +1381,6 @@ impl SessionStorage for DynamoDbSessionStorage {
                 }
             }
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Updating session in DynamoDB (placeholder): {}",
-                session_info.session_id
-            );
-            Ok(())
-        }
     }
 
     async fn set_session_state(
@@ -1484,7 +1389,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         key: &str,
         value: Value,
     ) -> Result<(), Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
@@ -1574,15 +1478,6 @@ impl SessionStorage for DynamoDbSessionStorage {
                 }
             }
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Setting session state in DynamoDB (placeholder): {} -> {}",
-                session_id, key
-            );
-            Ok(())
-        }
     }
 
     async fn get_session_state(
@@ -1590,7 +1485,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         session_id: &str,
         key: &str,
     ) -> Result<Option<Value>, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             // Get the entire session and extract the state value
             if let Some(session) = self.get_session(session_id).await? {
@@ -1615,15 +1509,6 @@ impl SessionStorage for DynamoDbSessionStorage {
                 Ok(None)
             }
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Getting session state from DynamoDB (placeholder): {} -> {}",
-                session_id, key
-            );
-            Ok(None)
-        }
     }
 
     async fn remove_session_state(
@@ -1631,7 +1516,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         session_id: &str,
         key: &str,
     ) -> Result<Option<Value>, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
@@ -1692,19 +1576,9 @@ impl SessionStorage for DynamoDbSessionStorage {
                 Ok(None)
             }
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Removing session state from DynamoDB (placeholder): {} -> {}",
-                session_id, key
-            );
-            Ok(None)
-        }
     }
 
     async fn delete_session(&self, session_id: &str) -> Result<bool, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
@@ -1735,19 +1609,9 @@ impl SessionStorage for DynamoDbSessionStorage {
                 }
             }
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Deleting session from DynamoDB (placeholder): {}",
-                session_id
-            );
-            Ok(true)
-        }
     }
 
     async fn list_sessions(&self) -> Result<Vec<String>, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             debug!("Scanning DynamoDB table for all session IDs");
 
@@ -1784,12 +1648,6 @@ impl SessionStorage for DynamoDbSessionStorage {
                 }
             }
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!("Listing all sessions from DynamoDB (placeholder)");
-            Ok(vec![])
-        }
     }
 
     async fn store_event(
@@ -1797,7 +1655,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         session_id: &str,
         mut event: SseEvent,
     ) -> Result<SseEvent, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
@@ -1946,13 +1803,6 @@ impl SessionStorage for DynamoDbSessionStorage {
                 MAX_RETRIES, session_id
             )));
         }
-
-        // Non-DynamoDB fallback (should not reach here with dynamodb feature)
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            event.id = self.event_counter.fetch_add(1, Ordering::SeqCst);
-            Ok(event)
-        }
     }
 
     async fn get_events_after(
@@ -1960,7 +1810,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         session_id: &str,
         after_event_id: u64,
     ) -> Result<Vec<SseEvent>, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
@@ -2043,15 +1892,6 @@ impl SessionStorage for DynamoDbSessionStorage {
             );
             Ok(events)
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Getting events after {} from DynamoDB (placeholder): {}",
-                after_event_id, session_id
-            );
-            Ok(vec![])
-        }
     }
 
     async fn get_recent_events(
@@ -2059,7 +1899,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         session_id: &str,
         limit: usize,
     ) -> Result<Vec<SseEvent>, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
@@ -2138,15 +1977,6 @@ impl SessionStorage for DynamoDbSessionStorage {
             );
             Ok(events)
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Getting {} recent events from DynamoDB (placeholder): {}",
-                limit, session_id
-            );
-            Ok(vec![])
-        }
     }
 
     async fn delete_events_before(
@@ -2154,7 +1984,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         session_id: &str,
         before_event_id: u64,
     ) -> Result<u64, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             // In a production setup, this would scan and delete events
             // where session_id = session_id AND event_id < before_event_id
@@ -2166,19 +1995,9 @@ impl SessionStorage for DynamoDbSessionStorage {
             // For now, return 0 as we're not implementing the full events table
             Ok(0)
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!(
-                "Deleting events before {} from DynamoDB (placeholder): {}",
-                before_event_id, session_id
-            );
-            Ok(0)
-        }
     }
 
     async fn expire_sessions(&self, older_than: SystemTime) -> Result<Vec<String>, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             let timestamp = older_than
                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -2201,23 +2020,9 @@ impl SessionStorage for DynamoDbSessionStorage {
             // For now, return empty list as DynamoDB TTL handles cleanup automatically
             Ok(vec![])
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            let timestamp = older_than
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs();
-            debug!(
-                "Expiring sessions older than {} from DynamoDB (placeholder)",
-                timestamp
-            );
-            Ok(vec![])
-        }
     }
 
     async fn session_count(&self) -> Result<usize, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             // In production, this would use scan with count-only projection
             // or maintain a counter in a separate item
@@ -2245,28 +2050,15 @@ impl SessionStorage for DynamoDbSessionStorage {
                 }
             }
         }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!("Counting sessions in DynamoDB (placeholder)");
-            Ok(0)
-        }
     }
 
     async fn event_count(&self) -> Result<usize, Self::Error> {
-        #[cfg(feature = "dynamodb")]
         {
             // In production with separate events table, this would scan that table
             let event_table = format!("{}-events", self.config.table_name);
             debug!("Would count events in DynamoDB table: {}", event_table);
 
             // For now, return 0 as we're not implementing the full events table
-            Ok(0)
-        }
-
-        #[cfg(not(feature = "dynamodb"))]
-        {
-            debug!("Counting events in DynamoDB (placeholder)");
             Ok(0)
         }
     }
@@ -2293,7 +2085,7 @@ impl SessionStorage for DynamoDbSessionStorage {
     }
 }
 
-#[cfg(all(test, feature = "dynamodb"))]
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -2536,7 +2328,6 @@ mod tests {
         DynamoDbSessionStorage {
             config: DynamoDbConfig::default(),
             client,
-            event_counter: AtomicU64::new(1),
             session_naming,
             event_naming,
         }

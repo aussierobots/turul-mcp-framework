@@ -70,6 +70,60 @@ impl McpTool for SlowDoubleTool {
     }
 }
 
+/// Set once `ChattyTaskTool` has actually emitted its progress notification, so
+/// the listen-stream test below cannot pass by the tool never emitting.
+static CHATTY_EMITTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Task tool that emits `notifications/progress` and `notifications/message`
+/// mid-run — the two kinds tasks.md forbids on a task's listen stream.
+struct ChattyTaskTool {
+    input_schema: ToolSchema,
+}
+
+impl HasBaseMetadata for ChattyTaskTool {
+    fn name(&self) -> &str {
+        "chatty_task"
+    }
+}
+impl HasDescription for ChattyTaskTool {
+    fn description(&self) -> Option<&str> {
+        Some("Emits progress and a log message while running as a task")
+    }
+}
+impl HasInputSchema for ChattyTaskTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+impl HasOutputSchema for ChattyTaskTool {}
+impl HasAnnotations for ChattyTaskTool {}
+impl HasToolMeta for ChattyTaskTool {}
+impl HasIcons for ChattyTaskTool {}
+
+#[async_trait]
+impl McpTool for ChattyTaskTool {
+    async fn call(&self, _args: Value, s: Option<SessionContext>) -> McpResult<CallToolResult> {
+        // Give the test time to open the listen stream before emitting.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        if let Some(s) = s {
+            if s.notify_request_progress(0.5, Some(1.0)).await {
+                CHATTY_EMITTED.store(true, std::sync::atomic::Ordering::SeqCst);
+            }
+            // Logging is deprecated (SEP-2577) but still served; the test needs a message.
+            #[allow(deprecated)]
+            s.notify_log(
+                turul_mcp_protocol::logging::LoggingLevel::Info,
+                json!("halfway"),
+                None,
+                None,
+            )
+            .await;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        Ok(CallToolResult::success(vec![ToolResult::text("done")]))
+    }
+}
+
 /// Tool that demands an elicited confirmation before completing — exercises
 /// the input_required ⇄ tasks/update bridge.
 struct ApprovalTool {
@@ -280,6 +334,9 @@ async fn start_server() -> String {
         .with_ext_tasks(Arc::new(InMemoryTaskStore::new()))
         .ext_task_tool(SlowDoubleTool::new())
         .ext_task_tool(ApprovalTool::new())
+        .ext_task_tool(ChattyTaskTool {
+            input_schema: ToolSchema::object(),
+        })
         .ext_task_tool_required(SlowRequiredTool::new())
         .ext_task_tool_with(
             GatherThenTaskTool::new(),
@@ -1170,6 +1227,90 @@ async fn task_notifications_ride_listen_filtered_by_task_id() {
         saw_task_notification,
         "terminal notifications/tasks must arrive on the filtered stream: {buf}"
     );
+}
+
+/// tasks.md §Task Status Notifications: `notifications/progress` and
+/// `notifications/message` MUST NOT be sent on the `subscriptions/listen`
+/// stream for a task. The tool emits both while running as a task, with a
+/// progress token and a log level on the call, and the stream must carry
+/// neither — only the ack and the task's own `notifications/tasks`.
+#[tokio::test]
+async fn progress_and_message_never_ride_a_task_listen_stream() {
+    let url = start_server().await;
+
+    let mut call_meta = meta(true);
+    call_meta["progressToken"] = json!("p-chatty");
+    call_meta["io.modelcontextprotocol/logLevel"] = json!("debug");
+    let (status, body) = post(
+        &url,
+        "tools/call",
+        Some("chatty_task"),
+        json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": { "_meta": call_meta, "name": "chatty_task", "arguments": {} }
+        }),
+    )
+    .await;
+    assert_eq!(status, 200, "{body}");
+    let task_id = body["result"]["taskId"]
+        .as_str()
+        .unwrap_or_else(|| panic!("task handle expected: {body}"))
+        .to_string();
+
+    let resp = reqwest::Client::new()
+        .post(&url)
+        .header("Accept", "text/event-stream")
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", "2026-07-28")
+        .header("Mcp-Method", "subscriptions/listen")
+        .json(&json!({
+            "jsonrpc": "2.0", "id": 9, "method": "subscriptions/listen",
+            "params": { "_meta": meta(true), "notifications": { "taskIds": [task_id] } }
+        }))
+        .send()
+        .await
+        .expect("listen POST");
+    assert_eq!(resp.status(), 200);
+
+    use futures::StreamExt;
+    let mut stream = resp.bytes_stream();
+    let mut buf = String::new();
+    let mut methods = Vec::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    'read: while tokio::time::Instant::now() < deadline {
+        let chunk = match tokio::time::timeout(Duration::from_millis(500), stream.next()).await {
+            Ok(Some(Ok(c))) => c,
+            _ => break,
+        };
+        buf.push_str(&String::from_utf8_lossy(&chunk));
+        methods.clear();
+        for line in buf.lines() {
+            if let Some(data) = line.strip_prefix("data: ")
+                && let Ok(v) = serde_json::from_str::<Value>(data)
+                && let Some(m) = v["method"].as_str()
+            {
+                methods.push(m.to_string());
+                if m == "notifications/tasks" && v["params"]["status"] == "completed" {
+                    break 'read;
+                }
+            }
+        }
+    }
+
+    assert!(
+        CHATTY_EMITTED.load(std::sync::atomic::Ordering::SeqCst),
+        "the tool must actually have emitted progress, or this test proves nothing"
+    );
+    assert!(
+        methods.iter().any(|m| m == "notifications/tasks"),
+        "the task's own notification must arrive: {buf}"
+    );
+    for forbidden in ["notifications/progress", "notifications/message"] {
+        assert!(
+            !methods.iter().any(|m| m == forbidden),
+            "{forbidden} rode the task's listen stream: {buf}"
+        );
+    }
 }
 
 /// tasks.md §Task Status Notifications: a client that requests `taskIds`

@@ -148,31 +148,11 @@ impl McpPrompt for CodeGenerationPrompt {
         let empty_map = HashMap::new();
         let args = args.as_ref().unwrap_or(&empty_map);
 
-        // Check required arguments
-        for arg in &self.arguments {
-            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!(
-                    "Missing required argument: {}",
-                    arg.name
-                )));
-            }
-        }
-
         let rendered_content = self.render_template(args);
         Ok(vec![PromptMessage::text(rendered_content)])
     }
 
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
-        // Check required arguments
-        for arg in &self.arguments {
-            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!(
-                    "Missing required argument: {}",
-                    arg.name
-                )));
-            }
-        }
-
         // Validate language argument
         if let Some(language) = args.get("language").and_then(|v| v.as_str()) {
             let supported_languages = &[
@@ -194,7 +174,7 @@ impl McpPrompt for CodeGenerationPrompt {
                 "sql",
             ];
             if !supported_languages.contains(&language.to_lowercase().as_str()) {
-                return Err(McpError::validation(&format!(
+                return Err(McpError::InvalidParameters(format!(
                     "Unsupported language: {}",
                     language
                 )));
@@ -348,35 +328,16 @@ impl McpPrompt for CodeReviewPrompt {
         let empty_map = HashMap::new();
         let args = args.as_ref().unwrap_or(&empty_map);
 
-        // Check required arguments
-        for arg in &self.arguments {
-            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!(
-                    "Missing required argument: {}",
-                    arg.name
-                )));
-            }
-        }
-
         let rendered_content = self.render_template(args);
         Ok(vec![PromptMessage::text(rendered_content)])
     }
 
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
-        for arg in &self.arguments {
-            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!(
-                    "Missing required argument: {}",
-                    arg.name
-                )));
-            }
-        }
-
         // Validate focus area if provided
         if let Some(focus) = args.get("focus").and_then(|v| v.as_str()) {
             let valid_focus = &["security", "performance", "readability", "all"];
             if !valid_focus.contains(&focus.to_lowercase().as_str()) {
-                return Err(McpError::validation(&format!(
+                return Err(McpError::InvalidParameters(format!(
                     "Invalid focus area: {}",
                     focus
                 )));
@@ -458,16 +419,6 @@ impl McpPrompt for ArchitecturePrompt {
         let empty_map = HashMap::new();
         let args = args.as_ref().unwrap_or(&empty_map);
 
-        // Check required arguments
-        for arg in &self.arguments {
-            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!(
-                    "Missing required argument: {}",
-                    arg.name
-                )));
-            }
-        }
-
         let project_type = args
             .get("project_type")
             .and_then(|v| v.as_str())
@@ -542,15 +493,6 @@ Please provide detailed, actionable recommendations:"#,
     }
 
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
-        for arg in &self.arguments {
-            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!(
-                    "Missing required argument: {}",
-                    arg.name
-                )));
-            }
-        }
-
         // Validate project type
         if let Some(project_type) = args.get("project_type").and_then(|v| v.as_str()) {
             let valid_types = &[
@@ -563,7 +505,7 @@ Please provide detailed, actionable recommendations:"#,
                 "library",
             ];
             if !valid_types.contains(&project_type.to_lowercase().as_str()) {
-                return Err(McpError::validation(&format!(
+                return Err(McpError::InvalidParameters(format!(
                     "Invalid project type: {}",
                     project_type
                 )));
