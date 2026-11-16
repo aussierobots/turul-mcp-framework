@@ -17,6 +17,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 source "$SCRIPT_DIR/lib/mcp2026.sh"
+source "$SCRIPT_DIR/lib/target-dir.sh"
 
 PORT=8675
 URL="http://127.0.0.1:${PORT}/mcp"
@@ -33,7 +34,7 @@ trap cleanup EXIT
 echo "=== middleware-rate-limit-server verification ==="
 cargo build -p middleware-rate-limit-server > /dev/null 2>&1
 
-RUST_LOG=error ./target/debug/middleware-rate-limit-server --port "$PORT" > /tmp/middleware_rate_limit.log 2>&1 &
+RUST_LOG=error "$(cargo_target_dir)/debug/middleware-rate-limit-server" --port "$PORT" > /tmp/middleware_rate_limit.log 2>&1 &
 PID=$!
 
 # Plain TCP-open readiness check (NOT server/discover): the rate limiter

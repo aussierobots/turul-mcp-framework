@@ -2,6 +2,8 @@
 # Shared MCP server health check utilities
 # Mirrors TestServerManager::start() polling logic from mcp_e2e_shared
 
+source "$(dirname "${BASH_SOURCE[0]}")/../../../scripts/lib/target-dir.sh"
+
 wait_for_server() {
     local port=$1
     local max_attempts=50  # 15 seconds total (50 * 300ms)
@@ -25,7 +27,7 @@ wait_for_server() {
 ensure_binary_built() {
     local server_name=$1
 
-    if [ ! -f "./target/debug/$server_name" ]; then
+    if [ ! -f "$(cargo_target_dir)/debug/$server_name" ]; then
         echo "Building $server_name..."
         local build_output
         build_output=$(cargo build --bin "$server_name" 2>&1)

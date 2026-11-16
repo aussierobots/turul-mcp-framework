@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Scripts find built binaries wherever cargo puts them.** `test_middleware_live.sh`,
+  `test_rate_limit.sh`, `interop-go-sdk.sh`, `tests/shared/bin/wait_for_server.sh` and
+  `scripts/lib/examples.sh` assumed `./target`, so they failed under `CARGO_TARGET_DIR` or a
+  `[build] target-dir`. They now resolve it through `cargo metadata` via one helper,
+  `scripts/lib/target-dir.sh`; the 2025 lane sits beside it as `<target>-2025`. Tooling
+  only, no crate changes.
+- **`client_server_upgrade_e2e` builds its 2026 server beside the active target dir**
+  (`<target>-upgrade-e2e`) instead of a hardcoded `<repo>/target-upgrade-e2e`, through a new
+  `mcp_e2e_shared::e2e_utils::cargo_target_dir`, which `debug_binary_path` now also uses.
+
 ## [0.4.29] - 2026-11-16
 
 `turul-mcp-ext-skills` 0.1.2 → 0.1.3, `turul-mcp-server` 0.4.17 → 0.4.18,

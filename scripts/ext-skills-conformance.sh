@@ -27,7 +27,8 @@ VERSION=$(grep -oE '^CONFORMANCE_VERSION="[^"]+"' scripts/conformance-suite.sh |
 
 command -v npx >/dev/null || { echo "  SKIP: npx unavailable"; exit 77; }
 cargo build -q -p ext-skills-server --bins || exit 1
-CLIENT="$(cargo metadata -q --format-version 1 --no-deps | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["target_directory"])')/debug/ext-skills-client"
+source "$(dirname "${BASH_SOURCE[0]}")/lib/target-dir.sh"
+CLIENT="$(cargo_target_dir)/debug/ext-skills-client"
 if [ -z "${SKILLS_URL:-}" ]; then
   cargo run -q -p ext-skills-server -- "$PORT" >/dev/null 2>&1 &
   PID=$!

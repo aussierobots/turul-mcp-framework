@@ -12,6 +12,8 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 source "$SCRIPT_DIR/lib/mcp2026.sh"
+source "$SCRIPT_DIR/lib/target-dir.sh"
+BIN_DIR="$(cargo_target_dir)/debug"
 
 echo "🧪 Testing Middleware Examples (Live)"
 echo "======================================"
@@ -21,7 +23,7 @@ echo ""
 echo "📝 Test 1: middleware-logging-server (port 8670)"
 echo "------------------------------------------------"
 cargo build -p middleware-logging-server > /dev/null 2>&1
-RUST_LOG=error ./target/debug/middleware-logging-server --port 8670 > /tmp/middleware_logging.log 2>&1 &
+RUST_LOG=error $BIN_DIR/middleware-logging-server --port 8670 > /tmp/middleware_logging.log 2>&1 &
 SERVER_PID=$!
 
 if ! mcp2026_wait_for_server 8670; then
@@ -50,7 +52,7 @@ echo ""
 echo "🚦 Test 2: middleware-rate-limit-server (port 8671)"
 echo "---------------------------------------------------"
 cargo build -p middleware-rate-limit-server > /dev/null 2>&1
-RUST_LOG=error ./target/debug/middleware-rate-limit-server --port 8671 > /tmp/middleware_ratelimit.log 2>&1 &
+RUST_LOG=error $BIN_DIR/middleware-rate-limit-server --port 8671 > /tmp/middleware_ratelimit.log 2>&1 &
 SERVER_PID=$!
 
 # Plain TCP-open readiness check, not server/discover: the rate limiter runs
@@ -96,7 +98,7 @@ echo ""
 echo "🔐 Test 3: middleware-auth-server (port 8672)"
 echo "---------------------------------------------"
 cargo build -p middleware-auth-server > /dev/null 2>&1
-RUST_LOG=error ./target/debug/middleware-auth-server --port 8672 > /tmp/middleware_auth.log 2>&1 &
+RUST_LOG=error $BIN_DIR/middleware-auth-server --port 8672 > /tmp/middleware_auth.log 2>&1 &
 SERVER_PID=$!
 
 if ! mcp2026_wait_for_server 8672; then
