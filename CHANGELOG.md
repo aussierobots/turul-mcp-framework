@@ -7,17 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.30] - 2026-11-17
+
+`turul-mcp-derive` 0.4.9 → 0.4.10, `turul-mcp-builders` 0.4.4 → 0.4.5,
+`turul-http-mcp-server` 0.4.11 → 0.4.12, `turul-mcp-protocol-2026-07-28` 0.4.3 → 0.4.4,
+`turul-mcp-session-storage` 0.4.2 → 0.4.3, `turul-mcp-server-state-storage` 0.4.2 → 0.4.3,
+`turul-mcp-task-storage` 0.4.1 → 0.4.2, `turul-mcp-ext-tasks` 0.1.8 → 0.1.9,
+`turul-mcp-client` 0.4.14 → 0.4.15, `turul-mcp-aws-lambda` 0.4.9 → 0.4.10; pin raises only:
+`turul-mcp-protocol` 0.4.2 → 0.4.3, `turul-mcp-server` 0.4.18 → 0.4.19, `turul-mcp-oauth`
+0.4.2 → 0.4.3, `turul-mcp-ext-apps` 0.1.4 → 0.1.5, `turul-mcp-ext-skills` 0.1.3 → 0.1.4.
+
 ### Fixed
 
+- **`task_support` on the 2026-07-28 lane is a compile error naming the Tasks extension**
+  (ADR-037 item 10). It emitted 2025-11-25 paths that failed with `cannot find TaskSupport`.
+  `#[mcp_tool]` and `derive(McpTool)` share one emitter, `generate_execution_impl`.
+- **`#[mcp_tool]` and `#[mcp_resource]` refuse an unknown argument** (ADR-037 item 9), naming
+  the accepted keys. A typo such as `mimetype` or `readonly` was silently dropped.
+- **Builders sent what they were built with.** `NotificationBuilder::build_dynamic()` returned
+  no payload, so its params never reached the wire; `ElicitationBuilder::build_dynamic()` and
+  `LoggingBuilder::build_dynamic()` / `build_session_aware()` dropped `_meta`.
+  `HasElicitationMetadata` and `HasLoggingMetadata` gain a defaulted `meta()`, used by
+  `to_create_request` and `to_message_notification`.
+- **`examples/prompts-server` reports invalid prompt arguments as `-32602`**, as the spec
+  requires, instead of `-32014`. Its own required-argument loops are gone: the `prompts/get`
+  handler already enforces required arguments.
 - **Scripts find built binaries wherever cargo puts them.** `test_middleware_live.sh`,
   `test_rate_limit.sh`, `interop-go-sdk.sh`, `tests/shared/bin/wait_for_server.sh` and
   `scripts/lib/examples.sh` assumed `./target`, so they failed under `CARGO_TARGET_DIR` or a
   `[build] target-dir`. They now resolve it through `cargo metadata` via one helper,
-  `scripts/lib/target-dir.sh`; the 2025 lane sits beside it as `<target>-2025`. Tooling
-  only, no crate changes.
+  `scripts/lib/target-dir.sh`; the 2025 lane sits beside it as `<target>-2025`.
 - **`client_server_upgrade_e2e` builds its 2026 server beside the active target dir**
   (`<target>-upgrade-e2e`) instead of a hardcoded `<repo>/target-upgrade-e2e`, through a new
   `mcp_e2e_shared::e2e_utils::cargo_target_dir`, which `debug_binary_path` now also uses.
+
+### Added
+
+- **Test: `progress_and_message_never_ride_a_task_listen_stream`** (tasks.md: progress and
+  message notifications MUST NOT be sent on a task's listen stream). The tool provably emits
+  both; the stream carries neither. The framework already complied.
+- **`turul-mcp-task-storage` tests run in the 2025-11-25 gate and CI** (in-memory and SQLite
+  parity). They existed but no gate ran them.
+- **`docs/compliance/extensions.md`**: the supported-extensions list and a Skills section.
+
+### Removed (dead code)
+
+- `turul-http-mcp-server`: the unused `handle_json_post` and `handle_buffered_post`.
+- `turul-mcp-session-storage` DynamoDB: 21 `cfg(not(feature = "dynamodb"))` fallbacks inside a
+  module compiled only with that feature, and the `event_counter` they used.
+- `turul-mcp-server-state-storage`: `PostgresServerStateConfig::create_tables` and
+  `cleanup_interval_minutes`, which nothing read, and the stored config copy.
+- `turul-mcp-derive`: three unused output-schema helpers.
+- `turul-mcp-builders`: `DynamicPrompt`'s unread `messages` copy.
+- `turul-mcp-protocol-2026-07-28`: the unused `discover::ClientCapabilitiesRef` re-export.
+- `turul-mcp-ext-tasks`: `validate_identifier` and `InvalidExtensionIdentifier`. ADR-028 §4
+  said the server calls it; it never did (ADR-028 revision 2026-11-17).
+- Every remaining bare `#[allow(dead_code)]` outside tests is gone or narrowed to the `cfg`
+  under which the item is really unused.
+
+### Semver
+
+Removing `PostgresServerStateConfig` fields, `discover::ClientCapabilitiesRef`,
+`validate_identifier` and `InvalidExtensionIdentifier`, adding a trait method with a default,
+and refusing unknown macro arguments are formally breaking. They ship as patches under the 0.4
+rule.
 
 ## [0.4.29] - 2026-11-16
 

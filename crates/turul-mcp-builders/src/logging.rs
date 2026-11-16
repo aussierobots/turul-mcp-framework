@@ -105,7 +105,6 @@ pub struct DynamicLogger {
     level: LoggingLevel,
     data: Value,
     logger: Option<String>,
-    #[allow(dead_code)]
     meta: Option<HashMap<String, Value>>,
     batch_size: Option<usize>,
 }
@@ -118,6 +117,10 @@ impl HasLoggingMetadata for DynamicLogger {
 
     fn logger_name(&self) -> Option<&str> {
         self.logger.as_deref()
+    }
+
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
     }
 }
 
@@ -154,7 +157,6 @@ pub struct SessionAwareLogger {
     level: LoggingLevel,
     data: Value,
     logger: Option<String>,
-    #[allow(dead_code)]
     meta: Option<HashMap<String, Value>>,
     batch_size: Option<usize>,
 }
@@ -233,6 +235,9 @@ impl HasLoggingMetadata for SessionAwareLogger {
 
     fn logger_name(&self) -> Option<&str> {
         self.logger.as_deref()
+    }
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
     }
 }
 
@@ -422,6 +427,22 @@ mod tests {
     use super::*;
     use crate::traits::LoggerDefinition;
     use serde_json::json;
+
+    #[test]
+    fn dynamic_and_session_aware_loggers_send_their_meta() {
+        let meta = HashMap::from([("trace".to_string(), json!("t1"))]);
+        let dynamic = LoggingBuilder::new(LoggingLevel::Info, json!("m"))
+            .meta(meta.clone())
+            .build_dynamic();
+        assert_eq!(
+            dynamic.to_message_notification().params.meta,
+            Some(meta.clone())
+        );
+        let aware = LoggingBuilder::new(LoggingLevel::Info, json!("m"))
+            .meta(meta.clone())
+            .build_session_aware();
+        assert_eq!(aware.meta(), Some(&meta));
+    }
 
     #[test]
     fn test_logging_builder_basic() {

@@ -384,39 +384,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         }
     };
 
-    // Generate HasExecution impl based on task_support attribute
-    let execution_impl = match tool_meta.task_support.as_deref() {
-        Some("optional") => quote! {
-            impl #mcp_builders::traits::HasExecution for #name {
-                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
-                    Some(#mcp_protocol::tools::ToolExecution {
-                        task_support: Some(#mcp_protocol::tools::TaskSupport::Optional),
-                    })
-                }
-            }
-        },
-        Some("required") => quote! {
-            impl #mcp_builders::traits::HasExecution for #name {
-                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
-                    Some(#mcp_protocol::tools::ToolExecution {
-                        task_support: Some(#mcp_protocol::tools::TaskSupport::Required),
-                    })
-                }
-            }
-        },
-        Some("forbidden") => quote! {
-            impl #mcp_builders::traits::HasExecution for #name {
-                fn execution(&self) -> Option<#mcp_protocol::tools::ToolExecution> {
-                    Some(#mcp_protocol::tools::ToolExecution {
-                        task_support: Some(#mcp_protocol::tools::TaskSupport::Forbidden),
-                    })
-                }
-            }
-        },
-        _ => quote! {
-            impl #mcp_builders::traits::HasExecution for #name {}
-        },
-    };
+    let execution_impl =
+        crate::utils::generate_execution_impl(name, tool_meta.task_support.as_deref());
 
     let close_input_schema = crate::utils::generate_close_input_schema();
     let undeclared_arg_check = crate::utils::generate_undeclared_arg_check();

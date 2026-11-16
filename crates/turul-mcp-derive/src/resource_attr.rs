@@ -63,7 +63,12 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             Meta::NameValue(nv) if nv.path.is_ident("mime_type") => {
                 mime_type = Some(nv.value.clone());
             }
-            _ => {}
+            other => {
+                return Err(syn::Error::new_spanned(
+                    other,
+                    "unknown #[mcp_resource] argument; expected one of: uri, name, description, title, mime_type, size, meta, icons, annotations",
+                ));
+            }
         }
     }
 
@@ -269,6 +274,17 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
 mod tests {
     use super::*;
     use syn::parse_quote;
+
+    #[test]
+    fn unknown_argument_is_refused_naming_the_accepted_keys() {
+        let args = parse_quote! { uri = "file:///a.json", mimetype = "application/json" };
+        let input = parse_quote! {
+            async fn a() -> McpResult<Vec<ResourceContent>> { Ok(vec![]) }
+        };
+        let err = mcp_resource_impl(args, input).unwrap_err().to_string();
+        assert!(err.contains("unknown #[mcp_resource] argument"), "{err}");
+        assert!(err.contains("mime_type"), "{err}");
+    }
 
     #[test]
     fn test_basic_mcp_resource() {

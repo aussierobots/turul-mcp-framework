@@ -38,8 +38,8 @@ pub struct LambdaMcpHandler {
     /// StreamableHttpHandler for MCP 2025-11-25 with proper headers
     streamable_handler: StreamableHttpHandler,
 
-    /// Whether SSE is enabled (used for testing and debugging)
-    #[allow(dead_code)]
+    /// Whether SSE is enabled. Only read by in-crate tests.
+    #[cfg_attr(not(test), allow(dead_code))]
     sse_enabled: bool,
 
     /// Custom route registry (e.g., .well-known endpoints)

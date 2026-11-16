@@ -41,38 +41,3 @@ pub fn declared_by_server(caps: &ServerCapabilities) -> bool {
         .and_then(|m| m.get(EXTENSION_IDENTIFIER))
         .is_some()
 }
-
-/// Error from [`validate_identifier`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InvalidExtensionIdentifier(pub String);
-
-impl std::fmt::Display for InvalidExtensionIdentifier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "invalid extension identifier: {}", self.0)
-    }
-}
-
-impl std::error::Error for InvalidExtensionIdentifier {}
-
-/// Validate an extension identifier against the SEP-2133 naming rules:
-/// a reverse-DNS prefix, a `/` separator, and a non-empty name segment
-/// (e.g. `io.modelcontextprotocol/tasks`, `com.example/my-ext`).
-pub fn validate_identifier(s: &str) -> Result<(), InvalidExtensionIdentifier> {
-    let Some((prefix, name)) = s.split_once('/') else {
-        return Err(InvalidExtensionIdentifier(format!(
-            "{s:?} has no '/' separator"
-        )));
-    };
-    if name.is_empty() {
-        return Err(InvalidExtensionIdentifier(format!(
-            "{s:?} has an empty name segment"
-        )));
-    }
-    let labels: Vec<&str> = prefix.split('.').collect();
-    if labels.len() < 2 || labels.iter().any(|l| l.is_empty()) {
-        return Err(InvalidExtensionIdentifier(format!(
-            "{s:?} prefix {prefix:?} is not reverse-DNS (need ≥2 non-empty dot-separated labels)"
-        )));
-    }
-    Ok(())
-}

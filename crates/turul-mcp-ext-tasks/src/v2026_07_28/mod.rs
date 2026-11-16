@@ -32,8 +32,8 @@ mod compliance_test;
 mod released_schema_test;
 
 pub use capability::{
-    EXTENSION_IDENTIFIER, InvalidExtensionIdentifier, capability, declared_by_client,
-    declared_by_server, missing_capability_error, validate_identifier,
+    EXTENSION_IDENTIFIER, capability, declared_by_client, declared_by_server,
+    missing_capability_error,
 };
 pub use in_memory::InMemoryTaskStore;
 pub use lifecycle::{

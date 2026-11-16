@@ -13,7 +13,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::initialize::{ClientCapabilities, Implementation, ServerCapabilities};
+use crate::initialize::{Implementation, ServerCapabilities};
 use crate::result_type::ResultType;
 
 /// Wire method string for the discover RPC.
@@ -180,19 +180,10 @@ impl crate::traits::HasResultType for DiscoverResult {
 }
 impl crate::traits::RpcResult for DiscoverResult {}
 
-// The client capabilities are *advertised* by the client per-request via
-// `RequestMetaObject.client_capabilities`, not in the discover request itself.
-// We re-export the type here for ergonomic discovery from `discover::`.
-pub use crate::initialize::ClientCapabilities as ClientCapabilitiesRef;
-#[allow(dead_code)]
-const _: fn() = || {
-    // Compile-time guard: ensure the ClientCapabilities type lives where we expect.
-    let _: ClientCapabilities;
-};
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::initialize::ClientCapabilities;
     use serde_json::json;
 
     fn fixture_impl() -> Implementation {

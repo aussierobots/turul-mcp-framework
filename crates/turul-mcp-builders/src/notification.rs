@@ -130,7 +130,6 @@ impl NotificationBuilder {
 #[derive(Debug)]
 pub struct DynamicNotification {
     method: String,
-    #[allow(dead_code)]
     params: Option<NotificationParams>,
     priority: u32,
     can_batch: bool,
@@ -151,8 +150,9 @@ impl HasNotificationMetadata for DynamicNotification {
 
 impl HasNotificationPayload for DynamicNotification {
     fn payload(&self) -> Option<Value> {
-        // Convert params to a single Value if needed
-        None // For simplicity, custom payloads can be added via trait extension
+        self.params
+            .as_ref()
+            .and_then(|params| serde_json::to_value(params).ok())
     }
 }
 
@@ -412,6 +412,16 @@ mod tests {
     use super::*;
     use crate::traits::NotificationDefinition;
     use serde_json::json;
+
+    #[test]
+    fn dynamic_notification_carries_the_params_it_was_built_with() {
+        let dynamic = NotificationBuilder::new("notifications/custom")
+            .param("key", json!("value"))
+            .build_dynamic();
+        assert_eq!(dynamic.payload().unwrap()["key"], json!("value"));
+        let wire = serde_json::to_value(dynamic.to_notification()).unwrap();
+        assert_eq!(wire["params"]["key"], json!("value"), "{wire}");
+    }
 
     #[test]
     fn test_notification_builder_basic() {

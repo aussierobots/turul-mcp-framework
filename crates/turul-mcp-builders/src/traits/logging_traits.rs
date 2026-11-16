@@ -21,6 +21,11 @@ pub trait HasLoggingMetadata {
     fn logger_name(&self) -> Option<&str> {
         None
     }
+
+    /// Optional `_meta` sent on the notification
+    fn meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
+        None
+    }
 }
 
 /// Trait for logging level configuration
@@ -78,6 +83,9 @@ pub trait LoggerDefinition:
         let mut notification = LoggingMessageNotification::new(self.level(), self.data().clone());
         if let Some(logger) = self.logger_name() {
             notification = notification.with_logger(logger);
+        }
+        if let Some(meta) = self.meta() {
+            notification = notification.with_meta(meta.clone());
         }
         notification
     }

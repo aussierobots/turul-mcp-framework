@@ -22,14 +22,9 @@ pub struct PostgresServerStateConfig {
     pub min_connections: u32,
     /// Connection timeout in seconds
     pub connection_timeout_secs: u64,
-    /// Verify table existence at startup and run migrations.
+    /// Create missing tables and indexes at startup (`CREATE ... IF NOT EXISTS`).
     /// When false, tables are assumed to exist.
     pub verify_tables: bool,
-    /// Create tables if they don't exist during verification.
-    /// Only has effect when `verify_tables` is true.
-    pub create_tables: bool,
-    /// Cleanup interval in minutes for maintenance tasks
-    pub cleanup_interval_minutes: u32,
 }
 
 impl Default for PostgresServerStateConfig {
@@ -40,8 +35,6 @@ impl Default for PostgresServerStateConfig {
             min_connections: 1,
             connection_timeout_secs: 30,
             verify_tables: false,
-            create_tables: false,
-            cleanup_interval_minutes: 30,
         }
     }
 }
@@ -52,8 +45,6 @@ impl Default for PostgresServerStateConfig {
 /// suitable for multi-instance deployments requiring shared state.
 pub struct PostgresServerStateStorage {
     pool: PgPool,
-    #[allow(dead_code)]
-    config: PostgresServerStateConfig,
 }
 
 impl PostgresServerStateStorage {
@@ -84,10 +75,9 @@ impl PostgresServerStateStorage {
                 ServerStateError::DatabaseError(format!("Failed to connect to PostgreSQL: {}", e))
             })?;
 
-        let verify = config.verify_tables;
-        let storage = Self { pool, config };
+        let storage = Self { pool };
 
-        if verify {
+        if config.verify_tables {
             storage.migrate().await?;
         }
 
@@ -99,8 +89,7 @@ impl PostgresServerStateStorage {
     ///
     /// Useful when sharing a pool with other storage backends.
     pub async fn from_pool(pool: PgPool) -> Result<Self, ServerStateError> {
-        let config = PostgresServerStateConfig::default();
-        Ok(Self { pool, config })
+        Ok(Self { pool })
     }
 
     /// Run database schema migrations.
@@ -380,7 +369,6 @@ mod tests {
             database_url: std::env::var("TEST_DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/test".to_string()),
             verify_tables: true,
-            create_tables: true,
             ..PostgresServerStateConfig::default()
         };
         PostgresServerStateStorage::with_config(config).await

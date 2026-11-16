@@ -3,7 +3,7 @@
 
 use serde_json::{Value, json};
 
-use super::capability::{EXTENSION_IDENTIFIER, validate_identifier};
+use super::capability::EXTENSION_IDENTIFIER;
 use super::lifecycle::{
     GetTaskParams, GetTaskResult, TaskAckResult, TaskStatusNotificationParams,
     TaskSubscriptionNotifications, UpdateTaskParams,
@@ -227,17 +227,6 @@ fn task_subscription_filter() {
         serde_json::to_value(&f).unwrap(),
         json!({"taskIds": ["t-11"]})
     );
-}
-
-/// The extension identifier itself passes SEP-2133 validation; malformed
-/// identifiers are rejected.
-#[test]
-fn extension_identifier_validation() {
-    validate_identifier(EXTENSION_IDENTIFIER).unwrap();
-    validate_identifier("com.example/my-ext").unwrap();
-    assert!(validate_identifier("no-separator").is_err());
-    assert!(validate_identifier("io.modelcontextprotocol/").is_err());
-    assert!(validate_identifier("bare/name").is_err());
 }
 
 /// Capability declaration: empty object under the identifier.
