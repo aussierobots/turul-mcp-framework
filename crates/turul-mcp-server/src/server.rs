@@ -1434,9 +1434,16 @@ impl DiscoverHandler {
         Self {
             capabilities,
             instructions,
-            supported_versions: vec![McpVersion::V2026_07_28.as_str().to_string()],
+            supported_versions: discover_supported_versions(),
         }
     }
+}
+
+/// The `supportedVersions` `server/discover` answers with: the one spec this
+/// build speaks. Server Cards read the same list (ADR-038 §2).
+#[cfg(feature = "protocol-2026-07-28")]
+pub(crate) fn discover_supported_versions() -> Vec<String> {
+    vec![McpVersion::V2026_07_28.as_str().to_string()]
 }
 
 #[cfg(feature = "protocol-2026-07-28")]

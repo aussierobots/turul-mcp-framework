@@ -116,6 +116,7 @@ points at the server, so a bare `cargo run -p simple-sqlite-session` works.
 | Example | Lane | Port | Demonstrates |
 |---|---|---|---|
 | **ext-apps-server** | 2026-07-28 | 8660 | MCP Apps (`io.modelcontextprotocol/ui`) through generic hooks: a UI-linked tool, an app-only tool and a `ui://` view with content-item `_meta.ui` |
+| **server-card-server** | 2026-07-28 | 8665 | Server Cards (**experimental** upstream, SEP-2127): `GET /mcp/server-card` with the spec's CORS, `Cache-Control`, `ETag` and `304`; `version`, `title` and protocol versions come from the server itself (ADR-038) |
 | **ext-tasks-server** | 2026-07-28 | 8645 | The Tasks *extension* (SEP-2663): task election, polling, `tasks/update` mid-task input, sync fallback. Ships the paired `ext-tasks-client` bin |
 | **tasks-e2e-inmemory-server** | 2025-11-25 (pinned) | 8080 | In-core 2025 task lifecycle with a `slow_add` tool and InMemory task storage |
 | **tasks-e2e-inmemory-client** | 2025-11-25 (pinned) | targets `:8080` | Drives that lifecycle: create, poll, cancel, fetch result |

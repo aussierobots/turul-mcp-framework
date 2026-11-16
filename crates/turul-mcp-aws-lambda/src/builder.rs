@@ -112,6 +112,14 @@ impl LambdaMcpServerBuilder {
         self
     }
 
+    /// Serve a Server Card (**experimental**); see
+    /// [`McpServerBuilder::with_server_card`] (ADR-038).
+    #[cfg(feature = "ext-server-card")]
+    pub fn with_server_card(mut self, card: turul_mcp_ext_server_card::v1::ServerCard) -> Self {
+        self.inner = self.inner.with_server_card(card);
+        self
+    }
+
     /// Set the server name
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.inner = self.inner.name(name);

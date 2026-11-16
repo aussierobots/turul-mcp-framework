@@ -20,9 +20,9 @@ answer 404 for every `tasks/*` method.
 | Tasks | `io.modelcontextprotocol/tasks` | `turul-mcp-ext-tasks`; server feature `ext-tasks` (`with_ext_tasks`); client feature `ext-tasks` | Cargo feature |
 | MCP Apps | `io.modelcontextprotocol/ui` | `turul-mcp-ext-apps` helpers over the server's generic hooks; client feature `ext-apps` | the server calls `extension_capability` itself |
 | Skills | `io.modelcontextprotocol/skills` | `turul-mcp-ext-skills`; server feature `ext-skills` (`with_ext_skills`); client feature `ext-skills` | Cargo feature |
+| Server Cards (**experimental** upstream) | none (no negotiation, SEP-2127) | `turul-mcp-ext-server-card`; server and Lambda feature `ext-server-card` (`with_server_card`) | Cargo feature |
 
-Not implemented: OAuth Client Credentials, Enterprise-Managed Authorization,
-Server Cards.
+Not implemented: OAuth Client Credentials, Enterprise-Managed Authorization.
 
 ---
 
@@ -134,6 +134,25 @@ Governing ADR: ADR-033. Skill parsing is owned by `turul-agent-skills`;
 
 `scripts/ext-skills-conformance.sh` runs the upstream host scenarios against
 `examples/ext-skills-server`, the only check here not written by turul.
+
+## 5. Server Cards (SEP-2127) — experimental, no identifier
+
+Governing ADR: ADR-038. Upstream `ext-server-card` marks this experimental and
+not an accepted extension; the pin is `526201b`.
+
+| Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
+|---|---|---|---|---|---|---|---|---|
+| Card conforms to the v1 schema | MUST | Implemented | `ServerCard::validate` | `v1::tests::every_valid_example_passes_both_and_round_trips`, `::every_invalid_example_fails_both`, `::validate_agrees_with_the_schema_on_each_constraint` (against the vendored `schema.json`) | pass | — | — | — |
+| Served at `<streamable-http-url>/server-card` as `application/mcp-server-card+json` | MAY / SHOULD | Implemented | `with_server_card` route | `server_card_2026.rs::get_serves_the_card_with_media_type_cors_and_caching` | pass | — | — | — |
+| CORS: `*`, `GET`, `Content-Type, If-None-Match`, expose `ETag` | MUST | Implemented | route sets them; transports keep a route's own CORS | `server_card_2026.rs::route_cors_survives_the_servers_own_cors`, `::head_options_and_other_methods`; Lambda `a_route_that_sets_cors_keeps_it_and_answers_its_preflight` | pass | — | — | — |
+| `Cache-Control: public, max-age=3600`, `ETag`, 304 on `If-None-Match` | SHOULD | Implemented | `ServerCardDocument` + route | `server_card_2026.rs::matching_if_none_match_is_304` | pass | — | — | — |
+| Identity, version, descriptive fields and protocol versions do not contradict `server/discover` | SHOULD NOT | Implemented (build error) | `ext_server_card::reconcile` | `server_card_2026.rs::card_fields_equal_server_discover`, `::a_card_contradicting_server_discover_fails_build` | pass | — | — | — |
+| No credentials or private endpoints in a card | MUST NOT | Caller's duty | documented in the crate README | — | — | — | — | — |
+| HTTPS in production; rate limiting | MUST / SHOULD | Deployment's duty | TLS terminates in front; middleware | — | — | — | — | — |
+
+`examples/server-card-server` was read back live with curl: `GET`, `If-None-Match`
+→ 304, `OPTIONS` → 204, `POST` → 405, and the card's version, title and protocol
+versions equal its `server/discover`.
 
 ## Gap register
 

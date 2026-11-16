@@ -8,6 +8,7 @@ members = [
   "crates/turul-mcp-protocol-2026-07-28",
   "crates/turul-mcp-schema-validation",
   "crates/turul-mcp-ext-apps",
+  "crates/turul-mcp-ext-server-card",
   "crates/turul-mcp-ext-skills",
   "crates/turul-mcp-ext-tasks",
   "crates/turul-mcp-protocol",
@@ -42,6 +43,7 @@ members = [
   "examples/elicitation-server",
   "examples/ext-apps-server",
   "examples/ext-skills-server",
+  "examples/server-card-server",
   "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
@@ -123,6 +125,7 @@ default-members = [
   "crates/turul-mcp-protocol-2026-07-28",
   "crates/turul-mcp-schema-validation",
   "crates/turul-mcp-ext-apps",
+  "crates/turul-mcp-ext-server-card",
   "crates/turul-mcp-ext-skills",
   "crates/turul-mcp-ext-tasks",
   "crates/turul-mcp-protocol",
@@ -156,6 +159,7 @@ default-members = [
   "examples/derive-macro-server",
   "examples/ext-apps-server",
   "examples/ext-skills-server",
+  "examples/server-card-server",
   "examples/ext-tasks-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
@@ -275,6 +279,7 @@ turul-mcp-server = { version = "0.4.18", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.4.9", path = "crates/turul-mcp-derive" }
 turul-mcp-client = { version = "0.4.14", path = "crates/turul-mcp-client" }
 turul-mcp-ext-apps = { version = "0.1.5", path = "crates/turul-mcp-ext-apps" }
+turul-mcp-ext-server-card = { version = "0.1.0", path = "crates/turul-mcp-ext-server-card" }
 turul-mcp-ext-skills = { version = "0.1.4", path = "crates/turul-mcp-ext-skills" }
 turul-mcp-ext-tasks = { version = "0.1.9", path = "crates/turul-mcp-ext-tasks" }
 turul-mcp-builders = { version = "0.4.4", path = "crates/turul-mcp-builders" }

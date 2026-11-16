@@ -678,7 +678,14 @@ async fn handle_request(
     // Apply CORS if enabled
     match response {
         Ok(mut final_response) => {
-            if handler.session_handler.config.enable_cors {
+            // A custom route that sets its own CORS keeps it (a Server Card's
+            // headers are spec-mandated, ADR-038 §4); everything else gets the
+            // server's.
+            if handler.session_handler.config.enable_cors
+                && !final_response
+                    .headers()
+                    .contains_key("Access-Control-Allow-Origin")
+            {
                 CorsLayer::apply_cors_headers(final_response.headers_mut());
             }
             Ok(final_response)

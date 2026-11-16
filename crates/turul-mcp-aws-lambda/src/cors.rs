@@ -116,6 +116,15 @@ pub fn inject_cors_headers<B>(
 ) -> Result<()> {
     debug!("Injecting CORS headers for origin: {:?}", request_origin);
 
+    // A response that already carries CORS (a custom route that owns its
+    // headers, e.g. a Server Card — ADR-038 §4) keeps it.
+    if response
+        .headers()
+        .contains_key("Access-Control-Allow-Origin")
+    {
+        return Ok(());
+    }
+
     // Determine allowed origin
     let allowed_origin = determine_allowed_origin(config, request_origin);
 

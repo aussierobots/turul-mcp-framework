@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.31] - 2026-11-17
+
+New crate `turul-mcp-ext-server-card` 0.1.0; `turul-http-mcp-server` 0.4.12 → 0.4.13,
+`turul-mcp-server` 0.4.19 → 0.4.20, `turul-mcp-aws-lambda` 0.4.10 → 0.4.11; pin raise only:
+`turul-mcp-oauth` 0.4.3 → 0.4.4.
+
+### Added
+
+- **Server Cards, experimental (ADR-038).** Upstream `ext-server-card` marks the extension
+  "experimental … not an accepted or official MCP extension"; the crate README says so first.
+  - **`turul-mcp-ext-server-card` 0.1.0:** the v1 wire types, `ServerCard::validate` (the
+    schema's constraints), and `ServerCardDocument` (the served bytes and their `ETag`). The
+    schema and the upstream examples are vendored at `526201b`, and `check-schema-pin.sh`
+    verifies them.
+  - **`with_server_card(card)` on `McpServerBuilder` and `LambdaMcpServerBuilder`** (feature
+    `ext-server-card`, off by default). It serves `GET <mcp_path>/server-card` as
+    `application/mcp-server-card+json`, with the spec's CORS headers,
+    `Cache-Control: public, max-age=3600`, an `ETag` and `304` on `If-None-Match`; `HEAD`,
+    `OPTIONS` (204) and `405` for other methods.
+  - **Consistency with `server/discover`:** `version`, `title`, `description`, `websiteUrl`,
+    `icons` and `supportedProtocolVersions` are copied from it when the card leaves them unset.
+    A contradicting value, or an invalid card, fails `build()`.
+- **`examples/server-card-server`** (port 8665).
+
+### Changed
+
+- **A custom route keeps the CORS headers it sets.** The HTTP server and Lambda add their own
+  CORS headers only to a response that carries no `Access-Control-Allow-Origin`. Lambda now
+  lets a matching route answer its own `OPTIONS` preflight. Responses that set no CORS of
+  their own, including every MCP-endpoint response, are unchanged.
+
 ## [0.4.30] - 2026-11-17
 
 `turul-mcp-derive` 0.4.9 → 0.4.10, `turul-mcp-builders` 0.4.4 → 0.4.5,

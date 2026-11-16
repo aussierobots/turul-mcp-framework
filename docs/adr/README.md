@@ -68,6 +68,7 @@ Each ADR follows the standard format:
 | [035](./035-lambda-consumes-server-builder.md) | Lambda consumes `McpServerBuilder` — one owner of handlers, capabilities and extensions | Proposed | 2026-11-14 | `LambdaMcpServerBuilder` becomes a thin wrapper; extensions (Skills, Apps) reach Lambda; one resource-security policy; Tasks on Lambda deferred |
 | [036](./036-deterministic-wire-maps.md) | Wire maps serialize in sorted key order | Accepted | 2026-11-14 | Every `HashMap` field of a 2026-07-28 wire type serializes through `serde_maps::sorted`, so output bytes are stable |
 | [037](./037-macro-declared-spec-fields.md) | Macros declare every per-object spec field they can know at compile time | Accepted | 2026-11-15 | `meta =` on every tool, resource and prompt macro form, plus resource `icons`/`annotations` and prompt `title`; `resources/templates/list` serves every declared field |
+| [038](./038-server-cards-experimental.md) | Server Cards (experimental): `turul-mcp-ext-server-card` and `with_server_card` | Accepted | 2026-11-17 | Serves `GET <mcp_path>/server-card` with the spec's CORS, caching and `ETag`; card fields shared with `server/discover` are copied from it, and a contradiction fails `build()`; a route's own CORS headers survive the transport's |
 
 ## Tasks Architecture ADRs
 

@@ -320,6 +320,8 @@ impl LambdaMcpHandler {
         #[cfg(feature = "cors")]
         if method == http::Method::OPTIONS
             && let Some(ref cors_config) = self.cors_config
+            // A custom route answers its own preflight (ADR-038 §4).
+            && !matches!(self.route_registry.match_route(req.uri().path()), Ok(Some(_)))
         {
             debug!("Handling CORS preflight request");
             return create_preflight_response(cors_config, request_origin.as_deref());
@@ -443,6 +445,8 @@ impl LambdaMcpHandler {
         #[cfg(feature = "cors")]
         if method == http::Method::OPTIONS
             && let Some(ref cors_config) = self.cors_config
+            // A custom route answers its own preflight (ADR-038 §4).
+            && !matches!(self.route_registry.match_route(req.uri().path()), Ok(Some(_)))
         {
             debug!("Handling CORS preflight request (streaming)");
             let preflight_response =
@@ -1503,6 +1507,93 @@ mod tests {
                 .header("Origin", origin)
                 .body(LambdaBody::Empty)
                 .unwrap()
+        }
+
+        /// A route that owns its CORS and answers its own preflight, as a Server
+        /// Card does (ADR-038 §4).
+        struct CorsOwningRoute;
+
+        #[async_trait]
+        impl RouteHandler for CorsOwningRoute {
+            async fn handle(&self, req: HyperRequest<RouteBody>) -> HyperResponse<RouteBody> {
+                use http_body_util::BodyExt;
+                let status = if req.method() == hyper::Method::OPTIONS {
+                    StatusCode::NO_CONTENT
+                } else {
+                    StatusCode::OK
+                };
+                HyperResponse::builder()
+                    .status(status)
+                    .header("Access-Control-Allow-Origin", "*")
+                    .header(
+                        "Access-Control-Allow-Headers",
+                        "Content-Type, If-None-Match",
+                    )
+                    .header("Access-Control-Expose-Headers", "ETag")
+                    .body(
+                        Full::new(Bytes::new())
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap()
+            }
+        }
+
+        fn cors_owning_handler() -> LambdaMcpHandler {
+            let mut registry = RouteRegistry::new();
+            registry.add_route("/mcp/server-card", Arc::new(CorsOwningRoute));
+            handler_with_route_and_cors(Arc::new(registry), Some(CorsConfig::default()))
+        }
+
+        fn request(method: &str, path: &str) -> LambdaRequest {
+            Request::builder()
+                .method(method)
+                .uri(path)
+                .header("Origin", "https://browser.example")
+                .header("Access-Control-Request-Method", "GET")
+                .body(LambdaBody::Empty)
+                .unwrap()
+        }
+
+        fn assert_route_cors_kept(headers: &http::HeaderMap, what: &str) {
+            assert_eq!(headers["access-control-allow-origin"], "*", "{what}");
+            assert_eq!(headers["access-control-expose-headers"], "ETag", "{what}");
+            assert_eq!(
+                headers["access-control-allow-headers"], "Content-Type, If-None-Match",
+                "{what}"
+            );
+        }
+
+        #[tokio::test]
+        async fn a_route_that_sets_cors_keeps_it_and_answers_its_preflight() {
+            let handler = cors_owning_handler();
+            for method in ["GET", "OPTIONS"] {
+                let buffered = handler
+                    .handle(request(method, "/mcp/server-card"))
+                    .await
+                    .unwrap();
+                assert_route_cors_kept(buffered.headers(), &format!("buffered {method}"));
+                let streaming = handler
+                    .handle_streaming(request(method, "/mcp/server-card"))
+                    .await
+                    .unwrap();
+                assert_route_cors_kept(streaming.headers(), &format!("streaming {method}"));
+                if method == "OPTIONS" {
+                    assert_eq!(
+                        buffered.status(),
+                        StatusCode::NO_CONTENT,
+                        "route answers preflight"
+                    );
+                    assert_eq!(
+                        streaming.status(),
+                        StatusCode::NO_CONTENT,
+                        "route answers preflight"
+                    );
+                }
+            }
+            // Any other path still gets the transport's own preflight.
+            let other = handler.handle(request("OPTIONS", "/mcp")).await.unwrap();
+            assert_ne!(other.headers()["access-control-expose-headers"], "ETag");
         }
 
         #[tokio::test]
