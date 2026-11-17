@@ -10,7 +10,7 @@ name: CI
 # omits only the three that need a toolchain, network or wall clock a runner
 # should not spend. Measured 2026-08-02, counting commands (local -> hosted):
 #   fmt          1  -> 1   parity
-#   default-2026 29 -> 29  parity
+#   default-2026 30 -> 30  parity
 #   opt-in-2025  36 -> 36  parity
 #   mutex/docs         parity
 #   lambda       3  -> 0   no hosted job: needs the cargo-lambda + Zig
@@ -146,6 +146,8 @@ jobs:
         run: cargo test -p turul-mcp-client --features ext-skills --test ext_skills_client_2026
       - name: Server Cards (experimental, opt-in feature)
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-server-card --test server_card_2026
+      - name: Lambda routes with dynamic-tools
+        run: cargo test -p turul-mcp-aws-lambda --features dynamic-tools --lib
       - name: Extension crates standalone
         run: cargo test -p turul-mcp-ext-tasks -p turul-mcp-ext-apps -p turul-mcp-ext-skills -p turul-mcp-ext-server-card
       # Postgres and DynamoDB Local, provisioned WITHOUT docker so CI and the

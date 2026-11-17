@@ -301,6 +301,42 @@ impl LambdaMcpHandler {
     /// Note: If SSE is enabled (.sse(true)), SSE responses may not stream properly
     /// with regular Lambda runtime. For proper SSE streaming, use handle_streaming()
     /// with run_with_streaming_response().
+    /// The custom route for `path`: an exact match, or — when lambda_http
+    /// prefixed an API Gateway `stage` onto the path — an exact match with that
+    /// one prefix removed (ADR-038 §6). The registry itself stays exact-match.
+    fn match_route(
+        &self,
+        path: &str,
+        stage: Option<&str>,
+    ) -> std::result::Result<
+        Option<&Arc<dyn turul_http_mcp_server::RouteHandler>>,
+        turul_http_mcp_server::RouteValidationError,
+    > {
+        if let Some(handler) = self.route_registry.match_route(path)? {
+            return Ok(Some(handler));
+        }
+        let unstaged = stage.and_then(|stage| {
+            path.strip_prefix('/')
+                .and_then(|p| p.strip_prefix(stage))
+                .filter(|rest| rest.starts_with('/'))
+        });
+        match unstaged {
+            Some(rest) => self.route_registry.match_route(rest),
+            None => Ok(None),
+        }
+    }
+
+    /// Pull tool changes from shared state before an MCP request; a failure is
+    /// logged and the request proceeds on the current tool set.
+    #[cfg(feature = "dynamic-tools")]
+    async fn refresh_dynamic_tools(&self) {
+        if let Some(ref registry) = self.tool_registry
+            && let Err(e) = registry.check_for_changes().await
+        {
+            tracing::warn!(error = %e, "Failed to check for tool changes");
+        }
+    }
+
     pub async fn handle(&self, req: LambdaRequest) -> Result<LambdaResponse<LambdaBody>> {
         let method = req.method().clone();
         let uri = req.uri().clone();
@@ -316,23 +352,18 @@ impl LambdaMcpHandler {
             method, uri, request_origin
         );
 
+        // The API Gateway stage lambda_http prefixed onto the path, if any.
+        let stage = crate::adapter::api_gateway_stage_prefix(&req);
+
         // Handle CORS preflight requests first (Lambda-specific logic)
         #[cfg(feature = "cors")]
         if method == http::Method::OPTIONS
             && let Some(ref cors_config) = self.cors_config
             // A custom route answers its own preflight (ADR-038 §4).
-            && !matches!(self.route_registry.match_route(req.uri().path()), Ok(Some(_)))
+            && !matches!(self.match_route(req.uri().path(), stage.as_deref()), Ok(Some(_)))
         {
             debug!("Handling CORS preflight request");
             return create_preflight_response(cors_config, request_origin.as_deref());
-        }
-
-        // Check for remote tool changes (Dynamic mode with coordination)
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry
-            && let Err(e) = registry.check_for_changes().await
-        {
-            tracing::warn!(error = %e, "Failed to check for tool changes");
         }
 
         // 🚀 DELEGATION: Convert Lambda request to hyper request
@@ -341,7 +372,7 @@ impl LambdaMcpHandler {
         // Check custom routes (e.g., .well-known) before MCP delegation
         let path = hyper_req.uri().path().to_string();
         if !self.route_registry.is_empty() {
-            match self.route_registry.match_route(&path) {
+            match self.match_route(&path, stage.as_deref()) {
                 Ok(Some(route_handler)) => {
                     debug!("Custom route matched: {}", path);
                     use http_body_util::BodyExt;
@@ -382,6 +413,11 @@ impl LambdaMcpHandler {
                 }
             }
         }
+
+        // Check for remote tool changes (Dynamic mode with coordination). Only
+        // requests bound for MCP pay for it; a custom route never does (ADR-038 §6).
+        #[cfg(feature = "dynamic-tools")]
+        self.refresh_dynamic_tools().await;
 
         // A protocol-2026-07-28 build serves a single spec: every request goes
         // to the streamable handler, which mints the stateless core's
@@ -441,12 +477,15 @@ impl LambdaMcpHandler {
             method, uri, request_origin
         );
 
+        // The API Gateway stage lambda_http prefixed onto the path, if any.
+        let stage = crate::adapter::api_gateway_stage_prefix(&req);
+
         // Handle CORS preflight requests first (Lambda-specific logic)
         #[cfg(feature = "cors")]
         if method == http::Method::OPTIONS
             && let Some(ref cors_config) = self.cors_config
             // A custom route answers its own preflight (ADR-038 §4).
-            && !matches!(self.route_registry.match_route(req.uri().path()), Ok(Some(_)))
+            && !matches!(self.match_route(req.uri().path(), stage.as_deref()), Ok(Some(_)))
         {
             debug!("Handling CORS preflight request (streaming)");
             let preflight_response =
@@ -457,14 +496,6 @@ impl LambdaMcpHandler {
             return Ok(self.convert_lambda_response_to_streaming(preflight_response));
         }
 
-        // Check for remote tool changes (Dynamic mode with coordination)
-        #[cfg(feature = "dynamic-tools")]
-        if let Some(ref registry) = self.tool_registry
-            && let Err(e) = registry.check_for_changes().await
-        {
-            tracing::warn!(error = %e, "Failed to check for tool changes (streaming)");
-        }
-
         // 🚀 DELEGATION: Convert Lambda request to hyper request
         let hyper_req = crate::adapter::lambda_to_hyper_request(req)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
@@ -472,7 +503,7 @@ impl LambdaMcpHandler {
         // Check custom routes (e.g., .well-known) before MCP delegation
         let path = hyper_req.uri().path().to_string();
         if !self.route_registry.is_empty() {
-            match self.route_registry.match_route(&path) {
+            match self.match_route(&path, stage.as_deref()) {
                 Ok(Some(route_handler)) => {
                     debug!("Custom route matched (streaming): {}", path);
                     use http_body_util::BodyExt;
@@ -507,6 +538,11 @@ impl LambdaMcpHandler {
                 }
             }
         }
+
+        // Check for remote tool changes (Dynamic mode with coordination). Only
+        // requests bound for MCP pay for it; a custom route never does (ADR-038 §6).
+        #[cfg(feature = "dynamic-tools")]
+        self.refresh_dynamic_tools().await;
 
         // 🚀 PROTOCOL ROUTING: Check protocol version and route to appropriate handler
         use turul_http_mcp_server::protocol::McpProtocolVersion;
@@ -1561,6 +1597,215 @@ mod tests {
             assert_eq!(
                 headers["access-control-allow-headers"], "Content-Type, If-None-Match",
                 "{what}"
+            );
+        }
+
+        /// An API Gateway event parsed by lambda_http itself, so the path carries
+        /// exactly the stage prefix a deployed Lambda sees.
+        fn apigw_event(version: &str, method: &str, path: &str, stage: &str) -> LambdaRequest {
+            let event = if version == "rest" {
+                serde_json::json!({
+                    "resource": "/{proxy+}", "path": path, "httpMethod": method,
+                    "headers": { "Origin": "https://browser.example" },
+                    "isBase64Encoded": false,
+                    "requestContext": { "resourcePath": "/{proxy+}", "httpMethod": method,
+                        "requestId": "r", "accountId": "1", "stage": stage, "apiId": "a",
+                        "identity": {} }
+                })
+            } else {
+                // HTTP API puts a named stage in rawPath itself.
+                let raw = if stage == "$default" {
+                    path.to_string()
+                } else {
+                    format!("/{stage}{path}")
+                };
+                serde_json::json!({
+                    "version": "2.0", "routeKey": "$default", "rawPath": raw,
+                    "rawQueryString": "", "headers": { "origin": "https://browser.example" },
+                    "isBase64Encoded": false,
+                    "requestContext": { "accountId": "1", "apiId": "a",
+                        "domainName": "a.execute-api.example.com",
+                        "http": { "method": method, "path": raw, "protocol": "HTTP/1.1",
+                                  "sourceIp": "1.2.3.4", "userAgent": "t" },
+                        "requestId": "r", "stage": stage, "time": "t", "timeEpoch": 0 }
+                })
+            };
+            lambda_http::request::from_str(&event.to_string())
+                .expect("lambda_http parses the event")
+        }
+
+        fn card_route_handler() -> LambdaMcpHandler {
+            let mut registry = RouteRegistry::new();
+            registry.add_route(
+                "/mcp/server-card",
+                Arc::new(StubRoute {
+                    status: StatusCode::OK,
+                    body: "card",
+                }),
+            );
+            handler_with_route_and_cors(Arc::new(registry), Some(CorsConfig::default()))
+        }
+
+        #[tokio::test]
+        async fn route_matches_behind_an_api_gateway_stage_rest_and_http_api() {
+            let handler = card_route_handler();
+            for version in ["rest", "http"] {
+                for stage in ["prod", "$default"] {
+                    let req = apigw_event(version, "GET", "/mcp/server-card", stage);
+                    let what = format!("{version} stage {stage} path {}", req.uri().path());
+                    let resp = handler.handle(req).await.unwrap();
+                    assert_eq!(resp.status(), StatusCode::OK, "buffered {what}");
+                    let req = apigw_event(version, "GET", "/mcp/server-card", stage);
+                    let resp = handler.handle_streaming(req).await.unwrap();
+                    assert_eq!(resp.status(), StatusCode::OK, "streaming {what}");
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn route_matches_behind_an_api_gateway_stage_only_for_that_stage() {
+            let handler = card_route_handler();
+            // A different first segment is not the stage: no route matches, and
+            // the request falls through to the MCP handler instead of the card.
+            let req = apigw_event("rest", "GET", "/other/mcp/server-card", "prod");
+            assert_eq!(req.uri().path(), "/prod/other/mcp/server-card");
+            let resp = handler.handle(req).await.unwrap();
+            assert_ne!(resp.status(), StatusCode::OK);
+            assert_ne!(resp.body().as_ref(), b"card");
+            // The stage alone is not a route either.
+            let req = apigw_event("rest", "GET", "/server-card", "mcp");
+            let resp = handler.handle(req).await.unwrap();
+            assert_eq!(
+                resp.status(),
+                StatusCode::OK,
+                "/mcp + /server-card is the route itself"
+            );
+        }
+
+        /// Counts fingerprint reads, the storage call `check_for_changes` makes.
+        #[cfg(feature = "dynamic-tools")]
+        struct CountingState {
+            inner: turul_mcp_server_state_storage::InMemoryServerStateStorage,
+            fingerprint_reads: std::sync::atomic::AtomicUsize,
+        }
+
+        #[cfg(feature = "dynamic-tools")]
+        #[async_trait]
+        impl turul_mcp_server_state_storage::ServerStateStorage for CountingState {
+            fn backend_name(&self) -> &'static str {
+                "counting"
+            }
+            async fn get_entity_state(
+                &self,
+                t: &str,
+                id: &str,
+            ) -> std::result::Result<
+                Option<turul_mcp_server_state_storage::EntityState>,
+                turul_mcp_server_state_storage::ServerStateError,
+            > {
+                self.inner.get_entity_state(t, id).await
+            }
+            async fn set_entity_state(
+                &self,
+                t: &str,
+                id: &str,
+                st: turul_mcp_server_state_storage::EntityState,
+            ) -> std::result::Result<(), turul_mcp_server_state_storage::ServerStateError>
+            {
+                self.inner.set_entity_state(t, id, st).await
+            }
+            async fn delete_entity_state(
+                &self,
+                t: &str,
+                id: &str,
+            ) -> std::result::Result<(), turul_mcp_server_state_storage::ServerStateError>
+            {
+                self.inner.delete_entity_state(t, id).await
+            }
+            async fn get_active_entities(
+                &self,
+                t: &str,
+            ) -> std::result::Result<Vec<String>, turul_mcp_server_state_storage::ServerStateError>
+            {
+                self.inner.get_active_entities(t).await
+            }
+            async fn get_fingerprint(
+                &self,
+                t: &str,
+            ) -> std::result::Result<Option<String>, turul_mcp_server_state_storage::ServerStateError>
+            {
+                self.fingerprint_reads
+                    .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                self.inner.get_fingerprint(t).await
+            }
+            async fn set_fingerprint(
+                &self,
+                t: &str,
+                fp: String,
+            ) -> std::result::Result<(), turul_mcp_server_state_storage::ServerStateError>
+            {
+                self.inner.set_fingerprint(t, fp).await
+            }
+            async fn get_registry_snapshot(
+                &self,
+                t: &str,
+            ) -> std::result::Result<
+                Option<turul_mcp_server_state_storage::RegistrySnapshot>,
+                turul_mcp_server_state_storage::ServerStateError,
+            > {
+                self.inner.get_registry_snapshot(t).await
+            }
+            async fn maintenance(
+                &self,
+            ) -> std::result::Result<(), turul_mcp_server_state_storage::ServerStateError>
+            {
+                self.inner.maintenance().await
+            }
+        }
+
+        /// ADR-038 §6: a custom-route request never reads shared tool state;
+        /// a request bound for MCP still does.
+        #[cfg(feature = "dynamic-tools")]
+        #[tokio::test]
+        async fn a_route_request_skips_the_dynamic_tools_check() {
+            let state = Arc::new(CountingState {
+                inner: turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
+                fingerprint_reads: std::sync::atomic::AtomicUsize::new(0),
+            });
+            let registry = Arc::new(turul_mcp_server::ToolRegistry::new(
+                std::collections::HashMap::new(),
+                Arc::new(turul_mcp_server::SessionManager::new(
+                    ServerCapabilities::default(),
+                )),
+                state.clone(),
+            ));
+            let handler = card_route_handler().with_tool_registry(registry);
+            let reads = || {
+                state
+                    .fingerprint_reads
+                    .load(std::sync::atomic::Ordering::SeqCst)
+            };
+
+            for method in ["GET", "OPTIONS"] {
+                handler
+                    .handle(apigw_event("rest", method, "/mcp/server-card", "prod"))
+                    .await
+                    .unwrap();
+                handler
+                    .handle_streaming(apigw_event("rest", method, "/mcp/server-card", "prod"))
+                    .await
+                    .unwrap();
+            }
+            assert_eq!(reads(), 0, "a card request read tool state");
+
+            handler
+                .handle(apigw_event("rest", "POST", "/mcp", "prod"))
+                .await
+                .unwrap();
+            assert_eq!(
+                reads(),
+                1,
+                "an MCP request must still check for tool changes"
             );
         }
 

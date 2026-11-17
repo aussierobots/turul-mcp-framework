@@ -91,6 +91,24 @@ drops the `ETag` exposure and the `If-None-Match` allowance the CORS MUST requir
    `OPTIONS` preflight, so a route answers its own preflight. MCP-endpoint
    responses set no CORS of their own, so they are unchanged.
 
+6. **On Lambda, a route matches without the API Gateway stage.** `lambda_http`
+   prefixes the request path with `/{stage}` for every stage except
+   `$default`, unless `AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH` is set. So
+   `/prod/mcp/server-card` would miss the `/mcp/server-card` route, and the
+   request would fall through to the MCP handler as a 405.
+   - The Lambda handler first matches the path exactly.
+   - If that finds nothing, and the request came through API Gateway with a
+     stage other than `$default` whose prefix the path carries, it matches
+     again with that one prefix removed. One function,
+     `LambdaMcpHandler::match_route`, does this for the buffered path, the
+     streaming path and the preflight check.
+   - `RouteRegistry` stays exact-match. A custom-domain base path is not
+     stripped, because `lambda_http` does not add it; such a deployment sets
+     `mcp_path` to include it.
+
+   The dynamic-tools change check runs after the route match. A card request
+   no longer reads server state first.
+
 5. **Not built.**
    - No client fetch helper: nothing consumes one.
    - No AI Catalog document: it is site-wide, which belongs to the deployment.
@@ -139,3 +157,4 @@ names:
 ## Revision log
 
 - **2026-11-17**: Initial; accepted with every test gated. `name` is left unreconciled (§2).
+- **2026-11-17 (0.4.32)**: §6. Lambda routes match with the API Gateway stage prefix removed, and the dynamic-tools check moves after the route match. Both gaps were found by a downstream adopter's review. Tests: `route_matches_behind_an_api_gateway_stage_*` in the Lambda handler tests.

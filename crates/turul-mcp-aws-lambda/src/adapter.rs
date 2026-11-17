@@ -276,6 +276,22 @@ pub fn sanitize_authorizer_field_name(field: &str) -> String {
 /// let fields = extract_authorizer_context(&request);
 /// assert_eq!(fields.get("account_id"), Some(&"acc_123".to_string()));
 /// ```
+/// The API Gateway stage lambda_http prefixed onto this request's path, if it
+/// did: a REST or HTTP API stage other than `$default`, unless
+/// `AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH` told lambda_http not to (ADR-038 §6).
+pub(crate) fn api_gateway_stage_prefix(req: &LambdaRequest) -> Option<String> {
+    use lambda_http::request::RequestContext;
+    if std::env::var_os("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH").is_some() {
+        return None;
+    }
+    let stage = match req.extensions().get::<RequestContext>()? {
+        RequestContext::ApiGatewayV1(ctx) => ctx.stage.clone(),
+        RequestContext::ApiGatewayV2(ctx) => ctx.stage.clone(),
+        _ => None,
+    }?;
+    (stage != "$default" && !stage.is_empty()).then_some(stage)
+}
+
 pub fn extract_authorizer_context(req: &LambdaRequest) -> HashMap<String, String> {
     use lambda_http::request::RequestContext;
 
