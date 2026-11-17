@@ -9,20 +9,20 @@ use turul_mcp_protocol::{
     sampling::{CreateMessageRequest, CreateMessageResult},
 };
 
-/// High-level trait for implementing MCP sampling
+/// High-level trait for implementing MCP sampling.
 ///
 /// McpSampling extends SamplingDefinition with execution capabilities.
 /// All metadata is provided by the SamplingDefinition trait, ensuring
 /// consistency between concrete Sampling structs and dynamic implementations.
 #[async_trait]
 pub trait McpSampling: SamplingDefinition + Send + Sync {
-    /// Create a message using the sampling model (per MCP spec)
+    /// Create a message using the sampling model (per MCP spec).
     ///
     /// This method processes the sampling/createMessage request and returns
     /// the generated message response.
     async fn sample(&self, request: CreateMessageRequest) -> McpResult<CreateMessageResult>;
 
-    /// Optional: Check if this sampling handler can handle the given request
+    /// Optional: Check if this sampling handler can handle the given request.
     ///
     /// This allows for conditional sampling based on model preferences,
     /// context size, or other factors.
@@ -30,7 +30,7 @@ pub trait McpSampling: SamplingDefinition + Send + Sync {
         true
     }
 
-    /// Optional: Get sampling priority for request routing
+    /// Optional: Get sampling priority for request routing.
     ///
     /// Higher priority handlers are tried first when multiple handlers
     /// can handle the same request.
@@ -38,7 +38,7 @@ pub trait McpSampling: SamplingDefinition + Send + Sync {
         0
     }
 
-    /// Optional: Validate the sampling request
+    /// Optional: Validate the sampling request.
     ///
     /// This method can perform additional validation beyond basic parameter checks.
     async fn validate_request(&self, request: &CreateMessageRequest) -> McpResult<()> {
@@ -57,7 +57,7 @@ pub trait McpSampling: SamplingDefinition + Send + Sync {
     }
 }
 
-/// Convert an McpSampling trait object to CreateMessageParams
+/// Convert an McpSampling trait object to CreateMessageParams.
 ///
 /// This is a convenience function for converting sampling definitions
 /// to protocol parameters.

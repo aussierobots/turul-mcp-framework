@@ -1,11 +1,11 @@
-//! Cancellation Handle — cooperative cancellation for in-process task execution.
+//! Cooperative cancellation for in-process task execution.
 //!
 //! Lives in the server crate (not task-storage) because it uses `tokio::sync::watch`
 //! which is a runtime-specific primitive that doesn't belong in the storage abstraction.
 
 use tokio::sync::watch;
 
-/// A cooperative cancellation handle for in-process task execution.
+/// Signals cooperative cancellation to an in-process task.
 ///
 /// Wraps a `tokio::sync::watch` channel to signal cancellation to a running future.
 /// Clone-friendly — both the task executor and the runtime hold copies.
@@ -16,32 +16,32 @@ pub struct CancellationHandle {
 }
 
 impl CancellationHandle {
-    /// Create a new (not-yet-cancelled) handle.
+    /// Creates a new handle that is not yet cancelled.
     pub fn new() -> Self {
         let (tx, rx) = watch::channel(false);
         Self { tx, rx }
     }
 
-    /// Signal cancellation. Idempotent — multiple calls are safe.
+    /// Signals cancellation.
+    ///
+    /// Idempotent — multiple calls are safe.
     pub fn cancel(&self) {
         let _ = self.tx.send(true);
     }
 
-    /// Check if cancellation has been requested.
+    /// Returns whether cancellation has been requested.
     pub fn is_cancelled(&self) -> bool {
         *self.rx.borrow()
     }
 
-    /// Wait until cancellation is requested.
+    /// Waits until cancellation is requested.
     ///
-    /// Returns immediately if already cancelled.
+    /// Returns immediately if already cancelled, and also when the sender is dropped.
     pub async fn cancelled(&self) {
         let mut rx = self.rx.clone();
-        // If already cancelled, return immediately
         if *rx.borrow() {
             return;
         }
-        // Otherwise wait for the signal
         loop {
             if rx.changed().await.is_err() {
                 // Sender dropped — treat as cancelled

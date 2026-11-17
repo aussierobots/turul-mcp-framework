@@ -1,4 +1,4 @@
-//! JSON-RPC 2.0 response builders for HTTP transport
+//! JSON-RPC 2.0 response builders for the HTTP transport.
 //!
 //! This module provides functions that always return JSON-RPC 2.0 conformant
 //! HTTP responses with proper headers and body content.
@@ -11,11 +11,12 @@ use tracing::error;
 
 use turul_rpc::{JsonRpcError, JsonRpcResponse, error::JsonRpcErrorObject, types::RequestId};
 
-/// HTTP body type for JSON-RPC responses
+/// HTTP body type for JSON-RPC responses.
 type JsonRpcBody = Full<Bytes>;
 
-/// Build an HTTP response containing a JSON-RPC error object.
-/// Always returns a proper JSON-RPC 2.0 conformant response.
+/// Builds an HTTP 200 response containing a JSON-RPC 2.0 error object.
+///
+/// Falls back to an empty `{}` body if serialization fails.
 pub fn jsonrpc_error_response(
     id: RequestId,
     code: i64,
@@ -42,7 +43,7 @@ pub fn jsonrpc_error_response(
         .unwrap())
 }
 
-/// Build an HTTP response for JSON-RPC notifications (202 Accepted per MCP 2025-11-25).
+/// Builds the empty 202 Accepted HTTP response returned for JSON-RPC notifications.
 pub fn jsonrpc_notification_response() -> Result<Response<JsonRpcBody>, hyper::Error> {
     Ok(Response::builder()
         .status(StatusCode::ACCEPTED) // MCP 2025-11-25: 202 Accepted for notifications
@@ -51,7 +52,7 @@ pub fn jsonrpc_notification_response() -> Result<Response<JsonRpcBody>, hyper::E
         .unwrap())
 }
 
-/// Build an HTTP response containing a successful JSON-RPC response.
+/// Builds an HTTP 200 response containing a successful JSON-RPC response.
 pub fn jsonrpc_success_response(
     id: RequestId,
     result: Value,
@@ -70,7 +71,11 @@ pub fn jsonrpc_success_response(
         .unwrap())
 }
 
-/// Build a generic JSON-RPC response with session header support.
+/// Builds an HTTP 200 response from a JSON-RPC response, adding an `Mcp-Session-Id` header when `session_id` is given.
+///
+/// # Panics
+///
+/// Panics if `session_id` is not a valid HTTP header value.
 pub fn jsonrpc_response_with_session(
     response: JsonRpcResponse,
     session_id: Option<String>,
@@ -91,7 +96,7 @@ pub fn jsonrpc_response_with_session(
     Ok(builder.body(Full::new(Bytes::from(body_bytes))).unwrap())
 }
 
-/// Build HTTP response for method not allowed (405).
+/// Builds a 405 Method Not Allowed response with an `Allow` header.
 pub fn method_not_allowed_response() -> Response<JsonRpcBody> {
     Response::builder()
         .status(StatusCode::METHOD_NOT_ALLOWED)
@@ -100,7 +105,7 @@ pub fn method_not_allowed_response() -> Response<JsonRpcBody> {
         .unwrap()
 }
 
-/// Build HTTP response for not found (404).
+/// Builds a 404 Not Found response.
 pub fn not_found_response() -> Response<JsonRpcBody> {
     Response::builder()
         .status(StatusCode::NOT_FOUND)
@@ -108,7 +113,7 @@ pub fn not_found_response() -> Response<JsonRpcBody> {
         .unwrap()
 }
 
-/// Build HTTP response for bad request (400) with JSON-RPC parse error.
+/// Builds a 400 Bad Request response carrying a JSON-RPC parse error (`-32700`) with the given message.
 pub fn bad_request_response(message: &str) -> Response<JsonRpcBody> {
     let error_obj = JsonRpcErrorObject {
         code: -32700, // Parse error
@@ -127,7 +132,7 @@ pub fn bad_request_response(message: &str) -> Response<JsonRpcBody> {
         .unwrap()
 }
 
-/// Build HTTP response for OPTIONS preflight requests.
+/// Builds the response for OPTIONS preflight requests.
 ///
 /// Returns a bare 200 OK with an empty body. CORS headers are added by
 /// `CorsLayer::apply_cors_headers` in `server.rs` when `enable_cors` is true.

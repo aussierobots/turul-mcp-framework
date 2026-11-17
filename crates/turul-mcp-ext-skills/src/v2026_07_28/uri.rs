@@ -1,5 +1,5 @@
 //! `skill://` URIs (`skills.mdx` §Resource Mapping). [`SkillPath`] is the only
-//! place a `skill://` string is formatted (ADR-033 §2).
+//! place a `skill://` string is formatted.
 
 use turul_agent_skills::SkillName;
 
@@ -27,10 +27,15 @@ pub struct SkillPath {
 }
 
 impl SkillPath {
-    /// A skill path from prefix segments and the skill name.
+    /// Creates a skill path from prefix segments and the skill name.
     ///
     /// The first segment (prefix or name) becomes the URI authority; restricting
     /// prefix segments to unreserved characters makes it a valid `reg-name`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UriError::PrefixSegment`] for the first prefix segment that is
+    /// empty, `.`, `..`, or contains a character outside the unreserved set.
     pub fn new<'a>(
         prefix: impl IntoIterator<Item = &'a str>,
         name: SkillName,
@@ -42,12 +47,12 @@ impl SkillPath {
         Ok(Self { prefix, name })
     }
 
-    /// The skill's name, the final path segment.
+    /// Returns the skill's name, the final path segment.
     pub fn name(&self) -> &SkillName {
         &self.name
     }
 
-    /// The skill root directory URI, `skill://<skill-path>`, with no trailing slash.
+    /// Returns the skill root directory URI, `skill://<skill-path>`, with no trailing slash.
     pub fn root_uri(&self) -> String {
         let mut uri = String::from(SCHEME);
         for segment in &self.prefix {
@@ -58,14 +63,20 @@ impl SkillPath {
         uri
     }
 
-    /// The `SKILL.md` URI, the skill's identity within a server.
+    /// Returns the `SKILL.md` URI, the skill's identity within a server.
     pub fn skill_md_uri(&self) -> String {
         self.file_uri(SKILL_MD)
             .expect("SKILL.md is a valid file path")
     }
 
-    /// The URI of a file at `relative` (`/`-separated) inside the skill.
+    /// Returns the URI of a file at `relative` (`/`-separated) inside the skill.
+    ///
     /// Characters outside the unreserved set are percent-encoded.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`UriError::FilePath`] when `relative` is empty or has an empty,
+    /// `.` or `..` segment.
     pub fn file_uri(&self, relative: &str) -> Result<String, UriError> {
         let mut uri = self.root_uri();
         if relative.is_empty() {
@@ -87,7 +98,7 @@ impl SkillPath {
         Ok(uri)
     }
 
-    /// True when `uri` names a file inside this skill's directory.
+    /// Returns `true` when `uri` names a file inside this skill's directory.
     pub fn contains(&self, uri: &str) -> bool {
         uri.strip_prefix(&self.root_uri())
             .is_some_and(|rest| rest.len() > 1 && rest.starts_with('/'))
@@ -110,7 +121,7 @@ mod tests {
         SkillName::parse(s).unwrap()
     }
 
-    /// S-G5: the final segment of `<skill-path>` is the skill name, and the spec's
+    /// The final segment of `<skill-path>` is the skill name, and the spec's
     /// resource-mapping examples are reproduced exactly.
     #[test]
     fn s_g5_final_segment_is_skill_name() {
@@ -130,7 +141,7 @@ mod tests {
         assert_eq!(nested.name().as_str(), "refunds");
     }
 
-    /// ADR-033 §Tests: distinct skill identities produce distinct URIs, including
+    /// Distinct skill identities produce distinct URIs, including
     /// two skills sharing a name under different prefixes.
     #[test]
     fn distinct_paths_produce_distinct_uris() {

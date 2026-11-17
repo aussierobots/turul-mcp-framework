@@ -38,15 +38,12 @@ use crate::sampling::{CreateMessageRequest, CreateMessageResult};
 ///
 /// **Note**: `CreateMessageRequest` (Sampling) and `ListRootsRequest` (Roots)
 /// are themselves deprecated per SEP-2577 in 2026-07-28. They remain valid
-/// variants of `InputRequest` during the 12-month migration window so servers
-/// can continue to ask clients for sampling/roots input via the MRTR pattern
-/// (SEP-2322). After the deprecated features are removed, the corresponding
-/// variants will be removed from this enum.
-// Variant sizes are inherently uneven: `CreateMessageRequest` (the largest) is a
-// full sampling request, while `ListRootsRequest`/`ElicitRequest` are small. These
-// are untagged unions over deprecated (SEP-2577) types retained only for the
-// SEP-2322 migration window, deserialized off the hot path — boxing soon-to-be-removed
-// variants buys no runtime benefit, so the size lint is suppressed rather than chased.
+/// variants of `InputRequest`, so servers can still ask clients for
+/// sampling/roots input via the MRTR pattern (SEP-2322).
+// Variant sizes are uneven: `CreateMessageRequest` (the largest) is a full
+// sampling request, while `ListRootsRequest`/`ElicitRequest` are small. The enum
+// is deserialized off the hot path, so boxing the large variant buys no runtime
+// benefit and the size lint is suppressed.
 #[allow(deprecated)]
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize)]
@@ -98,8 +95,8 @@ impl<'de> Deserialize<'de> for InputRequest {
 /// `type InputResponse = CreateMessageResult | ListRootsResult | ElicitResult`.
 ///
 /// **Note**: `CreateMessageResult` and `ListRootsResult` variants reference
-/// types deprecated per SEP-2577. They remain valid during the deprecation
-/// window so clients can respond to legacy server-initiated requests.
+/// types deprecated per SEP-2577. They remain valid so clients can respond to
+/// sampling and roots requests carried in [`InputRequests`].
 #[allow(deprecated)]
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -156,7 +153,7 @@ pub struct InputRequiredResult {
 }
 
 impl InputRequiredResult {
-    /// Construct with only `inputRequests`; `requestState` absent.
+    /// Creates a result with only `inputRequests`; `requestState` is absent.
     pub fn with_requests(requests: InputRequests) -> Self {
         Self {
             result_type: ResultType::InputRequired,
@@ -166,7 +163,7 @@ impl InputRequiredResult {
         }
     }
 
-    /// Construct with only `requestState` (load-shedding / pure-state pattern,
+    /// Creates a result with only `requestState` (load-shedding / pure-state pattern,
     /// per schema example "input-required-result-with-request-state-only").
     pub fn with_state(state: impl Into<String>) -> Self {
         Self {
@@ -177,7 +174,7 @@ impl InputRequiredResult {
         }
     }
 
-    /// Construct with both `inputRequests` and `requestState`.
+    /// Creates a result with both `inputRequests` and `requestState`.
     pub fn with_requests_and_state(requests: InputRequests, state: impl Into<String>) -> Self {
         Self {
             result_type: ResultType::InputRequired,
@@ -187,14 +184,14 @@ impl InputRequiredResult {
         }
     }
 
-    /// Attach `_meta`.
+    /// Attaches `_meta`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
     }
 
-    /// Per schema: "At least one of `inputRequests` or `requestState`
-    /// MUST be present." Verify this invariant.
+    /// Returns `true` when at least one of `inputRequests` or `requestState` is
+    /// present, as the schema requires.
     pub fn is_well_formed(&self) -> bool {
         self.input_requests.is_some() || self.request_state.is_some()
     }
@@ -282,7 +279,7 @@ pub struct InputResponseRequestParams {
 }
 
 impl InputResponseRequestParams {
-    /// Construct with only responses.
+    /// Creates params with only `inputResponses`.
     pub fn with_responses(responses: InputResponses) -> Self {
         Self {
             input_responses: Some(responses),
@@ -290,7 +287,7 @@ impl InputResponseRequestParams {
         }
     }
 
-    /// Construct with only echoed state.
+    /// Creates params with only the echoed `requestState`.
     pub fn with_state(state: impl Into<String>) -> Self {
         Self {
             input_responses: None,
@@ -298,7 +295,7 @@ impl InputResponseRequestParams {
         }
     }
 
-    /// Construct with both.
+    /// Creates params with both `inputResponses` and `requestState`.
     pub fn with_responses_and_state(responses: InputResponses, state: impl Into<String>) -> Self {
         Self {
             input_responses: Some(responses),

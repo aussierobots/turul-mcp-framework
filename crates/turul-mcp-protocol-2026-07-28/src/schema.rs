@@ -11,60 +11,80 @@ use std::collections::HashMap;
 pub enum JsonSchema {
     /// String type
     String {
+        /// Human-readable description of the value.
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
+        /// Regular expression the string must match.
         #[serde(skip_serializing_if = "Option::is_none")]
         pattern: Option<String>,
+        /// Minimum string length.
         #[serde(rename = "minLength", skip_serializing_if = "Option::is_none")]
         min_length: Option<u64>,
+        /// Maximum string length.
         #[serde(rename = "maxLength", skip_serializing_if = "Option::is_none")]
         max_length: Option<u64>,
+        /// Closed set of permitted string values (`enum`).
         #[serde(rename = "enum", skip_serializing_if = "Option::is_none")]
         enum_values: Option<Vec<String>>,
     },
     /// Number type
     Number {
+        /// Human-readable description of the value.
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
+        /// Inclusive lower bound.
         #[serde(skip_serializing_if = "Option::is_none")]
         minimum: Option<f64>,
+        /// Inclusive upper bound.
         #[serde(skip_serializing_if = "Option::is_none")]
         maximum: Option<f64>,
     },
     /// Integer type
     Integer {
+        /// Human-readable description of the value.
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
+        /// Inclusive lower bound.
         #[serde(skip_serializing_if = "Option::is_none")]
         minimum: Option<i64>,
+        /// Inclusive upper bound.
         #[serde(skip_serializing_if = "Option::is_none")]
         maximum: Option<i64>,
     },
     /// Boolean type
     Boolean {
+        /// Human-readable description of the value.
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
     },
     /// Array type
     Array {
+        /// Human-readable description of the value.
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
+        /// Schema every array element must satisfy.
         #[serde(skip_serializing_if = "Option::is_none")]
         items: Option<Box<JsonSchema>>,
+        /// Minimum number of items.
         #[serde(rename = "minItems", skip_serializing_if = "Option::is_none")]
         min_items: Option<u64>,
+        /// Maximum number of items.
         #[serde(rename = "maxItems", skip_serializing_if = "Option::is_none")]
         max_items: Option<u64>,
     },
     /// Object type
     Object {
+        /// Human-readable description of the value.
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
+        /// Schemas of the object's properties, keyed by property name.
         #[serde(skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
         properties: Option<HashMap<String, JsonSchema>>,
+        /// Names of the properties that must be present.
         #[serde(skip_serializing_if = "Option::is_none")]
         required: Option<Vec<String>>,
+        /// Whether properties not listed in `properties` are permitted.
         #[serde(
             rename = "additionalProperties",
             skip_serializing_if = "Option::is_none"
@@ -85,7 +105,7 @@ pub enum JsonSchema {
 }
 
 impl JsonSchema {
-    /// Create a string schema
+    /// Creates a string schema with no constraints.
     pub fn string() -> Self {
         Self::String {
             description: None,
@@ -96,7 +116,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create a string schema with description
+    /// Creates a string schema with the given description.
     pub fn string_with_description(description: impl Into<String>) -> Self {
         Self::String {
             description: Some(description.into()),
@@ -107,7 +127,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create a string enum schema
+    /// Creates a string schema restricted to the given `enum` values.
     pub fn string_enum(values: Vec<String>) -> Self {
         Self::String {
             description: None,
@@ -118,7 +138,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create a number schema
+    /// Creates a number schema with no bounds.
     pub fn number() -> Self {
         Self::Number {
             description: None,
@@ -127,7 +147,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create a number schema with description
+    /// Creates a number schema with the given description.
     pub fn number_with_description(description: impl Into<String>) -> Self {
         Self::Number {
             description: Some(description.into()),
@@ -136,7 +156,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create an integer schema
+    /// Creates an integer schema with no bounds.
     pub fn integer() -> Self {
         Self::Integer {
             description: None,
@@ -145,7 +165,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create an integer schema with description
+    /// Creates an integer schema with the given description.
     pub fn integer_with_description(description: impl Into<String>) -> Self {
         Self::Integer {
             description: Some(description.into()),
@@ -154,19 +174,19 @@ impl JsonSchema {
         }
     }
 
-    /// Create a boolean schema
+    /// Creates a boolean schema.
     pub fn boolean() -> Self {
         Self::Boolean { description: None }
     }
 
-    /// Create a boolean schema with description
+    /// Creates a boolean schema with the given description.
     pub fn boolean_with_description(description: impl Into<String>) -> Self {
         Self::Boolean {
             description: Some(description.into()),
         }
     }
 
-    /// Create an array schema
+    /// Creates an array schema whose elements satisfy `items`.
     pub fn array(items: JsonSchema) -> Self {
         Self::Array {
             description: None,
@@ -176,7 +196,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create an array schema with description
+    /// Creates an array schema whose elements satisfy `items`, with the given description.
     pub fn array_with_description(items: JsonSchema, description: impl Into<String>) -> Self {
         Self::Array {
             description: Some(description.into()),
@@ -186,7 +206,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create an object schema
+    /// Creates an object schema with no properties.
     pub fn object() -> Self {
         Self::Object {
             description: None,
@@ -196,7 +216,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create an object schema with properties
+    /// Creates an object schema with the given properties and none required.
     pub fn object_with_properties(properties: HashMap<String, JsonSchema>) -> Self {
         Self::Object {
             description: None,
@@ -206,7 +226,7 @@ impl JsonSchema {
         }
     }
 
-    /// Create an object schema with properties and required fields
+    /// Creates an object schema with the given properties and required property names.
     pub fn object_with_required(
         properties: HashMap<String, JsonSchema>,
         required: Vec<String>,
@@ -219,7 +239,7 @@ impl JsonSchema {
         }
     }
 
-    /// Add description to any schema
+    /// Sets the description on any typed variant; a `Raw` object schema gets a `description` key.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         match &mut self {
             JsonSchema::String { description: d, .. } => *d = Some(description.into()),
@@ -245,7 +265,7 @@ impl JsonSchema {
         JsonSchema::Raw(value)
     }
 
-    /// Add minimum constraint to number schema
+    /// Sets the inclusive `minimum` on a number or integer schema (truncated toward zero for integers); other variants are returned unchanged.
     pub fn with_minimum(mut self, minimum: f64) -> Self {
         match &mut self {
             JsonSchema::Number { minimum: m, .. } => *m = Some(minimum),
@@ -255,7 +275,7 @@ impl JsonSchema {
         self
     }
 
-    /// Add maximum constraint to number schema
+    /// Sets the inclusive `maximum` on a number or integer schema (truncated toward zero for integers); other variants are returned unchanged.
     pub fn with_maximum(mut self, maximum: f64) -> Self {
         match &mut self {
             JsonSchema::Number { maximum: m, .. } => *m = Some(maximum),
@@ -265,7 +285,7 @@ impl JsonSchema {
         self
     }
 
-    /// Add properties to object schema
+    /// Replaces the properties of an object schema; other variants are returned unchanged.
     pub fn with_properties(mut self, properties: HashMap<String, JsonSchema>) -> Self {
         if let JsonSchema::Object { properties: p, .. } = &mut self {
             *p = Some(properties);
@@ -273,7 +293,7 @@ impl JsonSchema {
         self
     }
 
-    /// Add required fields to object schema
+    /// Replaces the required property names of an object schema; other variants are returned unchanged.
     pub fn with_required(mut self, required: Vec<String>) -> Self {
         if let JsonSchema::Object { required: r, .. } = &mut self {
             *r = Some(required);
@@ -281,7 +301,7 @@ impl JsonSchema {
         self
     }
 
-    /// Set minimum number of items for array schema
+    /// Sets `minItems` on an array schema; other variants are returned unchanged.
     pub fn with_min_items(mut self, min: u64) -> Self {
         if let JsonSchema::Array { min_items, .. } = &mut self {
             *min_items = Some(min);
@@ -289,7 +309,7 @@ impl JsonSchema {
         self
     }
 
-    /// Set maximum number of items for array schema
+    /// Sets `maxItems` on an array schema; other variants are returned unchanged.
     pub fn with_max_items(mut self, max: u64) -> Self {
         if let JsonSchema::Array { max_items, .. } = &mut self {
             *max_items = Some(max);
@@ -300,6 +320,7 @@ impl JsonSchema {
 
 /// Converts common Rust types to JsonSchema
 pub trait ToJsonSchema {
+    /// Returns the JSON Schema describing this Rust type.
     fn to_json_schema() -> JsonSchema;
 }
 

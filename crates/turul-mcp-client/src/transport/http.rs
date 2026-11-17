@@ -1,4 +1,4 @@
-//! HTTP transport implementation for MCP client
+//! Streamable HTTP transport for the MCP client.
 
 use async_trait::async_trait;
 use futures::Stream;
@@ -17,10 +17,10 @@ use crate::transport::{
     TransportStatistics, TransportType,
 };
 
-/// Accept header for MCP POST requests per spec (MUST include both media types)
+/// Accept header for MCP POST requests; the spec requires both media types.
 const MCP_POST_ACCEPT: &str = "application/json, text/event-stream";
 
-/// HTTP transport for MCP client (Streamable HTTP)
+/// HTTP transport for the MCP client (Streamable HTTP).
 #[derive(Debug)]
 pub struct HttpTransport {
     /// HTTP client
@@ -58,12 +58,16 @@ pub struct HttpTransport {
 }
 
 impl HttpTransport {
-    /// Create a new HTTP transport
+    /// Creates an HTTP transport for the given endpoint with a 30 second request timeout.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError::ConnectionFailed`] if the URL does not parse or its scheme is not
+    /// `http`/`https`, and [`TransportError::Http`] if the HTTP client cannot be built.
     pub fn new(endpoint: &str) -> McpClientResult<Self> {
         let url = Url::parse(endpoint)
             .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
 
-        // Validate URL scheme
         if !matches!(url.scheme(), "http" | "https") {
             return Err(TransportError::ConnectionFailed(format!(
                 "Invalid scheme for HTTP transport: {}",
@@ -97,7 +101,12 @@ impl HttpTransport {
         })
     }
 
-    /// Create HTTP transport with connection configuration applied
+    /// Creates an HTTP transport with the connection configuration applied.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError::ConnectionFailed`] if the URL does not parse or its scheme is not
+    /// `http`/`https`, and [`TransportError::Http`] if the HTTP client cannot be built.
     pub fn with_config(
         endpoint: &str,
         config: &crate::config::ConnectionConfig,
@@ -165,7 +174,11 @@ impl HttpTransport {
         })
     }
 
-    /// Create HTTP transport with custom client
+    /// Creates an HTTP transport that uses a caller-supplied client.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError::ConnectionFailed`] if the URL does not parse.
     pub fn with_client(endpoint: &str, client: Client) -> McpClientResult<Self> {
         let url = Url::parse(endpoint)
             .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
@@ -184,14 +197,16 @@ impl HttpTransport {
         })
     }
 
-    /// Set the session ID to use for subsequent requests
+    /// Sets the session ID to use for subsequent requests.
     pub fn set_session_id(&self, session_id: String) {
         debug!("Setting session ID: {}", session_id);
         *self.session_id.lock() = Some(session_id);
     }
 
-    /// Set the negotiated MCP spec version, advertised on the `MCP-Protocol-Version`
-    /// header. A stateless version (2026-07-28) also drops any captured session id —
+    /// Sets the negotiated MCP spec version, advertised on the `MCP-Protocol-Version`
+    /// header.
+    ///
+    /// A stateless version (2026-07-28) also drops any captured session id —
     /// the stateless core has no `Mcp-Session-Id`.
     pub fn set_protocol_version(&self, version: &str) {
         *self.protocol_version.write() = version.to_string();
@@ -200,27 +215,28 @@ impl HttpTransport {
         }
     }
 
-    /// Whether this connection carries `Mcp-Session-Id`. The 2026-07-28
-    /// stateless core removed the header, so its absence is not worth a warning
-    /// there.
+    /// Returns whether this connection carries `Mcp-Session-Id`.
+    ///
+    /// The 2026-07-28 stateless core has no such header, so its absence is not
+    /// worth a warning there.
     fn uses_session_header(&self) -> bool {
         *self.protocol_version.read() != "2026-07-28"
     }
 
-    /// Clear the session ID (used during 404 re-initialization)
+    /// Clears the session ID (used during 404 re-initialization).
     pub fn clear_session_id(&self) {
         debug!("Clearing session ID for re-initialization");
         *self.session_id.lock() = None;
     }
 
-    /// Generate unique request ID
+    /// Generates a unique request ID.
     fn next_request_id(&self) -> String {
         let counter = self.request_counter.fetch_add(1, Ordering::SeqCst);
         format!("req_{}", counter)
     }
 
-    /// SEP-2243 request-metadata headers, emitted on 2026-07-28 connections:
-    /// mirror the body's `method` into `Mcp-Method` (all requests and
+    /// Adds the SEP-2243 request-metadata headers on 2026-07-28 connections:
+    /// mirrors the body's `method` into `Mcp-Method` (all requests and
     /// notifications) and `params.name` / `params.uri` into `Mcp-Name` for
     /// `tools/call`, `prompts/get`, and `resources/read`, and `params.taskId`
     /// for the Tasks extension's `tasks/get|update|cancel`. 2025-11-25
@@ -266,7 +282,8 @@ impl HttpTransport {
         builder
     }
 
-    /// Apply the live `Authorization` override (if any) to a `RequestBuilder`.
+    /// Applies the live `Authorization` override (if any) to a `RequestBuilder`.
+    ///
     /// Per-request headers override `default_headers` of the same name in
     /// reqwest, so this transparently supersedes any bearer baked in via
     /// `ConnectionConfig::headers`.
@@ -278,7 +295,7 @@ impl HttpTransport {
         }
     }
 
-    /// Update statistics
+    /// Updates statistics.
     fn update_stats<F>(&self, update_fn: F)
     where
         F: FnOnce(&mut TransportStatistics),
@@ -287,7 +304,7 @@ impl HttpTransport {
         update_fn(&mut stats);
     }
 
-    /// Test helper: Process an in-memory byte stream (for testing without network)
+    /// Test helper that processes an in-memory byte stream without network.
     #[doc(hidden)]
     pub async fn test_handle_byte_stream<S, B, E>(&self, stream: S) -> McpClientResult<Value>
     where
@@ -298,9 +315,10 @@ impl HttpTransport {
         self.handle_byte_stream(stream).await
     }
 
-    /// Parse an SSE stream from a POST response.
+    /// Parses an SSE stream from a POST response.
+    ///
     /// Extracts JSON-RPC frames from `data:` lines, routes notifications
-    /// to event_sender, returns the final result/error frame.
+    /// and server requests to `event_sender`, and returns the final result/error frame.
     async fn handle_sse_stream(&self, response: Response) -> McpClientResult<Value> {
         use futures::StreamExt;
         use tokio::io::AsyncBufReadExt;
@@ -321,7 +339,7 @@ impl HttpTransport {
         .await
     }
 
-    /// Test helper: Process an in-memory SSE byte stream
+    /// Test helper that processes an in-memory SSE byte stream.
     #[doc(hidden)]
     pub async fn test_handle_sse_stream<S, B, E>(&self, stream: S) -> McpClientResult<Value>
     where
@@ -353,9 +371,9 @@ impl HttpTransport {
         .await
     }
 
-    /// Streamable HTTP servers answer protocol-level rejections with
+    /// Rescues protocol-level rejections that Streamable HTTP servers answer with
     /// `400 Bad Request` and a JSON-RPC error body (UnsupportedProtocolVersion,
-    /// HeaderMismatch, MissingRequiredClientCapability). Surface that envelope
+    /// HeaderMismatch, MissingRequiredClientCapability), surfacing that envelope
     /// to the caller's normal JSON-RPC error classification instead of a
     /// transport failure. Only status 400 with a parseable `error.code`
     /// envelope is rescued — every other status (404 session recovery,
@@ -377,7 +395,7 @@ impl HttpTransport {
         }
     }
 
-    /// Map a non-2xx `(status, body)` to a client error, applying the same
+    /// Maps a non-2xx `(status, body)` to a client error, applying the same
     /// 400-envelope rescue as [`rescue_400_jsonrpc_envelope`] but for callers
     /// (e.g. the streaming path) that return an error directly rather than a
     /// `Value`. A status-400 body carrying a JSON-RPC `error.code` becomes a
@@ -399,7 +417,7 @@ impl HttpTransport {
         TransportError::HttpStatus { status, message }.into()
     }
 
-    /// Handle HTTP response
+    /// Handles an HTTP response.
     async fn handle_response(&self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
 
@@ -421,7 +439,6 @@ impl HttpTransport {
             .into());
         }
 
-        // Capture session ID from response headers if present
         if *self.protocol_version.read() != "2026-07-28"
             && let Some(session_header) = response.headers().get("mcp-session-id")
             && let Ok(session_str) = session_header.to_str()
@@ -446,7 +463,7 @@ impl HttpTransport {
         }
     }
 
-    /// Handle JSON stream (works for both single responses and chunked streaming)
+    /// Handles a JSON response body, whether single or chunked.
     async fn handle_json_stream(&self, response: Response) -> McpClientResult<Value> {
         use futures::StreamExt;
 
@@ -457,7 +474,7 @@ impl HttpTransport {
         self.handle_byte_stream(stream).await
     }
 
-    /// Handle a generic byte stream (for both HTTP responses and in-memory testing)
+    /// Handles a generic byte stream (HTTP responses and in-memory testing).
     async fn handle_byte_stream<S, B, E>(&self, mut stream: S) -> McpClientResult<Value>
     where
         S: Stream<Item = Result<B, E>> + Unpin,
@@ -494,7 +511,6 @@ impl HttpTransport {
 
                 match stream.next() {
                     Some(Ok(json)) => {
-                        // Calculate how many bytes were consumed by this JSON object
                         let consumed_bytes = stream.byte_offset();
 
                         debug!(
@@ -543,7 +559,6 @@ impl HttpTransport {
                             }
                         }
 
-                        // Update processed bytes counter
                         processed_bytes += consumed_bytes;
                     }
                     Some(Err(e)) => {
@@ -562,7 +577,6 @@ impl HttpTransport {
                 }
             }
 
-            // Remove processed data from buffer
             if processed_bytes > 0 {
                 buffer.drain(..processed_bytes);
             }
@@ -582,7 +596,7 @@ impl HttpTransport {
         Err(TransportError::Http("Stream ended without final result".to_string()).into())
     }
 
-    /// Handle HTTP response with headers
+    /// Handles an HTTP response and returns it with its headers.
     async fn handle_response_with_headers(
         &self,
         response: Response,
@@ -607,7 +621,6 @@ impl HttpTransport {
             .into());
         }
 
-        // Capture session ID from response headers if present
         if let Some(session_header) = response.headers().get("mcp-session-id")
             && let Ok(session_str) = session_header.to_str()
         {
@@ -615,7 +628,6 @@ impl HttpTransport {
             *self.session_id.lock() = Some(session_str.to_owned());
         }
 
-        // Extract headers
         let mut headers = std::collections::HashMap::new();
         for (name, value) in response.headers() {
             if let Ok(value_str) = value.to_str() {
@@ -680,7 +692,6 @@ impl Transport for HttpTransport {
         debug!("Disconnecting HTTP transport");
         self.connected.store(false, Ordering::SeqCst);
 
-        // Close event sender if exists
         if let Some(sender) = self.event_sender.lock().take() {
             sender.send(ServerEvent::ConnectionLost).ok();
         }
@@ -700,7 +711,6 @@ impl Transport for HttpTransport {
 
         let start_time = Instant::now();
 
-        // Ensure request has an ID
         let mut request = request;
         if request.get("id").is_none() {
             request["id"] = Value::String(self.next_request_id());
@@ -724,7 +734,6 @@ impl Transport for HttpTransport {
         req_builder = self.apply_request_metadata_headers(req_builder, &request);
         req_builder = self.apply_auth_override(req_builder);
 
-        // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP request using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
@@ -862,7 +871,6 @@ impl Transport for HttpTransport {
 
         let start_time = Instant::now();
 
-        // Ensure request has an ID
         let mut request = request;
         if request.get("id").is_none() {
             request["id"] = Value::String(self.next_request_id());
@@ -886,7 +894,6 @@ impl Transport for HttpTransport {
         req_builder = self.apply_request_metadata_headers(req_builder, &request);
         req_builder = self.apply_auth_override(req_builder);
 
-        // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP request with headers using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
@@ -944,7 +951,6 @@ impl Transport for HttpTransport {
         req_builder = self.apply_request_metadata_headers(req_builder, &notification);
         req_builder = self.apply_auth_override(req_builder);
 
-        // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP notification using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
@@ -1010,7 +1016,6 @@ impl Transport for HttpTransport {
         let elapsed = start_time.elapsed();
         self.update_stats(|stats| {
             stats.responses_received += 1;
-            // Update average response time
             let elapsed_ms = elapsed.as_millis() as f64;
             if stats.responses_received == 1 {
                 stats.avg_response_time_ms = elapsed_ms;
@@ -1022,7 +1027,6 @@ impl Transport for HttpTransport {
             }
         });
 
-        // DELETE should return 2xx success status
         if response.status().is_success() {
             info!(
                 session_id = session_id,
@@ -1053,7 +1057,7 @@ impl Transport for HttpTransport {
         let queued_events = {
             let mut queue = self.queued_events.lock();
             let events = queue.clone();
-            queue.clear(); // Clear the queue after replaying
+            queue.clear();
             events
         };
 
@@ -1084,7 +1088,6 @@ impl Transport for HttpTransport {
             return Ok(rx);
         }
 
-        // Start SSE connection task for GET requests
         let client = self.client.clone();
         let url = self.endpoint.clone();
         let session_id = self.session_id.clone();
@@ -1095,7 +1098,6 @@ impl Transport for HttpTransport {
 
         tokio::spawn(async move {
             loop {
-                // GET request with SSE accept header
                 let mut request_builder = client
                     .get(url.as_str())
                     .header("Accept", "text/event-stream")
@@ -1210,7 +1212,6 @@ impl Transport for HttpTransport {
                             debug!("Event channel closed, stopping SSE listener");
                             return;
                         }
-                        // Wait before retrying
                         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                         continue;
                     }
@@ -1234,7 +1235,6 @@ impl Transport for HttpTransport {
                                 let event_text = buffer[..end].to_string();
                                 buffer.drain(..end + 2);
 
-                                // Parse SSE event fields
                                 let mut event_type = None;
                                 let mut data = String::new();
                                 let mut id = None;
@@ -1253,7 +1253,6 @@ impl Transport for HttpTransport {
                                 }
 
                                 if !data.is_empty() {
-                                    // Try to parse as JSON
                                     match serde_json::from_str::<Value>(&data) {
                                         Ok(json) => {
                                             debug!(
@@ -1318,7 +1317,6 @@ impl Transport for HttpTransport {
                     return;
                 }
 
-                // Wait before retrying
                 tokio::time::sleep(std::time::Duration::from_secs(2)).await;
             }
         });
@@ -1347,7 +1345,6 @@ impl Transport for HttpTransport {
             return Ok(false);
         }
 
-        // Send a ping request
         let ping_request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": "health_check",
@@ -1390,8 +1387,9 @@ impl Transport for HttpTransport {
     }
 }
 
-/// Parse SSE lines, route server requests/notifications, return final response frame.
-/// Extracted from handle_sse_stream for testability.
+/// Parses SSE lines, routes server requests and notifications, and returns the final response frame.
+///
+/// Shared by `handle_sse_stream` and its in-memory test helper.
 async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
     lines: &mut tokio::io::Lines<R>,
     event_sender: Option<mpsc::UnboundedSender<ServerEvent>>,
@@ -1434,7 +1432,6 @@ async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
     Err(TransportError::Http("SSE stream ended without final result".to_string()).into())
 }
 
-// Use parking_lot for better performance
 use parking_lot;
 
 #[cfg(test)]
@@ -1527,7 +1524,7 @@ mod tests {
         assert!(id2.starts_with("req_"));
     }
 
-    /// Test helper to create an in-memory byte stream for testing
+    /// Creates an in-memory byte stream for testing.
     fn create_test_stream(
         data: Vec<Vec<u8>>,
     ) -> impl Stream<Item = Result<Vec<u8>, std::io::Error>> + Unpin {

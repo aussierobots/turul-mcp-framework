@@ -2,7 +2,7 @@
 //!
 //! # Why this file exists
 //!
-//! The 2026-07-28 half of ADR-030's bilingual contract is well covered against a
+//! The 2026-07-28 half of the client's bilingual contract (it speaks both spec versions) is well covered against a
 //! real server (`crates/turul-mcp-client/tests/e2e_2026_real_server.rs`). The
 //! 2025-11-25 half was not, and the shape of the gap mattered:
 //! `bilingual_negotiation.rs` proves the *downgrade decision* correctly, but

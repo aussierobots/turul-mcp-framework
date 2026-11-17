@@ -1,4 +1,4 @@
-//! Implementation of #[derive(McpCompletion)] macro
+//! Implements the `#[derive(McpCompletion)]` macro.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -13,7 +13,6 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
     let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes
     let reference = extract_string_attribute(&input.attrs, "reference")
         .unwrap_or_else(|| "ref/prompt".to_string());
 
@@ -62,7 +61,6 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
             }
 
             fn filter_completions(&self, values: Vec<String>, current_value: &str) -> Vec<String> {
-                // Default: prefix matching
                 values
                     .into_iter()
                     .filter(|v| v.to_lowercase().starts_with(&current_value.to_lowercase()))
@@ -76,7 +74,7 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
         #[#async_trait::async_trait]
         impl #mcp_server::McpCompletion for #struct_name {
             async fn complete(&self, request: #mcp_protocol::completion::CompleteRequest) -> #mcp_protocol::McpResult<#mcp_protocol::completion::CompleteResult> {
-                // Default implementation - this should be overridden by implementing complete_impl
+                // Delegates to complete_impl, mapping its String error to McpError::tool_execution.
                 match self.complete_impl(request).await {
                     Ok(result) => Ok(result),
                     Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
@@ -85,9 +83,8 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         impl #struct_name {
-            /// Override this method to provide custom completion logic
+            /// Returns sample completions built from the current argument value.
             pub async fn complete_impl(&self, request: #mcp_protocol::completion::CompleteRequest) -> Result<#mcp_protocol::completion::CompleteResult, String> {
-                // Default: return sample completions
                 let current_value = &request.params.argument.value;
                 let completions = vec![
                     format!("{}suggestion1", current_value),

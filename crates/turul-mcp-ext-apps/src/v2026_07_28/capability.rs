@@ -21,14 +21,14 @@ pub fn capability() -> Value {
     serde_json::json!({})
 }
 
-/// True when the server declared the Apps extension.
+/// Returns `true` when the server declared the Apps extension.
 pub fn declared_by_server(caps: &ServerCapabilities) -> bool {
     caps.extensions
         .as_ref()
         .is_some_and(|m| m.contains_key(EXTENSION_IDENTIFIER))
 }
 
-/// The client's declared Apps capability, when present.
+/// Returns the client's declared Apps capability, when present.
 pub fn declared_by_client(caps: &ClientCapabilities) -> Option<UiClientCapabilities> {
     caps.extensions
         .as_ref()
@@ -36,7 +36,7 @@ pub fn declared_by_client(caps: &ClientCapabilities) -> Option<UiClientCapabilit
         .and_then(|v| serde_json::from_value(v.clone()).ok())
 }
 
-/// True when the client declared Apps support for HTML views.
+/// Returns `true` when the client declared Apps support for HTML views.
 pub fn client_supports_html_views(caps: &ClientCapabilities) -> bool {
     declared_by_client(caps).is_some_and(|c| c.supports_html_views())
 }

@@ -68,6 +68,7 @@
 //! - [`ext-tasks-server`](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/ext-tasks-server) example
 //! - [SEP-2663](https://modelcontextprotocol.io/seps/2663-tasks-extension), the extension specification
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #[cfg(feature = "protocol-2026-07-28")]
 pub mod v2026_07_28;
 

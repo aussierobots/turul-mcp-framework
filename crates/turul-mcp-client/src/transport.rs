@@ -1,4 +1,4 @@
-//! Transport layer for MCP client
+//! Transport layer for the MCP client: the [`Transport`] trait and its HTTP and SSE implementations.
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -10,12 +10,11 @@ use crate::error::{McpClientResult, TransportError};
 pub mod http;
 pub mod sse;
 
-// Re-export transport implementations
 pub use http::HttpTransport;
 #[allow(deprecated)] // re-exported for unmigrated ≤2024-11-05 servers (SEP-2596)
 pub use sse::SseTransport;
 
-/// Transport type enumeration
+/// Kind of transport used to reach an MCP server.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransportType {
     /// HTTP transport (Streamable HTTP)
@@ -33,7 +32,7 @@ impl std::fmt::Display for TransportType {
     }
 }
 
-/// Transport capabilities
+/// Capabilities advertised by a transport.
 #[derive(Debug, Clone)]
 pub struct TransportCapabilities {
     /// Whether the transport supports streaming responses
@@ -48,7 +47,7 @@ pub struct TransportCapabilities {
     pub persistent: bool,
 }
 
-/// Transport connection information
+/// Connection details reported by a transport.
 #[derive(Debug, Clone)]
 pub struct ConnectionInfo {
     /// Transport type
@@ -63,7 +62,7 @@ pub struct ConnectionInfo {
     pub metadata: Value,
 }
 
-/// Transport response containing both body and headers
+/// Response body together with the HTTP response headers.
 #[derive(Debug, Clone)]
 pub struct TransportResponse {
     /// Response body (JSON)
@@ -73,12 +72,12 @@ pub struct TransportResponse {
 }
 
 impl TransportResponse {
-    /// Create a new transport response
+    /// Creates a transport response from a body and headers.
     pub fn new(body: Value, headers: HashMap<String, String>) -> Self {
         Self { body, headers }
     }
 
-    /// Create a simple response with just body (no headers)
+    /// Creates a transport response with a body and no headers.
     pub fn body_only(body: Value) -> Self {
         Self {
             body,
@@ -87,32 +86,34 @@ impl TransportResponse {
     }
 }
 
-/// Transport trait defining the interface for all transport implementations
+/// Interface implemented by every MCP client transport.
 #[async_trait]
 pub trait Transport: Send + Sync {
-    /// Get transport type
+    /// Returns the transport type.
     fn transport_type(&self) -> TransportType;
 
-    /// Get transport capabilities
+    /// Returns the transport capabilities.
     fn capabilities(&self) -> TransportCapabilities;
 
-    /// Connect to the server
+    /// Marks the transport as connected.
     async fn connect(&self) -> McpClientResult<()>;
 
-    /// Disconnect from the server
+    /// Marks the transport as disconnected and stops event delivery.
     async fn disconnect(&self) -> McpClientResult<()>;
 
-    /// Check if connected
+    /// Returns whether the transport is connected.
     fn is_connected(&self) -> bool;
 
-    /// Send a request and wait for response
+    /// Sends a request and waits for the response.
     async fn send_request(&self, request: Value) -> McpClientResult<Value>;
 
-    /// Open a long-lived streaming request (2026 `subscriptions/listen`):
-    /// POST the request and return a channel of the JSON payloads arriving on
+    /// Opens a long-lived streaming request (2026-07-28 `subscriptions/listen`).
+    ///
+    /// POSTs the request and returns a channel of the JSON payloads arriving on
     /// the response's SSE stream, in order. Dropping the receiver closes the
     /// stream (Streamable HTTP: closing the response stream IS cancellation).
-    /// Default: unsupported (only the Streamable HTTP transport implements it).
+    /// The default implementation is unsupported; only the Streamable HTTP
+    /// transport overrides it.
     async fn send_request_streaming(
         &self,
         _request: Value,
@@ -123,9 +124,11 @@ pub trait Transport: Send + Sync {
         .into())
     }
 
-    /// Send a request with additional per-request HTTP headers (SEP-2243
-    /// `Mcp-Param-*` mirrors). Non-HTTP transports MAY ignore the annotations
-    /// entirely, so the default delegates to [`Self::send_request`].
+    /// Sends a request with additional per-request HTTP headers (SEP-2243
+    /// `Mcp-Param-*` mirrors).
+    ///
+    /// Non-HTTP transports MAY ignore the annotations entirely, so the default
+    /// delegates to [`Self::send_request`].
     async fn send_request_with_extra_headers(
         &self,
         request: Value,
@@ -134,23 +137,23 @@ pub trait Transport: Send + Sync {
         self.send_request(request).await
     }
 
-    /// Send a request and return response with headers (for initialization)
+    /// Sends a request and returns the response with its headers (used for initialization).
     async fn send_request_with_headers(&self, request: Value)
     -> McpClientResult<TransportResponse>;
 
-    /// Send a notification (no response expected)
+    /// Sends a notification; no response is expected.
     async fn send_notification(&self, notification: Value) -> McpClientResult<()>;
 
-    /// Send a DELETE request for session termination (MCP session management)
+    /// Sends a DELETE request to terminate the session (MCP session management).
     async fn send_delete(&self, session_id: &str) -> McpClientResult<()>;
 
-    /// Set the session ID to include in subsequent requests (MCP session management)
+    /// Sets the session ID to include in subsequent requests (MCP session management).
     fn set_session_id(&self, session_id: String);
 
-    /// Clear the session ID (used during 404 re-initialization)
+    /// Clears the session ID (used during 404 re-initialization).
     fn clear_session_id(&self);
 
-    /// Update (or clear) the `Authorization` header used on subsequent outbound
+    /// Updates (or clears) the `Authorization` header used on subsequent outbound
     /// requests, *without* tearing down the underlying connection pool.
     ///
     /// `Some("Bearer …")` overrides any previously-configured Authorization
@@ -181,21 +184,23 @@ pub trait Transport: Send + Sync {
         // No-op for transports without per-request HTTP auth.
     }
 
-    /// Set the negotiated MCP spec version, sent as `MCP-Protocol-Version`.
+    /// Sets the negotiated MCP spec version, sent as `MCP-Protocol-Version`.
     ///
     /// The client calls this after negotiation so the transport advertises the
     /// agreed spec (and, for the 2026-07-28 stateless core, stops sending the
     /// removed `Mcp-Session-Id`). No-op for transports that don't carry the header.
     fn set_protocol_version(&self, _version: &str) {}
 
-    /// Start listening for server events (if supported).
+    /// Starts listening for server events (if supported).
     ///
-    /// # Streamable HTTP listener termination (since 0.3.38)
+    /// # Streamable HTTP listener termination
     ///
     /// On the streamable HTTP transport, the SSE GET listener treats HTTP 4xx
-    /// as **terminal**: the cached `Mcp-Session-Id` is cleared, a single
-    /// [`ServerEvent::Error`] (`"SSE GET rejected with HTTP <status> — listener
-    /// exiting"`) is emitted, and the spawned task exits. The returned
+    /// other than 404 and 405 as **terminal**: the cached `Mcp-Session-Id` is
+    /// cleared, a single [`ServerEvent::Error`] (`"SSE GET rejected with HTTP
+    /// <status> — listener exiting"`) is emitted, and the spawned task exits.
+    /// A 404 emits the same event but keeps the cached session id; a 405 exits
+    /// without an event and keeps the session. The returned
     /// [`EventReceiver`] is **not** closed (the transport keeps an internal
     /// sender clone), so callers must observe the terminal `Error` event itself
     /// — not channel closure — to detect the exit.
@@ -205,16 +210,15 @@ pub trait Transport: Send + Sync {
     /// cleared, the next initialize POST will be sent without a stale
     /// `Mcp-Session-Id`, mirroring the existing POST 404 recovery flow.
     ///
-    /// HTTP 5xx and network errors remain transient and are retried with the
-    /// existing static backoff.
+    /// HTTP 5xx and network errors are transient and are retried with a static
+    /// backoff.
     async fn start_event_listener(&self) -> McpClientResult<EventReceiver>;
 
-    /// Get connection information
+    /// Returns connection information.
     fn connection_info(&self) -> ConnectionInfo;
 
-    /// Perform health check
+    /// Returns whether the server answers a `ping` request.
     async fn health_check(&self) -> McpClientResult<bool> {
-        // Default implementation: try to send a ping
         let ping_request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": "health_check",
@@ -228,19 +232,19 @@ pub trait Transport: Send + Sync {
         }
     }
 
-    /// Get transport statistics
+    /// Returns transport statistics.
     fn statistics(&self) -> TransportStatistics {
         TransportStatistics::default()
     }
 }
 
-/// Type alias for a boxed transport
+/// Boxed [`Transport`] trait object.
 pub type BoxedTransport = Box<dyn Transport>;
 
-/// Event receiver for server-initiated events
+/// Receiver for server-initiated events.
 pub type EventReceiver = tokio::sync::mpsc::UnboundedReceiver<ServerEvent>;
 
-/// Server-initiated events
+/// Events initiated by the server or the transport.
 #[derive(Debug, Clone)]
 pub enum ServerEvent {
     /// Server sent a notification (method only, no id)
@@ -269,7 +273,7 @@ pub enum ServerEvent {
     Heartbeat,
 }
 
-/// Transport statistics for monitoring
+/// Transport statistics for monitoring.
 #[derive(Debug, Clone, Default)]
 pub struct TransportStatistics {
     /// Number of requests sent
@@ -288,14 +292,21 @@ pub struct TransportStatistics {
     pub last_error: Option<String>,
 }
 
-/// Helper function to detect transport type from URL
+/// Detects the transport type from a URL.
+///
+/// A path containing `/sse` or a query containing `transport=sse` selects
+/// [`TransportType::Sse`]; any other `http`/`https` URL selects [`TransportType::Http`].
+///
+/// # Errors
+///
+/// Returns [`TransportError::ConnectionFailed`] if the URL does not parse, and
+/// [`TransportError::Unsupported`] for `stdio`/`file` and unknown schemes.
 pub fn detect_transport_type(url_str: &str) -> McpClientResult<TransportType> {
     let url = Url::parse(url_str)
         .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
 
     match url.scheme() {
         "http" | "https" => {
-            // Check for SSE hint in path or query
             if url.path().contains("/sse") || url.query().unwrap_or("").contains("transport=sse") {
                 Ok(TransportType::Sse)
             } else {
@@ -310,11 +321,15 @@ pub fn detect_transport_type(url_str: &str) -> McpClientResult<TransportType> {
     }
 }
 
-/// Transport factory for creating transport instances
+/// Factory for creating transport instances.
 pub struct TransportFactory;
 
 impl TransportFactory {
-    /// Create a transport from URL string
+    /// Creates a transport from a URL string, choosing the type with [`detect_transport_type`].
+    ///
+    /// # Errors
+    ///
+    /// Returns the error from [`detect_transport_type`], or the transport constructor's error for a rejected URL.
     pub fn from_url(url: &str) -> McpClientResult<BoxedTransport> {
         let transport_type = detect_transport_type(url)?;
 
@@ -325,7 +340,11 @@ impl TransportFactory {
         }
     }
 
-    /// Create a specific transport type
+    /// Creates a transport of the given type for an endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns the transport constructor's error when the endpoint is rejected.
     pub fn create(
         transport_type: TransportType,
         endpoint: &str,
@@ -337,7 +356,7 @@ impl TransportFactory {
         }
     }
 
-    /// List available transport types
+    /// Lists the available transport types.
     pub fn available_transports() -> Vec<TransportType> {
         vec![TransportType::Http, TransportType::Sse]
     }

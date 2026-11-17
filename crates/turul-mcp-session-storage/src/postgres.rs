@@ -15,29 +15,35 @@ use tracing::{debug, info, warn};
 use crate::{SessionInfo, SessionStorage, SessionStorageError, SseEvent};
 use turul_mcp_protocol::{ClientCapabilities, ServerCapabilities};
 
-/// PostgreSQL-specific error types
+/// Errors returned by the PostgreSQL session storage backend.
 #[derive(Error, Debug)]
 pub enum PostgresError {
     #[error("Database error: {0}")]
+    /// A database operation failed in the underlying `sqlx` driver.
     Database(#[from] sqlx::Error),
 
     #[error("Serialization error: {0}")]
+    /// A value could not be serialized to or deserialized from JSON.
     Serialization(#[from] serde_json::Error),
 
     #[error("Session not found: {0}")]
+    /// No session exists for the given session ID.
     SessionNotFound(String),
 
     #[error("Connection error: {0}")]
+    /// The database connection could not be established.
     Connection(String),
 
     #[error("Migration error: {0}")]
+    /// A schema migration failed; this backend reports migration failures as `Database` instead.
     Migration(String),
 
     #[error("Concurrent modification error: {0}")]
+    /// The stored row changed concurrently; this backend does not currently return it.
     ConcurrentModification(String),
 }
 
-/// Configuration for PostgreSQL session storage
+/// Configures the PostgreSQL session storage backend.
 #[derive(Debug, Clone)]
 pub struct PostgresConfig {
     /// Database connection URL
@@ -57,8 +63,7 @@ pub struct PostgresConfig {
     /// Verify table existence at startup and run migrations.
     /// When false, tables are assumed to exist.
     pub verify_tables: bool,
-    /// Create tables if they don't exist during verification.
-    /// Only has effect when `verify_tables` is true.
+    /// Not read by the storage; tables are created whenever `verify_tables` is true.
     pub create_tables: bool,
     /// Enable connection pooling optimizations
     pub enable_pooling_optimizations: bool,
@@ -84,26 +89,35 @@ impl Default for PostgresConfig {
     }
 }
 
-/// PostgreSQL-backed session storage implementation
+/// Implements session storage on top of a PostgreSQL connection pool.
 pub struct PostgresSessionStorage {
     pool: PgPool,
     config: PostgresConfig,
 }
 
 impl PostgresSessionStorage {
-    /// Create new PostgreSQL session storage with default configuration
+    /// Creates PostgreSQL session storage with the default configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PostgresError::Connection`] if connecting to the database fails, or
+    /// [`PostgresError::Database`] if migration fails when `verify_tables` is true.
     pub async fn new() -> Result<Self, PostgresError> {
         Self::with_config(PostgresConfig::default()).await
     }
 
-    /// Create PostgreSQL session storage with custom configuration
+    /// Creates PostgreSQL session storage with the given configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PostgresError::Connection`] if connecting to the database fails, or
+    /// [`PostgresError::Database`] if migration fails when `verify_tables` is true.
     pub async fn with_config(config: PostgresConfig) -> Result<Self, PostgresError> {
         info!(
             "Initializing PostgreSQL session storage at {}",
             mask_db_url(&config.database_url)
         );
 
-        // Build connection pool with optimized settings
         let pool = sqlx::postgres::PgPoolOptions::new()
             .max_connections(config.max_connections)
             .min_connections(config.min_connections)
@@ -134,11 +148,11 @@ impl PostgresSessionStorage {
         Ok(storage)
     }
 
-    /// Run database schema migrations
+    /// Creates the schema tables and indexes if absent, plus the statistics view when
+    /// `enable_pooling_optimizations` is true.
     async fn migrate(&self) -> Result<(), PostgresError> {
         debug!("Running PostgreSQL database migrations");
 
-        // Create sessions table with PostgreSQL-specific optimizations
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS sessions (
@@ -158,7 +172,7 @@ impl PostgresSessionStorage {
         .await
         .map_err(PostgresError::Database)?;
 
-        // Create events table with partitioning support
+        // Create events table
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS events (
@@ -176,7 +190,6 @@ impl PostgresSessionStorage {
         .await
         .map_err(PostgresError::Database)?;
 
-        // Create indexes optimized for PostgreSQL
         let indexes = [
             "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sessions_last_activity ON sessions (last_activity)",
             "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_sessions_created_at ON sessions (created_at)",
@@ -221,7 +234,7 @@ impl PostgresSessionStorage {
         Ok(())
     }
 
-    /// Start background cleanup task for expired sessions and old events
+    /// Spawns a background task that periodically removes expired sessions and old events.
     async fn start_cleanup_task(&self) {
         let pool = self.pool.clone();
         let config = self.config.clone();
@@ -251,7 +264,7 @@ impl PostgresSessionStorage {
         });
     }
 
-    /// Get session with optimistic locking support
+    /// Returns the session together with its row version used for optimistic locking.
     async fn get_session_with_version(
         &self,
         session_id: &str,
@@ -303,12 +316,11 @@ impl PostgresSessionStorage {
     }
 }
 
-/// Background cleanup for expired sessions and old events
+/// Deletes expired sessions and trims events beyond the per-session limit in one transaction.
 async fn cleanup_expired_data(pool: &PgPool, config: &PostgresConfig) -> Result<(), PostgresError> {
     let now = chrono::Utc::now().timestamp_millis();
     let expiration_threshold = now - (config.session_timeout_minutes as i64 * 60 * 1000);
 
-    // Use transaction for consistency
     let mut tx = pool.begin().await?;
 
     // Clean up expired sessions
@@ -348,7 +360,7 @@ async fn cleanup_expired_data(pool: &PgPool, config: &PostgresConfig) -> Result<
     Ok(())
 }
 
-/// Mask sensitive information in database URL for logging
+/// Masks the password in a database URL for logging.
 fn mask_db_url(url: &str) -> String {
     if let Some(at_pos) = url.find('@') {
         let (prefix, suffix) = url.split_at(at_pos);
@@ -762,7 +774,6 @@ impl SessionStorage for PostgresSessionStorage {
         let now = chrono::Utc::now().timestamp_millis();
         let expiration_threshold = now - (self.config.session_timeout_minutes as i64 * 60 * 1000);
 
-        // Use transaction for consistency
         let mut tx = self.pool.begin().await?;
 
         // Clean up expired sessions

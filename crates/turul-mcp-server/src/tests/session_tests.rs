@@ -954,7 +954,4 @@ mod performance_tests {
 
         assert_eq!(manager.session_count().await, 0);
     }
-
-    // test_high_frequency_operations removed - caused async deadlocks in unit tests
-    // These performance tests should be integration tests with separate server/client processes
 }

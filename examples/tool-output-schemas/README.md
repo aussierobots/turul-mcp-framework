@@ -102,5 +102,5 @@ pub struct Output {
 
 ## See Also
 
-- [ADR-014: Schemars Schema Generation](../../docs/adr/014-schemars-schema-generation.md) - Architecture decision
+- [Schemars Schema Generation](../../docs/adr/014-schemars-schema-generation.md) - Design rationale
 - [Schemars Integration Tests](../../crates/turul-mcp-derive/tests/schemars_integration_test.rs) - Comprehensive test coverage

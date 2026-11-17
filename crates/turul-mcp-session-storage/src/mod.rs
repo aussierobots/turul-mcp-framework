@@ -1,6 +1,6 @@
-//! Session Storage Abstraction and Implementations
+//! Session storage abstraction and implementations.
 //!
-//! This module provides the core SessionStorage trait that enables pluggable
+//! Provides the core `SessionStorage` trait that enables pluggable
 //! session backends for different deployment scenarios.
 
 // Core trait and types
@@ -13,15 +13,15 @@ pub mod in_memory;
 // Re-export for convenience
 pub use in_memory::{InMemorySessionStorage, InMemoryConfig, InMemoryError, InMemoryStats};
 
-/// Convenience type alias for session storage results
+/// Convenience type alias for session storage results.
 pub type StorageResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// Create a default in-memory session storage instance
+/// Creates a default in-memory session storage instance.
 pub fn create_default_storage() -> InMemorySessionStorage {
     InMemorySessionStorage::new()
 }
 
-/// Create an in-memory session storage with custom configuration
+/// Creates an in-memory session storage with custom configuration.
 pub fn create_memory_storage(config: InMemoryConfig) -> InMemorySessionStorage {
     InMemorySessionStorage::with_config(config)
 }

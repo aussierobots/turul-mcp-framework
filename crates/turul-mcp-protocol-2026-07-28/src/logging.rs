@@ -1,4 +1,4 @@
-//! MCP Logging Protocol Types
+//! Logging level types for the deprecated MCP Logging surface.
 //!
 //! # Deprecation status (2026-07-28)
 //!
@@ -27,8 +27,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// Logging levels (per MCP spec)
-/// Maps to syslog message severities as specified in RFC-5424.
+/// Severity levels for logging messages.
+///
+/// Maps to syslog message severities as specified in RFC 5424.
 #[deprecated(
     since = "0.4.0",
     note = "Deprecated per SEP-2577 (2026-07-28) along with the whole Logging surface, \
@@ -39,17 +40,25 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LoggingLevel {
+    /// Detailed debugging information.
     Debug,
+    /// General informational messages.
     Info,
+    /// Normal but significant events.
     Notice,
+    /// Warning conditions.
     Warning,
+    /// Error conditions.
     Error,
+    /// Critical conditions.
     Critical,
+    /// Action must be taken immediately.
     Alert,
+    /// The system is unusable.
     Emergency,
 }
 
-/// Type alias for compatibility (per MCP spec)
+/// Alias for [`LoggingLevel`].
 #[allow(deprecated)]
 #[deprecated(
     since = "0.4.0",
@@ -57,10 +66,10 @@ pub enum LoggingLevel {
 )]
 pub type LogLevel = LoggingLevel;
 
-/// Convenience constructors for LoggingLevel
+/// Priority ordering helpers for [`LoggingLevel`].
 #[allow(deprecated)]
 impl LoggingLevel {
-    /// Get logging level priority (0 = debug, 7 = emergency)
+    /// Returns the logging level priority (0 = debug, 7 = emergency).
     pub fn priority(&self) -> u8 {
         match self {
             LoggingLevel::Debug => 0,
@@ -74,7 +83,7 @@ impl LoggingLevel {
         }
     }
 
-    /// Check if this level should be logged at the given threshold
+    /// Returns `true` if this level is at or above the given threshold.
     pub fn should_log(&self, threshold: LoggingLevel) -> bool {
         self.priority() >= threshold.priority()
     }

@@ -33,12 +33,12 @@ use turul_mcp_protocol_2025_11_25::{
 /// and the optional params object.
 pub type NotificationCallback = Arc<dyn Fn(&str, Option<&Value>) + Send + Sync>;
 
-/// Main MCP client
 /// Per-tool SEP-2243 bindings: tool name → `(header name, argument JSON
 /// pointer, declared type)` per `x-mcp-header` annotation.
 #[cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 type ParamBindingMap = std::collections::HashMap<String, Vec<(String, String, String)>>;
 
+/// Main MCP client.
 pub struct McpClient {
     /// Transport layer — `Arc<BoxedTransport>` (no Mutex) so concurrent
     /// `call_tool`/`list_tools`/etc. go through the transport in parallel.
@@ -537,10 +537,14 @@ impl McpClient {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```no_run
+    /// # use turul_mcp_client::McpClient;
+    /// # async fn demo(old_client: McpClient, fresh_token: String) -> Result<(), Box<dyn std::error::Error>> {
     /// // Old client is about to be torn down after the M2M token rotated.
     /// old_client.set_bearer(Some(&fresh_token)).await;
     /// old_client.disconnect().await?;   // DELETE under fresh bearer
+    /// # Ok(())
+    /// # }
     /// ```
     pub async fn set_bearer(&self, token: Option<&str>) {
         let value = token.map(|t| format!("Bearer {}", t));
@@ -666,7 +670,7 @@ impl McpClient {
     /// Routes through `turul_rpc::JsonRpcRequest` so the `jsonrpc: "2.0"` envelope
     /// is single-source-of-truth — no manual `json!({"jsonrpc": "2.0", ...})` at
     /// call sites. An empty `Value::Object` is preserved as `"params":{}` on the
-    /// wire (not omitted) for drop-in compatibility with the prior hand-rolled form.
+    /// wire (not omitted).
     fn build_request(&self, method: &str, params: Value) -> Value {
         let id = RequestId::String(self.next_request_id());
         let request = JsonRpcRequest::new(id, method.to_string(), value_to_request_params(params));
@@ -1684,8 +1688,8 @@ impl McpClient {
         }
     }
 
-    /// C-1 (ADR-033 §6): `skills/*` may be issued only after the server
-    /// declared the extension in `server/discover`.
+    /// Returns `McpClientError::ExtensionNotDeclared` unless the server declared the
+    /// Skills extension in `server/discover`; `skills/*` requests are issued only after it did.
     #[cfg(all(
         feature = "ext-skills",
         any(feature = "client-bilingual", feature = "client-2026-07-28-only")
@@ -1711,10 +1715,10 @@ impl McpClient {
         feature = "ext-skills",
         any(feature = "client-bilingual", feature = "client-2026-07-28-only")
     ))]
-    /// `resources/directory/read` — a directory resource's direct children
-    /// (ADR-033 §7). Sent only when the server declared `directoryRead: true`
-    /// (C-8). A listing never extends a held manifest: `skill_fetch` still
-    /// refuses files the entry does not list.
+    /// `resources/directory/read` — a directory resource's direct children.
+    /// Sent only when the server declared `directoryRead: true`. A listing never
+    /// extends a held manifest: `skill_fetch` still refuses files the entry does
+    /// not list.
     pub async fn skills_directory_read(
         &self,
         uri: &str,
@@ -1785,8 +1789,8 @@ impl McpClient {
         .await
     }
 
-    /// Read one file of `entry` and return its bytes only if they verify
-    /// (ADR-033 §6, C-3 to C-7): `uri` must be listed in the entry's manifest,
+    /// Read one file of `entry` and return its bytes only if they verify:
+    /// `uri` must be listed in the entry's manifest,
     /// the bytes must match its `size` and `digest`, and a `SKILL.md` must have
     /// frontmatter equal to `entry.frontmatter`. A `"dynamic"` entry offers no
     /// integrity and is declined. On failure nothing is returned:
@@ -2482,11 +2486,17 @@ impl McpClient {
 /// Connection status information
 #[derive(Debug, Clone)]
 pub struct ConnectionStatus {
+    /// Whether the underlying transport currently reports a live connection.
     pub transport_connected: bool,
+    /// Current lifecycle state of the session.
     pub session_state: SessionState,
+    /// Kind of transport in use.
     pub transport_type: crate::transport::TransportType,
+    /// Endpoint the transport connects to.
     pub endpoint: String,
+    /// Server-assigned session ID, if one has been established.
     pub session_id: Option<String>,
+    /// Negotiated protocol version, if negotiation has completed.
     pub protocol_version: Option<String>,
 }
 
@@ -4436,8 +4446,7 @@ mod tests {
     // ========================================================================
     // JSON-RPC envelope construction tests (turul-rpc typed constructors)
     //
-    // These tests guard the sweep that replaced 20+ hand-rolled
-    // `json!({"jsonrpc": "2.0", ...})` envelopes with `JsonRpcRequest::new` /
+    // These tests cover envelopes built with `JsonRpcRequest::new` /
     // `JsonRpcNotification::new` from `turul-rpc`. They lock in the semantic
     // envelope shape (jsonrpc version, method, id presence, params field
     // present-vs-absent) so a future refactor — e.g., switching to
@@ -4526,8 +4535,8 @@ mod tests {
     }
 
     /// Regression: MCP tool arguments commonly carry array values
-    /// (e.g., `compute_stats({"values": [1.0, 2.0, 3.0]})`). The sweep routes
-    /// the `arguments` Object through `RequestParams::Object(HashMap<String,
+    /// (e.g., `compute_stats({"values": [1.0, 2.0, 3.0]})`). Arguments are routed
+    /// as the `arguments` Object through `RequestParams::Object(HashMap<String,
     /// serde_json::Value>)`; the inner `Value`s must survive untouched so a
     /// nested `Value::Array` is still an array on the wire — not flattened,
     /// stringified, or coerced. Distinct from JSON-RPC positional params at
@@ -4627,9 +4636,9 @@ mod tests {
         assert!(envelope.get("id").is_none());
     }
 
-    /// Locks in semantic JSON-envelope equality with the prior hand-rolled
+    /// Locks in semantic JSON-envelope equality with a hand-written
     /// `json!({"jsonrpc": "2.0", "method": ..., "id": ..., "params": {...}})`
-    /// form. Compares as `serde_json::Value`, which is field-order-agnostic per
+    /// envelope. Compares as `serde_json::Value`, which is field-order-agnostic per
     /// JSON-RPC 2.0 (objects are unordered key/value sets); this is not a
     /// byte-equality assertion. Catches semantic drift like an omitted `params`
     /// field, missing `jsonrpc` version, or extra envelope fields.

@@ -9,42 +9,42 @@ use turul_mcp_protocol::elicitation::ElicitationSchema;
 #[cfg(feature = "protocol-2025-11-25")]
 use turul_mcp_protocol::elicitation::ElicitCreateRequest;
 
+/// Supplies the identity and display fields of an elicitation request.
 pub trait HasElicitationMetadata {
-    /// The message to present to the user
+    /// Returns the message to present to the user.
     fn message(&self) -> &str;
 
-    /// Optional title for the elicitation dialog
+    /// Returns the optional title for the elicitation dialog.
     fn title(&self) -> Option<&str> {
         None
     }
 
-    /// Optional `_meta` sent on the request
+    /// Returns the optional `_meta` sent on the request.
     fn meta(&self) -> Option<&HashMap<String, Value>> {
         None
     }
 }
 
-/// Trait for elicitation schema definition (restricted to primitive types per MCP spec)
+/// Supplies the elicitation schema, restricted to primitive property types by the MCP spec.
 pub trait HasElicitationSchema {
-    /// Restricted schema defining structure of input to collect (primitives only)
+    /// Returns the restricted schema defining the structure of the input to collect.
     fn requested_schema(&self) -> &ElicitationSchema;
 
-    /// Validate that schema only contains primitive types (per MCP spec)
+    /// Validates that the schema contains only primitive types.
     fn validate_schema(&self) -> Result<(), String> {
         // All schemas in ElicitationSchema are already primitive-only by design
         Ok(())
     }
 }
 
-/// Trait for elicitation validation and handling
+/// Validates and processes content submitted in response to an elicitation.
 pub trait HasElicitationHandling {
-    /// Validate submitted content against the schema
+    /// Validates submitted content against the schema.
     fn validate_content(&self, _content: &HashMap<String, Value>) -> Result<(), String> {
-        // Basic validation - can be extended
         Ok(())
     }
 
-    /// Process accepted content (transform, normalize, etc.)
+    /// Processes accepted content, for example to transform or normalize it.
     fn process_content(
         &self,
         content: HashMap<String, Value>,
@@ -53,7 +53,7 @@ pub trait HasElicitationHandling {
     }
 }
 
-/// **Complete MCP Elicitation Creation** - Build schema-validated user input collection systems.
+/// Defines a complete MCP elicitation that prompts users for schema-validated structured input.
 ///
 /// This trait represents a **complete, working MCP elicitation** that can prompt users
 /// for structured input and validate their responses against JSON schemas. When you implement
@@ -72,12 +72,8 @@ pub trait HasElicitationHandling {
 ///
 /// Implement these three traits on your struct:
 ///
-// The example constructs the 2025-11-25 ElicitationSchema shape and calls
-// to_create_request(), both of which the stateless 2026-07-28 core removed; run it
-// only under 2025-11-25.
-#[cfg_attr(feature = "protocol-2025-11-25", doc = "```rust")]
-#[cfg_attr(not(feature = "protocol-2025-11-25"), doc = "```rust,ignore")]
-/// # use turul_mcp_protocol::elicitation::*;
+/// ```rust
+/// # use turul_mcp_protocol::elicitation::{ElicitationSchema, PrimitiveSchemaDefinition};
 /// # use turul_mcp_builders::prelude::*;
 /// # use serde_json::Value;
 /// # use std::collections::HashMap;
@@ -90,31 +86,14 @@ pub trait HasElicitationHandling {
 ///
 /// impl UserPreferencesForm {
 ///     fn new(context: String) -> Self {
-///         let mut properties = HashMap::new();
-///         properties.insert("theme".to_string(), PrimitiveSchemaDefinition::Enum(
-///             EnumSchema::new(vec!["dark".to_string(), "light".to_string()])
-///                 .with_description("UI theme preference"),
-///         ));
-///         properties.insert("notifications".to_string(), PrimitiveSchemaDefinition::Boolean(BooleanSchema {
-///             schema_type: "boolean".to_string(),
-///             title: None,
-///             description: Some("Enable notifications".to_string()),
-///             default: Some(true),
-///         }));
-///         properties.insert("max_items".to_string(), PrimitiveSchemaDefinition::Number(NumberSchema {
-///             schema_type: "number".to_string(),
-///             title: None,
-///             description: Some("Maximum items to display".to_string()),
-///             default: None,
-///             minimum: Some(1.0),
-///             maximum: Some(100.0),
-///         }));
-///
-///         let schema = ElicitationSchema {
-///             schema_type: "object".to_string(),
-///             properties,
-///             required: Some(vec!["theme".to_string()]),
-///         };
+///         let schema = ElicitationSchema::new()
+///             .with_property(
+///                 "theme",
+///                 PrimitiveSchemaDefinition::enum_values(vec!["dark".to_string(), "light".to_string()]),
+///             )
+///             .with_property("notifications", PrimitiveSchemaDefinition::boolean())
+///             .with_property("max_items", PrimitiveSchemaDefinition::number())
+///             .with_required(vec!["theme".to_string()]);
 ///
 ///         Self { context, schema }
 ///     }
@@ -148,14 +127,11 @@ pub trait HasElicitationHandling {
 ///     }
 /// }
 ///
-/// // Now you can use it with the server:
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let form = UserPreferencesForm::new("project-setup".to_string());
-///
 /// // The elicitation automatically implements ElicitationDefinition
-/// let create_request = form.to_create_request();
-/// # Ok(())
-/// # }
+/// fn assert_definition<T: ElicitationDefinition>(_: &T) {}
+/// let form = UserPreferencesForm::new("project-setup".to_string());
+/// assert_definition(&form);
+/// assert_eq!(form.message(), "Please configure your preferences for this project");
 /// ```
 ///
 /// # Key Benefits
@@ -175,7 +151,7 @@ pub trait HasElicitationHandling {
 pub trait ElicitationDefinition:
     HasElicitationMetadata + HasElicitationSchema + HasElicitationHandling
 {
-    /// Convert this elicitation definition to a protocol ElicitCreateRequest
+    /// Converts this elicitation definition to a protocol `ElicitCreateRequest`.
     #[cfg(feature = "protocol-2025-11-25")]
     fn to_create_request(&self) -> ElicitCreateRequest {
         let request = ElicitCreateRequest::new(self.message(), self.requested_schema().clone());

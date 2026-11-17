@@ -45,6 +45,7 @@ impl Default for ToolAnnotations {
 }
 
 impl ToolAnnotations {
+    /// Creates annotations with every hint unset.
     pub fn new() -> Self {
         Self {
             title: None,
@@ -55,26 +56,31 @@ impl ToolAnnotations {
         }
     }
 
+    /// Sets the human-readable title for the tool and returns `self`.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Sets `readOnlyHint`: whether the tool does not modify its environment. Returns `self`.
     pub fn with_read_only_hint(mut self, read_only: bool) -> Self {
         self.read_only_hint = Some(read_only);
         self
     }
 
+    /// Sets `destructiveHint`: whether the tool may perform destructive updates rather than only additive ones. Returns `self`.
     pub fn with_destructive_hint(mut self, destructive: bool) -> Self {
         self.destructive_hint = Some(destructive);
         self
     }
 
+    /// Sets `idempotentHint`: whether repeating the call with the same arguments has no additional effect. Returns `self`.
     pub fn with_idempotent_hint(mut self, idempotent: bool) -> Self {
         self.idempotent_hint = Some(idempotent);
         self
     }
 
+    /// Sets `openWorldHint`: whether the tool may interact with an open set of external entities. Returns `self`.
     pub fn with_open_world_hint(mut self, open_world: bool) -> Self {
         self.open_world_hint = Some(open_world);
         self
@@ -120,6 +126,7 @@ pub struct ToolSchema {
 }
 
 impl ToolSchema {
+    /// Creates an empty schema with `type` set to `"object"`, no properties and no required list.
     pub fn object() -> Self {
         Self {
             schema_type: "object".to_string(),
@@ -136,6 +143,7 @@ impl ToolSchema {
         self
     }
 
+    /// Sets the names of the required properties and returns `self`.
     pub fn with_required(mut self, required: Vec<String>) -> Self {
         self.required = Some(required);
         self
@@ -207,10 +215,12 @@ pub struct Tool {
         rename = "_meta"
     )]
     #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+    /// Optional `_meta` object reserved by MCP for attaching additional metadata to the tool; `None` omits it from the wire.
     pub meta: Option<HashMap<String, Value>>,
 }
 
 impl Tool {
+    /// Creates a tool with the given unique name and input schema; all optional fields are unset.
     pub fn new(name: impl Into<String>, input_schema: ToolSchema) -> Self {
         Self {
             name: name.into(),
@@ -224,31 +234,37 @@ impl Tool {
         }
     }
 
+    /// Sets the human-readable display title and returns `self`.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Sets the description of what the tool does, which clients may present to a model, and returns `self`.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the schema describing the tool's `structuredContent` output and returns `self`.
     pub fn with_output_schema(mut self, output_schema: ToolOutputSchema) -> Self {
         self.output_schema = Some(output_schema);
         self
     }
 
+    /// Sets the behavior hints for the tool and returns `self`.
     pub fn with_annotations(mut self, annotations: ToolAnnotations) -> Self {
         self.annotations = Some(annotations);
         self
     }
 
+    /// Sets the icons clients may display for the tool and returns `self`.
     pub fn with_icons(mut self, icons: Vec<crate::icons::Icon>) -> Self {
         self.icons = Some(icons);
         self
     }
 
+    /// Sets the `_meta` metadata object and returns `self`.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -284,11 +300,13 @@ impl ListToolsRequest {
         self
     }
 
+    /// Sets the pagination cursor from a previous result's `nextCursor` and returns `self`.
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.params = self.params.with_cursor(cursor);
         self
     }
 
+    /// Sets the request `_meta` object and returns `self`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.params = self.params.with_meta(meta);
         self
@@ -339,11 +357,13 @@ impl ListToolsResult {
         }
     }
 
+    /// Sets the opaque cursor a client passes to fetch the next page and returns `self`.
     pub fn with_next_cursor(mut self, cursor: Cursor) -> Self {
         self.next_cursor = Some(cursor);
         self
     }
 
+    /// Sets the result `_meta` object and returns `self`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
@@ -422,11 +442,13 @@ impl CallToolRequestParams {
             .map(|map| Value::Object(map.clone().into_iter().collect()))
     }
 
+    /// Sets the tool arguments as a map of argument name to JSON value and returns `self`.
     pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
         self.arguments = Some(arguments);
         self
     }
 
+    /// Sets the tool arguments from a JSON value; a value that is not an object leaves the arguments unchanged. Returns `self`.
     pub fn with_arguments_value(mut self, arguments: Value) -> Self {
         // Helper for backward compatibility - convert Value to HashMap if it's an object
         if let Value::Object(map) = arguments {
@@ -435,6 +457,7 @@ impl CallToolRequestParams {
         self
     }
 
+    /// Sets the request `_meta` object and returns `self`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.meta = meta;
         self
@@ -470,16 +493,19 @@ impl CallToolRequest {
         self
     }
 
+    /// Sets the tool arguments as a map of argument name to JSON value and returns `self`.
     pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
         self.params = self.params.with_arguments(arguments);
         self
     }
 
+    /// Sets the tool arguments from a JSON value; a value that is not an object leaves the arguments unchanged. Returns `self`.
     pub fn with_arguments_value(mut self, arguments: Value) -> Self {
         self.params = self.params.with_arguments_value(arguments);
         self
     }
 
+    /// Sets the request `_meta` object and returns `self`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.params = self.params.with_meta(meta);
         self
@@ -524,6 +550,7 @@ pub struct CallToolResult {
 }
 
 impl CallToolResult {
+    /// Creates a complete result with the given content blocks and `isError` unset.
     pub fn new(content: Vec<ToolResult>) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -534,6 +561,7 @@ impl CallToolResult {
         }
     }
 
+    /// Creates a complete result with the given content blocks and `isError` set to `false`.
     pub fn success(content: Vec<ToolResult>) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -544,6 +572,7 @@ impl CallToolResult {
         }
     }
 
+    /// Creates a complete result with the given content blocks and `isError` set to `true`, reporting a tool-level failure rather than a protocol error.
     pub fn error(content: Vec<ToolResult>) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -554,16 +583,19 @@ impl CallToolResult {
         }
     }
 
+    /// Sets `isError` explicitly and returns `self`.
     pub fn with_error_flag(mut self, is_error: bool) -> Self {
         self.is_error = Some(is_error);
         self
     }
 
+    /// Sets the `structuredContent` JSON value and returns `self`.
     pub fn with_structured_content(mut self, structured_content: Value) -> Self {
         self.structured_content = Some(structured_content);
         self
     }
 
+    /// Sets the result `_meta` object and returns `self`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
@@ -807,7 +839,7 @@ impl HasParams for CallToolRequest {
     }
 }
 
-/// The text block for a result with no `structuredContent` (ADR-010 §4): a JSON
+/// The text block for a result with no `structuredContent`: a JSON
 /// string is the string itself; anything else is its serialized JSON.
 fn unstructured_text(value: Value) -> String {
     match value {
@@ -830,7 +862,7 @@ mod tests {
             .to_string()
     }
 
-    /// ADR-010 §4: with no `structuredContent`, a string result is sent as the
+    /// With no `structuredContent`, a string result is sent as the
     /// string itself, not as a quoted JSON literal.
     #[test]
     fn string_result_without_structured_content_is_raw_text() {
@@ -842,7 +874,7 @@ mod tests {
         assert!(auto.structured_content.is_none());
     }
 
-    /// ADR-010 §4 and tools.md: with `structuredContent`, the text block carries
+    /// With `structuredContent`, the text block carries
     /// its serialized JSON, so a string stays a JSON literal there.
     #[test]
     fn structured_content_text_is_the_serialized_json() {
@@ -854,7 +886,7 @@ mod tests {
         assert_eq!(n.structured_content, Some(json!(42)));
     }
 
-    /// ADR-036: the same schema serializes to the same bytes every time, keys
+    /// The same schema serializes to the same bytes every time, keys
     /// sorted, whatever order the `HashMap`s happen to iterate in.
     #[test]
     fn tool_schema_serializes_identically_every_time() {

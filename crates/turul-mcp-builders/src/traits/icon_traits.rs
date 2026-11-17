@@ -6,7 +6,7 @@
 
 use turul_mcp_protocol::icons::Icon;
 
-/// Icons trait - provides optional icons for MCP types
+/// Provides optional icons for MCP types.
 ///
 /// Implement this trait to associate icons with your tool, resource, or prompt.
 /// Icons are display hints — most implementations do not need icons.
@@ -24,6 +24,7 @@ use turul_mcp_protocol::icons::Icon;
 /// }
 /// ```
 pub trait HasIcons {
+    /// Returns the icons a client may display for this item, or `None` when it has none.
     fn icons(&self) -> Option<&Vec<Icon>> {
         None
     }

@@ -6,13 +6,12 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import from protocol via alias
 use turul_mcp_protocol::completion::{
     CompleteArgument, CompleteParams, CompleteRequest, CompletionContext, CompletionReference,
     PromptReference, ResourceTemplateReference,
 };
 
-/// Builder for creating completion requests at runtime
+/// Builder for creating completion requests at runtime.
 pub struct CompletionBuilder {
     reference: CompletionReference,
     argument: CompleteArgument,
@@ -21,7 +20,7 @@ pub struct CompletionBuilder {
 }
 
 impl CompletionBuilder {
-    /// Create a new completion builder for a prompt reference
+    /// Creates a new completion builder for a prompt reference.
     pub fn for_prompt(name: impl Into<String>) -> Self {
         Self {
             reference: CompletionReference::Prompt(PromptReference::new(name)),
@@ -31,7 +30,7 @@ impl CompletionBuilder {
         }
     }
 
-    /// Create a new completion builder for a resource template reference
+    /// Creates a new completion builder for a resource template reference.
     pub fn for_resource(uri: impl Into<String>) -> Self {
         Self {
             reference: CompletionReference::ResourceTemplate(ResourceTemplateReference::new(uri)),
@@ -41,31 +40,31 @@ impl CompletionBuilder {
         }
     }
 
-    /// Set the argument being completed
+    /// Sets the argument being completed.
     pub fn argument(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.argument = CompleteArgument::new(name, value);
         self
     }
 
-    /// Set the argument name being completed
+    /// Sets the argument name being completed.
     pub fn argument_name(mut self, name: impl Into<String>) -> Self {
         self.argument.name = name.into();
         self
     }
 
-    /// Set the current value being completed
+    /// Sets the current value being completed.
     pub fn current_value(mut self, value: impl Into<String>) -> Self {
         self.argument.value = value.into();
         self
     }
 
-    /// Set completion context
+    /// Sets completion context.
     pub fn context(mut self, context: CompletionContext) -> Self {
         self.context = Some(context);
         self
     }
 
-    /// Set completion context with existing arguments
+    /// Sets completion context with existing arguments.
     pub fn with_context_arguments(mut self, arguments: HashMap<String, String>) -> Self {
         let mut context = CompletionContext::new();
         context.arguments = Some(arguments);
@@ -73,7 +72,7 @@ impl CompletionBuilder {
         self
     }
 
-    /// Add a context argument
+    /// Adds a context argument.
     pub fn context_argument(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         let context = self.context.get_or_insert_with(CompletionContext::new);
         let arguments = context.arguments.get_or_insert_with(HashMap::new);
@@ -81,13 +80,13 @@ impl CompletionBuilder {
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Build the completion request
+    /// Builds the completion request.
     pub fn build(self) -> CompleteRequest {
         let mut params = CompleteParams::new(self.reference, self.argument);
 
@@ -105,7 +104,7 @@ impl CompletionBuilder {
         }
     }
 
-    /// Build just the params (without the full request wrapper)
+    /// Builds just the params (without the full request wrapper).
     pub fn build_params(self) -> CompleteParams {
         let mut params = CompleteParams::new(self.reference, self.argument);
 
@@ -121,16 +120,16 @@ impl CompletionBuilder {
     }
 }
 
-/// Convenience methods for common completion scenarios
+/// Convenience methods for common completion scenarios.
 impl CompletionBuilder {
-    /// Create completion for a prompt argument with no current value
+    /// Creates completion for a prompt argument with no current value.
     pub fn prompt_argument(prompt_name: impl Into<String>, arg_name: impl Into<String>) -> Self {
         Self::for_prompt(prompt_name)
             .argument_name(arg_name)
             .current_value("")
     }
 
-    /// Create completion for a prompt argument with partial value
+    /// Creates completion for a prompt argument with partial value.
     pub fn prompt_argument_partial(
         prompt_name: impl Into<String>,
         arg_name: impl Into<String>,
@@ -141,7 +140,7 @@ impl CompletionBuilder {
             .current_value(partial_value)
     }
 
-    /// Create completion for a resource template parameter
+    /// Creates completion for a resource template parameter.
     pub fn resource_parameter(
         uri_template: impl Into<String>,
         param_name: impl Into<String>,
@@ -151,7 +150,7 @@ impl CompletionBuilder {
             .current_value("")
     }
 
-    /// Create completion for a resource template parameter with partial value
+    /// Creates completion for a resource template parameter with partial value.
     pub fn resource_parameter_partial(
         uri_template: impl Into<String>,
         param_name: impl Into<String>,

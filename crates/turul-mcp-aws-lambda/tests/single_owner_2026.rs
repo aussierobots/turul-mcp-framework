@@ -1,6 +1,6 @@
-//! ADR-035 executable contract: Lambda serves exactly what `McpServerBuilder`
+//! Single-owner contract: Lambda serves exactly what `McpServerBuilder`
 //! builds — one owner of handlers, capabilities, extensions and the
-//! resource-security policy. Each test names the ADR-035 clause it proves.
+//! resource-security policy. Each test states the constraint it proves.
 #![cfg(feature = "protocol-2026-07-28")]
 
 use std::sync::Arc;
@@ -64,7 +64,7 @@ fn resource(uri: &str) -> turul_mcp_builders::resource::DynamicResource {
         .unwrap()
 }
 
-/// ADR-035 §1/§3: for one configuration, Lambda's `server/discover`
+/// For one configuration, Lambda's `server/discover`
 /// capabilities equal the owner's, except `resources.subscribe`, which Lambda
 /// cannot serve and therefore does not advertise.
 #[tokio::test]
@@ -96,7 +96,7 @@ async fn lambda_discover_matches_server() {
     assert_eq!(got["result"]["capabilities"], expected, "{got}");
 }
 
-/// ADR-035 §3: Lambda `resources/read` enforces the owner's read policy — a
+/// Lambda `resources/read` enforces the owner's read policy — a
 /// URI the auto policy blocks is refused, as on the HTTP server.
 #[tokio::test]
 async fn lambda_read_enforces_server_policy() {
@@ -129,7 +129,7 @@ async fn lambda_read_enforces_server_policy() {
     );
 }
 
-/// ADR-035 §3: an invalid resource URI fails `build()` on Lambda, as on the server.
+/// An invalid resource URI fails `build()` on Lambda, as on the server.
 #[tokio::test]
 async fn lambda_invalid_resource_uri_fails_build() {
     let built = LambdaMcpServerBuilder::new()
@@ -143,7 +143,7 @@ async fn lambda_invalid_resource_uri_fails_build() {
     assert!(built.is_err(), "an invalid resource URI must fail build()");
 }
 
-/// ADR-035 §5: Tasks on Lambda is deferred, so Lambda never advertises it —
+/// Tasks on Lambda is deferred, so Lambda never advertises it —
 /// the builder offers no Tasks wiring, and discover carries no Tasks entry.
 #[tokio::test]
 async fn lambda_does_not_advertise_tasks() {
@@ -156,7 +156,7 @@ async fn lambda_does_not_advertise_tasks() {
     ] {
         assert!(
             !builder_src.contains(needle) && !manifest.contains(needle),
-            "Lambda exposes Tasks wiring (`{needle}`) before ADR-035 §5 is decided"
+            "Lambda exposes Tasks wiring (`{needle}`) while Tasks on Lambda is deferred"
         );
     }
 
@@ -176,7 +176,7 @@ async fn lambda_does_not_advertise_tasks() {
     assert!(ext.get("io.modelcontextprotocol/tasks").is_none(), "{got}");
 }
 
-/// ADR-035 §2: no parallel registration remains in the Lambda crate — handlers,
+/// No parallel registration remains in the Lambda crate — handlers,
 /// capabilities and the read policy come only from the owner.
 #[test]
 fn no_parallel_registration() {
@@ -220,7 +220,7 @@ fn no_parallel_registration() {
     }
 }
 
-/// ADR-035 §4 / ADR-033: Skills reach Lambda through the owner with no Lambda
+/// Skills reach Lambda through the owner with no Lambda
 /// skills code — discover, list, get (unknown = -32602) and digest-exact reads.
 #[cfg(feature = "ext-skills")]
 #[tokio::test]
@@ -300,7 +300,7 @@ async fn lambda_serves_skills_through_the_owner() {
     }
 }
 
-/// ADR-033 §5 (Q10) on Lambda: a blocklisted skill file fails build, naming it.
+/// On Lambda, a blocklisted skill file fails build, naming it.
 #[cfg(feature = "ext-skills")]
 #[tokio::test]
 async fn lambda_q10_blocklisted_skill_file_refused_at_build() {

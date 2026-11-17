@@ -11,7 +11,8 @@ use crate::error::McpClientResult;
 use serde_json::Value;
 use turul_mcp_protocol_2026_07_28 as p;
 
-/// Build the per-request `_meta` object required by the 2026 stateless core.
+/// Builds the per-request `_meta` object required by the 2026 stateless core.
+///
 /// Capabilities are declared per request (servers MUST NOT infer them from
 /// prior requests), translated from the config-level declarations.
 pub(crate) fn request_meta(
@@ -96,8 +97,9 @@ pub(crate) fn check_result_type(result: &Value) -> Result<(), crate::error::McpC
     }
 }
 
-/// Build an operation's params object with the required `_meta` merged in. `extra`
-/// carries the op-specific params (e.g. `{ "name": ..., "arguments": ... }`).
+/// Builds an operation's params object with the required `_meta` merged in.
+///
+/// `extra` carries the op-specific params (e.g. `{ "name": ..., "arguments": ... }`).
 pub(crate) fn params_with_meta(meta: &p::meta::RequestMetaObject, extra: Value) -> Value {
     let mut map = match extra {
         Value::Object(m) => m,
@@ -110,7 +112,7 @@ pub(crate) fn params_with_meta(meta: &p::meta::RequestMetaObject, extra: Value) 
     Value::Object(map)
 }
 
-/// Map a 2026 typed value to the public (alias) type via JSON.
+/// Maps a 2026 typed value to the public (alias) type via JSON.
 fn remap<A, B>(v: &A) -> McpClientResult<B>
 where
     A: serde::Serialize,
@@ -119,7 +121,9 @@ where
     Ok(serde_json::from_value(serde_json::to_value(v)?)?)
 }
 
-/// Remap a 2026 tool into the public `Tool` vocabulary. Infallible by
+/// Remaps a 2026 tool into the public `Tool` vocabulary.
+///
+/// Infallible by
 /// construction: a tool is never dropped from — and never fails — a listing
 /// because of what its schema contains.
 ///
@@ -556,8 +560,8 @@ mod tests {
     /// `_meta.io.modelcontextprotocol/clientCapabilities` on each request"
     /// (client/sampling). `sub_capabilities_map_into_request_meta` above only
     /// exercises `sampling: true` combined with `sampling_tools: true`, so the
-    /// bare declaration (no sub-capabilities) was never asserted on its own —
-    /// this proves declaring plain `sampling` alone still emits the object.
+    /// bare declaration (no sub-capabilities) is asserted here: declaring plain
+    /// `sampling` alone still emits the object.
     #[test]
     fn bare_sampling_capability_alone_is_declared_in_request_meta() {
         let declared = crate::config::DeclaredCapabilities {

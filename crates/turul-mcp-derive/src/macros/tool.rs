@@ -1,6 +1,6 @@
-//! Tool Declarative Macro Implementation
+//! Implements the `tool!{}` declarative macro.
 //!
-//! Implements the `tool!{}` declarative macro for creating MCP tools with
+//! The macro creates MCP tools with
 //! a concise syntax.
 
 use proc_macro::TokenStream;
@@ -12,7 +12,11 @@ use syn::{
 
 use crate::macros::shared::capitalize;
 
-/// Implementation function for the tool!{} declarative macro
+/// Expands `tool!{}` input into a block that evaluates to a tool instance.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when the input does not parse as `ToolMacroInput`.
 pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let async_trait = crate::utils::async_trait_path();
     let json_crate = crate::utils::serde_json_path();
@@ -35,7 +39,6 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let icons_impl =
         crate::tool_derive::generate_icons_impl(&tool_name_ident, input.icons.as_ref());
 
-    // Generate parameter extraction
     let mut param_extractions = Vec::new();
     let mut param_names = Vec::new();
     let mut schema_properties = Vec::new();
@@ -52,7 +55,6 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         param_names.push(param_name);
         let param_name_str = param_name.to_string();
 
-        // Generate schema based on type with enhanced constraints
         let type_str = quote!(#param_type).to_string();
         let base_schema = match type_str.as_str() {
             "f64" | "f32" => {
@@ -114,14 +116,12 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             (#param_name_str.to_string(), #base_schema)
         });
 
-        // Only add to required fields if not optional
         if !optional {
             required_fields.push(quote! {
                 #param_name_str.to_string()
             });
         }
 
-        // Generate parameter extraction based on type and constraints
         let default_expr = param.default_value.as_ref();
 
         let extraction = if optional && !type_str.starts_with("Option<") {
@@ -223,7 +223,6 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
         };
 
-        // If there's a default value and the parameter is optional, apply the default
         let final_extraction = if let Some(default) = default_expr {
             if optional {
                 quote! {
@@ -334,10 +333,8 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
                     #undeclared_arg_check
 
-                    // Extract parameters
                     #(#param_extractions)*
 
-                    // Call the execute closure
                     let execute_fn = #execute_closure;
                     match execute_fn(#(#param_names),*).await {
                         Ok(result) => {
@@ -360,7 +357,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     Ok(expanded.into())
 }
 
-/// Parser for the tool! macro syntax
+/// Parsed input of the `tool!{}` macro.
 pub struct ToolMacroInput {
     pub name: String,
     pub description: String,
@@ -372,10 +369,11 @@ pub struct ToolMacroInput {
     pub destructive: Option<bool>,
     pub idempotent: Option<bool>,
     pub open_world: Option<bool>,
-    pub meta: Option<Expr>,  // → HasToolMeta::tool_meta() (ADR-037)
+    pub meta: Option<Expr>,  // → HasToolMeta::tool_meta()
     pub icons: Option<Expr>, // → HasIcons::icons()
 }
 
+/// A parameter declared in the `params` block of `tool!{}`.
 pub struct ToolParam {
     pub name: Ident,
     pub param_type: Type,
@@ -449,13 +447,11 @@ impl Parse for ToolMacroInput {
                         content.parse::<Token![=>]>()?;
                         let param_desc: LitStr = content.parse()?;
 
-                        // Parse optional parameter attributes
                         let mut optional = false;
                         let mut min_value = None;
                         let mut max_value = None;
                         let mut default_value = None;
 
-                        // Check if there are parameter constraints in braces
                         if content.peek(syn::token::Brace) {
                             let constraint_content;
                             syn::braced!(constraint_content in content);

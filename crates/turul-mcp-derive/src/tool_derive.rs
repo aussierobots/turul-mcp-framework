@@ -1,4 +1,4 @@
-//! Implementation of #[derive(McpTool)]
+//! Expansion of `#[derive(McpTool)]`, plus the trait-impl generators shared with the other derive and attribute macros.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -9,7 +9,8 @@ use crate::utils::{
     generate_output_schema_auto, generate_param_extraction, type_to_schema,
 };
 
-/// Auto-determine tool name from struct name (ZERO CONFIGURATION!)
+/// Derives a tool name from a struct name by dropping a `Tool` suffix and converting to snake_case.
+///
 /// Examples:
 /// - `CalculatorTool` → `"calculator"`
 /// - `FileReaderTool` → `"file_reader"`
@@ -26,7 +27,7 @@ fn auto_determine_tool_name(struct_name: String) -> String {
     camel_to_snake_case(base_name)
 }
 
-/// Convert CamelCase to snake_case
+/// Converts CamelCase to snake_case.
 fn camel_to_snake_case(input: &str) -> String {
     let mut result = String::new();
     for (i, ch) in input.chars().enumerate() {
@@ -38,7 +39,7 @@ fn camel_to_snake_case(input: &str) -> String {
     result
 }
 
-/// Convert CamelCase to readable words with spaces
+/// Converts CamelCase to words separated by spaces.
 fn camel_to_readable(input: &str) -> String {
     let mut result = String::new();
     for (i, ch) in input.chars().enumerate() {
@@ -124,7 +125,7 @@ fn split_expr_attrs(attrs: &[syn::Attribute]) -> Result<(ToolExprAttrs, Vec<syn:
     Ok((out, kept_attrs))
 }
 
-/// `HasIcons` for a macro-authored tool. With no `icons = <expr>` the default
+/// Generates the `HasIcons` impl for a macro-authored tool. With no `icons = <expr>` the default
 /// (no icons) impl is emitted; the trait is a supertrait of `ToolDefinition`,
 /// so some impl is always required.
 pub(crate) fn generate_icons_impl(name: &syn::Ident, icons: Option<&syn::Expr>) -> TokenStream {
@@ -146,10 +147,11 @@ pub(crate) fn generate_icons_impl(name: &syn::Ident, icons: Option<&syn::Expr>) 
     }
 }
 
-/// The `_meta` trait (`HasToolMeta`, `HasResourceMeta` or `HasPromptMeta`) for a
-/// macro-authored object (ADR-037). `meta = <expr>` yields a
-/// `HashMap<String, Value>` built once per type; without it the method returns
-/// `None`, which is what every form emitted before the attribute existed.
+/// Generates the `_meta` trait impl (`HasToolMeta`, `HasResourceMeta` or `HasPromptMeta`)
+/// for a macro-authored object.
+///
+/// `meta = <expr>` yields a `HashMap<String, Value>` built once per type; without it
+/// the method returns `None`.
 pub(crate) fn generate_meta_impl(
     name: &syn::Ident,
     trait_name: &str,
@@ -177,7 +179,8 @@ pub(crate) fn generate_meta_impl(
     }
 }
 
-/// `HasResourceAnnotations` for a macro-authored resource (ADR-037):
+/// Generates the `HasResourceAnnotations` impl for a macro-authored resource.
+///
 /// `annotations = <expr>` yields an `Annotations` built once per type.
 pub(crate) fn generate_resource_annotations_impl(
     name: &syn::Ident,
@@ -202,8 +205,9 @@ pub(crate) fn generate_resource_annotations_impl(
     }
 }
 
-/// `HasResourceSize` for a macro-authored resource (ADR-037): `size = <expr>`
-/// yields the content's byte length as a `u64`.
+/// Generates the `HasResourceSize` impl for a macro-authored resource.
+///
+/// `size = <expr>` yields the content's byte length as a `u64`.
 pub(crate) fn generate_resource_size_impl(
     name: &syn::Ident,
     size: Option<&syn::Expr>,
@@ -230,7 +234,6 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let mcp_server = crate::utils::server_path();
     let name = &input.ident;
 
-    // AUTO-DETERMINE tool name from struct name (ZERO CONFIGURATION!)
     let auto_name = auto_determine_tool_name(name.to_string());
 
     let (expr_attrs, attrs) = split_expr_attrs(&input.attrs)?;
@@ -375,8 +378,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     } else {
         // Zero-config: no output schema. The derive macro cannot inspect the
         // execute() method's return type (it only receives the struct definition).
-        // Previously this introspected Self, which incorrectly used input fields as
-        // the output schema. Use #[tool(output = Type)] for explicit output schemas.
+        // Use #[tool(output = Type)] for an explicit output schema.
         quote! {
             fn output_schema(&self) -> Option<&#mcp_protocol::tools::ToolSchema> {
                 None
@@ -637,8 +639,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                     // set is not cosmetic: `InputRequired` is MRTR control flow (SEP-2322)
                     // that the server turns into `resultType: "input_required"`, and
                     // `MissingRequiredClientCapability` is the spec's -32021 gate.
-                    // Swallowing either into `isError` silently breaks the feature — an
-                    // earlier, blanket version of this change failed 7 MRTR wire tests.
+                    // Swallowing either into `isError` silently breaks the feature.
                     Err(#mcp_protocol::McpError::ToolExecutionError(msg)) => {
                         Ok(#mcp_protocol::tools::CallToolResult::error(vec![
                             #mcp_protocol::tools::ToolResult::text(msg)

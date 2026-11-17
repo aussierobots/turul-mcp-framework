@@ -1,21 +1,25 @@
-//! `_meta` Field Support for MCP 2026-07-28.
+//! `_meta` field support for MCP 2026-07-28.
 //!
-//! Two distinct meta carriers per the schema:
+//! Three meta carriers per the schema:
 //! - [`RequestMetaObject`] — strictly-typed shape for every `Request.params._meta`.
-//!   Carries the required `io.modelcontextprotocol/protocolVersion`, `clientInfo`,
-//!   and `clientCapabilities` for per-request capability negotiation, plus
-//!   optional `progressToken` and `logLevel`. Arbitrary namespaced keys ride
-//!   along on the flattened `extra` map.
-//! - [`MetaObject`] — loose `HashMap<String, Value>` for `Notification.params._meta`
-//!   and `Result._meta`. Open key-value per the schema's reverse-DNS prefix rules.
+//!   Carries the required `io.modelcontextprotocol/protocolVersion` and
+//!   `clientCapabilities` for per-request capability negotiation, the optional
+//!   `clientInfo`, and optional `progressToken` and `logLevel`. Arbitrary
+//!   namespaced keys ride along on the flattened `extra` map.
+//! - [`ResultMetaObject`] — `Result._meta`: a [`MetaObject`] plus the responding
+//!   server's `serverInfo`.
+//! - [`MetaObject`] — loose `HashMap<String, Value>` for `Notification.params._meta`.
+//!   Open key-value per the schema's reverse-DNS prefix rules.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
 /// Annotations for resources, prompts, and tools — `audience`, `priority`,
-/// `last_modified`. Carried on `Resource`, `ResourceTemplate`, `Prompt`,
-/// `Tool` (via `ToolAnnotations`), and `ContentBlock`.
+/// `last_modified`.
+///
+/// Carried on `Resource`, `ResourceTemplate`, `Prompt`, `Tool` (via
+/// `ToolAnnotations`), and `ContentBlock`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Annotations {
@@ -31,6 +35,7 @@ pub struct Annotations {
 }
 
 impl Annotations {
+    /// Creates annotations with no audience, priority or last-modified set.
     pub fn new() -> Self {
         Self {
             audience: None,
@@ -39,16 +44,19 @@ impl Annotations {
         }
     }
 
+    /// Sets the intended audience roles.
     pub fn with_audience(mut self, audience: Vec<crate::prompts::Role>) -> Self {
         self.audience = Some(audience);
         self
     }
 
+    /// Sets the importance of the item, clamped to the range `0.0..=1.0` where 1 is most important.
     pub fn with_priority(mut self, priority: f64) -> Self {
         self.priority = Some(priority.clamp(0.0, 1.0));
         self
     }
 
+    /// Sets the ISO 8601 datetime at which the item was last modified.
     pub fn with_last_modified(mut self, last_modified: impl Into<String>) -> Self {
         self.last_modified = Some(last_modified.into());
         self
@@ -72,18 +80,20 @@ impl Default for Annotations {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum ProgressToken {
+    /// A string token.
     String(String),
+    /// A numeric token, preserving the exact JSON number.
     Number(serde_json::Number),
 }
 
 impl ProgressToken {
-    /// Construct a string-form token. For numeric tokens use the `From<i64>` /
+    /// Creates a string-form token. For numeric tokens use the `From<i64>` /
     /// `From<u64>` / `From<f64>` impls, or `ProgressToken::Number(num)` directly.
     pub fn new(token: impl Into<String>) -> Self {
         Self::String(token.into())
     }
 
-    /// Return the string body if this is a string-form token; `None` for numeric.
+    /// Returns the string body if this is a string-form token; `None` for numeric.
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(s) => Some(s.as_str()),
@@ -91,7 +101,7 @@ impl ProgressToken {
         }
     }
 
-    /// Return the numeric body if this is an integer-form token; `None` for
+    /// Returns the numeric body if this is an integer-form token; `None` for
     /// string or for a JSON float that has no exact `i64` representation.
     pub fn as_i64(&self) -> Option<i64> {
         match self {
@@ -100,7 +110,7 @@ impl ProgressToken {
         }
     }
 
-    /// Return the numeric body as `f64` if this is a number-form token. Lossy
+    /// Returns the numeric body as `f64` if this is a number-form token. Lossy
     /// for integers beyond `2^53`; `None` for string-form tokens.
     pub fn as_f64(&self) -> Option<f64> {
         match self {
@@ -109,7 +119,7 @@ impl ProgressToken {
         }
     }
 
-    /// Return the raw `serde_json::Number` for a number-form token. Use this
+    /// Returns the raw `serde_json::Number` for a number-form token. Use this
     /// when you need to preserve the exact wire representation (int vs float)
     /// without lossy conversion.
     pub fn as_number(&self) -> Option<&serde_json::Number> {
@@ -150,9 +160,14 @@ impl From<i32> for ProgressToken {
     }
 }
 
-/// Construct from an `f64`. Panics if the value is NaN or ±infinity — JSON
-/// has no representation for those. Use [`serde_json::Number::from_f64`]
-/// directly + `ProgressToken::Number(...)` if you need explicit error handling.
+/// Creates a number-form token from an `f64`.
+///
+/// Use [`serde_json::Number::from_f64`] directly with `ProgressToken::Number(...)`
+/// if you need explicit error handling.
+///
+/// # Panics
+///
+/// Panics if the value is NaN or ±infinity, which JSON cannot represent.
 impl From<f64> for ProgressToken {
     fn from(n: f64) -> Self {
         let num = serde_json::Number::from_f64(n)
@@ -161,16 +176,18 @@ impl From<f64> for ProgressToken {
     }
 }
 
-/// Cursor for pagination support
+/// Opaque pagination cursor.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]
 pub struct Cursor(pub String);
 
 impl Cursor {
+    /// Creates a cursor from an opaque string issued by the server.
     pub fn new(cursor: impl Into<String>) -> Self {
         Self(cursor.into())
     }
 
+    /// Returns the cursor's opaque string, to be sent back unchanged.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -189,13 +206,11 @@ impl From<&str> for Cursor {
 }
 
 // ---------------------------------------------------------------------------
-// Convention `_meta` keys (changelog Minor #2: OpenTelemetry trace context;
-// changelog Major #4: subscription tagging; SEP-2575: per-request log level).
-// These keys are not declared as named fields in the schema's RequestMetaObject
-// — they ride the catch-all `[key: string]: unknown` from the MetaObject parent
-// and the per-request `extra: HashMap<String, Value>` on `RequestMetaObject` /
-// `NotificationParams._meta`. Typed constants here give consumers a single
-// source of truth for the spelling.
+// Convention `_meta` keys. The trace-context keys (`traceparent`, `tracestate`,
+// `baggage`) are not named fields in the schema's RequestMetaObject — they ride
+// the catch-all `[key: string]: unknown` from the MetaObject parent and the
+// `extra: HashMap<String, Value>` on `RequestMetaObject` / `NotificationParams._meta`.
+// Typed constants here give consumers a single source of truth for the spelling.
 // ---------------------------------------------------------------------------
 
 /// `_meta` key carrying the W3C Trace Context `traceparent` header value per
@@ -281,20 +296,20 @@ pub struct ResultMetaObject {
 }
 
 impl ResultMetaObject {
-    /// Carry the responding server's identity.
+    /// Sets the responding server's identity.
     pub fn with_server_info(mut self, info: crate::initialize::Implementation) -> Self {
         self.server_info = Some(info);
         self
     }
 
-    /// Add an extra meta key. Key must follow [`MetaObject`] naming rules
+    /// Adds an extra meta key. Key must follow [`MetaObject`] naming rules
     /// (no validation performed here; keep keys spec-conformant).
     pub fn with_extra(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.extra.insert(key.into(), value.into());
         self
     }
 
-    /// True when nothing would be emitted — lets callers skip an empty `_meta`.
+    /// Returns `true` when nothing would be emitted, so callers can skip an empty `_meta`.
     pub fn is_empty(&self) -> bool {
         self.server_info.is_none()
             && self
@@ -305,7 +320,7 @@ impl ResultMetaObject {
 }
 
 impl From<MetaObject> for ResultMetaObject {
-    /// Lift a loose `_meta` map into the typed carrier.
+    /// Lifts a loose `_meta` map into the typed carrier.
     ///
     /// `io.modelcontextprotocol/serverInfo` is reserved: the typed field owns
     /// it, and `Serialize` never emits that key from `extra`. So a value that
@@ -377,7 +392,7 @@ impl Serialize for ResultMetaObject {
 ///   it unless configured otherwise. It is self-reported and unverified: servers
 ///   MUST NOT key behavior on it and MUST NOT treat it as a security identity.
 ///   A request that omits it is well-formed and MUST be served.
-/// - `io.modelcontextprotocol/logLevel?: LoggingLevel` — replaces the removed
+/// - `io.modelcontextprotocol/logLevel?: LoggingLevel` — replaces the 2025-11-25
 ///   `logging/setLevel` RPC; client opts in to log notifications per-request
 ///
 /// Extra keys per `MetaObject` rules are preserved in [`Self::extra`].
@@ -423,7 +438,7 @@ pub struct RequestMetaObject {
 
     /// Per-request log level opt-in. Optional.
     ///
-    /// Replaces the former `logging/setLevel` RPC. If absent, the server MUST
+    /// Replaces the 2025-11-25 `logging/setLevel` RPC. If absent, the server MUST
     /// NOT send `notifications/message` for this request. Deprecated per
     /// SEP-2577 along with the whole Logging surface; functional through the
     /// migration window.
@@ -445,7 +460,7 @@ pub struct RequestMetaObject {
 }
 
 impl RequestMetaObject {
-    /// Construct with the two required fields plus `client_info`, which clients
+    /// Creates a request meta with the two required fields plus `client_info`, which clients
     /// SHOULD send. Use [`Self::without_client_info`] for the configured-off
     /// case. All other optionals start `None`, `extra` empty.
     pub fn new(
@@ -464,19 +479,19 @@ impl RequestMetaObject {
         }
     }
 
-    /// Drop `clientInfo`, modelling a client configured not to report itself.
+    /// Clears `clientInfo`, modelling a client configured not to report itself.
     pub fn without_client_info(mut self) -> Self {
         self.client_info = None;
         self
     }
 
-    /// Attach a progress token.
+    /// Attaches a progress token.
     pub fn with_progress_token(mut self, token: impl Into<ProgressToken>) -> Self {
         self.progress_token = Some(token.into());
         self
     }
 
-    /// Opt in to log notifications at this level for this request.
+    /// Opts in to log notifications at this level for this request.
     /// Deprecated per SEP-2577 along with the whole Logging surface.
     #[allow(deprecated)]
     #[deprecated(
@@ -488,7 +503,7 @@ impl RequestMetaObject {
         self
     }
 
-    /// Add an extra meta key. Key must follow [`MetaObject`] naming rules
+    /// Adds an extra meta key. Key must follow [`MetaObject`] naming rules
     /// (no validation performed here; keep keys spec-conformant).
     pub fn with_extra(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.extra.insert(key.into(), value.into());
@@ -578,7 +593,7 @@ mod tests {
     #[allow(clippy::approx_constant)] // 2.71828 is an arbitrary test float, not E
     fn test_progress_token_float_round_trips() {
         // Schema says `ProgressToken = string | number`; `number` is IEEE-754.
-        // 1.5 is a spec-valid token. Pre-fix `Number(i64)` rejected this shape.
+        // 1.5 is a spec-valid token and must not be rejected as a non-integer.
         let json = serde_json::json!(1.5);
         let token: ProgressToken = serde_json::from_value(json.clone()).unwrap();
         assert_eq!(token.as_f64(), Some(1.5));
@@ -666,9 +681,6 @@ mod tests {
         assert_eq!(from_string.as_str(), "page-3");
     }
 
-    // Schema-aligned tests for `RequestMetaObject` and `MetaObject` live
-    // alongside those type definitions.
-
     #[test]
     fn request_meta_object_extra_cannot_shadow_protocol_version() {
         // `RequestMetaObject.extra` is a public, caller-writable
@@ -751,9 +763,9 @@ mod tests {
     }
 
     /// A reserved `serverInfo` whose value is not an `Implementation` is
-    /// dropped. Asserted on the SERIALIZED form: an earlier version re-homed it
-    /// in `extra`, which looked preserved in memory while `Serialize` filtered
-    /// it out, so an in-memory assertion could not see the loss.
+    /// dropped. Asserted on the SERIALIZED form: a value re-homed in `extra` would
+    /// look preserved in memory while `Serialize` filtered it out, so an in-memory
+    /// assertion could not see the loss.
     #[test]
     fn malformed_server_info_is_dropped_on_the_wire() {
         let mut map = MetaObject::new();

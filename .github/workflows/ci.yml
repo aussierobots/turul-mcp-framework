@@ -307,3 +307,12 @@ jobs:
         env:
           RUSTDOCFLAGS: "-D warnings"
         run: cargo doc --no-deps
+      - name: Published crates document every public item
+        env:
+          RUSTDOCFLAGS: "-D warnings -D missing_docs"
+        run: >-
+          cargo doc --no-deps -p turul-http-mcp-server@0.4 -p turul-mcp-aws-lambda@0.4 -p turul-mcp-builders@0.4
+          -p turul-mcp-client@0.4 -p turul-mcp-derive@0.4 -p turul-mcp-ext-apps@0.1 -p turul-mcp-ext-server-card@0.1
+          -p turul-mcp-ext-skills@0.1 -p turul-mcp-ext-tasks@0.1 -p turul-mcp-oauth@0.4 -p turul-mcp-protocol@0.4
+          -p turul-mcp-protocol-2026-07-28@0.4 -p turul-mcp-schema-validation@0.4 -p turul-mcp-server@0.4
+          -p turul-mcp-server-state-storage@0.4 -p turul-mcp-session-storage@0.4

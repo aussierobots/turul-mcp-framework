@@ -1,7 +1,7 @@
-//! HTTP MCP Server with SessionStorage integration
+//! HTTP MCP server with `SessionStorage` integration.
 //!
-//! This server provides MCP 2025-11-25 compliant HTTP transport with
-//! pluggable session storage backends and proper SSE resumability.
+//! Provides the MCP HTTP transport with pluggable session storage backends
+//! and SSE resumability.
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
@@ -22,16 +22,16 @@ use crate::protocol::McpProtocolVersion;
 use crate::streamable_http::StreamableHttpHandler;
 use crate::{CorsLayer, Result, SessionMcpHandler, StreamConfig, StreamManager};
 
-/// Configuration for the HTTP MCP server
+/// Configuration for the HTTP MCP server.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
-    /// Address to bind to
+    /// Address to bind to.
     pub bind_address: SocketAddr,
-    /// Path for MCP endpoint
+    /// Path for the MCP endpoint.
     pub mcp_path: String,
-    /// Enable CORS
+    /// Enables CORS.
     pub enable_cors: bool,
-    /// Maximum request body size
+    /// Maximum request body size.
     pub max_body_size: usize,
     /// Enable GET SSE support (persistent event streams).
     ///
@@ -47,11 +47,11 @@ pub struct ServerConfig {
         )
     )]
     pub enable_get_sse: bool,
-    /// Enable POST SSE support (streaming tool call responses) - disabled by default for compatibility
+    /// Enables POST SSE support (streaming tool call responses); disabled by default for compatibility.
     pub enable_post_sse: bool,
-    /// Session expiry time in minutes (default: 30 minutes)
+    /// Session expiry time in minutes (default: 30).
     pub session_expiry_minutes: u64,
-    /// Allow ping requests without Mcp-Session-Id header (default: true)
+    /// Allows ping requests without an `Mcp-Session-Id` header (default: true).
     ///
     /// When true, the server accepts pre-initialization `ping` requests without
     /// requiring a session. The full middleware stack still runs with `session=None`,
@@ -83,7 +83,7 @@ impl Default for ServerConfig {
     }
 }
 
-/// A socket the caller bound before the server starts (ADR-034).
+/// A socket the caller bound before the server starts.
 ///
 /// `HttpMcpServer::run` serves on it instead of binding `bind_address`, so a
 /// port chosen with `127.0.0.1:0` is never released before the server owns it.
@@ -112,7 +112,7 @@ impl PreboundListener {
     }
 }
 
-/// Builder for HTTP MCP server with pluggable storage
+/// Builder for the HTTP MCP server with pluggable storage.
 pub struct HttpMcpServerBuilder {
     config: ServerConfig,
     dispatcher: JsonRpcDispatcher<McpError>,
@@ -128,7 +128,7 @@ pub struct HttpMcpServerBuilder {
 }
 
 impl HttpMcpServerBuilder {
-    /// Create a new builder with in-memory storage (zero-configuration)
+    /// Creates a builder with in-memory storage (zero-configuration).
     pub fn new() -> Self {
         Self {
             config: ServerConfig::default(),
@@ -147,7 +147,7 @@ impl HttpMcpServerBuilder {
 }
 
 impl HttpMcpServerBuilder {
-    /// Create a new builder with specific session storage
+    /// Creates a builder with the given session storage.
     pub fn with_storage(
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     ) -> Self {
@@ -166,7 +166,7 @@ impl HttpMcpServerBuilder {
         }
     }
 
-    /// Set the middleware stack (for HTTP transport middleware support)
+    /// Sets the middleware stack for HTTP transport middleware.
     pub fn with_middleware_stack(
         mut self,
         middleware_stack: Arc<crate::middleware::MiddlewareStack>,
@@ -175,19 +175,20 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Set the route registry for custom HTTP paths (e.g., `.well-known`)
+    /// Sets the route registry for custom HTTP paths (e.g., `.well-known`).
     pub fn route_registry(mut self, registry: Arc<crate::routes::RouteRegistry>) -> Self {
         self.route_registry = registry;
         self
     }
 
-    /// Set tool fingerprint for session versioning across server restarts
-    /// Identity reported in each 2026-07-28 result's `_meta.serverInfo`.
+    /// Sets the server identity reported in each 2026-07-28 result's
+    /// `_meta.serverInfo`.
     pub fn server_info(mut self, info: turul_mcp_protocol::Implementation) -> Self {
         self.server_info = Some(info);
         self
     }
 
+    /// Sets the tool fingerprint used to detect a changed tool set across restarts or redeploys; an empty string disables the check (static mode).
     pub fn tool_fingerprint(mut self, fingerprint: String) -> Self {
         if fingerprint.is_empty() {
             self.tool_fingerprint = None; // Static mode: no fingerprint check
@@ -197,26 +198,26 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Set the tool change notifier for restart/redeploy fingerprint mismatch.
+    /// Sets the notifier called when a session's stored tool fingerprint differs from the server's, so the session receives `notifications/tools/list_changed`.
     pub fn tool_notifier(mut self, notifier: Arc<dyn crate::ToolChangeNotifier>) -> Self {
         self.tool_notifier = Some(notifier);
         self
     }
 
-    /// Set the bind address
+    /// Sets the bind address.
     pub fn bind_address(mut self, addr: SocketAddr) -> Self {
         self.config.bind_address = addr;
         self
     }
 
-    /// Serve on a socket the caller has already bound (ADR-034). Sets
+    /// Serves on a socket the caller has already bound. Sets
     /// `bind_address` to its local address. Use this, not a dropped
     /// `127.0.0.1:0` listener, to start a server on a free port.
     pub fn listener(self, listener: std::net::TcpListener) -> Self {
         self.prebound_listener(PreboundListener::new(listener))
     }
 
-    /// Serve on a [`PreboundListener`] (ADR-034); the form `turul-mcp-server`
+    /// Serves on a [`PreboundListener`]; the form `turul-mcp-server`
     /// passes through. Sets `bind_address` to its local address.
     pub fn prebound_listener(mut self, listener: PreboundListener) -> Self {
         if let Some(addr) = listener.local_addr() {
@@ -226,25 +227,25 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Set the MCP endpoint path
+    /// Sets the MCP endpoint path.
     pub fn mcp_path(mut self, path: impl Into<String>) -> Self {
         self.config.mcp_path = path.into();
         self
     }
 
-    /// Enable or disable CORS
+    /// Enables or disables CORS.
     pub fn cors(mut self, enable: bool) -> Self {
         self.config.enable_cors = enable;
         self
     }
 
-    /// Set maximum request body size
+    /// Sets the maximum request body size.
     pub fn max_body_size(mut self, size: usize) -> Self {
         self.config.max_body_size = size;
         self
     }
 
-    /// Enable or disable GET SSE for persistent event streams.
+    /// Enables or disables GET SSE for persistent event streams.
     ///
     /// 2025-11-25 stateful lane only — see [`ServerConfig::enable_get_sse`].
     #[cfg_attr(
@@ -260,13 +261,13 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Enable or disable POST SSE for streaming tool call responses (disabled by default for compatibility)
+    /// Enables or disables POST SSE for streaming tool call responses (disabled by default for compatibility).
     pub fn post_sse(mut self, enable: bool) -> Self {
         self.config.enable_post_sse = enable;
         self
     }
 
-    /// Enable or disable both GET and POST SSE (convenience method).
+    /// Enables or disables both GET and POST SSE (convenience method).
     ///
     /// The GET half is 2025-11-25-lane-only — see [`ServerConfig::enable_get_sse`].
     #[allow(deprecated)]
@@ -276,34 +277,31 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Set session expiry time in minutes
+    /// Sets the session expiry time in minutes.
     pub fn session_expiry_minutes(mut self, minutes: u64) -> Self {
         self.config.session_expiry_minutes = minutes;
         self
     }
 
-    /// Allow or disallow ping requests without Mcp-Session-Id header
-    ///
-    /// Default: `true` (sessionless pings allowed per MCP spec).
-    /// Set to `false` for hardened deployments requiring session for all methods.
-    /// Set the Origin-header validation policy (DNS-rebinding protection).
+    /// Sets the Origin-header validation policy (DNS-rebinding protection).
     pub fn origin_policy(mut self, policy: crate::origin::OriginPolicy) -> Self {
         self.config.origin_policy = policy;
         self
     }
 
+    /// Sets whether `ping` requests are accepted without an established session; defaults to `true`, and `false` is for hardened deployments.
     pub fn allow_unauthenticated_ping(mut self, allow: bool) -> Self {
         self.config.allow_unauthenticated_ping = allow;
         self
     }
 
-    /// Configure SSE streaming settings
+    /// Configures SSE streaming settings.
     pub fn stream_config(mut self, config: StreamConfig) -> Self {
         self.stream_config = config;
         self
     }
 
-    /// Register a JSON-RPC handler for specific methods
+    /// Registers a JSON-RPC handler for specific methods.
     pub fn register_handler<H>(mut self, methods: Vec<String>, handler: H) -> Self
     where
         H: JsonRpcHandler<Error = McpError> + 'static,
@@ -312,15 +310,15 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Register every method of a dispatcher built by its owner
-    /// (`turul_mcp_server::McpServer`; ADR-035). Methods already registered
+    /// Registers every method of a dispatcher built by its owner
+    /// (`turul_mcp_server::McpServer`). Methods already registered
     /// with the same name are replaced.
     pub fn register_dispatcher(mut self, dispatcher: JsonRpcDispatcher<McpError>) -> Self {
         self.dispatcher.handlers.extend(dispatcher.handlers);
         self
     }
 
-    /// Register a default handler for unhandled methods
+    /// Registers a default handler for unhandled methods.
     pub fn default_handler<H>(mut self, handler: H) -> Self
     where
         H: JsonRpcHandler<Error = McpError> + 'static,
@@ -329,7 +327,7 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Set server capabilities
+    /// Sets the server capabilities.
     pub fn server_capabilities(
         mut self,
         capabilities: turul_mcp_protocol::ServerCapabilities,
@@ -338,25 +336,21 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Build the HTTP MCP server
+    /// Builds the HTTP MCP server, creating the single `StreamManager` shared by all request handlers.
     pub fn build(self) -> HttpMcpServer {
         let session_storage = self
             .session_storage
             .expect("Session storage must be provided");
 
-        // ✅ CORRECTED ARCHITECTURE: Create single shared StreamManager instance
         let stream_manager = Arc::new(StreamManager::with_config(
             Arc::clone(&session_storage),
             self.stream_config.clone(),
         ));
 
-        // Create shared dispatcher Arc
         let dispatcher = Arc::new(self.dispatcher);
 
-        // Use middleware stack from builder
         let middleware_stack = self.middleware_stack;
 
-        // Create StreamableHttpHandler for MCP 2025-11-25 support
         let mut streamable_handler = StreamableHttpHandler::new(
             Arc::new(self.config.clone()),
             Arc::clone(&dispatcher),
@@ -394,16 +388,16 @@ impl Default for HttpMcpServerBuilder {
     }
 }
 
-/// HTTP MCP Server with SessionStorage integration
+/// HTTP MCP server with `SessionStorage` integration.
 #[derive(Clone)]
 pub struct HttpMcpServer {
     config: ServerConfig,
     dispatcher: Arc<JsonRpcDispatcher<McpError>>,
     session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     stream_config: StreamConfig,
-    // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance
+    // Single shared StreamManager instance
     stream_manager: Arc<StreamManager>,
-    // StreamableHttpHandler for MCP 2025-11-25 clients
+    // Handles Streamable HTTP requests
     streamable_handler: StreamableHttpHandler,
     // Custom route registry for paths like .well-known
     route_registry: Arc<crate::routes::RouteRegistry>,
@@ -411,27 +405,26 @@ pub struct HttpMcpServer {
     tool_fingerprint: Option<String>,
     // Tool change notifier for restart/redeploy fingerprint mismatch
     tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
-    // Caller-bound socket, taken on the first run (ADR-034)
+    // Caller-bound socket, taken on the first run
     listener: Option<PreboundListener>,
 }
 
 impl HttpMcpServer {
-    /// Create a new builder with default in-memory storage
+    /// Creates a builder with default in-memory storage.
     pub fn builder() -> HttpMcpServerBuilder {
         HttpMcpServerBuilder::new()
     }
 }
 
 impl HttpMcpServer {
-    /// Create a new builder with specific session storage
+    /// Creates a builder with the given session storage.
     pub fn builder_with_storage(
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     ) -> HttpMcpServerBuilder {
         HttpMcpServerBuilder::with_storage(session_storage)
     }
 
-    /// Get the shared StreamManager instance for event forwarding bridge
-    /// Returns reference to the same StreamManager used by HTTP server
+    /// Returns the `StreamManager` shared with the HTTP server, for the event forwarding bridge.
     pub fn get_stream_manager(&self) -> Arc<crate::StreamManager> {
         Arc::clone(&self.stream_manager)
     }
@@ -444,7 +437,8 @@ impl HttpMcpServer {
         self.dispatcher.registered_methods()
     }
 
-    /// Run the server with session management
+    /// Runs the server: starts session cleanup, binds the address (or takes the
+    /// pre-bound listener) and serves connections until binding or accepting fails.
     pub async fn run(&self) -> Result<()> {
         // Start session cleanup task
         self.start_session_cleanup().await;
@@ -460,8 +454,7 @@ impl HttpMcpServer {
         info!("MCP endpoint available at: {}", self.config.mcp_path);
         info!("Session storage: {}", self.session_storage.backend_name());
 
-        // ✅ CORRECTED ARCHITECTURE: Create single SessionMcpHandler instance outside the loop
-        // Use the same middleware stack as streamable_handler (both handlers share it)
+        // One SessionMcpHandler outside the accept loop, sharing the middleware stack with streamable_handler
         let mut session_handler = SessionMcpHandler::with_shared_stream_manager(
             self.config.clone(),
             Arc::clone(&self.dispatcher),
@@ -504,7 +497,7 @@ impl HttpMcpServer {
         }
     }
 
-    /// Start background session cleanup task
+    /// Spawns a task that expires sessions older than `session_expiry_minutes`, checking every 60 seconds.
     async fn start_session_cleanup(&self) {
         let storage = Arc::clone(&self.session_storage);
         let session_expiry_minutes = self.config.session_expiry_minutes;
@@ -532,7 +525,7 @@ impl HttpMcpServer {
         });
     }
 
-    /// Get server statistics
+    /// Returns server statistics.
     pub async fn get_stats(&self) -> ServerStats {
         let session_count = self.session_storage.session_count().await.unwrap_or(0);
         let event_count = self.session_storage.event_count().await.unwrap_or(0);
@@ -545,8 +538,7 @@ impl HttpMcpServer {
     }
 }
 
-/// Handle requests with MCP 2025-11-25 compliance
-/// Combined handler that routes based on MCP protocol version
+/// Combined handler that routes requests by MCP protocol version.
 #[derive(Clone)]
 struct McpRequestHandler {
     session_handler: SessionMcpHandler,
@@ -567,7 +559,6 @@ async fn handle_request(
 
     debug!("Handling {} {}", method, path);
 
-    // Route the request
     debug!(
         "HTTP server dispatch: path={}, expected_mcp_path={}",
         path, handler.session_handler.config.mcp_path
@@ -594,7 +585,6 @@ async fn handle_request(
             method
         );
 
-        // Route based on protocol version - MCP 2025-11-25 uses Streamable HTTP, older versions use SessionMcpHandler
         debug!(
             "Routing decision: protocol_version={}, method={}, supports_streamable={}, handler={}",
             protocol_version.as_str(),
@@ -644,7 +634,7 @@ async fn handle_request(
             }
         }
     } else {
-        // Check custom routes (e.g., .well-known)
+        // Custom routes (e.g., .well-known)
         match handler.route_registry.match_route(path) {
             Ok(Some(route_handler)) => {
                 debug!("Custom route matched: {}", path);
@@ -675,11 +665,10 @@ async fn handle_request(
         }
     };
 
-    // Apply CORS if enabled
     match response {
         Ok(mut final_response) => {
             // A custom route that sets its own CORS keeps it (a Server Card's
-            // headers are spec-mandated, ADR-038 §4); everything else gets the
+            // headers are spec-mandated); everything else gets the
             // server's.
             if handler.session_handler.config.enable_cors
                 && !final_response
@@ -694,18 +683,21 @@ async fn handle_request(
     }
 }
 
-/// Server statistics
+/// Server statistics.
 #[derive(Debug, Clone)]
 pub struct ServerStats {
+    /// Number of sessions currently held in session storage.
     pub sessions: usize,
+    /// Number of stored SSE events across all sessions.
     pub events: usize,
+    /// Name of the session storage backend in use.
     pub storage_type: String,
 }
 
 #[cfg(test)]
 mod tests {
 
-    /// ADR-034: the server serves on the caller's bound socket and reports
+    /// The server serves on the caller's bound socket and reports
     /// its address as `bind_address`.
     #[tokio::test]
     async fn prebound_listener_serves_on_the_given_socket() {

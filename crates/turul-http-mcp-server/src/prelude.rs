@@ -1,19 +1,14 @@
-//! # HTTP MCP Server Prelude
-//!
-//! This module provides convenient re-exports of the most commonly used types
-//! from the HTTP MCP server library.
+//! Re-exports the most commonly used types of the HTTP MCP server library.
 //!
 //! ```rust,no_run
 //! use turul_http_mcp_server::prelude::*;
 //! ```
 
-// Core server types
 pub use crate::cors::CorsLayer;
 pub use crate::server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig, ServerStats};
 pub use crate::session_handler::{SessionMcpHandler, SessionSseStream};
 pub use crate::stream_manager::{StreamConfig, StreamError, StreamManager, StreamStats};
 
-// Protocol and notification types
 pub use crate::notification_bridge::{
     BroadcastError, NotificationBroadcaster, SharedNotificationBroadcaster,
     StreamManagerNotificationBroadcaster,
@@ -22,7 +17,6 @@ pub use crate::protocol::{
     McpProtocolVersion, extract_last_event_id, extract_protocol_version, extract_session_id,
 };
 
-// Middleware types
 pub use crate::middleware::{
     DispatcherResult, McpMiddleware, MiddlewareError, MiddlewareStack, RequestContext,
     SessionInjection, StorageBackedSessionView, error_codes,

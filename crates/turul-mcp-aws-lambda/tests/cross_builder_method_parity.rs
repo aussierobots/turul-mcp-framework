@@ -1,7 +1,7 @@
 //! Cross-builder method-registration parity.
 //!
 //! `LambdaMcpServerBuilder` delegates to `McpServerBuilder`, and the Lambda
-//! handler serves `McpServer`'s own dispatcher (ADR-035), so the two transports
+//! handler serves `McpServer`'s own dispatcher, so the two transports
 //! MUST register the same method set — otherwise one transport silently serves
 //! a method the other 404s (the `server/discover`-missing-on-Lambda bug fixed
 //! 2026-07-13). These tests build both through their production paths, read the

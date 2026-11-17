@@ -1,7 +1,7 @@
-//! URI Template System for Dynamic Resources
+//! RFC 6570-inspired URI templates for dynamic MCP resources.
 //!
-//! This module provides RFC 6570-inspired URI template support for dynamic MCP resources.
-//! It enables patterns like `file:///user/{user_id}.json` with strict validation.
+//! Templates such as `file:///user/{user_id}.json` match URIs, extract variables
+//! with strict validation, and resolve variables back into URIs.
 
 use regex::Regex;
 use std::collections::HashMap;
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use crate::McpResult;
 use turul_mcp_protocol::McpError;
 
-/// A compiled URI template with validation rules
+/// Represents a compiled URI template with validation rules.
 #[derive(Debug, Clone)]
 pub struct UriTemplate {
     /// Original template pattern
@@ -24,7 +24,7 @@ pub struct UriTemplate {
     mime_type: Option<String>,
 }
 
-/// Validation rules for template variables
+/// Holds the validation rules for a template variable.
 #[derive(Debug, Clone)]
 pub struct VariableValidator {
     /// Regex pattern for valid values
@@ -36,7 +36,7 @@ pub struct VariableValidator {
 }
 
 impl VariableValidator {
-    /// Create validator for user IDs (alphanumeric, underscore, hyphen)
+    /// Creates a validator for user IDs (alphanumeric, underscore, hyphen).
     pub fn user_id() -> Self {
         Self {
             pattern: Regex::new(r"^[A-Za-z0-9_-]{1,128}$").unwrap(),
@@ -46,7 +46,7 @@ impl VariableValidator {
         }
     }
 
-    /// Create validator for image formats
+    /// Creates a validator for image formats.
     pub fn image_format() -> Self {
         Self {
             pattern: Regex::new(r"^(png|jpg|jpeg|webp|svg)$").unwrap(),
@@ -55,7 +55,7 @@ impl VariableValidator {
         }
     }
 
-    /// Create validator for document formats
+    /// Creates a validator for document formats.
     pub fn document_format() -> Self {
         Self {
             pattern: Regex::new(r"^(pdf|txt|md|json|xml|html)$").unwrap(),
@@ -64,7 +64,11 @@ impl VariableValidator {
         }
     }
 
-    /// Create custom validator
+    /// Creates a custom validator.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `McpError::tool_execution` error if `pattern` is not a valid regex.
     pub fn custom(pattern: &str, description: String, max_length: usize) -> McpResult<Self> {
         let regex = Regex::new(pattern)
             .map_err(|e| McpError::tool_execution(&format!("Invalid regex pattern: {}", e)))?;
@@ -76,7 +80,12 @@ impl VariableValidator {
         })
     }
 
-    /// Validate a variable value
+    /// Validates a variable value.
+    ///
+    /// # Errors
+    ///
+    /// Returns a message if the value is longer than the maximum length or does not
+    /// match the validator's pattern.
     pub fn validate(&self, value: &str) -> Result<(), String> {
         if value.len() > self.max_length {
             return Err(format!(
@@ -95,7 +104,12 @@ impl VariableValidator {
 }
 
 impl UriTemplate {
-    /// Create a new URI template with automatic MIME type detection
+    /// Creates a new URI template with automatic MIME type detection.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `McpError::tool_execution` error if the pattern cannot be compiled
+    /// into a regex.
     pub fn new(pattern: &str) -> McpResult<Self> {
         let mut template = Self {
             pattern: pattern.to_string(),
@@ -109,14 +123,19 @@ impl UriTemplate {
         Ok(template)
     }
 
-    /// Create template with explicit MIME type
+    /// Creates a template with an explicit MIME type.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `McpError::tool_execution` error if the pattern cannot be compiled
+    /// into a regex.
     pub fn with_mime_type(pattern: &str, mime_type: &str) -> McpResult<Self> {
         let mut template = Self::new(pattern)?;
         template.mime_type = Some(mime_type.to_string());
         Ok(template)
     }
 
-    /// Add validation rule for a variable
+    /// Adds a validation rule for a variable.
     pub fn with_validator(mut self, variable: &str, validator: VariableValidator) -> Self {
         self.validators.insert(variable.to_string(), validator);
         self
@@ -143,7 +162,6 @@ impl UriTemplate {
             regex_pattern = regex_pattern.replace(&escaped_var, capture);
         }
 
-        // Anchor the pattern
         regex_pattern = format!("^{}$", regex_pattern);
 
         self.regex = Regex::new(&regex_pattern)
@@ -177,7 +195,12 @@ impl UriTemplate {
         }
     }
 
-    /// Resolve template with variables to create actual URI
+    /// Resolves the template with variables to create an actual URI.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::missing_param` if a template variable has no value, or
+    /// `McpError::invalid_param_type` if a value fails its validator.
     pub fn resolve(&self, variables: &HashMap<String, String>) -> McpResult<String> {
         let mut result = self.pattern.clone();
 
@@ -201,7 +224,13 @@ impl UriTemplate {
         Ok(result)
     }
 
-    /// Extract variables from a URI that matches this template
+    /// Extracts variables from a URI that matches this template.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::invalid_param_type` if the URI does not match the template,
+    /// a value is not valid UTF-8 after percent-decoding, a decoded value is rooted,
+    /// contains NUL or has a `.` or `..` segment, or a value fails its validator.
     pub fn extract(&self, uri: &str) -> McpResult<HashMap<String, String>> {
         let captures = self
             .regex
@@ -226,7 +255,7 @@ impl UriTemplate {
                 // RFC 6570: a simple `{var}` carries `/` as `%2F`, so a decoded
                 // value may contain `/`. It must stay relative and in place: not
                 // rooted (a path join would discard its base), no NUL, and not
-                // be, or contain, a `.` or `..` segment (ADR-007).
+                // be, or contain, a `.` or `..` segment.
                 if value.starts_with(['/', '\\'])
                     || value.contains('\0')
                     || value
@@ -254,55 +283,60 @@ impl UriTemplate {
         Ok(variables)
     }
 
-    /// Check if a URI matches this template
+    /// Checks whether a URI matches this template.
     pub fn matches(&self, uri: &str) -> bool {
         self.regex.is_match(uri)
     }
 
-    /// Get the MIME type for this template
+    /// Returns the MIME type for this template.
     pub fn mime_type(&self) -> Option<&str> {
         self.mime_type.as_deref()
     }
 
-    /// Get the original pattern
+    /// Returns the original pattern.
     pub fn pattern(&self) -> &str {
         &self.pattern
     }
 
-    /// Get variable names
+    /// Returns the variable names in order of appearance.
     pub fn variables(&self) -> &[String] {
         &self.variables
     }
 }
 
-/// Registry for managing URI templates
+/// Holds registered URI templates and looks them up by URI or pattern.
 #[derive(Debug, Default)]
 pub struct UriTemplateRegistry {
     templates: Vec<UriTemplate>,
 }
 
 impl UriTemplateRegistry {
-    /// Create a new empty registry
+    /// Creates a new empty registry.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Register a URI template
+    /// Registers a URI template.
     pub fn register(&mut self, template: UriTemplate) {
         self.templates.push(template);
     }
 
-    /// Find template that matches the given URI
+    /// Finds the first registered template that matches the given URI.
     pub fn find_matching(&self, uri: &str) -> Option<&UriTemplate> {
         self.templates.iter().find(|t| t.matches(uri))
     }
 
-    /// Get all registered templates
+    /// Returns all registered templates.
     pub fn templates(&self) -> &[UriTemplate] {
         &self.templates
     }
 
-    /// Resolve a template pattern with variables
+    /// Resolves a registered template pattern with variables.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::invalid_param_type` if no registered template has this
+    /// pattern, or any error from [`UriTemplate::resolve`].
     pub fn resolve_pattern(
         &self,
         pattern: &str,

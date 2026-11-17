@@ -1,6 +1,4 @@
-//! MCP Tool Trait
-//!
-//! This module defines the high-level trait for implementing MCP tools.
+//! The `McpTool` trait for implementing executable MCP tools, and tool-set fingerprinting.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,30 +10,28 @@ use turul_mcp_protocol::{CallToolResult, McpResult};
 
 use crate::session::SessionContext;
 
-/// High-level trait for implementing MCP tools
+/// Defines a tool that can be executed, extending `ToolDefinition` with a `call` method.
 ///
-/// McpTool extends ToolDefinition with execution capabilities.
-/// All metadata is provided by the ToolDefinition trait, ensuring
-/// consistency between concrete Tool structs and dynamic implementations.
+/// All metadata comes from the `ToolDefinition` trait, which keeps concrete
+/// tool structs and dynamic implementations consistent.
 #[async_trait]
 pub trait McpTool: ToolDefinition {
-    /// Execute the tool with full session support
+    /// Executes the tool with optional session support.
     ///
-    /// This is the primary execution method that tools should implement.
-    /// Returns a complete CallToolResponse with both content and structured data.
+    /// This is the primary execution method that tools implement. Returns a
+    /// `CallToolResult` carrying both content and structured data.
     async fn call(&self, args: Value, session: Option<SessionContext>)
     -> McpResult<CallToolResult>;
 }
 
-/// Converts an McpTool trait object to a protocol Tool descriptor
+/// Converts an [`McpTool`] trait object to a protocol `Tool` descriptor.
 ///
-/// This is now a thin wrapper around the ToolDefinition::to_tool() method
-/// for backward compatibility. New code should use tool.to_tool() directly.
+/// Thin wrapper around `ToolDefinition::to_tool()`.
 pub fn tool_to_descriptor(tool: &dyn McpTool) -> turul_mcp_protocol::Tool {
     tool.to_tool()
 }
 
-/// Compute a stable fingerprint of the tool set for session versioning.
+/// Computes a stable fingerprint of the tool set for session versioning.
 ///
 /// Produces a deterministic 16-char hex string from the full serialized `Tool`
 /// descriptors (as returned by `tools/list`). Any change to any advertised field
@@ -49,6 +45,10 @@ pub fn tool_to_descriptor(tool: &dyn McpTool) -> turul_mcp_protocol::Tool {
 /// `ToolSchema.additional`, nested `JsonSchema.properties`) have non-deterministic
 /// iteration order. The serialized JSON is canonicalized (all object keys sorted
 /// recursively) before hashing to ensure stability across processes and instances.
+///
+/// # Panics
+///
+/// Panics if a tool descriptor fails to serialize to JSON.
 pub fn compute_tool_fingerprint(tools: &HashMap<String, Arc<dyn McpTool>>) -> String {
     let mut tool_names: Vec<&String> = tools.keys().collect();
     tool_names.sort();
@@ -83,8 +83,9 @@ pub fn compute_tool_fingerprint(tools: &HashMap<String, Arc<dyn McpTool>>) -> St
     format!("{:016x}", hash)
 }
 
-/// Recursively sort all object keys in a JSON value for deterministic serialization.
-/// HashMap iteration order is non-deterministic in Rust; this ensures identical
+/// Recursively sorts all object keys in a JSON value for deterministic serialization.
+///
+/// `HashMap` iteration order is non-deterministic in Rust; sorting ensures identical
 /// logical structures always produce identical JSON strings.
 fn canonicalize_json(value: serde_json::Value) -> serde_json::Value {
     match value {
@@ -110,7 +111,6 @@ mod tests {
     use std::collections::HashMap;
     use turul_mcp_protocol::schema::JsonSchema;
     use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations, ToolResult, ToolSchema};
-    // Framework traits already imported via prelude at module level
 
     struct TestTool {
         input_schema: ToolSchema,
@@ -206,7 +206,6 @@ mod tests {
 
         assert_eq!(mcp_tool.name, "test");
         assert_eq!(mcp_tool.description, Some("A test tool".to_string()));
-        // ToolSchema doesn't have schema_type field anymore, check structure instead
         assert!(mcp_tool.input_schema.properties.is_some());
     }
 

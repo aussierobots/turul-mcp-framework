@@ -8,7 +8,7 @@ use crate::handlers::McpHandler;
 use crate::session::SessionContext;
 use turul_mcp_protocol::{McpError, McpResult};
 
-/// Advanced MCP request dispatcher with routing, middleware, and error handling
+/// Dispatches MCP requests through middleware to handlers matched by exact method, pattern, or default.
 pub struct McpDispatcher {
     /// Route handlers mapped by method pattern
     route_handlers: HashMap<String, Arc<dyn McpHandler>>,
@@ -20,10 +20,12 @@ pub struct McpDispatcher {
     default_handler: Option<Arc<dyn McpHandler>>,
 }
 
-/// Middleware trait for request processing pipeline
+/// Middleware run before and after a request is routed to its handler.
 #[async_trait]
 pub trait DispatchMiddleware: Send + Sync {
-    /// Process request before routing (return None to continue, Some(Value) to short-circuit)
+    /// Processes a request before routing.
+    ///
+    /// Returns `None` to continue, or `Some(result)` to short-circuit with that result.
     async fn before_dispatch(
         &self,
         method: &str,
@@ -31,7 +33,7 @@ pub trait DispatchMiddleware: Send + Sync {
         session: Option<&SessionContext>,
     ) -> Option<McpResult<Value>>;
 
-    /// Process response after routing
+    /// Processes the handler's result after routing and returns the result to pass on.
     async fn after_dispatch(
         &self,
         method: &str,
@@ -40,15 +42,20 @@ pub trait DispatchMiddleware: Send + Sync {
     ) -> McpResult<Value>;
 }
 
-/// Request context for dispatch processing
+/// Request context for dispatch processing.
 pub struct DispatchContext {
+    /// JSON-RPC method name being dispatched.
     pub method: String,
+    /// Request parameters, if any.
     pub params: Option<Value>,
+    /// Session the request belongs to, if any.
     pub session: Option<SessionContext>,
+    /// Free-form values shared between dispatch stages.
     pub metadata: HashMap<String, Value>,
 }
 
 impl McpDispatcher {
+    /// Creates a dispatcher with no handlers or middleware.
     pub fn new() -> Self {
         Self {
             route_handlers: HashMap::new(),
@@ -58,13 +65,13 @@ impl McpDispatcher {
         }
     }
 
-    /// Register a handler for exact method matching
+    /// Registers a handler for exact method matching.
     pub fn register_exact_handler(mut self, method: String, handler: Arc<dyn McpHandler>) -> Self {
         self.route_handlers.insert(method, handler);
         self
     }
 
-    /// Register a handler for pattern matching (e.g., "tools/*")
+    /// Registers a handler for pattern matching (e.g., `tools/*`).
     pub fn register_pattern_handler(
         mut self,
         pattern: String,
@@ -74,19 +81,26 @@ impl McpDispatcher {
         self
     }
 
-    /// Register middleware
+    /// Registers middleware.
+    ///
+    /// `before_dispatch` runs in registration order; `after_dispatch` runs in reverse order.
     pub fn register_middleware(mut self, middleware: Arc<dyn DispatchMiddleware>) -> Self {
         self.middleware.push(middleware);
         self
     }
 
-    /// Set default fallback handler
+    /// Sets the default fallback handler.
     pub fn set_default_handler(mut self, handler: Arc<dyn McpHandler>) -> Self {
         self.default_handler = Some(handler);
         self
     }
 
-    /// Dispatch a request through the routing and middleware pipeline
+    /// Dispatches a request through the routing and middleware pipeline.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::InvalidParameters` when no exact, pattern, or default handler
+    /// matches `method`; otherwise returns the handler's or middleware's result.
     #[instrument(skip(self, params, session))]
     pub async fn dispatch(
         &self,
@@ -96,7 +110,6 @@ impl McpDispatcher {
     ) -> McpResult<Value> {
         debug!("Dispatching request: method={}", method);
 
-        // Run before-dispatch middleware
         for middleware in &self.middleware {
             if let Some(result) = middleware
                 .before_dispatch(method, params.as_ref(), session.as_ref())
@@ -107,13 +120,10 @@ impl McpDispatcher {
             }
         }
 
-        // Find appropriate handler
         let handler = self.find_handler(method)?;
 
-        // Execute handler
         let mut result = handler.handle_with_session(params, session.clone()).await;
 
-        // Run after-dispatch middleware (in reverse order)
         for middleware in self.middleware.iter().rev() {
             result = middleware
                 .after_dispatch(method, &result, session.as_ref())
@@ -123,15 +133,13 @@ impl McpDispatcher {
         result
     }
 
-    /// Find the appropriate handler for a method
+    /// Finds the handler for a method: exact match, then patterns in registration order, then the default.
     fn find_handler(&self, method: &str) -> McpResult<&Arc<dyn McpHandler>> {
-        // Try exact match first
         if let Some(handler) = self.route_handlers.get(method) {
             debug!("Found exact handler for method: {}", method);
             return Ok(handler);
         }
 
-        // Try pattern matching
         for (pattern, handler) in &self.pattern_handlers {
             if self.matches_pattern(method, pattern) {
                 debug!("Found pattern handler '{}' for method: {}", pattern, method);
@@ -139,7 +147,6 @@ impl McpDispatcher {
             }
         }
 
-        // Try default handler
         if let Some(ref handler) = self.default_handler {
             debug!("Using default handler for method: {}", method);
             return Ok(handler);
@@ -152,26 +159,26 @@ impl McpDispatcher {
         )))
     }
 
-    /// Check if a method matches a pattern (supports wildcards)
+    /// Returns whether a method matches a pattern.
+    ///
+    /// A trailing `/*` matches any non-empty suffix after the prefix; any other `*` never matches;
+    /// a pattern without `*` must equal the method.
     fn matches_pattern(&self, method: &str, pattern: &str) -> bool {
         if let Some(prefix) = pattern.strip_suffix("/*") {
             method.starts_with(prefix) && method.len() > prefix.len()
         } else if pattern.contains('*') {
-            // More sophisticated glob matching could be implemented here
             false
         } else {
             method == pattern
         }
     }
 
-    /// Get all registered methods and patterns
+    /// Returns all registered exact methods and patterns, sorted.
     pub fn get_supported_methods(&self) -> Vec<String> {
         let mut methods = Vec::new();
 
-        // Add exact methods
         methods.extend(self.route_handlers.keys().cloned());
 
-        // Add patterns
         methods.extend(
             self.pattern_handlers
                 .iter()
@@ -189,7 +196,10 @@ impl Default for McpDispatcher {
     }
 }
 
-/// Logging middleware for request/response tracking
+/// Middleware that logs requests and responses at debug level.
+///
+/// `after_dispatch` returns `Ok` values unchanged and re-wraps any error as
+/// `McpError::InvalidParameters` carrying the original error's message.
 pub struct LoggingMiddleware;
 
 #[async_trait]
@@ -250,11 +260,11 @@ impl DispatchMiddleware for LoggingMiddleware {
     }
 }
 
-/// Rate limiting middleware
-pub struct RateLimitingMiddleware {
-    // Rate limiting could be implemented here
-    // For now, this is a placeholder
-}
+/// Placeholder middleware that does not limit requests.
+///
+/// `before_dispatch` always continues; `after_dispatch` returns `Ok` values unchanged and
+/// re-wraps any error as `McpError::InvalidParameters`.
+pub struct RateLimitingMiddleware {}
 
 #[async_trait]
 impl DispatchMiddleware for RateLimitingMiddleware {
@@ -264,7 +274,6 @@ impl DispatchMiddleware for RateLimitingMiddleware {
         _params: Option<&Value>,
         _session: Option<&SessionContext>,
     ) -> Option<McpResult<Value>> {
-        // Rate limiting logic would go here
         None
     }
 

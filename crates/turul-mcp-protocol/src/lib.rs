@@ -8,7 +8,7 @@
 //! 2025-11-25 spec is an opt-in lane selected by a Cargo feature; the two are
 //! mutually exclusive and exactly one must be active.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```toml
 //! [dependencies]
@@ -64,7 +64,7 @@ pub use turul_mcp_protocol_2025_11_25::*;
 #[cfg(feature = "protocol-2026-07-28")]
 pub use turul_mcp_protocol_2026_07_28::*;
 
-// Explicitly re-export the prelude module for convenient imports.
+/// Common imports for the selected spec lane: `use turul_mcp_protocol::prelude::*;`.
 pub mod prelude {
     #[cfg(feature = "protocol-2025-11-25")]
     pub use turul_mcp_protocol_2025_11_25::prelude::*;
@@ -72,7 +72,7 @@ pub mod prelude {
     pub use turul_mcp_protocol_2026_07_28::prelude::*;
 }
 
-/// The current MCP protocol version implemented by this crate
+/// The MCP protocol version string of the active spec lane.
 pub const CURRENT_VERSION: &str = MCP_VERSION;
 
 #[cfg(test)]
@@ -109,7 +109,6 @@ mod tests {
 
     #[test]
     fn test_re_exports_work() {
-        // Test that we can create basic types
         let _impl = Implementation::new("test", "1.0.0");
         let _capabilities = ClientCapabilities::default();
         let _tool = Tool::new("test", ToolSchema::object());
@@ -121,7 +120,6 @@ mod tests {
     fn test_prelude_works() {
         use crate::prelude::*;
 
-        // Test that prelude types are available
         let _tool = Tool::new("test", ToolSchema::object());
         let _resource = Resource::new("test://resource", "test_resource");
         let _prompt = Prompt::new("test_prompt");

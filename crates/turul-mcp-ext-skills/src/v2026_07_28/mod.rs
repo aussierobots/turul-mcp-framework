@@ -1,4 +1,4 @@
-//! The Skills extension surface for the 2026-07-28 spec line (ADR-033).
+//! The Skills extension surface for the 2026-07-28 spec line.
 
 pub mod capability;
 pub mod entry;

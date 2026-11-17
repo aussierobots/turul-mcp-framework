@@ -1,7 +1,7 @@
-//! CORS (Cross-Origin Resource Sharing) support for Lambda MCP servers
+//! CORS (Cross-Origin Resource Sharing) support for Lambda MCP servers.
 //!
-//! This module provides CORS header injection for Lambda responses, since Tower
-//! middleware cannot be used in the Lambda execution environment.
+//! Injects CORS headers into Lambda responses, since Tower middleware cannot be
+//! used in the Lambda execution environment.
 
 use std::collections::HashSet;
 
@@ -11,7 +11,7 @@ use tracing::debug;
 
 use crate::error::{LambdaError, Result};
 
-/// CORS configuration for Lambda MCP servers
+/// CORS configuration for Lambda MCP servers.
 #[derive(Debug, Clone)]
 pub struct CorsConfig {
     /// Allowed origins for CORS requests
@@ -69,12 +69,12 @@ impl Default for CorsConfig {
 }
 
 impl CorsConfig {
-    /// Create a CORS config that allows all origins (for development)
+    /// Creates a CORS config that allows all origins (for development).
     pub fn allow_all() -> Self {
         Self::default()
     }
 
-    /// Create a CORS config for specific origins
+    /// Creates a CORS config that allows only the given origins.
     pub fn for_origins(origins: Vec<String>) -> Self {
         Self {
             allowed_origins: origins,
@@ -82,7 +82,10 @@ impl CorsConfig {
         }
     }
 
-    /// Create a CORS config from environment variables
+    /// Creates a CORS config from the `MCP_CORS_ORIGINS`, `MCP_CORS_CREDENTIALS` and
+    /// `MCP_CORS_MAX_AGE` environment variables.
+    ///
+    /// Unset variables fall back to the defaults.
     pub fn from_env() -> Self {
         let allowed_origins = std::env::var("MCP_CORS_ORIGINS")
             .map(|s| s.split(',').map(|s| s.trim().to_string()).collect())
@@ -105,10 +108,16 @@ impl CorsConfig {
     }
 }
 
-/// Inject CORS headers into a Lambda response (generic over body type)
+/// Injects CORS headers into a Lambda response, generic over the body type.
 ///
-/// This function adds the appropriate CORS headers based on the configuration
-/// and the incoming request's Origin header.
+/// Adds the CORS headers selected by the configuration and the request's Origin
+/// header. A response that already carries `Access-Control-Allow-Origin` is left
+/// unchanged.
+///
+/// # Errors
+///
+/// Returns [`LambdaError::Cors`] when a configured origin, method, header or max-age
+/// value is not a valid HTTP header value.
 pub fn inject_cors_headers<B>(
     response: &mut lambda_http::Response<B>,
     config: &CorsConfig,
@@ -117,7 +126,7 @@ pub fn inject_cors_headers<B>(
     debug!("Injecting CORS headers for origin: {:?}", request_origin);
 
     // A response that already carries CORS (a custom route that owns its
-    // headers, e.g. a Server Card — ADR-038 §4) keeps it.
+    // headers, e.g. a Server Card) keeps it.
     if response
         .headers()
         .contains_key("Access-Control-Allow-Origin")
@@ -125,7 +134,6 @@ pub fn inject_cors_headers<B>(
         return Ok(());
     }
 
-    // Determine allowed origin
     let allowed_origin = determine_allowed_origin(config, request_origin);
 
     if let Some(origin) = allowed_origin {
@@ -136,7 +144,6 @@ pub fn inject_cors_headers<B>(
         );
     }
 
-    // Add allowed methods
     let methods_str = config
         .allowed_methods
         .iter()
@@ -149,7 +156,6 @@ pub fn inject_cors_headers<B>(
             .map_err(|e| LambdaError::Cors(format!("Invalid methods: {}", e)))?,
     );
 
-    // Add allowed headers
     if !config.allowed_headers.is_empty() {
         let headers_str = config.allowed_headers.join(", ");
         response.headers_mut().insert(
@@ -159,7 +165,6 @@ pub fn inject_cors_headers<B>(
         );
     }
 
-    // Add exposed headers
     if !config.expose_headers.is_empty() {
         let expose_str = config.expose_headers.join(", ");
         response.headers_mut().insert(
@@ -169,7 +174,6 @@ pub fn inject_cors_headers<B>(
         );
     }
 
-    // Add credentials if allowed
     if config.allow_credentials {
         response.headers_mut().insert(
             "Access-Control-Allow-Credentials",
@@ -190,9 +194,14 @@ pub fn inject_cors_headers<B>(
     Ok(())
 }
 
-/// Create a CORS preflight response
+/// Creates a CORS preflight response.
 ///
-/// Handles OPTIONS requests that browsers send before making actual CORS requests.
+/// Answers the OPTIONS requests that browsers send before making actual CORS requests.
+///
+/// # Errors
+///
+/// Returns [`LambdaError::Http`] if the response cannot be built, or
+/// [`LambdaError::Cors`] if header injection fails (see [`inject_cors_headers`]).
 pub fn create_preflight_response(
     config: &CorsConfig,
     request_origin: Option<&str>,
@@ -209,7 +218,7 @@ pub fn create_preflight_response(
     Ok(response)
 }
 
-/// Determine the allowed origin based on configuration and request
+/// Returns the origin to echo in `Access-Control-Allow-Origin`, or `None` when no header should be set.
 fn determine_allowed_origin(config: &CorsConfig, request_origin: Option<&str>) -> Option<String> {
     // If wildcard is configured, return it
     if config.allowed_origins.contains(&"*".to_string()) {
@@ -228,7 +237,13 @@ fn determine_allowed_origin(config: &CorsConfig, request_origin: Option<&str>) -
     }
 }
 
-/// Validate CORS configuration
+/// Validates a CORS configuration.
+///
+/// # Errors
+///
+/// Returns [`LambdaError::Cors`] when credentials are enabled together with a `*` origin,
+/// when an origin other than `*` does not start with `http://` or `https://`, or when
+/// `allowed_headers` contains duplicates.
 pub fn validate_config(config: &CorsConfig) -> Result<()> {
     // Check for wildcard with credentials (security issue)
     if config.allow_credentials && config.allowed_origins.contains(&"*".to_string()) {

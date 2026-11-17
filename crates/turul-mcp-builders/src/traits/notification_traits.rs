@@ -6,29 +6,34 @@ use serde_json::Value;
 use std::collections::HashMap;
 use turul_mcp_protocol::notifications::{Notification, NotificationParams};
 
+/// Supplies the method name and delivery hints of a notification.
 pub trait HasNotificationMetadata {
-    /// The notification method name
+    /// Returns the notification method name.
     fn method(&self) -> &str;
 
-    /// Optional notification type or category
+    /// Returns the optional notification type or category.
     fn notification_type(&self) -> Option<&str> {
         None
     }
 
-    /// Whether this notification requires acknowledgment
+    /// Returns whether this notification requires acknowledgment.
     fn requires_ack(&self) -> bool {
         false
     }
 }
 
-/// Trait for notification payload and data structure
+/// Supplies the notification payload and serializes it.
 pub trait HasNotificationPayload {
-    /// Get the notification payload data (owned Value for computed serialization)
+    /// Returns the payload as an owned `Value`, so it can be computed on demand.
     fn payload(&self) -> Option<Value> {
         None
     }
 
-    /// Serialize notification to JSON
+    /// Serializes the payload to a JSON string, or `{}` when there is no payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns the `serde_json` failure message when the payload cannot be serialized.
     fn serialize_payload(&self) -> Result<String, String> {
         match self.payload() {
             Some(data) => {
@@ -39,30 +44,30 @@ pub trait HasNotificationPayload {
     }
 }
 
-/// Trait for notification delivery rules and filtering
+/// Supplies notification delivery rules: priority, batching, retries and filtering.
 pub trait HasNotificationRules {
-    /// Optional delivery priority (higher = more important)
+    /// Returns the delivery priority; higher is more important.
     fn priority(&self) -> u32 {
         0
     }
 
-    /// Whether this notification can be batched with others
+    /// Returns whether this notification can be batched with others.
     fn can_batch(&self) -> bool {
         true
     }
 
-    /// Maximum retry attempts for delivery
+    /// Returns the maximum retry attempts for delivery.
     fn max_retries(&self) -> u32 {
         3
     }
 
-    /// Check if notification should be delivered
+    /// Returns whether this notification should be delivered.
     fn should_deliver(&self) -> bool {
         true
     }
 }
 
-/// **Complete MCP Notification Creation** - Build real-time event broadcasting systems.
+/// Defines a complete MCP notification that broadcasts a real-time event with a structured payload.
 ///
 /// This trait represents a **complete, working MCP notification** that can broadcast
 /// real-time events to connected clients with structured payloads and routing rules.
@@ -152,7 +157,7 @@ pub trait HasNotificationRules {
 pub trait NotificationDefinition:
     HasNotificationMetadata + HasNotificationPayload + HasNotificationRules
 {
-    /// Convert this notification definition to a base Notification
+    /// Converts this notification definition to a base [`Notification`].
     fn to_notification(&self) -> Notification {
         let mut notification = Notification::new(self.method());
         if let Some(payload) = self.payload() {
@@ -166,7 +171,11 @@ pub trait NotificationDefinition:
         notification
     }
 
-    /// Validate this notification
+    /// Validates this notification.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the method is empty or does not start with `notifications/`.
     fn validate(&self) -> Result<(), String> {
         if self.method().is_empty() {
             return Err("Notification method cannot be empty".to_string());

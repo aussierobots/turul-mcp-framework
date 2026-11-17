@@ -21,7 +21,7 @@ pub const SERVER_DISCOVER_METHOD: &str = "server/discover";
 
 /// Client → server `server/discover` request.
 ///
-/// `DiscoverRequest extends JSONRPCRequest { method: "server/discover", params: RequestParams }`.
+/// Mirrors the schema's `DiscoverRequest extends JSONRPCRequest { method: "server/discover", params: RequestParams }`.
 ///
 /// The `jsonrpc: "2.0"` and `id` fields are supplied by the
 /// [`JsonRpcRequest`](crate::JsonRpcRequest) envelope when this typed
@@ -32,15 +32,14 @@ pub struct DiscoverRequest {
     /// Always `"server/discover"`.
     pub method: String,
 
-    /// Standard request params; carries `_meta: RequestMetaObject` in spec-strict
-    /// usage. Today's [`RequestParams`](crate::json_rpc::RequestParams) keeps
-    /// `_meta` optional transitionally.
+    /// Standard request params; carries the required
+    /// `_meta: RequestMetaObject` (see [`RequestParams`](crate::json_rpc::RequestParams)).
     pub params: crate::json_rpc::RequestParams,
 }
 
 impl DiscoverRequest {
-    /// Construct a discover request with the required `_meta` (per-request
-    /// capability negotiation, mandatory in 2026-07-28 stateless core).
+    /// Creates a discover request with the required `_meta` (per-request
+    /// capability negotiation, mandatory in the 2026-07-28 stateless core).
     pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: SERVER_DISCOVER_METHOD.to_string(),
@@ -48,7 +47,7 @@ impl DiscoverRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Replaces the request params with a fully-constructed params struct.
     pub fn with_params(mut self, params: crate::json_rpc::RequestParams) -> Self {
         self.params = params;
         self
@@ -94,7 +93,7 @@ pub struct DiscoverResult {
 }
 
 impl DiscoverResult {
-    /// Construct with the two required fields. Cache hint defaults to
+    /// Creates a result from the two required fields. The cache hint defaults to
     /// immediately-stale public (`ttlMs=0`, `cacheScope=public`);
     /// `instructions` and `_meta` start `None`.
     pub fn new(supported_versions: Vec<String>, capabilities: ServerCapabilities) -> Self {
@@ -109,21 +108,21 @@ impl DiscoverResult {
         }
     }
 
-    /// Attach the responding server's identity under
+    /// Attaches the responding server's identity under
     /// `_meta.io.modelcontextprotocol/serverInfo`.
     pub fn with_server_info(mut self, info: Implementation) -> Self {
         self.meta.get_or_insert_with(Default::default).server_info = Some(info);
         self
     }
 
-    /// Set the cache-control hint (`ttlMs` + `cacheScope`).
+    /// Sets the cache-control hint (`ttlMs` + `cacheScope`).
     pub fn with_cache(mut self, ttl_ms: f64, cache_scope: crate::caching::CacheScope) -> Self {
         self.ttl_ms = ttl_ms;
         self.cache_scope = cache_scope;
         self
     }
 
-    /// Attach natural-language guidance.
+    /// Attaches natural-language guidance.
     pub fn with_instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = Some(instructions.into());
         self
@@ -140,10 +139,12 @@ pub struct DiscoverResultResponse {
     pub jsonrpc: String,
     /// Request id this response is for.
     pub id: Value,
+    /// The discover result payload.
     pub result: DiscoverResult,
 }
 
 impl DiscoverResultResponse {
+    /// Creates a response for request `id` carrying `result`.
     pub fn new(id: Value, result: DiscoverResult) -> Self {
         Self {
             jsonrpc: crate::json_rpc::JSONRPC_VERSION.to_string(),
@@ -229,7 +230,7 @@ mod tests {
 
     #[test]
     fn discover_request_satisfies_rpc_trait() {
-        // Generic function over the A8 trait abstraction.
+        // Generic function over the `DiscoverRequestTrait` abstraction.
         fn method_via_trait<R: crate::traits::DiscoverRequestTrait>(r: &R) -> &str {
             r.method_string()
         }

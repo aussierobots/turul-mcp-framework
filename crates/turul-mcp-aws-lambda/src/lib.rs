@@ -69,6 +69,7 @@
 //! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server) for tools, resources and prompts
 //! - [Examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 pub mod adapter;
 pub mod builder;
 pub mod error;
@@ -89,7 +90,7 @@ pub use builder::LambdaMcpServerBuilder;
 pub use error::{LambdaError, Result};
 /// Lambda request handler with session management and protocol conversion
 pub use handler::LambdaMcpHandler;
-/// Core Lambda MCP server implementation with DynamoDB integration
+/// Lambda MCP server that wraps the core server with Lambda transport
 pub use server::LambdaMcpServer;
 
 #[cfg(feature = "cors")]
@@ -113,7 +114,7 @@ enum RuntimeEventClassification {
     UnrecognizedEvent,
 }
 
-/// Classify a raw JSON payload into one of three categories.
+/// Classifies a raw JSON payload into one of three categories.
 ///
 /// Order matters:
 /// 1. Try API Gateway/ALB/WebSocket deserialization first (most common path)
@@ -167,7 +168,7 @@ struct HandleResult {
     event_type: &'static str,
 }
 
-/// Process a raw Lambda runtime payload into a streaming response.
+/// Processes a raw Lambda runtime payload into a streaming response.
 ///
 /// Classifies the payload via [`classify_runtime_event()`], dispatches API
 /// Gateway events through `dispatch`, and acknowledges non-API payloads with
@@ -206,7 +207,7 @@ where
     }
 }
 
-/// Map an event type string to the appropriate tracing log level.
+/// Maps an event type string to the appropriate tracing log level.
 ///
 /// Returns `Some(Level::WARN)` for unrecognized payloads (surfaced in
 /// CloudWatch), `Some(Level::DEBUG)` for completion acks (normally silent),
@@ -219,7 +220,7 @@ fn event_log_level(event_type: &str) -> Option<tracing::Level> {
     }
 }
 
-/// Run the Lambda MCP handler with streaming response support.
+/// Runs the Lambda MCP handler with streaming response support.
 ///
 /// This replaces `lambda_http::run_with_streaming_response(service_fn(...))` and
 /// gracefully handles API Gateway streaming completion invocations that would
@@ -245,9 +246,18 @@ fn event_log_level(event_type: &str) -> Option<tracing::Level> {
 ///
 /// ## Usage
 ///
-/// ```rust,ignore
-/// let handler = server.handler().await?;
-/// turul_mcp_aws_lambda::run_streaming(handler).await
+/// ```rust,no_run
+/// use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+///
+/// # async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+/// let handler = LambdaMcpServerBuilder::new()
+///     .build()
+///     .await?
+///     .handler()
+///     .await?;
+/// turul_mcp_aws_lambda::run_streaming(handler).await?;
+/// # Ok(())
+/// # }
 /// ```
 pub async fn run_streaming(
     handler: LambdaMcpHandler,
@@ -284,7 +294,7 @@ pub async fn run_streaming(
     .await
 }
 
-/// Run a custom dispatch function with streaming response support.
+/// Runs a custom dispatch function with streaming response support.
 ///
 /// Like [`run_streaming()`], but accepts a custom dispatch closure instead of
 /// a [`LambdaMcpHandler`]. Use this when you need pre-dispatch logic
@@ -296,14 +306,24 @@ pub async fn run_streaming(
 ///
 /// ## Usage
 ///
-/// ```rust,ignore
-/// async fn lambda_handler(request: Request) -> Result<Response, Error> {
-///     // pre-dispatch logic here (e.g., .well-known short-circuit)
-///     let handler = HANDLER.get_or_try_init(|| async { ... }).await?;
-///     handler.handle_streaming(request).await
-/// }
+/// ```rust,no_run
+/// use lambda_http::{Error, Request};
+/// use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
 ///
-/// turul_mcp_aws_lambda::run_streaming_with(lambda_handler).await
+/// # async fn run() -> Result<(), Error> {
+/// let handler = LambdaMcpServerBuilder::new()
+///     .build()
+///     .await?
+///     .handler()
+///     .await?;
+///
+/// turul_mcp_aws_lambda::run_streaming_with(move |request: Request| {
+///     // pre-dispatch logic here (e.g., .well-known short-circuit)
+///     let handler = handler.clone();
+///     async move { handler.handle_streaming(request).await }
+/// })
+/// .await
+/// # }
 /// ```
 pub async fn run_streaming_with<F, Fut>(dispatch: F) -> std::result::Result<(), lambda_http::Error>
 where
@@ -356,8 +376,6 @@ where
 /// frame. For zero-frame bodies, it emits one zero-length `Bytes` data
 /// frame, which satisfies the multipart framing contract without
 /// changing the visible response body.
-///
-/// See ADR-026.
 struct EnsureOneFrame<B> {
     inner: B,
     /// Tracks whether we have observed (or fabricated) the first data
@@ -435,7 +453,7 @@ where
     }
 }
 
-/// Convert an HTTP response into a Lambda `StreamResponse`.
+/// Converts an HTTP response into a Lambda `StreamResponse`.
 ///
 /// Replicates `lambda_http::streaming::into_stream_response` (which is private)
 /// by extracting status/headers/cookies into `MetadataPrelude` and converting
@@ -443,7 +461,7 @@ where
 ///
 /// The body is wrapped in [`EnsureOneFrame`] to guarantee the resulting
 /// stream yields at least one chunk — Lambda Response Streaming framing
-/// requires this. See ADR-026.
+/// requires this.
 fn into_lambda_stream_response<B>(
     response: http::Response<B>,
 ) -> lambda_runtime::StreamResponse<http_body_util::BodyDataStream<EnsureOneFrame<B>>>
@@ -476,7 +494,7 @@ where
     }
 }
 
-/// Build an empty 200 response for acknowledging completion invocations.
+/// Builds an empty 200 response for acknowledging completion invocations.
 fn empty_streaming_response()
 -> http::Response<http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>> {
     use http_body_util::{BodyExt, Full};
@@ -563,7 +581,7 @@ mod streaming_completion_tests {
         ));
     }
 
-    // ── R5: Precedence edge case ──
+    // ── Precedence edge case ──
 
     #[test]
     fn test_classify_completion_with_api_like_fields() {
@@ -639,7 +657,7 @@ mod streaming_completion_tests {
 
     #[test]
     fn test_classify_never_panics_on_arbitrary_json() {
-        // R4: Only assert no panics — no brittle !ApiGatewayEvent assertion.
+        // Only assert no panics — no brittle !ApiGatewayEvent assertion.
         let payloads = vec![
             json!(null),
             json!(true),
@@ -691,7 +709,7 @@ mod streaming_completion_tests {
         }
     }
 
-    // ── event_log_level contract tests (R1) ──
+    // ── event_log_level contract tests ──
 
     #[test]
     fn test_unrecognized_logs_at_warn_level() {
@@ -714,7 +732,7 @@ mod streaming_completion_tests {
         assert_eq!(event_log_level("api_gateway_event"), None);
     }
 
-    // ── handle_runtime_payload action-path tests (R3) ──
+    // ── handle_runtime_payload action-path tests ──
 
     #[tokio::test]
     async fn test_handle_completion_does_not_dispatch() {
@@ -966,7 +984,7 @@ mod streaming_completion_tests {
     // after the function timeout while the dispatch closure already
     // returned `Ok(resp)`.
     //
-    // Contract these tests enforce (ADR-026): the framework MUST produce
+    // Contract these tests enforce: the framework MUST produce
     // a Lambda streaming response whose `BodyDataStream` yields at least
     // one data frame for any input `Response<B>`, including bodies that
     // would otherwise produce zero data frames natively.

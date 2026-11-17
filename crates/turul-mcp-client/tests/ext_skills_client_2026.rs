@@ -2,8 +2,8 @@
     feature = "ext-skills",
     any(feature = "client-bilingual", feature = "client-2026-07-28-only")
 ))]
-//! Skills extension client — the executable contract of ADR-033 §6 (host
-//! clauses C-1 to C-8). A wiremock peer serves crafted and tampered entries;
+//! Skills extension client — the executable contract of the host
+//! clauses C-1 to C-8. A wiremock peer serves crafted and tampered entries;
 //! one test runs against the real `turul-mcp-server`.
 
 use serde_json::{Value, json};
@@ -249,8 +249,7 @@ async fn c5_frontmatter_discrepancy_refused() {
     assert!(reason.contains("frontmatter"), "{reason}");
 }
 
-/// C-5 / ADR-033 §6: frontmatter our parser cannot render faithfully (a typed
-/// C-5 / ADR-033 §9: a typed value both YAML schemas agree on verifies.
+/// C-5: a typed value both YAML schemas agree on verifies.
 #[tokio::test]
 async fn c5_typed_frontmatter_verifies() {
     let md = "---\nname: demo\ndescription: Does demo.\nversion: 1.0\n---\n";
@@ -266,7 +265,7 @@ async fn c5_typed_frontmatter_verifies() {
     c.skill_fetch(&skill, SKILL_URI).await.unwrap();
 }
 
-/// C-5 / ADR-033 §9: a value YAML 1.1 and 1.2 read differently cannot be
+/// C-5: a value YAML 1.1 and 1.2 read differently cannot be
 /// verified and fails closed.
 #[tokio::test]
 async fn c5_schema_disagreement_fails_closed() {
@@ -432,7 +431,7 @@ async fn c8_directory_read_refused_without_declaration() {
     );
 }
 
-/// ADR-033 §7: with `directoryRead: true`, the call returns the direct children.
+/// C-8: with `directoryRead: true`, the call returns the direct children.
 #[tokio::test]
 async fn c8_directory_read_lists_children() {
     let children = json!([

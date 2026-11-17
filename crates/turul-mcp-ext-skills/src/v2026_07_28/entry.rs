@@ -1,5 +1,5 @@
 //! [`SkillEntry::from_files`]: the only path from a skill's files to a
-//! [`Skill`] wire entry (ADR-033 §1). It composes the owners: validation by
+//! [`Skill`] wire entry. It composes the owners: validation by
 //! `turul-agent-skills`, then [`Frontmatter`], [`SkillPath`] and [`Manifest`].
 
 use std::collections::BTreeMap;
@@ -16,11 +16,14 @@ use super::uri::{SkillPath, UriError};
 /// its raw bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkillFile {
+    /// `/`-separated path relative to the skill root.
     pub relative_path: String,
+    /// The file's raw contents.
     pub bytes: Vec<u8>,
 }
 
 impl SkillFile {
+    /// Creates a file from its skill-relative path and its bytes.
     pub fn new(relative_path: impl Into<String>, bytes: impl Into<Vec<u8>>) -> Self {
         Self {
             relative_path: relative_path.into(),
@@ -32,35 +35,62 @@ impl SkillFile {
 /// Why a skill cannot be published. Every variant names the skill.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum EntryError {
+    /// A file's relative path cannot form a URI inside the skill.
     #[error("skill {skill}: {source}")]
-    Uri { skill: String, source: UriError },
+    Uri {
+        /// The skill's `SKILL.md` URI.
+        skill: String,
+        /// Why the file path was refused.
+        source: UriError,
+    },
+    /// None of the skill's files is `SKILL.md`.
     #[error("skill {0}: no SKILL.md among its files")]
     NoSkillMd(String),
+    /// The bytes of `SKILL.md` are not valid UTF-8.
     #[error("skill {0}: SKILL.md is not UTF-8")]
     SkillMdNotUtf8(String),
     /// `turul-agent-skills` refused the skill, or loaded it only with diagnostics.
     #[error("skill {skill}: does not validate: {}", errors.join("; "))]
-    Invalid { skill: String, errors: Vec<String> },
+    Invalid {
+        /// The skill's `SKILL.md` URI.
+        skill: String,
+        /// Validation messages, one per diagnostic.
+        errors: Vec<String>,
+    },
+    /// The `SKILL.md` frontmatter has no unambiguous JSON form.
     #[error("skill {skill}: {source}")]
     Frontmatter {
+        /// The skill's `SKILL.md` URI.
         skill: String,
+        /// Why the frontmatter was refused.
         source: FrontmatterError,
     },
+    /// The skill's files do not form a valid manifest.
     #[error("skill {skill}: {source}")]
     Manifest {
+        /// The skill's `SKILL.md` URI.
         skill: String,
+        /// Why the manifest was refused.
         source: ManifestError,
     },
     /// A file of the skill directory could not be listed or read.
     #[error("skill {skill}: cannot read {file}: {message}")]
     Read {
+        /// The skill's `SKILL.md` URI.
         skill: String,
+        /// Skill-relative path of the file, or `.` for the directory itself.
         file: String,
+        /// The underlying I/O error text.
         message: String,
     },
     /// A symlink in the skill resolves outside the skill directory.
     #[error("skill {skill}: {file} is a symlink to a target outside the skill directory")]
-    SymlinkEscapes { skill: String, file: String },
+    SymlinkEscapes {
+        /// The skill's `SKILL.md` URI.
+        skill: String,
+        /// Skill-relative path of the symlink.
+        file: String,
+    },
 }
 
 /// A publishable skill: its path, frontmatter, manifest and the exact bytes the
@@ -74,10 +104,11 @@ pub struct SkillEntry {
 }
 
 impl SkillEntry {
-    /// Build the entry for the skill directory `dir` (ADR-033 §5,
-    /// "Directory-backed entries"): validated by `turul_agent_skills::load`, files
-    /// listed by `turul_agent_skills::bundled_files`, bytes read here. A symlink is
-    /// read only when its canonical target is inside the canonical `dir`.
+    /// Builds the entry for the skill directory `dir`.
+    ///
+    /// The skill is validated by `turul_agent_skills::load`, its files are listed
+    /// by `turul_agent_skills::bundled_files`, and their bytes are read here. A
+    /// symlink is read only when its canonical target is inside the canonical `dir`.
     pub fn from_dir(path: SkillPath, dir: &Path) -> Result<Self, EntryError> {
         let skill = path.skill_md_uri();
         let read_err = |file: &str, e: std::io::Error| EntryError::Read {
@@ -120,7 +151,7 @@ impl SkillEntry {
         Self::from_files(path, files)
     }
 
-    /// Build the entry for the skill at `path` from all of its files.
+    /// Builds the entry for the skill at `path` from all of its files.
     ///
     /// `files` must be the complete contents of the skill directory, nested
     /// skills included (`skills.mdx` §Resources); completeness is the caller's
@@ -140,7 +171,7 @@ impl SkillEntry {
             skill: skill.clone(),
             errors: skip.errors.iter().map(ToString::to_string).collect(),
         })?;
-        // An unknown field is kept as an extension and passes through (ADR-033 §3).
+        // An unknown field is kept as an extension and passes through.
         let refusals: Vec<String> = loaded
             .diagnostics
             .iter()
@@ -185,6 +216,7 @@ impl SkillEntry {
         })
     }
 
+    /// Returns the skill's path: its prefix segments and name.
     pub fn path(&self) -> &SkillPath {
         &self.path
     }
@@ -194,10 +226,12 @@ impl SkillEntry {
         self.path.skill_md_uri()
     }
 
+    /// Returns the `SKILL.md` frontmatter as served on the wire.
     pub fn frontmatter(&self) -> &Frontmatter {
         &self.frontmatter
     }
 
+    /// Returns the manifest of every file in the skill, ordered by URI.
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
     }
@@ -237,7 +271,7 @@ mod tests {
         )
     }
 
-    /// S-G4 / S-G5: the entry's uri ends in the frontmatter name, and the
+    /// The entry's uri ends in the frontmatter name, and the
     /// manifest covers every file with digests of the exact bytes kept.
     #[test]
     fn s_g4_entry_manifest_matches_bytes() {
@@ -255,7 +289,7 @@ mod tests {
         assert_eq!(e.files().count(), 2);
     }
 
-    /// S-G5: a skill whose frontmatter name is not the final segment is refused
+    /// A skill whose frontmatter name is not the final segment is refused
     /// by turul-agent-skills' validation.
     #[test]
     fn s_g5_name_must_equal_final_segment() {
@@ -263,7 +297,7 @@ mod tests {
         assert!(matches!(err, EntryError::Invalid { .. }), "{err}");
     }
 
-    /// ADR-033 §3: a skill that only loads with lenient repair is refused.
+    /// A skill that only loads with lenient repair is refused.
     #[test]
     fn repaired_skill_is_refused() {
         let f = SkillFile::new(
@@ -278,7 +312,7 @@ mod tests {
         );
     }
 
-    /// S-G3 (:208) / ADR-033 §3: a field outside the Agent Skills set passes
+    /// A field outside the Agent Skills set passes
     /// through to the entry unchanged.
     #[test]
     fn s_g3_extension_fields_pass_through() {
@@ -310,7 +344,7 @@ mod tests {
         (tmp, dir)
     }
 
-    /// ADR-033 §5: a directory-backed entry equals the in-memory entry built from
+    /// A directory-backed entry equals the in-memory entry built from
     /// the same files, nested skill files included; `.git` is not content.
     #[test]
     fn from_dir_matches_from_files() {
@@ -338,7 +372,7 @@ mod tests {
         assert_eq!(from_dir.manifest(), from_files.manifest());
     }
 
-    /// S-G8 (:233-243), end to end: a skill directory with 513 files (SKILL.md
+    /// End to end: a skill directory with 513 files (SKILL.md
     /// plus 512) is refused while its entry is built, so it never reaches a
     /// server; 512 files in all is accepted.
     #[test]
@@ -361,7 +395,7 @@ mod tests {
         ));
     }
 
-    /// ADR-033 §5: a symlink whose target stays inside the skill is served.
+    /// A symlink whose target stays inside the skill is served.
     #[cfg(unix)]
     #[test]
     fn symlink_inside_skill_is_read() {
@@ -376,7 +410,7 @@ mod tests {
         assert_eq!(alias.1, b"real\n");
     }
 
-    /// ADR-033 §5: a symlink out of the skill directory refuses the skill.
+    /// A symlink out of the skill directory refuses the skill.
     #[cfg(unix)]
     #[test]
     fn symlink_outside_skill_is_refused() {

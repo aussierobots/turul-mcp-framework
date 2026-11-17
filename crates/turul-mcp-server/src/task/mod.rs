@@ -1,4 +1,4 @@
-//! Task module — MCP task execution, storage integration, and request handlers.
+//! MCP task execution, storage integration, and request handlers.
 //!
 //! This module consolidates all task-related functionality:
 //! - [`executor`] — `TaskExecutor` trait and `BoxedTaskWork` type alias

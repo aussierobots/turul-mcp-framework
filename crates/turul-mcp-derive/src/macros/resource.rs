@@ -9,7 +9,7 @@ use syn::{Expr, Ident, LitStr, Result, Token, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
-/// Implementation function for the resource!{} declarative macro
+/// Expands the `resource!{}` declarative macro.
 pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let async_trait = crate::utils::async_trait_path();
     let json_crate = crate::utils::serde_json_path();
@@ -117,7 +117,7 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     Ok(expanded.into())
 }
 
-/// Parser for the resource! macro syntax
+/// Parsed input of the `resource!{}` macro.
 pub struct ResourceMacroInput {
     pub uri: String,
     pub name: String,

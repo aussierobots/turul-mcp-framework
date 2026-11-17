@@ -1,19 +1,17 @@
-//! Root Builder for Runtime Root Configuration
+//! Builder for creating MCP root directory configurations at runtime.
 //!
-//! This module provides a builder pattern for creating MCP root directory configurations
-//! at runtime. This enables dynamic root setup for file system access and directory management.
+//! Enables dynamic root setup for file system access and directory management.
 
 use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-// Import framework traits from local crate
 use crate::traits::{HasRootAnnotations, HasRootFiltering, HasRootMetadata, HasRootPermissions};
 
 #[cfg(feature = "protocol-2025-11-25")]
 use turul_mcp_protocol::roots::{ListRootsRequest, RootsListChangedNotification};
 
-/// Builder for creating root configurations at runtime
+/// Builder for creating root configurations at runtime.
 pub struct RootBuilder {
     uri: String,
     name: Option<String>,
@@ -29,7 +27,7 @@ pub struct RootBuilder {
 }
 
 impl RootBuilder {
-    /// Create a new root builder with the given URI
+    /// Creates a new root builder with the given URI.
     pub fn new(uri: impl Into<String>) -> Self {
         Self {
             uri: uri.into(),
@@ -44,32 +42,32 @@ impl RootBuilder {
         }
     }
 
-    /// Create a root builder from a file path (automatically converts to file:// URI)
+    /// Creates a root builder from a file path (automatically converts to a `file://` URI).
     pub fn from_path(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
         let uri = format!("file://{}", path.display());
         Self::new(uri)
     }
 
-    /// Set the human-readable name for this root
+    /// Sets the human-readable name for this root.
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
-    /// Set the description for this root
+    /// Sets the description for this root.
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -78,31 +76,31 @@ impl RootBuilder {
         self
     }
 
-    /// Set whether this root is read-only (default: true for safety)
+    /// Sets whether this root is read-only (default: true for safety).
     pub fn read_only(mut self, read_only: bool) -> Self {
         self.read_only = read_only;
         self
     }
 
-    /// Allow read and write access (convenience method)
+    /// Allows read and write access (convenience method).
     pub fn read_write(mut self) -> Self {
         self.read_only = false;
         self
     }
 
-    /// Set maximum directory traversal depth
+    /// Sets maximum directory traversal depth.
     pub fn max_depth(mut self, depth: usize) -> Self {
         self.max_depth = Some(depth);
         self
     }
 
-    /// Set allowed file extensions (None means all extensions allowed)
+    /// Sets allowed file extensions (`None` means all extensions allowed).
     pub fn allowed_extensions(mut self, extensions: Vec<String>) -> Self {
         self.allowed_extensions = Some(extensions);
         self
     }
 
-    /// Add an allowed file extension
+    /// Adds an allowed file extension.
     pub fn allow_extension(mut self, extension: impl Into<String>) -> Self {
         if self.allowed_extensions.is_none() {
             self.allowed_extensions = Some(Vec::new());
@@ -114,13 +112,13 @@ impl RootBuilder {
         self
     }
 
-    /// Set excluded file patterns (glob-style patterns)
+    /// Sets excluded file patterns (glob-style patterns).
     pub fn excluded_patterns(mut self, patterns: Vec<String>) -> Self {
         self.excluded_patterns = Some(patterns);
         self
     }
 
-    /// Add an excluded file pattern
+    /// Adds an excluded file pattern.
     pub fn exclude_pattern(mut self, pattern: impl Into<String>) -> Self {
         if self.excluded_patterns.is_none() {
             self.excluded_patterns = Some(Vec::new());
@@ -132,13 +130,13 @@ impl RootBuilder {
         self
     }
 
-    /// Set tags for this root
+    /// Sets tags for this root.
     pub fn tags(mut self, tags: Vec<String>) -> Self {
         self.tags = Some(tags);
         self
     }
 
-    /// Add a tag
+    /// Adds a tag.
     pub fn tag(mut self, tag: impl Into<String>) -> Self {
         if self.tags.is_none() {
             self.tags = Some(Vec::new());
@@ -147,7 +145,11 @@ impl RootBuilder {
         self
     }
 
-    /// Build the dynamic root configuration
+    /// Builds the dynamic root configuration.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the URI does not start with `file://`.
     pub fn build(self) -> Result<DynamicRoot, String> {
         // Validate URI
         if !self.uri.starts_with("file://") {
@@ -168,7 +170,7 @@ impl RootBuilder {
     }
 }
 
-/// Dynamic root configuration created by RootBuilder
+/// Dynamic root configuration created by [`RootBuilder`].
 #[derive(Debug)]
 pub struct DynamicRoot {
     uri: String,
@@ -182,7 +184,6 @@ pub struct DynamicRoot {
     tags: Option<Vec<String>>,
 }
 
-// Implement all fine-grained traits for DynamicRoot
 impl HasRootMetadata for DynamicRoot {
     fn uri(&self) -> &str {
         &self.uri
@@ -233,7 +234,7 @@ impl HasRootAnnotations for DynamicRoot {
 
 // RootDefinition is automatically implemented via blanket impl!
 
-/// Builder for ListRootsRequest
+/// Builder for `ListRootsRequest`.
 #[cfg(feature = "protocol-2025-11-25")]
 pub struct ListRootsRequestBuilder {
     meta: Option<HashMap<String, Value>>,
@@ -245,13 +246,13 @@ impl ListRootsRequestBuilder {
         Self { meta: None }
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -260,7 +261,7 @@ impl ListRootsRequestBuilder {
         self
     }
 
-    /// Build the ListRootsRequest
+    /// Builds the `ListRootsRequest`.
     pub fn build(self) -> ListRootsRequest {
         if let Some(meta) = self.meta {
             ListRootsRequest::new().with_meta(meta)
@@ -277,7 +278,7 @@ impl Default for ListRootsRequestBuilder {
     }
 }
 
-/// Builder for RootsListChangedNotification
+/// Builder for `RootsListChangedNotification`.
 #[cfg(feature = "protocol-2025-11-25")]
 pub struct RootsNotificationBuilder {
     meta: Option<HashMap<String, Value>>,
@@ -289,13 +290,13 @@ impl RootsNotificationBuilder {
         Self { meta: None }
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -304,7 +305,7 @@ impl RootsNotificationBuilder {
         self
     }
 
-    /// Build the RootsListChangedNotification
+    /// Builds the `RootsListChangedNotification`.
     pub fn build(self) -> RootsListChangedNotification {
         if let Some(meta) = self.meta {
             RootsListChangedNotification::new().with_meta(meta)
@@ -321,9 +322,9 @@ impl Default for RootsNotificationBuilder {
     }
 }
 
-/// Convenience methods for common root patterns
+/// Constructors for common root patterns.
 impl RootBuilder {
-    /// Create a source code root with common file extensions
+    /// Creates a source code root with common file extensions.
     pub fn source_code_root(path: impl Into<PathBuf>) -> Self {
         Self::from_path(path)
             .name("Source Code")
@@ -356,7 +357,7 @@ impl RootBuilder {
             .tag("source-code")
     }
 
-    /// Create a documentation root
+    /// Creates a documentation root.
     pub fn docs_root(path: impl Into<PathBuf>) -> Self {
         Self::from_path(path)
             .name("Documentation")
@@ -374,7 +375,7 @@ impl RootBuilder {
             .tag("documentation")
     }
 
-    /// Create a configuration root
+    /// Creates a configuration root.
     pub fn config_root(path: impl Into<PathBuf>) -> Self {
         Self::from_path(path)
             .name("Configuration")
@@ -393,7 +394,7 @@ impl RootBuilder {
             .tag("configuration")
     }
 
-    /// Create a temporary workspace root with write access
+    /// Creates a temporary workspace root with write access.
     pub fn workspace_root(path: impl Into<PathBuf>) -> Self {
         Self::from_path(path)
             .name("Workspace")
@@ -409,7 +410,7 @@ impl RootBuilder {
     }
 }
 
-// Roots are gone from the stateless 2026-07-28 core; the root builders are 2025-11-25 only.
+// The stateless 2026-07-28 core has no roots; the root builders exist only on the 2025-11-25 lane.
 #[cfg(all(test, feature = "protocol-2025-11-25"))]
 mod tests {
     use super::*;

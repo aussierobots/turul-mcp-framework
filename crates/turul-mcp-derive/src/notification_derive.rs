@@ -1,4 +1,4 @@
-//! Implementation of #[derive(McpNotification)] macro
+//! Implements the `#[derive(McpNotification)]` macro.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -6,23 +6,22 @@ use syn::{DeriveInput, Result};
 
 use crate::utils::extract_string_attribute;
 
-/// Auto-determine notification method from struct name (ZERO CONFIGURATION!)
-/// Examples:
+/// Derives the notification method string from a struct name.
+///
+/// # Examples
+///
 /// - `ProgressNotification` → `"notifications/progress"`
 /// - `ResourcesListChangedNotification` → `"notifications/resources/list_changed"`
 /// - `MessageNotification` → `"notifications/message"`
 fn auto_determine_notification_method(struct_name: String) -> String {
-    // Remove "Notification" suffix if present
     let base_name = if struct_name.ends_with("Notification") {
         &struct_name[..struct_name.len() - 12] // Remove "Notification"
     } else {
         &struct_name
     };
 
-    // Convert CamelCase to snake_case and build method
     let snake_case = camel_to_snake_case(base_name);
 
-    // Handle known patterns (MCP specification compliant)
     match snake_case.as_str() {
         "progress" => "notifications/progress".to_string(),
         "message" => "notifications/message".to_string(),
@@ -38,13 +37,12 @@ fn auto_determine_notification_method(struct_name: String) -> String {
         }
         "tools_list_changed" | "tools_changed" => "notifications/tools/list_changed".to_string(),
         _ => {
-            // For custom notifications, use notifications/{snake_case}
             format!("notifications/{}", snake_case)
         }
     }
 }
 
-/// Convert CamelCase to snake_case
+/// Converts CamelCase to snake_case, inserting `_` before every uppercase character except the first.
 fn camel_to_snake_case(input: &str) -> String {
     let mut result = String::new();
     for (i, ch) in input.chars().enumerate() {
@@ -56,6 +54,7 @@ fn camel_to_snake_case(input: &str) -> String {
     result
 }
 
+/// Expands `#[derive(McpNotification)]` into the notification metadata, payload, rules and `McpNotification` impls.
 pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
     let async_trait = crate::utils::async_trait_path();
     let json_crate = crate::utils::serde_json_path();
@@ -64,10 +63,10 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
     let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
-    // AUTO-DETERMINE method from struct name (ZERO CONFIGURATION!)
+    // Method defaults to the name derived from the struct name.
     let method = auto_determine_notification_method(struct_name.to_string());
 
-    // Optional: Allow override with attribute (for edge cases)
+    // A `method` attribute overrides the derived name.
     let method = extract_string_attribute(&input.attrs, "method").unwrap_or(method);
 
     let priority = extract_string_attribute(&input.attrs, "priority")
@@ -153,7 +152,7 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         impl #struct_name {
-            /// Override this method to provide custom notification sending logic
+            /// Prints the notification to stdout and reports it as sent.
             pub async fn send_impl(&self, payload: #json_crate::Value) -> Result<#mcp_server::notifications::DeliveryResult, String> {
                 // Default: simulate successful delivery
                 println!("Sending notification [{}]: {}", #method, payload);

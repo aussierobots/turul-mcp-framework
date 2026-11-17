@@ -22,10 +22,8 @@
 //! any other principal, indistinguishably from an unknown id. When a
 //! deployment has no authentication configured, no request carries a
 //! principal, every task is created with no owner, and no cross-caller
-//! isolation applies — this is a deliberate, documented consequence of
-//! running the extension without authentication, not a silent gap: an
-//! operator who needs isolation between mutually-untrusting callers must
-//! configure OAuth.
+//! isolation applies. An operator who needs isolation between
+//! mutually-untrusting callers must configure OAuth.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -73,8 +71,8 @@ pub struct ExtTaskElection {
     /// resolve all MRTR exchanges _synchronously_" and does so via the MRTR
     /// flow on the original request; a server needing input *during*
     /// execution uses `inputRequests`/`tasks/update` instead. Both are
-    /// legitimate — this flag picks the first. Default (`false`) is the
-    /// second, which is what every existing registration gets.
+    /// legitimate — this flag picks the first. The default (`false`) picks the
+    /// second.
     ///
     /// Setting this on a tool that never returns [`McpError::InputRequired`]
     /// means the tool simply runs synchronously and no task is ever minted;
@@ -84,12 +82,13 @@ pub struct ExtTaskElection {
 }
 
 impl ExtTaskElection {
-    /// Elected when the client declared the extension; synchronous otherwise.
+    /// Returns an election that is elected when the client declared the extension and synchronous otherwise.
     pub fn optional() -> Self {
         Self::default()
     }
 
-    /// Elected, and calls without the declaration are refused with `-32021`.
+    /// Returns an election that is elected when the client declared the extension; calls
+    /// without the declaration are refused with `-32021`.
     pub fn required() -> Self {
         Self {
             required: true,
@@ -97,16 +96,18 @@ impl ExtTaskElection {
         }
     }
 
-    /// Resolve the MRTR round synchronously before minting the task.
+    /// Sets `mrtr_first`, resolving the MRTR round synchronously before minting the task.
     pub fn with_mrtr_first(mut self) -> Self {
         self.mrtr_first = true;
         self
     }
 }
 
-/// The caller's authenticated principal for this request, or `None` when
+/// Returns the caller's authenticated principal for this request, or `None` when
 /// the request carries no verified identity (no OAuth configured, or the
-/// claim is absent/empty). Reads the same `__turul_internal.auth_claims`
+/// claim is absent/empty).
+///
+/// Reads the same `__turul_internal.auth_claims`
 /// extension `OAuthResourceMiddleware` populates from a validated Bearer
 /// token's `sub` claim.
 fn owner_from_session(session: &Option<SessionContext>) -> Option<String> {
@@ -136,6 +137,7 @@ pub struct ExtTasksRuntime {
 }
 
 impl ExtTasksRuntime {
+    /// Creates a runtime that persists tasks in `store`.
     pub fn new(store: Arc<dyn TaskStore>) -> Self {
         Self {
             store,
@@ -143,12 +145,21 @@ impl ExtTasksRuntime {
         }
     }
 
+    /// Returns the task store backing this runtime.
     pub fn store(&self) -> &Arc<dyn TaskStore> {
         &self.store
     }
 
-    /// Create the task durably, spawn the worker, and return the
+    /// Creates the task durably, spawns the worker, and returns the
     /// `CreateTaskResult` for the originating `tools/call`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::ToolExecutionError` when the task store rejects the create.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal abort-handle mutex is poisoned.
     pub async fn create_and_spawn(
         self: &Arc<Self>,
         tool: Arc<dyn McpTool>,
@@ -201,7 +212,7 @@ impl ExtTasksRuntime {
         }))
     }
 
-    /// The worker loop: run the tool; `InputRequired` parks the task until
+    /// Runs the worker loop: runs the tool; `InputRequired` parks the task until
     /// `tasks/update` completes the round, then re-invokes the tool with the
     /// responses; any other outcome is terminal.
     async fn worker(
@@ -362,8 +373,8 @@ impl ExtTasksRuntime {
         }
     }
 
-    /// Deliver `tasks/update` responses; resumes the worker when the round
-    /// completes. `owner` must match the task's bound owner (see
+    /// Delivers `tasks/update` responses to the store, which the parked worker
+    /// observes on its next poll. `owner` must match the task's bound owner (see
     /// [`TaskStore::provide_input`]) or the store reports the task unknown.
     pub async fn deliver_input(
         &self,
@@ -378,8 +389,8 @@ impl ExtTasksRuntime {
         Ok(())
     }
 
-    /// Cooperative cancel: flips non-terminal tasks to `cancelled`, aborts a
-    /// running worker, and drops any input waiter. Terminal tasks are left
+    /// Cancels cooperatively: flips non-terminal tasks to `cancelled` and aborts a
+    /// local running worker. Terminal tasks are left
     /// untouched (callers ack regardless). `owner` must match the task's
     /// bound owner (see [`TaskStore::cancel`]) or the store reports the task
     /// unknown.
@@ -401,9 +412,9 @@ impl ExtTasksRuntime {
         Ok(cancelled)
     }
 
-    /// Best-effort `notifications/tasks` push (wire-complete JSON-RPC
-    /// notification; delivered to `subscriptions/listen` streams whose
-    /// honored `taskIds` filter matches).
+    /// Pushes a best-effort `notifications/tasks` (wire-complete JSON-RPC
+    /// notification), delivered to `subscriptions/listen` streams whose
+    /// honored `taskIds` filter matches.
     async fn notify(&self, session: &Option<SessionContext>, state: &TaskState) {
         let Some(any) = session.as_ref().and_then(|s| s.broadcaster.clone()) else {
             return;
@@ -433,6 +444,7 @@ pub struct ExtTasksGetHandler {
 }
 
 impl ExtTasksGetHandler {
+    /// Creates the handler over the shared tasks runtime.
     pub fn new(runtime: Arc<ExtTasksRuntime>) -> Self {
         Self { runtime }
     }
@@ -489,6 +501,7 @@ pub struct ExtTasksUpdateHandler {
 }
 
 impl ExtTasksUpdateHandler {
+    /// Creates the handler over the shared tasks runtime.
     pub fn new(runtime: Arc<ExtTasksRuntime>) -> Self {
         Self { runtime }
     }
@@ -515,7 +528,6 @@ impl ExtTasksUpdateHandler {
                 ),
                 other => McpError::ToolExecutionError(format!("task store: {other}")),
             })?;
-        // Empty ack, resultType "complete".
         Ok(serde_json::json!({ "resultType": "complete" }))
     }
 }
@@ -546,6 +558,7 @@ pub struct ExtTasksCancelHandler {
 }
 
 impl ExtTasksCancelHandler {
+    /// Creates the handler over the shared tasks runtime.
     pub fn new(runtime: Arc<ExtTasksRuntime>) -> Self {
         Self { runtime }
     }
@@ -585,7 +598,7 @@ impl McpHandler for ExtTasksCancelHandler {
     }
 }
 
-/// True when this request's declared capabilities activate the extension.
+/// Returns whether the request's declared capabilities activate the extension.
 pub fn declared(caps: &turul_mcp_protocol::initialize::ClientCapabilities) -> bool {
     turul_mcp_ext_tasks::declared_by_client(caps)
 }
@@ -595,18 +608,17 @@ fn parse_params<T: serde::de::DeserializeOwned>(params: Option<Value>) -> McpRes
         .map_err(|e| McpError::InvalidParameters(format!("invalid task params: {e}")))
 }
 
-/// Refuse `tasks/*` from a client that never declared the extension.
+/// Refuses `tasks/*` from a client that never declared the extension.
 ///
 /// SEP-2663: the task methods exist only for a client that opted in, so
 /// calling one without the declaration is a missing-capability error
-/// (`-32021`), NOT invalid params. All three handlers previously fell through
-/// to whatever the task lookup said — typically `-32602 unknown task` — which
-/// tells the client its task id was wrong when the real problem is that it
-/// never negotiated the extension.
+/// (`-32021`), not invalid params. Checked before param parsing so a
+/// malformed body cannot mask it.
 ///
-/// Found by the conformance scenario `tasks-capability-negotiation`:
-/// "tasks/get MUST return -32021; got -32602" (and the same for update and
-/// cancel). Checked BEFORE param parsing so a malformed body cannot mask it.
+/// # Errors
+///
+/// Returns the error from `turul_mcp_ext_tasks::missing_capability_error` when the
+/// request's `_meta` client capabilities do not declare the extension.
 fn require_declared(params: &Option<Value>) -> McpResult<()> {
     let caps = params
         .as_ref()

@@ -6,16 +6,11 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import protocol types
 use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest};
 
-// Import framework traits from local crate
 use crate::traits::{HasLogFormat, HasLogLevel, HasLogTransport, HasLoggingMetadata};
 
-// Re-export the trait for convenience (defined below)
-// pub use LoggingTarget;
-
-/// Builder for creating logging messages at runtime
+/// Builder for creating logging messages at runtime.
 pub struct LoggingBuilder {
     level: LoggingLevel,
     data: Value,
@@ -26,7 +21,7 @@ pub struct LoggingBuilder {
 }
 
 impl LoggingBuilder {
-    /// Create a new logging builder with the given level and data
+    /// Creates a new logging builder with the given level and data.
     pub fn new(level: LoggingLevel, data: Value) -> Self {
         Self {
             level,
@@ -37,19 +32,19 @@ impl LoggingBuilder {
         }
     }
 
-    /// Set the logger name/identifier
+    /// Sets the logger name/identifier.
     pub fn logger(mut self, logger: impl Into<String>) -> Self {
         self.logger = Some(logger.into());
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -58,13 +53,13 @@ impl LoggingBuilder {
         self
     }
 
-    /// Set batch size for log messages
+    /// Sets batch size for log messages.
     pub fn batch_size(mut self, size: usize) -> Self {
         self.batch_size = Some(size);
         self
     }
 
-    /// Build the logging message notification
+    /// Builds the logging message notification.
     pub fn build(self) -> LoggingMessageNotification {
         let mut notification = LoggingMessageNotification::new(self.level, self.data);
         if let Some(logger) = self.logger {
@@ -76,7 +71,7 @@ impl LoggingBuilder {
         notification
     }
 
-    /// Build a dynamic logger that implements the definition traits
+    /// Builds a dynamic logger that implements the definition traits.
     pub fn build_dynamic(self) -> DynamicLogger {
         DynamicLogger {
             level: self.level,
@@ -87,7 +82,7 @@ impl LoggingBuilder {
         }
     }
 
-    /// Create session-aware logger that can send messages directly to a session
+    /// Creates session-aware logger that can send messages directly to a session.
     pub fn build_session_aware(self) -> SessionAwareLogger {
         SessionAwareLogger {
             level: self.level,
@@ -99,7 +94,7 @@ impl LoggingBuilder {
     }
 }
 
-/// Dynamic logger created by LoggingBuilder
+/// Dynamic logger created by LoggingBuilder.
 #[derive(Debug)]
 pub struct DynamicLogger {
     level: LoggingLevel,
@@ -109,7 +104,6 @@ pub struct DynamicLogger {
     batch_size: Option<usize>,
 }
 
-// Implement all fine-grained traits for DynamicLogger
 impl HasLoggingMetadata for DynamicLogger {
     fn method(&self) -> &str {
         "notifications/message"
@@ -148,7 +142,7 @@ impl HasLogTransport for DynamicLogger {
 
 // LoggerDefinition is automatically implemented via blanket impl!
 
-/// Session-aware logger that can send messages to sessions with filtering
+/// Session-aware logger that can send messages to sessions with filtering.
 ///
 /// This logger is designed to work with session contexts that implement
 /// logging level checking and message sending capabilities.
@@ -161,12 +155,12 @@ pub struct SessionAwareLogger {
     batch_size: Option<usize>,
 }
 
-/// Trait for logging targets that can check levels and send messages
+/// Trait for logging targets that can check levels and send messages.
 pub trait LoggingTarget {
-    /// Check if this target should receive a message at the given level
+    /// Checks if this target should receive a message at the given level.
     fn should_log(&self, level: LoggingLevel) -> bool;
 
-    /// Send a log message to this target
+    /// Sends a log message to this target.
     fn notify_log(
         &self,
         level: LoggingLevel,
@@ -177,7 +171,7 @@ pub trait LoggingTarget {
 }
 
 impl SessionAwareLogger {
-    /// Send this log message to the specified target if it passes the target's logging level filter
+    /// Sends this log message to the specified target if it passes the target's logging level filter.
     pub fn send_to_target<T: LoggingTarget>(&self, target: &T) {
         if target.should_log(self.level) {
             let message = self.format_message();
@@ -190,19 +184,19 @@ impl SessionAwareLogger {
         }
     }
 
-    /// Send this log message to multiple targets with per-target filtering
+    /// Sends this log message to multiple targets with per-target filtering.
     pub fn send_to_targets<T: LoggingTarget>(&self, targets: &[&T]) {
         for &target in targets {
             self.send_to_target(target);
         }
     }
 
-    /// Check if this message would be sent to the given target
+    /// Checks if this message would be sent to the given target.
     pub fn would_send_to_target<T: LoggingTarget>(&self, target: &T) -> bool {
         target.should_log(self.level)
     }
 
-    /// Get the formatted message that would be sent
+    /// Gets the formatted message that would be sent.
     pub fn format_message(&self) -> String {
         match &self.data {
             Value::String(s) => s.clone(),
@@ -212,7 +206,7 @@ impl SessionAwareLogger {
         }
     }
 
-    /// Convert logging level to string representation
+    /// Converts logging level to string representation.
     pub fn level_to_string(&self) -> &'static str {
         match self.level {
             LoggingLevel::Debug => "debug",
@@ -227,7 +221,6 @@ impl SessionAwareLogger {
     }
 }
 
-// Implement all fine-grained traits for SessionAwareLogger (same as DynamicLogger)
 impl HasLoggingMetadata for SessionAwareLogger {
     fn method(&self) -> &str {
         "notifications/message"
@@ -265,7 +258,7 @@ impl HasLogTransport for SessionAwareLogger {
 
 // LoggerDefinition is automatically implemented via blanket impl for SessionAwareLogger too!
 
-/// Builder for set level requests
+/// Builder for set level requests.
 pub struct SetLevelBuilder {
     level: LoggingLevel,
     meta: Option<HashMap<String, Value>>,
@@ -276,13 +269,13 @@ impl SetLevelBuilder {
         Self { level, meta: None }
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -291,7 +284,7 @@ impl SetLevelBuilder {
         self
     }
 
-    /// Build the set level request
+    /// Builds the set level request.
     pub fn build(self) -> SetLevelRequest {
         let mut request = SetLevelRequest::new(self.level);
         if let Some(meta) = self.meta {
@@ -301,54 +294,54 @@ impl SetLevelBuilder {
     }
 }
 
-/// Convenience methods for different log levels
+/// Convenience methods for different log levels.
 impl LoggingBuilder {
-    /// Create a debug level logging builder
+    /// Creates a debug level logging builder.
     pub fn debug(data: Value) -> Self {
         Self::new(LoggingLevel::Debug, data)
     }
 
-    /// Create an info level logging builder
+    /// Creates an info level logging builder.
     pub fn info(data: Value) -> Self {
         Self::new(LoggingLevel::Info, data)
     }
 
-    /// Create a notice level logging builder
+    /// Creates a notice level logging builder.
     pub fn notice(data: Value) -> Self {
         Self::new(LoggingLevel::Notice, data)
     }
 
-    /// Create a warning level logging builder
+    /// Creates a warning level logging builder.
     pub fn warning(data: Value) -> Self {
         Self::new(LoggingLevel::Warning, data)
     }
 
-    /// Create an error level logging builder
+    /// Creates an error level logging builder.
     pub fn error(data: Value) -> Self {
         Self::new(LoggingLevel::Error, data)
     }
 
-    /// Create a critical level logging builder
+    /// Creates a critical level logging builder.
     pub fn critical(data: Value) -> Self {
         Self::new(LoggingLevel::Critical, data)
     }
 
-    /// Create an alert level logging builder
+    /// Creates an alert level logging builder.
     pub fn alert(data: Value) -> Self {
         Self::new(LoggingLevel::Alert, data)
     }
 
-    /// Create an emergency level logging builder
+    /// Creates an emergency level logging builder.
     pub fn emergency(data: Value) -> Self {
         Self::new(LoggingLevel::Emergency, data)
     }
 
-    /// Create a simple text log message
+    /// Creates a simple text log message.
     pub fn text(level: LoggingLevel, message: impl Into<String>) -> Self {
         Self::new(level, Value::String(message.into()))
     }
 
-    /// Create a structured log message with fields
+    /// Creates a structured log message with fields.
     pub fn structured(level: LoggingLevel, fields: HashMap<String, Value>) -> Self {
         Self::new(
             level,
@@ -356,7 +349,7 @@ impl LoggingBuilder {
         )
     }
 
-    /// Create a log message with message and context
+    /// Creates a log message with message and context.
     pub fn with_context(
         level: LoggingLevel,
         message: impl Into<String>,
@@ -367,17 +360,17 @@ impl LoggingBuilder {
         Self::structured(level, data)
     }
 
-    /// Create a set level request builder
+    /// Creates a set level request builder.
     pub fn set_level(level: LoggingLevel) -> SetLevelBuilder {
         SetLevelBuilder::new(level)
     }
 }
 
-/// Logger level utility functions
+/// Logger level utility functions.
 pub struct LogLevel;
 
 impl LogLevel {
-    /// Parse a string to LoggingLevel
+    /// Parses a string to LoggingLevel.
     pub fn parse(level: &str) -> Result<LoggingLevel, String> {
         match level.to_lowercase().as_str() {
             "debug" => Ok(LoggingLevel::Debug),
@@ -392,7 +385,7 @@ impl LogLevel {
         }
     }
 
-    /// Convert LoggingLevel to string
+    /// Converts LoggingLevel to string.
     pub fn to_string(level: LoggingLevel) -> String {
         match level {
             LoggingLevel::Debug => "debug",
@@ -407,7 +400,7 @@ impl LogLevel {
         .to_string()
     }
 
-    /// Get all available log levels
+    /// Gets all available log levels.
     pub fn all() -> Vec<LoggingLevel> {
         vec![
             LoggingLevel::Debug,

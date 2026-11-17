@@ -1,4 +1,4 @@
-//! Streamable HTTP Transport for MCP 2025-11-25
+//! Streamable HTTP transport handler for MCP (2026-07-28 stateless core and the opt-in 2025-11-25 lane).
 //!
 //! This module implements the "Streamable HTTP" transport mechanism introduced
 //! in MCP 2025-03-26, which replaces the previous HTTP+SSE approach from 2024-11-05.
@@ -258,7 +258,12 @@ pub enum StreamableResponse {
     /// Single JSON response
     Json(Value),
     /// Error response
-    Error { status: StatusCode, message: String },
+    Error {
+        /// HTTP status code of the response.
+        status: StatusCode,
+        /// Human-readable error message returned in the response.
+        message: String,
+    },
 }
 
 impl std::fmt::Debug for StreamableResponse {
@@ -344,6 +349,7 @@ pub struct StreamableHttpHandler {
 }
 
 impl StreamableHttpHandler {
+    /// Creates a handler from the server configuration, JSON-RPC dispatcher, session storage, stream manager, advertised server capabilities, middleware stack and optional tool fingerprint.
     pub fn new(
         config: Arc<ServerConfig>,
         dispatcher: Arc<turul_rpc::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
@@ -374,13 +380,13 @@ impl StreamableHttpHandler {
         self
     }
 
-    /// Set the tool change notifier for restart/redeploy fingerprint mismatch notifications.
     /// Set the identity reported in each result's `_meta.serverInfo`.
     pub fn with_server_info(mut self, info: turul_mcp_protocol::Implementation) -> Self {
         self.server_info = Some(info);
         self
     }
 
+    /// Sets the notifier called when a session's stored tool fingerprint differs from the server's, so the session receives `notifications/tools/list_changed`.
     pub fn with_tool_notifier(mut self, notifier: Arc<dyn crate::ToolChangeNotifier>) -> Self {
         self.tool_notifier = Some(notifier);
         self
@@ -423,7 +429,7 @@ impl StreamableHttpHandler {
                 .map(|body| body.map_err(|never| match never {}).boxed_unsync());
         }
 
-        // DNS-rebinding protection (ADR-031): "If the `Origin` header is
+        // DNS-rebinding protection: "If the `Origin` header is
         // present and invalid, servers MUST respond with HTTP 403 Forbidden."
         // OPTIONS preflight (handled above) is exempt; the actual request is
         // gated here, ahead of validation, auth, and body parsing.
@@ -563,7 +569,7 @@ impl StreamableHttpHandler {
         );
 
         // 3. Return streaming response supporting progressive message delivery
-        // ✅ FIXED: Return the actual streaming response from StreamManager
+        // Return the actual streaming response from StreamManager
         // This preserves event replay, resumability, and live streaming capabilities
         match self
             .stream_manager
@@ -582,7 +588,7 @@ impl StreamableHttpHandler {
                     streaming_response.headers_mut().insert(key, value.clone());
                 }
 
-                // ✅ PRESERVE STREAMING: Return the streaming response with MCP headers
+                // Return the streaming response with MCP headers
                 // This maintains event replay from session storage and live streaming
                 streaming_response
             }
@@ -956,8 +962,8 @@ impl StreamableHttpHandler {
                 .unwrap();
         }
 
-        // --- Pre-session auth phase (D4) ---
-        // Extract Bearer token using hardened parser (D6). A present-but-
+        // --- Pre-session auth phase ---
+        // Extract Bearer token using hardened parser. A present-but-
         // unparseable Authorization header is flagged so auth middleware can
         // answer 400 invalid_request (RFC 6750 §3.1) instead of 401.
         let auth_header = context.headers.get("authorization");
@@ -975,7 +981,7 @@ impl StreamableHttpHandler {
                 pre_ctx.set_bearer_token(token.clone());
             }
             pre_ctx.set_authorization_malformed(authorization_malformed);
-            // Copy headers to metadata, excluding Bearer authorization (D5)
+            // Copy headers to metadata, excluding Bearer authorization
             for (k, v) in &context.headers {
                 if k.eq_ignore_ascii_case("authorization") && is_bearer_scheme(v) {
                     continue;
@@ -1169,7 +1175,6 @@ impl StreamableHttpHandler {
                                 // mismatched Mcp-Name through on the whole
                                 // tasks surface while the tools surface
                                 // rejected it — one rule, two behaviours.
-                                // Found by `tasks-request-headers`.
                                 "tasks/get" | "tasks/update" | "tasks/cancel" => params
                                     .get("taskId")
                                     .and_then(|v| v.as_str())
@@ -2339,7 +2344,7 @@ impl StreamableHttpHandler {
         response
     }
 
-    /// Handle POST request - unified handler for all client messages (MCP 2025-11-25 compliant)
+    /// Handles a POST request: the unified handler for all client messages.
     /// Processes JSON-RPC requests, notifications, and responses
     /// Server decides whether to respond with JSON or SSE stream based on message type
     async fn handle_client_message<T>(
@@ -2510,7 +2515,7 @@ impl StreamableHttpHandler {
         }
 
         for (k, v) in normalized_headers {
-            // D5: Bearer scheme NEVER enters metadata, even if token is malformed
+            // Bearer scheme NEVER enters metadata, even if token is malformed
             if k == "authorization" && is_bearer_scheme(&v) {
                 continue;
             }
@@ -2559,7 +2564,7 @@ impl StreamableHttpHandler {
             }
         }
 
-        // Thread extensions from RequestContext → JSON-RPC SessionContext (D3 canonical flow)
+        // Thread extensions from RequestContext → JSON-RPC SessionContext
         let session = session.map(|mut s| {
             s.extensions = ctx.extensions().clone();
             s
@@ -2757,7 +2762,7 @@ mod tests {
 
     #[test]
     fn test_non_bearer_preserved_in_metadata() {
-        // T5: Non-bearer auth headers pass through, Bearer excluded
+        // Non-bearer auth headers pass through, Bearer excluded
         let mut ctx = crate::middleware::RequestContext::new("test/method", None);
 
         let headers = vec![
@@ -2798,7 +2803,7 @@ mod tests {
 
     #[test]
     fn test_malformed_bearer_excluded_from_metadata() {
-        // T47: Even malformed Bearer tokens are excluded from metadata
+        // Even malformed Bearer tokens are excluded from metadata
         let mut ctx = crate::middleware::RequestContext::new("test/method", None);
 
         let headers = vec![("authorization".to_string(), "Bearer ".to_string())];

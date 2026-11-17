@@ -1,4 +1,4 @@
-//! Server Cards (experimental, ADR-038): reconciling a card with the server's
+//! Server Cards (experimental): reconciling a card with the server's
 //! `server/discover` data, and serving it at `<mcp_path>/server-card`.
 
 use async_trait::async_trait;
@@ -9,9 +9,14 @@ use turul_http_mcp_server::{RouteBody, RouteHandler};
 use turul_mcp_ext_server_card::v1::{MEDIA_TYPE, ServerCard, ServerCardDocument};
 use turul_mcp_protocol::initialize::Implementation;
 
-/// Fill the fields `server/discover` also serves from the server, and refuse a
-/// card that contradicts them (ADR-038 §2). `supported_versions` is the list
+/// Fills the fields `server/discover` also serves from the server, and refuses a
+/// card that contradicts them. `supported_versions` is the list
 /// `server/discover` answers with.
+///
+/// # Errors
+///
+/// Returns a message naming the field when a card value differs from the server's,
+/// or the `ServerCardDocument::new` error string when the card cannot be serialized.
 pub(crate) fn reconcile(
     mut card: ServerCard,
     implementation: &Implementation,
@@ -90,14 +95,14 @@ fn fill_or_match(
     Ok(())
 }
 
-/// The hosted card. Body and `ETag` are fixed at build.
+/// The hosted card, served with a body and `ETag` fixed at build.
 pub(crate) struct ServerCardRoute {
     pub(crate) document: ServerCardDocument,
 }
 
 impl ServerCardRoute {
     fn base(&self, status: StatusCode) -> hyper::http::response::Builder {
-        // The four CORS headers docs/discovery.md §CORS Requirements requires.
+        // The Server Card spec requires these four CORS headers.
         Response::builder()
             .status(status)
             .header("Access-Control-Allow-Origin", "*")

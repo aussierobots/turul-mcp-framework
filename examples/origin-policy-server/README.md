@@ -8,7 +8,7 @@ configurable.
 > The request's `Host` header is deliberately **not** consulted. It used to
 > be — an Origin matching Host was admitted — and that defeated the
 > protection entirely, because a rebinding attacker controls both headers and
-> sets them to agree. Removed 2026-08-15; see ADR-031's revision log.
+> sets them to agree. Removed 2026-08-15.
 
 ## Why this exists
 

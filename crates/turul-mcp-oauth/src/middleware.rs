@@ -1,4 +1,4 @@
-//! OAuth Resource Server middleware
+//! OAuth Resource Server middleware.
 //!
 //! Pre-session middleware that validates Bearer tokens and injects
 //! token claims into the request context for tools to read.
@@ -17,7 +17,7 @@ use turul_mcp_session_storage::SessionView;
 use crate::jwt::JwtValidator;
 use crate::metadata::ProtectedResourceMetadata;
 
-/// OAuth 2.1 Resource Server middleware
+/// OAuth 2.1 Resource Server middleware.
 ///
 /// Validates Bearer tokens against JWKS and injects claims into
 /// request extensions. Runs before session creation to return
@@ -29,7 +29,7 @@ pub struct OAuthResourceMiddleware {
 }
 
 impl OAuthResourceMiddleware {
-    /// Create a new OAuth middleware
+    /// Creates a new OAuth middleware.
     pub fn new(jwt_validator: Arc<JwtValidator>, metadata: ProtectedResourceMetadata) -> Self {
         Self {
             jwt_validator,
@@ -38,7 +38,7 @@ impl OAuthResourceMiddleware {
         }
     }
 
-    /// Require these scopes on every validated token (space-delimited `scope`
+    /// Requires these scopes on every validated token (space-delimited `scope`
     /// claim). A token missing any of them is rejected with HTTP 403 and a
     /// `WWW-Authenticate` challenge carrying `error="insufficient_scope"`.
     pub fn with_required_scopes(mut self, scopes: Vec<String>) -> Self {
@@ -46,7 +46,7 @@ impl OAuthResourceMiddleware {
         self
     }
 
-    /// Build a WWW-Authenticate challenge header value
+    /// Builds a `WWW-Authenticate` challenge header value.
     fn build_challenge(&self, error_params: &str) -> String {
         let scope_param = self
             .metadata
@@ -155,7 +155,7 @@ impl McpMiddleware for OAuthResourceMiddleware {
 mod tests {
     use super::*;
 
-    // T25: WWW-Authenticate contains resource_metadata URL
+    // WWW-Authenticate contains resource_metadata URL
     #[test]
     fn test_www_authenticate_contains_resource_metadata_url() {
         let metadata = ProtectedResourceMetadata::new(
@@ -175,7 +175,7 @@ mod tests {
         assert!(middleware.runs_before_session());
     }
 
-    // T30: Missing bearer returns 401
+    // Missing bearer returns 401
     #[tokio::test]
     async fn test_missing_bearer_returns_401() {
         let metadata = ProtectedResourceMetadata::new(

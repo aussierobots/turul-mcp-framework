@@ -32,6 +32,7 @@ pub struct InMemoryTaskStore {
 }
 
 impl InMemoryTaskStore {
+    /// Creates an empty store.
     pub fn new() -> Self {
         Self::default()
     }

@@ -1,13 +1,12 @@
-//! Notification Bridge - Connects NotificationBroadcaster to StreamManager
+//! Bridges `NotificationBroadcaster` to `StreamManager`.
 //!
-//! This module provides the critical bridge between the notification system
-//! (where tools send events) and the SSE streaming system (where clients receive events).
+//! This module connects the notification system (where tools send events) to the
+//! SSE streaming system (where clients receive events).
 //!
-//! CRITICAL: All notifications MUST use proper MCP JSON-RPC format per specification:
-//! {"jsonrpc":"2.0","method":"notifications/{type}","params":{...}}
+//! All notifications use the MCP JSON-RPC notification format:
+//! `{"jsonrpc":"2.0","method":"notifications/{type}","params":{...}}`
 //!
-//! Without this bridge: Tools send notifications → NotificationBroadcaster → VOID
-//! With this bridge: Tools send notifications → NotificationBroadcaster → StreamManager → SSE clients ✅
+//! Without this bridge, notifications sent through `NotificationBroadcaster` are not delivered to SSE clients.
 
 // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); this bridge
 // still carries logging notifications over SSE, which remains a valid feature.
@@ -25,80 +24,81 @@ use turul_mcp_protocol::notifications::{
 };
 use turul_rpc::JsonRpcNotification;
 
-/// MCP-compliant notification broadcaster trait for sending ALL notification types over SSE
+/// Sends every supported notification type over SSE.
 ///
-/// ALL methods send proper JSON-RPC notifications per MCP 2025-11-25 specification
+/// Each method sends a JSON-RPC notification in MCP wire format.
 #[async_trait]
 pub trait NotificationBroadcaster: Send + Sync {
-    // ================== SERVER-TO-CLIENT NOTIFICATIONS ==================
-
-    /// Send a progress notification (notifications/progress)
-    /// Used for long-running operations to show progress updates
+    /// Sends a progress notification (`notifications/progress`).
+    ///
+    /// Used for long-running operations to show progress updates.
     async fn send_progress_notification(
         &self,
         session_id: &str,
         notification: ProgressNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send a logging message notification (notifications/message)
-    /// Used to send log messages with different levels (debug, info, warning, error)
+    /// Sends a logging message notification (`notifications/message`).
+    ///
+    /// Used to send log messages with different levels (debug, info, warning, error).
     async fn send_message_notification(
         &self,
         session_id: &str,
         notification: LoggingMessageNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send resource updated notification (notifications/resources/updated)
-    /// Notifies that a specific resource has been updated
+    /// Sends a resource updated notification (`notifications/resources/updated`).
+    ///
+    /// Notifies that a specific resource has been updated.
     async fn send_resource_updated_notification(
         &self,
         session_id: &str,
         notification: ResourceUpdatedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send resource list changed notification (notifications/resources/list_changed)
-    /// Notifies that the resource list has changed (added/removed resources)
+    /// Sends a resource list changed notification (`notifications/resources/list_changed`).
+    ///
+    /// Notifies that the resource list has changed (added/removed resources).
     async fn send_resource_list_changed_notification(
         &self,
         session_id: &str,
         notification: ResourceListChangedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send tool list changed notification (notifications/tools/list_changed)
-    /// Notifies that the tool list has changed (added/removed tools)
+    /// Sends a tool list changed notification (`notifications/tools/list_changed`).
+    ///
+    /// Notifies that the tool list has changed (added/removed tools).
     async fn send_tool_list_changed_notification(
         &self,
         session_id: &str,
         notification: ToolListChangedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send prompt list changed notification (notifications/prompts/list_changed)
-    /// Notifies that the prompt list has changed (added/removed prompts)
+    /// Sends a prompt list changed notification (`notifications/prompts/list_changed`).
+    ///
+    /// Notifies that the prompt list has changed (added/removed prompts).
     async fn send_prompt_list_changed_notification(
         &self,
         session_id: &str,
         notification: PromptListChangedNotification,
     ) -> Result<(), BroadcastError>;
 
-    // ================== BIDIRECTIONAL NOTIFICATIONS ==================
-
-    /// Send cancelled notification (notifications/cancelled)
-    /// Can be sent by either client or server to cancel a request
+    /// Sends a cancelled notification (`notifications/cancelled`).
+    ///
+    /// Either client or server can send it to cancel a request.
     async fn send_cancelled_notification(
         &self,
         session_id: &str,
         notification: CancelledNotification,
     ) -> Result<(), BroadcastError>;
 
-    // ================== BROADCAST METHODS ==================
-
-    /// Broadcast any JSON-RPC notification to all active sessions (server-wide notifications)
+    /// Broadcasts a JSON-RPC notification to all active sessions.
     async fn broadcast_to_all_sessions(
         &self,
         notification: JsonRpcNotification,
     ) -> Result<Vec<String>, BroadcastError>;
 
-    /// Send any generic JSON-RPC notification to a specific session
+    /// Sends a JSON-RPC notification to a specific session.
     async fn send_notification(
         &self,
         session_id: &str,
@@ -106,40 +106,41 @@ pub trait NotificationBroadcaster: Send + Sync {
     ) -> Result<(), BroadcastError>;
 }
 
-/// Errors that can occur during notification broadcasting
+/// Errors returned by notification broadcasting.
 #[derive(Debug, thiserror::Error)]
 pub enum BroadcastError {
     #[error("Session not found: {0}")]
+    /// No session exists for the given identifier.
     SessionNotFound(String),
     #[error("Broadcasting failed: {0}")]
+    /// The notification could not be delivered; the message gives the reason.
     BroadcastFailed(String),
     #[error("Serialization error: {0}")]
+    /// The notification could not be serialized to JSON.
     SerializationError(#[from] serde_json::Error),
 }
 
-/// StreamManager-backed notification broadcaster that bridges events to SSE
+/// `StreamManager`-backed notification broadcaster that delivers events over SSE.
 ///
-/// This implementation converts ALL MCP notification types to proper JSON-RPC format
-/// and forwards them to StreamManager for SSE delivery
+/// Converts each MCP notification type to JSON-RPC format and forwards it to
+/// `StreamManager`.
 pub struct StreamManagerNotificationBroadcaster {
     stream_manager: Arc<StreamManager>,
 }
 
 impl StreamManagerNotificationBroadcaster {
-    /// Create new broadcaster that forwards events to StreamManager
+    /// Creates a broadcaster that forwards events to `stream_manager`.
     pub fn new(stream_manager: Arc<StreamManager>) -> Self {
         Self { stream_manager }
     }
 }
 
-// ================== CONVERSION HELPERS ==================
-// Helper functions to convert MCP notification types to JsonRpcNotification format
-
-/// Convert MCP notifications to proper JSON-RPC notifications
+/// Converts MCP notifications to JSON-RPC notifications.
 pub mod conversion {
     use super::*;
     use std::collections::HashMap;
 
+    /// Converts a progress notification into a JSON-RPC notification carrying its method and parameters.
     pub fn progress_to_json_rpc(notification: ProgressNotification) -> JsonRpcNotification {
         let mut params = HashMap::new();
         params.insert(
@@ -163,6 +164,7 @@ pub mod conversion {
         JsonRpcNotification::new_with_object_params(notification.method, params)
     }
 
+    /// Converts a logging message notification into a JSON-RPC notification carrying its method and parameters.
     pub fn message_to_json_rpc(notification: LoggingMessageNotification) -> JsonRpcNotification {
         let mut params = HashMap::new();
         params.insert(
@@ -180,6 +182,7 @@ pub mod conversion {
         JsonRpcNotification::new_with_object_params(notification.method, params)
     }
 
+    /// Converts a resource-updated notification into a JSON-RPC notification carrying its method and parameters.
     pub fn resource_updated_to_json_rpc(
         notification: ResourceUpdatedNotification,
     ) -> JsonRpcNotification {
@@ -195,6 +198,7 @@ pub mod conversion {
         JsonRpcNotification::new_with_object_params(notification.method, params)
     }
 
+    /// Converts a resource-list-changed notification into a JSON-RPC notification carrying its method and parameters.
     pub fn resource_list_changed_to_json_rpc(
         notification: ResourceListChangedNotification,
     ) -> JsonRpcNotification {
@@ -211,6 +215,7 @@ pub mod conversion {
         }
     }
 
+    /// Converts a tool-list-changed notification into a JSON-RPC notification carrying its method and parameters.
     pub fn tool_list_changed_to_json_rpc(
         notification: ToolListChangedNotification,
     ) -> JsonRpcNotification {
@@ -227,6 +232,7 @@ pub mod conversion {
         }
     }
 
+    /// Converts a prompt-list-changed notification into a JSON-RPC notification carrying its method and parameters.
     pub fn prompt_list_changed_to_json_rpc(
         notification: PromptListChangedNotification,
     ) -> JsonRpcNotification {
@@ -243,6 +249,7 @@ pub mod conversion {
         }
     }
 
+    /// Converts a cancelled notification into a JSON-RPC notification carrying its method and parameters.
     pub fn cancelled_to_json_rpc(notification: CancelledNotification) -> JsonRpcNotification {
         let mut params = HashMap::new();
         params.insert(
@@ -262,8 +269,6 @@ pub mod conversion {
 
 #[async_trait]
 impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
-    // ================== SERVER-TO-CLIENT NOTIFICATIONS ==================
-
     async fn send_progress_notification(
         &self,
         session_id: &str,
@@ -324,8 +329,6 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
             .await
     }
 
-    // ================== BIDIRECTIONAL NOTIFICATIONS ==================
-
     async fn send_cancelled_notification(
         &self,
         session_id: &str,
@@ -336,17 +339,13 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
             .await
     }
 
-    // ================== BROADCAST METHODS ==================
-
     async fn broadcast_to_all_sessions(
         &self,
         notification: JsonRpcNotification,
     ) -> Result<Vec<String>, BroadcastError> {
-        // Convert JsonRpcNotification to SSE-formatted JSON
         let sse_data =
             serde_json::to_value(&notification).map_err(BroadcastError::SerializationError)?;
 
-        // Use StreamManager's built-in broadcast_to_all_sessions method
         match self
             .stream_manager
             .broadcast_to_all_sessions(
@@ -378,11 +377,9 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         session_id: &str,
         notification: JsonRpcNotification,
     ) -> Result<(), BroadcastError> {
-        // Convert JsonRpcNotification to SSE-formatted JSON
         let sse_data =
             serde_json::to_value(&notification).map_err(BroadcastError::SerializationError)?;
 
-        // Send via StreamManager with proper JSON-RPC format
         match self
             .stream_manager
             .broadcast_to_session(
@@ -410,5 +407,5 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
     }
 }
 
-/// Shared NotificationBroadcaster type alias for use across the turul-http-mcp-server crate
+/// Shared, thread-safe handle to a `NotificationBroadcaster`.
 pub type SharedNotificationBroadcaster = Arc<dyn NotificationBroadcaster + Send + Sync>;

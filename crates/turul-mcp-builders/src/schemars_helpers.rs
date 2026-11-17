@@ -1,9 +1,9 @@
-//! Schemars helpers for auto-generating tool schemas
+//! Schemars helpers for auto-generating tool schemas.
 //!
-//! This module provides utilities for converting schemars-generated JSON Schemas
-//! into MCP ToolSchema format.
+//! Provides utilities for converting schemars-generated JSON Schemas
+//! into the MCP `ToolSchema` format.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```rust
 //! use turul_mcp_builders::ToolSchemaExt;
@@ -27,35 +27,31 @@ use std::collections::HashMap;
 use turul_mcp_protocol::ToolSchema;
 use turul_mcp_protocol::schema::JsonSchema;
 
-/// Convert a serde_json::Value from schemars to MCP's JsonSchema enum
+/// Converts a schemars `serde_json::Value` to MCP's `JsonSchema` enum.
 ///
 /// This is a "lossy but safe" converter that:
 /// - Handles basic types: string, number, integer, boolean, object, array
 /// - Recursively converts nested properties and array items
 /// - Returns generic Object for complex patterns (anyOf, oneOf, etc.)
-/// - **Never panics** - always returns a valid JsonSchema
+/// - **Never panics** - always returns a valid `JsonSchema`
 pub fn convert_value_to_json_schema(value: &Value) -> JsonSchema {
     convert_value_to_json_schema_with_defs(value, &HashMap::new())
 }
 
-/// Convert a serde_json::Value from schemars to MCP's JsonSchema enum with $ref resolution
+/// Converts a schemars `serde_json::Value` to MCP's `JsonSchema` enum, resolving `$ref`s.
 ///
-/// This version accepts a definitions map to resolve $ref references for nested types.
-/// Use this when converting a schemars RootSchema that includes definitions.
+/// This version accepts a definitions map to resolve `$ref` references for nested types.
+/// Use this when converting a schemars root schema that includes definitions.
 ///
-/// # Arguments
+/// `value` is the JSON schema value to convert; `definitions` maps type names to their
+/// schema definitions for `$ref` resolution.
 ///
-/// * `value` - The JSON schema value to convert
-/// * `definitions` - Map of type names to their schema definitions for $ref resolution
-///
-/// # Returns
-///
-/// A converted JsonSchema that:
+/// The converted `JsonSchema`:
 /// - Handles basic types: string, number, integer, boolean, object, array
 /// - Recursively converts nested properties and array items
-/// - Resolves $ref references to definitions for nested types
+/// - Resolves `$ref` references to definitions for nested types
 /// - Returns generic Object for unresolvable patterns (anyOf, oneOf, etc.)
-/// - **Never panics** - always returns a valid JsonSchema
+/// - **Never panics** - always returns a valid `JsonSchema`
 pub fn convert_value_to_json_schema_with_defs(
     value: &Value,
     definitions: &HashMap<String, Value>,
@@ -287,26 +283,20 @@ pub fn convert_value_to_json_schema_with_defs(
     }
 }
 
-/// Extension trait for ToolSchema to support schemars conversion
+/// Extension trait adding schemars conversion to `ToolSchema`.
 ///
-/// This trait is automatically implemented for `ToolSchema`, providing the
-/// `from_schemars()` method for converting schemars schemas to MCP format.
+/// Provides the `from_schemars()` method for converting schemars schemas to MCP format.
 pub trait ToolSchemaExt {
-    /// Convert a schemars JSON Schema to MCP ToolSchema
+    /// Converts a schemars JSON Schema to an MCP `ToolSchema`.
     ///
     /// This enables auto-generating tool output schemas from Rust types using the
     /// `schemars` crate's `JsonSchema` derive macro.
     ///
-    /// # Arguments
+    /// `schema` is a schemars `Schema` generated via `schema_for!()`. Returns the
+    /// converted schema, or an error message if the schema does not serialize or its
+    /// root is not an object schema.
     ///
-    /// * `schema` - A schemars Schema generated via `schema_for!()`
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(ToolSchema)` - Successfully converted schema
-    /// * `Err(String)` - Conversion error message
-    ///
-    /// # Example
+    /// # Examples
     ///
     /// ```rust
     /// use turul_mcp_builders::ToolSchemaExt;
@@ -345,7 +335,7 @@ impl ToolSchemaExt for ToolSchema {
             .as_object()
             .ok_or_else(|| "Schema is not an object".to_string())?;
 
-        // Validate root is an object schema (ToolSchema requires type: "object")
+        // `ToolSchema` requires a root of `type: "object"`.
         let is_object = obj.get("type").is_some_and(|v| {
             v.as_str() == Some("object")
                 || v.as_array()
@@ -364,7 +354,6 @@ impl ToolSchemaExt for ToolSchema {
             }
         }
 
-        // Convert each property using the centralized converter
         #[cfg(feature = "protocol-2025-11-25")]
         let properties = obj
             .get("properties")
@@ -429,12 +418,18 @@ impl ToolSchemaExt for ToolSchema {
     }
 }
 
-/// Inline every local `$ref` (`#/$defs/X`, `#/definitions/X`) in `value`
-/// against `defs`, recursively. Errors on unresolvable pointers and on
-/// cyclic references — cyclic schemas cannot be inlined and are not
-/// supported as tool parameter/output types (restructure the type, or build
-/// the whole `ToolSchema` from a root schemars document via `from_schemars`,
-/// which keeps `$defs` at the schema root instead).
+/// Inlines every local `$ref` (`#/$defs/X`, `#/definitions/X`) in `value`
+/// against `defs`, recursively.
+///
+/// Cyclic schemas cannot be inlined and are not supported as tool
+/// parameter/output types (restructure the type, or build the whole
+/// `ToolSchema` from a root schemars document via `from_schemars`, which keeps
+/// `$defs` at the schema root instead).
+///
+/// # Errors
+///
+/// Returns an error for a non-local `$ref`, a `$ref` with no matching definition,
+/// or a cyclic reference.
 pub fn resolve_local_refs(value: &Value, defs: &HashMap<String, Value>) -> Result<Value, String> {
     fn walk(
         value: &Value,
@@ -494,7 +489,7 @@ pub fn resolve_local_refs(value: &Value, defs: &HashMap<String, Value>) -> Resul
     walk(value, defs, &mut stack)
 }
 
-/// Convert a schemars-generated document into a single property/field
+/// Converts a schemars-generated document into a single property/field
 /// subschema for embedding inside a `ToolSchema`.
 ///
 /// 2026-07-28: local `$ref`s are inlined (a subschema cannot carry the
@@ -505,8 +500,10 @@ pub fn resolve_local_refs(value: &Value, defs: &HashMap<String, Value>) -> Resul
 /// typed enum).
 ///
 /// # Panics
-/// On cyclic `$ref`s — cyclic schemas cannot be inlined into a property
-/// subschema and are not supported as tool parameter/output types. Surface a
+///
+/// Panics if the schema cannot be serialized to a JSON value, or (2026-07-28 lane) if it contains
+/// cyclic or unresolvable `$ref`s. Cyclic schemas cannot be inlined into a property
+/// subschema and are not supported as tool parameter/output types; use a
 /// non-recursive type instead.
 pub fn schemars_param_schema(schema: schemars::Schema) -> JsonSchema {
     let schema_value =
@@ -785,8 +782,8 @@ mod schema_fidelity_2026_tests {
     #[test]
     fn tagged_union_one_of_survives_the_pipeline() {
         // A data-bearing enum renders as oneOf-with-const-tag subschemas —
-        // exactly the shape the old typed conversion DOWNGRADED (no
-        // oneOf/const in the structured model). The pipeline must carry it.
+        // a shape the 2025-11-25 typed model cannot express (no
+        // oneOf/const). The 2026-07-28 pipeline must carry it.
         let schema = schema_for!(Drawing);
         let prop = schemars_param_schema(schema);
         let v = serde_json::to_value(&prop).unwrap();
@@ -807,8 +804,8 @@ mod schema_fidelity_2026_tests {
 
     #[test]
     fn composition_keywords_survive_verbatim() {
-        // oneOf/anyOf/allOf + const are exactly what the typed model used to
-        // downgrade; the Raw path must carry them untouched.
+        // oneOf/anyOf/allOf + const are not expressible in the 2025-11-25 typed model;
+        // the Raw path must carry them untouched.
         let value = json!({
             "oneOf": [
                 {"type": "string", "const": "a"},

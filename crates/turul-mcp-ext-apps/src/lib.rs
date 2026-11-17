@@ -7,7 +7,7 @@
 //! ([`UiToolMeta`]) and UI resource metadata ([`UiResourceMeta`]). The
 //! host-to-view iframe protocol is left to app and host SDKs.
 //!
-//! # Example
+//! # Examples
 //!
 //! Link a tool to its UI resource under `_meta.ui`:
 //!

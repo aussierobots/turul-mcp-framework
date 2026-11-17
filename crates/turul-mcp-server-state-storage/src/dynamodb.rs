@@ -54,12 +54,12 @@ pub struct DynamoDbServerStateStorage {
 }
 
 impl DynamoDbServerStateStorage {
-    /// Create with default configuration.
+    /// Creates with default configuration.
     pub async fn new() -> Result<Self, ServerStateError> {
         Self::with_config(DynamoDbServerStateConfig::default()).await
     }
 
-    /// Create with custom configuration.
+    /// Creates with custom configuration.
     pub async fn with_config(config: DynamoDbServerStateConfig) -> Result<Self, ServerStateError> {
         info!(
             "Initializing DynamoDB server state storage: table={}, region={}",
@@ -89,19 +89,20 @@ impl DynamoDbServerStateStorage {
         Ok(storage)
     }
 
-    /// Create with a pre-configured AWS SDK client (useful for testing/custom endpoints).
+    /// Creates with a pre-configured AWS SDK client (useful for testing/custom endpoints).
     pub fn with_client(client: Client, table_name: String) -> Self {
         Self { client, table_name }
     }
 
-    /// Convert an AWS SDK error to a ServerStateError with full error chain.
-    /// Uses Debug formatting ({:?}) instead of Display to surface the error code,
-    /// message, HTTP status, and request ID — not just generic "service error".
+    /// Converts an AWS SDK error to a `ServerStateError` with the full error chain.
+    ///
+    /// Uses Debug formatting (`{:?}`) instead of Display to surface the error code,
+    /// message, HTTP status, and request ID, not just a generic "service error".
     fn dynamo_err_debug(e: impl std::fmt::Debug) -> ServerStateError {
         ServerStateError::DatabaseError(format!("{e:?}"))
     }
 
-    /// Ensure the table exists, creating it if necessary.
+    /// Ensures the table exists, creating it if necessary.
     async fn ensure_table(&self) -> Result<(), ServerStateError> {
         match self
             .client
@@ -148,7 +149,7 @@ impl DynamoDbServerStateStorage {
         }
     }
 
-    /// Create the DynamoDB table with camelCase key schema.
+    /// Creates the DynamoDB table with camelCase key schema.
     async fn create_table(&self) -> Result<(), ServerStateError> {
         use aws_sdk_dynamodb::types::{
             AttributeDefinition, BillingMode, KeySchemaElement, KeyType, ScalarAttributeType,
@@ -206,7 +207,7 @@ impl DynamoDbServerStateStorage {
         }
     }
 
-    /// Wait for the table to become ACTIVE (polls every 500ms, up to 30s).
+    /// Waits for the table to become ACTIVE (polls every 500ms, up to 30s).
     async fn wait_for_table_active(&self) -> Result<(), ServerStateError> {
         use aws_sdk_dynamodb::types::TableStatus;
 
@@ -246,7 +247,7 @@ impl DynamoDbServerStateStorage {
         )))
     }
 
-    /// Extract a string attribute from a DynamoDB item.
+    /// Extracts a string attribute from a DynamoDB item.
     fn get_s(
         item: &std::collections::HashMap<String, AttributeValue>,
         key: &str,
@@ -254,7 +255,7 @@ impl DynamoDbServerStateStorage {
         item.get(key).and_then(|v| v.as_s().ok()).cloned()
     }
 
-    /// Extract a boolean attribute from a DynamoDB item.
+    /// Extracts a boolean attribute from a DynamoDB item.
     fn get_bool(
         item: &std::collections::HashMap<String, AttributeValue>,
         key: &str,
@@ -262,7 +263,7 @@ impl DynamoDbServerStateStorage {
         item.get(key).and_then(|v| v.as_bool().ok()).copied()
     }
 
-    /// Parse a DynamoDB item into an EntityState.
+    /// Parses a DynamoDB item into an EntityState.
     fn item_to_entity_state(
         item: &std::collections::HashMap<String, AttributeValue>,
     ) -> Option<EntityState> {
@@ -459,7 +460,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
     }
 
     async fn maintenance(&self) -> Result<(), ServerStateError> {
-        // No-op: DynamoDB manages capacity and cleanup via TTL natively.
+        // No-op: this backend has nothing to compact.
         debug!("DynamoDB maintenance: no-op");
         Ok(())
     }
@@ -852,8 +853,7 @@ mod tests {
     // delayed persistence, or dropped writes.
     //
     // Against real AWS DynamoDB this exercises the cold-start fingerprint-read path
-    // from a fresh storage instance — the scenario behind the v0.3.26 non-deterministic
-    // fingerprint investigation and the subsequent consistent_read(true) fix.
+    // from a fresh storage instance, where get_fingerprint relies on consistent_read(true).
     #[tokio::test]
     #[ignore = "requires DynamoDB"]
     async fn read_your_writes_contract_fingerprint() {

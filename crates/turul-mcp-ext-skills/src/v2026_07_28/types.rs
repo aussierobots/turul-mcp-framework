@@ -62,6 +62,7 @@ pub struct Skill {
     pub frontmatter: Map<String, Value>,
     /// REQUIRED.
     pub resources: SkillResources,
+    /// Protocol-reserved `_meta` metadata; omitted when `None`.
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<Map<String, Value>>,
 }
@@ -73,12 +74,19 @@ pub struct ListSkillsResult {
     /// MUST be `"complete"`.
     #[serde(default)]
     pub result_type: ResultType,
+    /// The skills in this page.
     pub skills: Vec<Skill>,
+    /// Cursor for the next page; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<Cursor>,
+    /// How long, in milliseconds, the client may cache the result before
+    /// re-fetching; `0` means immediately stale.
     #[serde(with = "ttl_ms_serde")]
     pub ttl_ms: f64,
+    /// Whether a cached copy may be shared across authorization contexts
+    /// (`public`) or only reused within the same one (`private`).
     pub cache_scope: CacheScope,
+    /// Protocol-reserved `_meta` metadata; omitted when `None`.
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<Map<String, Value>>,
 }
@@ -100,10 +108,16 @@ pub struct GetSkillResult {
     /// MUST be `"complete"`.
     #[serde(default)]
     pub result_type: ResultType,
+    /// The requested skill.
     pub skill: Skill,
+    /// How long, in milliseconds, the client may cache the result before
+    /// re-fetching; `0` means immediately stale.
     #[serde(with = "ttl_ms_serde")]
     pub ttl_ms: f64,
+    /// Whether a cached copy may be shared across authorization contexts
+    /// (`public`) or only reused within the same one (`private`).
     pub cache_scope: CacheScope,
+    /// Protocol-reserved `_meta` metadata; omitted when `None`.
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<Map<String, Value>>,
 }
@@ -133,11 +147,17 @@ pub struct ReadResourceDirectoryResult {
     pub result_type: ResultType,
     /// Files with their `Resource` metadata; subdirectories as directory resources.
     pub resources: Vec<Resource>,
+    /// Cursor for the next page; absent on the last page.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<Cursor>,
+    /// How long, in milliseconds, the client may cache the result before
+    /// re-fetching; `0` means immediately stale.
     #[serde(with = "ttl_ms_serde")]
     pub ttl_ms: f64,
+    /// Whether a cached copy may be shared across authorization contexts
+    /// (`public`) or only reused within the same one (`private`).
     pub cache_scope: CacheScope,
+    /// Protocol-reserved `_meta` metadata; omitted when `None`.
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     pub meta: Option<Map<String, Value>>,
 }

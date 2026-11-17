@@ -1,5 +1,5 @@
-//! The upstream examples and the vendored `schema.json` are the contract
-//! (ADR-038 §Tests): `validate()` must agree with the schema on every example.
+//! The upstream examples and the vendored `schema.json` are the contract:
+//! `validate()` must agree with the schema on every example.
 
 use super::*;
 use serde_json::{Value, json};

@@ -172,8 +172,8 @@ async fn test_handler_pattern_middleware_error_short_circuits() {
 async fn test_both_handlers_use_run_middleware_and_dispatch() {
     // This test documents that both handlers use the run_middleware_and_dispatch pattern.
     // The actual implementation is in:
-    // - crates/turul-http-mcp-server/src/streamable_http.rs:1608-1630
-    // - crates/turul-http-mcp-server/src/session_handler.rs:880-902
+    // - crates/turul-http-mcp-server/src/streamable_http.rs
+    // - crates/turul-http-mcp-server/src/session_handler.rs
     //
     // Both call:
     // 1. StorageBackedSessionView::new(session_id, storage)

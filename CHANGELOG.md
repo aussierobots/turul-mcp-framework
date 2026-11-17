@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.33] - 2026-11-18
+
+Every active crate is a patch: `turul-http-mcp-server` 0.4.14, `turul-mcp-aws-lambda` 0.4.13,
+`turul-mcp-builders` 0.4.6, `turul-mcp-client` 0.4.16, `turul-mcp-derive` 0.4.11,
+`turul-mcp-ext-apps` 0.1.6, `turul-mcp-ext-server-card` 0.1.1, `turul-mcp-ext-skills` 0.1.5,
+`turul-mcp-ext-tasks` 0.1.10, `turul-mcp-oauth` 0.4.5, `turul-mcp-protocol` 0.4.4,
+`turul-mcp-protocol-2026-07-28` 0.4.5, `turul-mcp-schema-validation` 0.4.4, `turul-mcp-server`
+0.4.21, `turul-mcp-server-state-storage` 0.4.4, `turul-mcp-session-storage` 0.4.4,
+`turul-mcp-task-storage` 0.4.3. The frozen 0.3 crates are untouched.
+
+### Security
+
+- **`turul-mcp-oauth` requires `turul-jwt-validator` 0.3.5.** Before 0.3.5, a validly signed,
+  unexpired token with no `aud` claim was accepted. So was a token with no `iss` claim when an
+  issuer was configured. Only a wrong value was rejected. `oauth_resource_server` configures both,
+  so a missing audience is now `InvalidAudience` and a missing issuer is `InvalidIssuer`. There is
+  no API change. Tokens your authorization server issues must carry `aud` (the resource URL, as
+  RFC 8707 audience binding requires) and `iss`. The workspace requirement moves from `0.3` to
+  `0.3.5`, so updating `turul-mcp-oauth` cannot keep an older validator.
+
+### Changed
+
+- **Source comments meet the rustdoc conventions and `docs/rules/comments.md`.** About 3,200
+  comment lines across 201 files in the 17 active crates:
+  - **Removed:** ADR, gap-ID, phase and history citations. Each one is replaced by the
+    constraint it stood for.
+  - **Doc comments:** summaries are one third-person sentence; `# Errors` and `# Panics`
+    sections appear only where the condition can be named from the code.
+  - **Corrected inaccurate docs:**
+    - The `McpResource` and `McpPrompt` derives were described as implementing those traits;
+      they implement only the metadata traits.
+    - A builder doc named a method that does not exist.
+    - Several setters said "adds" where they overwrite.
+
+  Every changed comment was checked against its code by a second reviewer. Mechanically, no
+  code line or doctest changed, apart from formatting that re-sorted a `pub use` group whose
+  separating comment was removed.
+- **Every public item is documented, and docs.rs shows the opt-in features.**
+  - **Coverage:** 949 previously undocumented public items now have docs (rustdoc's
+    `missing_docs` reports zero). Protocol wire types take their wording from the spec's
+    `schema.ts`.
+  - **docs.rs:** the seven crates with opt-in features declare them in
+    `[package.metadata.docs.rs]` and enable `doc_cfg`, so docs.rs builds them and labels each
+    item with the feature it needs. Before this, `with_ext_tasks`, `with_ext_skills`,
+    `with_server_card`, dynamic tools and the SQLite/PostgreSQL/DynamoDB backends did not appear
+    on docs.rs at all. Those seven crates are the server, client, Lambda, the three storage
+    crates and `turul-mcp-ext-tasks`.
+  - **Gates:** `scripts/ci-gates.sh docs` and CI deny `missing_docs` on the published crates.
+    The new `scripts/docsrs-check.sh` reproduces each docs.rs build on nightly with its
+    declared features.
+- **Doc examples compile on 2026-07-28.** The 10 `ignore` blocks for items that exist on the
+  default lane now compile and run (or are `no_run` where they need a live server). Six derive
+  and macro examples stay ignored on 2026-07-28 because `McpElicitation`, `McpSampling` and
+  `McpLogger` exist only on the 2025-11-25 lane. The `turul-mcp-oauth` example now asserts the
+  routes it documents instead of carrying a commented-out builder call.
+- **ADR citations are gone from tests, examples and error messages.** Two skill-catalog build
+  errors drop their "(ADR-033 §N)" suffix and keep the stated constraint. Nothing asserted on
+  that text.
+
+### Fixed
+
+- **`ResourceReference` is no longer a second definition of `Resource`.** It is now a type alias
+  for `resources::Resource`, which the schema's `ResourceLink extends Resource` describes. Code
+  naming `ResourceReference` compiles unchanged, including constructors, struct literals, builder
+  methods and patterns, and the wire fields are identical. Within a resource link, `annotations`
+  now serialises before `icons`; JSON key order carries no meaning. Semver: removing the separate
+  struct's inherent `impl` is formally breaking, because the methods now come from `Resource`. It
+  ships as a patch under the 0.4 rule.
+
 ## [0.4.32] - 2026-11-17
 
 `turul-mcp-aws-lambda` 0.4.11 → 0.4.12.

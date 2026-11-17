@@ -45,7 +45,9 @@ pub struct ToolsByVisibility {
     pub app_only: Vec<Tool>,
 }
 
-/// Split tools into model-visible and app-only. A tool with malformed
+/// Splits tools into model-visible and app-only.
+///
+/// A tool with malformed
 /// `_meta.ui` fails the split rather than landing in either list.
 pub fn partition_tools(tools: Vec<Tool>) -> Result<ToolsByVisibility, serde_json::Error> {
     let mut split = ToolsByVisibility::default();

@@ -1,4 +1,4 @@
-//! CORS (Cross-Origin Resource Sharing) support
+//! CORS (Cross-Origin Resource Sharing) support.
 //!
 //! All CORS headers for the HTTP transport are centralized here.
 //! `server.rs` applies [`CorsLayer::apply_cors_headers`] to every response
@@ -48,7 +48,7 @@ pub(crate) const CORS_MAX_AGE: &str = "86400";
 
 // ── Public API ────────────────────────────────────────────────────────
 
-/// CORS layer for adding appropriate headers to HTTP responses.
+/// Adds CORS headers to HTTP responses.
 ///
 /// Applied by `server.rs` to **every** response when `enable_cors` is true,
 /// including OPTIONS preflight responses. Individual handlers should not
@@ -56,7 +56,7 @@ pub(crate) const CORS_MAX_AGE: &str = "86400";
 pub struct CorsLayer;
 
 impl CorsLayer {
-    /// Apply wildcard CORS headers to a response.
+    /// Applies wildcard CORS headers to a response.
     ///
     /// Sets `Access-Control-Allow-Origin: *` (no credentials).
     pub fn apply_cors_headers(headers: &mut HeaderMap) {
@@ -167,7 +167,7 @@ mod tests {
             "options_response() must not set CORS methods"
         );
 
-        // Simulate server.rs:508 — apply CorsLayer
+        // Apply CorsLayer, as server.rs does
         CorsLayer::apply_cors_headers(response.headers_mut());
 
         // After CorsLayer: full CORS contract

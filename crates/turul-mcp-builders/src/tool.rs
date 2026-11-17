@@ -1,19 +1,14 @@
-//! Tool Builder for Runtime Tool Construction
-//!
-//! This module provides a builder pattern for creating tools at runtime
-//! without requiring procedural macros. This is Level 3 of the tool creation spectrum.
+//! Builder for creating tools at runtime without procedural macros.
 
 use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-// Import traits from local traits module
 use crate::traits::{
     HasAnnotations, HasBaseMetadata, HasDescription, HasExecution, HasIcons, HasInputSchema,
     HasOutputSchema, HasToolMeta,
 };
-// Import protocol types
 use turul_mcp_protocol::icons::Icon;
 use turul_mcp_protocol::schema::JsonSchema;
 use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
@@ -22,11 +17,11 @@ use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
 #[cfg(feature = "protocol-2025-11-25")]
 use turul_mcp_protocol::tools::ToolExecution;
 
-/// Type alias for dynamic tool execution function
+/// Async function that executes a tool from its JSON arguments.
 pub type DynamicToolFn =
     Box<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send>> + Send + Sync>;
 
-/// Builder for creating tools at runtime
+/// Builder for creating tools at runtime.
 pub struct ToolBuilder {
     name: String,
     title: Option<String>,
@@ -45,7 +40,7 @@ pub struct ToolBuilder {
 }
 
 impl ToolBuilder {
-    /// Create a new tool builder with the given name
+    /// Creates a new tool builder with the given name.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -63,25 +58,25 @@ impl ToolBuilder {
         }
     }
 
-    /// Set the tool title (display name)
+    /// Sets the tool title (display name).
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
-    /// Set the tool description
+    /// Sets the tool description.
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    /// Add a parameter to the input schema
+    /// Adds a parameter to the input schema.
     pub fn param<T: Into<String>>(mut self, name: T, schema: JsonSchema) -> Self {
         self.properties.insert(name.into(), schema);
         self
     }
 
-    /// Add a required parameter
+    /// Adds a required parameter.
     pub fn required_param<T: Into<String>>(mut self, name: T, schema: JsonSchema) -> Self {
         let param_name = name.into();
         self.properties.insert(param_name.clone(), schema);
@@ -89,33 +84,33 @@ impl ToolBuilder {
         self
     }
 
-    /// Add a string parameter
+    /// Adds a string parameter.
     pub fn string_param(self, name: impl Into<String>, description: impl Into<String>) -> Self {
         self.required_param(name, JsonSchema::string().with_description(description))
     }
 
-    /// Add a number parameter
+    /// Adds a number parameter.
     pub fn number_param(self, name: impl Into<String>, description: impl Into<String>) -> Self {
         self.required_param(name, JsonSchema::number().with_description(description))
     }
 
-    /// Add an integer parameter
+    /// Adds an integer parameter.
     pub fn integer_param(self, name: impl Into<String>, description: impl Into<String>) -> Self {
         self.required_param(name, JsonSchema::integer().with_description(description))
     }
 
-    /// Add a boolean parameter
+    /// Adds a boolean parameter.
     pub fn boolean_param(self, name: impl Into<String>, description: impl Into<String>) -> Self {
         self.required_param(name, JsonSchema::boolean().with_description(description))
     }
 
-    /// Set the output schema
+    /// Sets the output schema.
     pub fn output_schema(mut self, schema: ToolSchema) -> Self {
         self.output_schema = Some(schema);
         self
     }
 
-    /// Set the output schema to expect a number result
+    /// Sets the output schema to expect a number result.
     pub fn number_output(mut self) -> Self {
         self.output_schema = Some(
             ToolSchema::object()
@@ -128,7 +123,7 @@ impl ToolBuilder {
         self
     }
 
-    /// Set the output schema to expect a string result
+    /// Sets the output schema to expect a string result.
     pub fn string_output(mut self) -> Self {
         self.output_schema = Some(
             ToolSchema::object()
@@ -141,32 +136,32 @@ impl ToolBuilder {
         self
     }
 
-    /// Set annotations
+    /// Sets annotations.
     pub fn annotations(mut self, annotations: ToolAnnotations) -> Self {
         self.annotations = Some(annotations);
         self
     }
 
-    /// Set execution configuration (per-tool task support). 2025-11-25 only.
+    /// Sets execution configuration (per-tool task support); available only on the 2025-11-25 lane.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn execution(mut self, execution: ToolExecution) -> Self {
         self.execution = Some(execution);
         self
     }
 
-    /// Set the tool icons (display hints)
+    /// Sets the tool icons (display hints).
     pub fn icons(mut self, icons: Vec<Icon>) -> Self {
         self.icons = Some(icons);
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Set the execution function
+    /// Sets the execution function.
     pub fn execute<F, Fut>(mut self, f: F) -> Self
     where
         F: Fn(Value) -> Fut + Send + Sync + 'static,
@@ -176,7 +171,11 @@ impl ToolBuilder {
         self
     }
 
-    /// Build the dynamic tool
+    /// Builds the dynamic tool.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if no execution function was set.
     pub fn build(self) -> Result<DynamicTool, String> {
         let execute_fn = self.execute_fn.ok_or("Execution function is required")?;
 
@@ -204,7 +203,7 @@ impl ToolBuilder {
     }
 }
 
-/// Dynamic tool created by ToolBuilder
+/// Dynamic tool created by [`ToolBuilder`].
 pub struct DynamicTool {
     name: String,
     title: Option<String>,
@@ -220,14 +219,17 @@ pub struct DynamicTool {
 }
 
 impl DynamicTool {
-    /// Execute the tool with the given arguments
+    /// Executes the tool with the given arguments.
+    ///
+    /// # Errors
+    ///
+    /// Returns the execution function's error if it fails.
     pub async fn execute(&self, args: Value) -> Result<Value, String> {
         (self.execute_fn)(args).await
     }
 }
 
-// Implement all fine-grained traits for DynamicTool
-/// Implements HasBaseMetadata for DynamicTool providing name and title access
+/// Implements `HasBaseMetadata` for `DynamicTool` providing name and title access.
 impl HasBaseMetadata for DynamicTool {
     fn name(&self) -> &str {
         &self.name
@@ -238,49 +240,49 @@ impl HasBaseMetadata for DynamicTool {
     }
 }
 
-/// Implements HasDescription for DynamicTool providing description text access
+/// Implements `HasDescription` for `DynamicTool` providing description text access.
 impl HasDescription for DynamicTool {
     fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
 }
 
-/// Implements HasInputSchema for DynamicTool providing parameter schema access
+/// Implements `HasInputSchema` for `DynamicTool` providing parameter schema access.
 impl HasInputSchema for DynamicTool {
     fn input_schema(&self) -> &ToolSchema {
         &self.input_schema
     }
 }
 
-/// Implements HasOutputSchema for DynamicTool providing result schema access
+/// Implements `HasOutputSchema` for `DynamicTool` providing result schema access.
 impl HasOutputSchema for DynamicTool {
     fn output_schema(&self) -> Option<&ToolSchema> {
         self.output_schema.as_ref()
     }
 }
 
-/// Implements HasAnnotations for DynamicTool providing metadata annotations
+/// Implements `HasAnnotations` for `DynamicTool` providing metadata annotations.
 impl HasAnnotations for DynamicTool {
     fn annotations(&self) -> Option<&ToolAnnotations> {
         self.annotations.as_ref()
     }
 }
 
-/// Implements HasToolMeta for DynamicTool providing additional metadata fields
+/// Implements `HasToolMeta` for `DynamicTool` providing additional metadata fields.
 impl HasToolMeta for DynamicTool {
     fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
         self.meta.as_ref()
     }
 }
 
-/// Implements HasIcons for DynamicTool providing optional icons
+/// Implements `HasIcons` for `DynamicTool` providing optional icons.
 impl HasIcons for DynamicTool {
     fn icons(&self) -> Option<&Vec<Icon>> {
         self.icons.as_ref()
     }
 }
 
-/// Implements HasExecution for DynamicTool providing task support configuration.
+/// Implements `HasExecution` for `DynamicTool` providing task support configuration.
 /// Under 2026-07-28 `HasExecution` is a marker (no Tool execution field).
 #[cfg(feature = "protocol-2025-11-25")]
 impl HasExecution for DynamicTool {

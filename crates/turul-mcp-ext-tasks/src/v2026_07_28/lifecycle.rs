@@ -29,6 +29,7 @@ pub struct GetTaskParams {
     /// The task identifier to query.
     #[serde(rename = "taskId")]
     pub task_id: String,
+    /// Protocol-reserved metadata attached to the message (`_meta`); omitted when `None`.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<MetaObject>,
 }
@@ -39,15 +40,19 @@ pub struct GetTaskParams {
 /// inside may be in any state).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTaskResult {
+    /// Result discriminator; always `"complete"` because the request itself finished, whatever state the task is in.
     #[serde(rename = "resultType", default)]
     pub result_type: ResultType,
+    /// Protocol-reserved metadata attached to the message (`_meta`); omitted when `None`.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<MetaObject>,
+    /// The task in its current status, flattened into the result.
     #[serde(flatten)]
     pub task: DetailedTask,
 }
 
 impl GetTaskResult {
+    /// Creates a result with `resultType` `"complete"`, no `_meta`, and the given task.
     pub fn new(task: DetailedTask) -> Self {
         Self {
             result_type: ResultType::Complete,
@@ -79,6 +84,7 @@ pub struct UpdateTaskParams {
     /// `TaskStore::provide_input`.
     #[serde(rename = "inputResponses")]
     pub input_responses: std::collections::HashMap<String, serde_json::Value>,
+    /// Protocol-reserved metadata attached to the message (`_meta`); omitted when `None`.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<MetaObject>,
 }
@@ -90,6 +96,7 @@ pub struct CancelTaskParams {
     /// The task identifier to cancel.
     #[serde(rename = "taskId")]
     pub task_id: String,
+    /// Protocol-reserved metadata attached to the message (`_meta`); omitted when `None`.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<MetaObject>,
 }
@@ -99,8 +106,10 @@ pub struct CancelTaskParams {
 /// `resultType: "complete"`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaskAckResult {
+    /// Result discriminator; always `"complete"`.
     #[serde(rename = "resultType", default)]
     pub result_type: ResultType,
+    /// Protocol-reserved metadata attached to the message (`_meta`); omitted when `None`.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<MetaObject>,
 }
@@ -110,8 +119,10 @@ pub struct TaskAckResult {
 /// these; clients subscribe via `subscriptions/listen`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskStatusNotificationParams {
+    /// Protocol-reserved metadata attached to the message (`_meta`); omitted when `None`.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<MetaObject>,
+    /// The task in its current status, flattened into the notification params.
     #[serde(flatten)]
     pub task: DetailedTask,
 }
@@ -130,6 +141,7 @@ pub struct TaskSubscriptionNotifications {
 /// agreed to send status notifications for.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct TaskSubscriptionAcknowledgedNotifications {
+    /// Task IDs the server agreed to send `notifications/tasks` for; omitted when `None`.
     #[serde(rename = "taskIds", skip_serializing_if = "Option::is_none")]
     pub task_ids: Option<Vec<String>>,
 }

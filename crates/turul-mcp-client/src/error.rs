@@ -55,14 +55,20 @@ pub enum McpClientError {
     /// Server returned an error
     #[error("Server error (code {code}): {message}")]
     ServerError {
+        /// JSON-RPC error code returned by the server.
         code: i32,
+        /// Human-readable error message returned by the server.
         message: String,
+        /// Optional structured `data` member of the JSON-RPC error, when the server sent one.
         data: Option<Value>,
     },
 
     /// Generic error with context
     #[error("Error: {message}")]
-    Generic { message: String },
+    Generic {
+        /// Description of what went wrong.
+        message: String,
+    },
 
     /// The server did not declare the extension this call belongs to, so the
     /// call was not sent (an extension's methods may be issued only after the
@@ -74,30 +80,47 @@ pub enum McpClientError {
     /// frontmatter, or not listed in the manifest). Its content must not be
     /// used; refresh the entry with `skills_get` and retry.
     #[error("Skill verification failed for {uri}: {reason}")]
-    SkillVerification { uri: String, reason: String },
+    SkillVerification {
+        /// URI of the skill file that failed verification.
+        uri: String,
+        /// Why the file was declined, e.g. not in the manifest or a size, digest or frontmatter mismatch.
+        reason: String,
+    },
 }
 
 /// Transport-specific errors
 #[derive(Error, Debug)]
 pub enum TransportError {
+    /// The HTTP transport failed; carries the failure description.
     #[error("HTTP transport error: {0}")]
     Http(String),
 
+    /// The SSE transport failed; carries the failure description.
     #[error("SSE transport error: {0}")]
     Sse(String),
 
+    /// The stdio transport failed; carries the failure description.
     #[error("Stdio transport error: {0}")]
     Stdio(String),
 
+    /// The endpoint names a transport this client does not implement; carries the reason.
     #[error("Unsupported transport: {0}")]
     Unsupported(String),
 
+    /// The transport could not establish a connection; carries the failure description.
     #[error("Connection failed: {0}")]
     ConnectionFailed(String),
 
+    /// The server answered with a non-success HTTP status.
     #[error("HTTP {status}: {message}")]
-    HttpStatus { status: u16, message: String },
+    HttpStatus {
+        /// HTTP status code of the response.
+        status: u16,
+        /// Response body or reason text accompanying the status.
+        message: String,
+    },
 
+    /// The transport was closed while an operation was still in progress.
     #[error("Transport closed unexpectedly")]
     Closed,
 }
@@ -105,24 +128,31 @@ pub enum TransportError {
 /// Protocol-specific errors
 #[derive(Error, Debug)]
 pub enum ProtocolError {
+    /// A JSON-RPC request was malformed; carries the reason.
     #[error("Invalid JSON-RPC request: {0}")]
     InvalidRequest(String),
 
+    /// A JSON-RPC response was malformed or did not match the request; carries the reason.
     #[error("Invalid JSON-RPC response: {0}")]
     InvalidResponse(String),
 
+    /// The server's protocol version is not one this client accepts; carries the reason.
     #[error("Unsupported protocol version: {0}")]
     UnsupportedVersion(String),
 
+    /// The peer reported the requested method does not exist; carries the method name.
     #[error("Method not found: {0}")]
     MethodNotFound(String),
 
+    /// The method parameters were rejected as invalid; carries the reason.
     #[error("Invalid parameters: {0}")]
     InvalidParams(String),
 
+    /// Protocol version or capability negotiation failed; carries the reason.
     #[error("Protocol negotiation failed: {0}")]
     NegotiationFailed(String),
 
+    /// The server lacks a capability the operation requires; carries the capability description.
     #[error("Capability mismatch: {0}")]
     CapabilityMismatch(String),
 }
@@ -130,44 +160,55 @@ pub enum ProtocolError {
 /// Session management errors
 #[derive(Error, Debug)]
 pub enum SessionError {
+    /// An operation needing an initialized session was attempted before initialization.
     #[error("Session not initialized")]
     NotInitialized,
 
+    /// Initialization was attempted on a session that is already initialized.
     #[error("Session already initialized")]
     AlreadyInitialized,
 
+    /// The session expired and can no longer be used.
     #[error("Session expired")]
     Expired,
 
+    /// The session was terminated and can no longer be used.
     #[error("Session terminated")]
     Terminated,
 
+    /// The session was in a state that does not permit the operation.
     #[error("Invalid session state: expected {expected}, found {actual}")]
-    InvalidState { expected: String, actual: String },
+    InvalidState {
+        /// The state the operation required.
+        expected: String,
+        /// The state the session was actually in.
+        actual: String,
+    },
 
+    /// Attempting to recover the session failed; carries the reason.
     #[error("Session recovery failed: {0}")]
     RecoveryFailed(String),
 }
 
 impl McpClientError {
-    /// Create a generic error with a message
+    /// Creates a generic error with a message.
     pub fn generic(message: impl Into<String>) -> Self {
         Self::Generic {
             message: message.into(),
         }
     }
 
-    /// Create a configuration error
+    /// Creates a configuration error.
     pub fn config(message: impl Into<String>) -> Self {
         Self::Config(message.into())
     }
 
-    /// Create an authentication error
+    /// Creates an authentication error.
     pub fn auth(message: impl Into<String>) -> Self {
         Self::Auth(message.into())
     }
 
-    /// Create a server error from JSON-RPC error response
+    /// Creates a server error from a JSON-RPC error response.
     pub fn server_error(code: i32, message: impl Into<String>, data: Option<Value>) -> Self {
         Self::ServerError {
             code,
@@ -176,8 +217,8 @@ impl McpClientError {
         }
     }
 
-    /// Is this a resource-not-found error from `resources/read`, on a
-    /// connection negotiated at the given wire version?
+    /// Returns whether this is a resource-not-found error from `resources/read`, on a
+    /// connection negotiated at the given wire version.
     ///
     /// Resources §Error Handling: servers answer a nonexistent resource with
     /// `-32602`; "For backwards compatibility, clients SHOULD also accept
@@ -202,7 +243,7 @@ impl McpClientError {
         )
     }
 
-    /// Check if the error is retryable
+    /// Returns whether the error is retryable.
     pub fn is_retryable(&self) -> bool {
         match self {
             Self::Transport(TransportError::ConnectionFailed(_)) => true,
@@ -217,8 +258,9 @@ impl McpClientError {
         }
     }
 
-    /// Check if this error indicates the session is expired/unknown (HTTP 404).
-    /// Per MCP spec, client MUST start a new session on 404.
+    /// Returns whether this error indicates the session is expired or unknown (HTTP 404).
+    ///
+    /// Per the MCP spec, a client MUST start a new session on 404.
     pub fn is_session_expired(&self) -> bool {
         matches!(
             self,
@@ -226,8 +268,9 @@ impl McpClientError {
         )
     }
 
-    /// Check if the server refused the request's protocol version
-    /// (JSON-RPC `-32022` UnsupportedProtocolVersionError). On an established
+    /// Returns whether the server refused the request's protocol version.
+    ///
+    /// The signal is JSON-RPC `-32022` UnsupportedProtocolVersionError. On an established
     /// connection this means the server behind the URL now speaks a different
     /// spec revision than the one locked at `connect()`.
     pub fn is_unsupported_protocol_version(&self) -> bool {
@@ -237,8 +280,10 @@ impl McpClientError {
         )
     }
 
-    /// Check if a stateful (2025-era) server refused the request for lack of an
-    /// `Mcp-Session-Id`. On a connection locked to 2026-07-28, which never sends
+    /// Returns whether a stateful (2025-era) server refused the request for lack of an
+    /// `Mcp-Session-Id`.
+    ///
+    /// On a connection locked to 2026-07-28, which never sends
     /// one, this means the server behind the URL is now a 2025-era server.
     pub fn is_missing_session_id(&self) -> bool {
         matches!(
@@ -248,7 +293,7 @@ impl McpClientError {
         )
     }
 
-    /// Check if this error indicates the server rejected the request because
+    /// Returns whether the server rejected the request because
     /// `notifications/initialized` has not been processed yet (JSON-RPC -32031
     /// or message containing "Session not initialized").
     ///
@@ -264,17 +309,17 @@ impl McpClientError {
         }
     }
 
-    /// Check if the error is a protocol-level issue
+    /// Returns whether the error is a protocol-level issue.
     pub fn is_protocol_error(&self) -> bool {
         matches!(self, Self::Protocol(_))
     }
 
-    /// Check if the error is a session-level issue
+    /// Returns whether the error is a session-level issue.
     pub fn is_session_error(&self) -> bool {
         matches!(self, Self::Session(_))
     }
 
-    /// Get the error code if this is a server error
+    /// Returns the error code if this is a server error.
     pub fn error_code(&self) -> Option<i32> {
         match self {
             Self::ServerError { code, .. } => Some(*code),

@@ -19,8 +19,11 @@ use serde_json::Value;
 
 /// Known entity types for server state storage.
 pub mod entity_types {
+    /// Entity type for tools.
     pub const TOOLS: &str = "tools";
+    /// Entity type for resources.
     pub const RESOURCES: &str = "resources";
+    /// Entity type for prompts.
     pub const PROMPTS: &str = "prompts";
 }
 
@@ -45,7 +48,7 @@ pub struct RegistrySnapshot {
     pub entity_type: String,
     /// Current fingerprint for this entity type
     pub fingerprint: String,
-    /// List of active entity IDs
+    /// Active entity IDs.
     pub active_entities: Vec<String>,
     /// ISO 8601 datetime when the registry was last modified
     pub updated_at: String,
@@ -67,19 +70,21 @@ pub struct RegistrySnapshot {
 /// - DynamoDB — serverless/AWS deployments
 #[async_trait]
 pub trait ServerStateStorage: Send + Sync {
-    /// Storage backend name (for logging/diagnostics)
+    /// Returns the storage backend name (for logging/diagnostics).
     fn backend_name(&self) -> &'static str;
 
     // ==================== Entity State ====================
 
-    /// Get the activation state of a specific entity.
+    /// Returns the activation state of a specific entity.
+    ///
+    /// Returns `None` when no state is stored for the entity.
     async fn get_entity_state(
         &self,
         entity_type: &str,
         entity_id: &str,
     ) -> Result<Option<EntityState>, ServerStateError>;
 
-    /// Set the activation state of a specific entity (upsert).
+    /// Sets the activation state of a specific entity (upsert).
     async fn set_entity_state(
         &self,
         entity_type: &str,
@@ -87,24 +92,25 @@ pub trait ServerStateStorage: Send + Sync {
         state: EntityState,
     ) -> Result<(), ServerStateError>;
 
-    /// Delete an entity's state.
+    /// Deletes an entity's state; succeeds when no state is stored.
     async fn delete_entity_state(
         &self,
         entity_type: &str,
         entity_id: &str,
     ) -> Result<(), ServerStateError>;
 
-    /// List all active entity IDs for a given type.
+    /// Lists all active entity IDs for a given type.
     async fn get_active_entities(&self, entity_type: &str)
     -> Result<Vec<String>, ServerStateError>;
 
     // ==================== Fingerprint ====================
 
-    /// Get the current fingerprint for an entity type.
-    /// Returns None if no fingerprint has been set.
+    /// Returns the current fingerprint for an entity type.
+    ///
+    /// Returns `None` if no fingerprint has been set.
     async fn get_fingerprint(&self, entity_type: &str) -> Result<Option<String>, ServerStateError>;
 
-    /// Set the fingerprint for an entity type.
+    /// Sets the fingerprint for an entity type.
     async fn set_fingerprint(
         &self,
         entity_type: &str,
@@ -113,8 +119,9 @@ pub trait ServerStateStorage: Send + Sync {
 
     // ==================== Registry Snapshot ====================
 
-    /// Get a full snapshot of the registry for an entity type.
-    /// Useful for startup comparison and diagnostics.
+    /// Returns a full snapshot of the registry for an entity type.
+    ///
+    /// Returns `None` when no fingerprint has been set for the type. Useful for startup comparison and diagnostics.
     async fn get_registry_snapshot(
         &self,
         entity_type: &str,
@@ -122,9 +129,9 @@ pub trait ServerStateStorage: Send + Sync {
 
     // ==================== Maintenance ====================
 
-    /// Perform storage maintenance (cleanup, compaction, etc.)
+    /// Performs storage maintenance (cleanup, compaction, etc.).
     async fn maintenance(&self) -> Result<(), ServerStateError>;
 }
 
-/// Type alias for boxed server state storage (mirrors SessionStorage pattern)
+/// Type alias for boxed server state storage (mirrors SessionStorage pattern).
 pub type BoxedServerStateStorage = dyn ServerStateStorage;

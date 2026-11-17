@@ -1,5 +1,5 @@
 //! Wire-shape tests against the vendored `schema/skills.mdx`, and the
-//! owner-routing guard (ADR-033 §Tests).
+//! owner-routing guard.
 
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -88,7 +88,7 @@ fn resources_dynamic_and_manifest_parse() {
     );
 }
 
-/// :231 — any `resources` value other than an array or `"dynamic"` is invalid.
+/// Any `resources` value other than an array or `"dynamic"` is invalid.
 #[test]
 fn resources_other_values_rejected() {
     for bad in [
@@ -108,7 +108,7 @@ fn resources_other_values_rejected() {
     assert!(serde_json::from_value::<super::types::Skill>(missing).is_err());
 }
 
-/// ADR-033 §1: every caller routes through the owner constructors — no
+/// Every caller routes through the owner constructors — no
 /// `skill://` or `sha256:` literal is formatted in non-test code outside
 /// `uri.rs` and `manifest.rs`, in this crate, the server's ext_skills module or the client.
 #[test]

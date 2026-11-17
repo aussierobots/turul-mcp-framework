@@ -1,4 +1,4 @@
-//! Framework traits for MCP sampling construction
+//! Defines framework traits for constructing MCP sampling requests.
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
@@ -8,63 +8,63 @@ use turul_mcp_protocol::prompts::ContentBlock;
 use turul_mcp_protocol::sampling::{CreateMessageParams, ModelPreferences, Role, SamplingMessage};
 
 pub trait HasSamplingMessageMetadata {
-    /// Role of the message (from spec)
+    /// Returns the message role.
     fn role(&self) -> &Role;
 
-    /// Content of the message (from spec)
+    /// Returns the message content.
     fn content(&self) -> &ContentBlock;
 }
 
-/// Trait for sampling configuration (from CreateMessageRequest spec)
+/// Provides sampling configuration for a `CreateMessageRequest`.
 pub trait HasSamplingConfig {
-    /// Maximum tokens to generate (required field from spec)
+    /// Returns the maximum tokens to generate.
     fn max_tokens(&self) -> u32;
 
-    /// Temperature for sampling (optional from spec)
+    /// Returns the sampling temperature, if any.
     fn temperature(&self) -> Option<f64> {
         None
     }
 
-    /// Stop sequences (optional from spec)
+    /// Returns the stop sequences, if any.
     fn stop_sequences(&self) -> Option<&Vec<String>> {
         None
     }
 }
 
-/// Trait for sampling context (from CreateMessageRequest spec)
+/// Provides sampling context for a `CreateMessageRequest`.
 pub trait HasSamplingContext {
-    /// Messages for context (required from spec)
+    /// Returns the context messages.
     fn messages(&self) -> &[SamplingMessage];
 
-    /// System prompt (optional from spec)
+    /// Returns the system prompt, if any.
     fn system_prompt(&self) -> Option<&str> {
         None
     }
 
-    /// Include context setting (optional from spec)
+    /// Returns the include-context setting, if any.
     fn include_context(&self) -> Option<&str> {
         None
     }
 }
 
-/// Trait for model preferences (from CreateMessageRequest spec)
+/// Provides model preferences for a `CreateMessageRequest`.
 pub trait HasModelPreferences {
-    /// Model preferences (optional from spec)
+    /// Returns the model preferences, if any.
     fn model_preferences(&self) -> Option<&ModelPreferences> {
         None
     }
 
-    /// Metadata (optional from spec)
+    /// Returns the request metadata, if any.
     fn metadata(&self) -> Option<&Value> {
         None
     }
 }
 
-/// Trait for sampling tools (MCP 2025-11-25)
+/// Provides tools the model may use during sampling (MCP 2025-11-25).
 ///
-/// Tools that the LLM can use during a sampling request, enabling agentic workflows.
+/// These tools let the LLM act during a sampling request, enabling agentic workflows.
 pub trait HasSamplingTools {
-    /// Tools available to the LLM during sampling (optional, MCP 2025-11-25)
+    /// Returns the tools available to the LLM during sampling, if any.
     fn tools(&self) -> Option<&Vec<Tool>> {
         None
     }
@@ -87,7 +87,7 @@ pub trait HasSamplingTools {
 ///
 /// # How to Create a Sampling Configuration
 ///
-/// Implement these three traits on your struct:
+/// Implement these four traits on your struct:
 ///
 /// ```rust
 /// # use turul_mcp_protocol::sampling::*;
@@ -168,7 +168,7 @@ pub trait HasSamplingTools {
 pub trait SamplingDefinition:
     HasSamplingConfig + HasSamplingContext + HasModelPreferences + HasSamplingTools
 {
-    /// Convert to CreateMessageParams
+    /// Builds `CreateMessageParams` from this definition, leaving `tool_choice`, `task` and `meta` unset.
     fn to_create_params(&self) -> CreateMessageParams {
         CreateMessageParams {
             messages: self.messages().to_vec(),

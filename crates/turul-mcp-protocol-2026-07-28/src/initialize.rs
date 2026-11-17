@@ -11,21 +11,21 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Describes the name and version of an MCP implementation
+/// Describes the name and version of an MCP implementation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Implementation {
-    /// Machine-readable name
+    /// Name intended for programmatic use; clients display it when `title` is absent.
     pub name: String,
-    /// Version string (e.g., "1.0.0")
+    /// Version string (e.g., "1.0.0").
     pub version: String,
-    /// Optional human-friendly display title
+    /// Optional human-friendly display title.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    /// Optional human-readable description of this implementation
+    /// Optional human-readable description of this implementation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// Optional URL for the implementation's website
+    /// Optional URL for the implementation's website.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub website_url: Option<String>,
     /// Optional icons for display. Most implementations do not need icons.
@@ -34,6 +34,7 @@ pub struct Implementation {
 }
 
 impl Implementation {
+    /// Creates an implementation description from its required name and version, leaving all optional fields unset.
     pub fn new(name: impl Into<String>, version: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -45,21 +46,25 @@ impl Implementation {
         }
     }
 
+    /// Sets the human-readable display title.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Sets the human-readable description of the implementation.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the URL of the implementation's website.
     pub fn with_website_url(mut self, url: impl Into<String>) -> Self {
         self.website_url = Some(url.into());
         self
     }
 
+    /// Sets the icons offered for display.
     pub fn with_icons(mut self, icons: Vec<crate::icons::Icon>) -> Self {
         self.icons = Some(icons);
         self
@@ -69,8 +74,8 @@ impl Implementation {
 /// Capabilities related to root listing support.
 ///
 /// Schema: `ClientCapabilities.roots?: {}` — an empty object; presence alone
-/// means the client supports listing roots. `notifications/roots/list_changed`
-/// was removed in this revision, so there is no `listChanged` sub-field.
+/// means the client supports listing roots. This revision has no
+/// `notifications/roots/list_changed`, so there is no `listChanged` sub-field.
 ///
 /// **Deprecated** per SEP-2577 alongside the Roots feature.
 #[deprecated(
@@ -158,8 +163,8 @@ pub struct ElicitationCapabilities {
 /// - `elicitation?: { form?, url? }`
 /// - `extensions?: { [k]: JSONObject }`  — reverse-DNS keyed extension capability map
 ///
-/// Note: `tasks` field is NOT present — tasks moved entirely to extension
-/// in 2026-07-28 (SEP-2663). Advertise tasks support via
+/// Note: there is no `tasks` field — tasks are an extension in 2026-07-28
+/// (SEP-2663). Advertise tasks support via
 /// `extensions["io.modelcontextprotocol/tasks"]`.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -188,7 +193,7 @@ pub struct ClientCapabilities {
     pub extensions: Option<HashMap<String, Value>>,
 }
 
-/// Capabilities for prompts provided by the server
+/// Capabilities for prompts provided by the server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptsCapabilities {
@@ -197,7 +202,7 @@ pub struct PromptsCapabilities {
     pub list_changed: Option<bool>,
 }
 
-/// Capabilities for tools provided by the server
+/// Capabilities for tools provided by the server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolsCapabilities {
@@ -209,7 +214,7 @@ pub struct ToolsCapabilities {
 // Tasks capabilities live in the tasks extension (SEP-2663). Advertise via
 // `extensions["io.modelcontextprotocol/tasks"]` on `ServerCapabilities`.
 
-/// Capabilities for resources provided by the server
+/// Capabilities for resources provided by the server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourcesCapabilities {
@@ -233,7 +238,7 @@ pub struct LoggingCapabilities {
     pub extra: HashMap<String, Value>,
 }
 
-/// Capabilities for completions provided by the server
+/// Capabilities for completions provided by the server.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct CompletionsCapabilities {
@@ -323,7 +328,7 @@ mod tests {
     #[test]
     #[allow(deprecated)]
     fn roots_capabilities_ignores_unknown_fields_on_deserialize() {
-        // Forward-compat: extra keys (including the removed `listChanged`) must not
+        // Forward-compat: extra keys (including `listChanged`) must not
         // reject deserialization.
         let wire = serde_json::json!({"listChanged": true});
         let parsed: Result<RootsCapabilities, _> = serde_json::from_value(wire);

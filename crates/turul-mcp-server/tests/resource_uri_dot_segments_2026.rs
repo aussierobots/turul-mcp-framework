@@ -1,4 +1,4 @@
-//! ADR-007: `resources/read` refuses any `..` path segment, in every position
+//! `resources/read` refuses any `..` path segment, in every position
 //! and in its percent-encoded form, before a URI reaches a resource handler,
 //! and a template variable admits percent-encoded octets.
 //!

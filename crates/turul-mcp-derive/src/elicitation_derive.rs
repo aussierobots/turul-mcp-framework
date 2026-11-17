@@ -1,4 +1,4 @@
-//! Implementation of #[derive(McpElicitation)] macro
+//! Implements the `#[derive(McpElicitation)]` macro.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -14,11 +14,9 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
     let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes from #[elicitation(...)]
     let elicitation_meta = extract_elicitation_meta(&input.attrs)?;
     let message = &elicitation_meta.message;
 
-    // Check if it's a struct
     let data = match &input.data {
         Data::Struct(data) => data,
         _ => {
@@ -29,7 +27,6 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
         }
     };
 
-    // Generate schema from struct fields
     let schema_fields = generate_schema_fields(&input.ident, data)?;
 
     let expanded = quote! {
@@ -62,7 +59,7 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
         #[#async_trait::async_trait]
         impl #mcp_server::McpElicitation for #struct_name {
             async fn elicit(&self, request: #mcp_protocol::elicitation::ElicitCreateRequest) -> #mcp_protocol::McpResult<#mcp_protocol::elicitation::ElicitResult> {
-                // Default implementation - this should be overridden by implementing elicit_impl
+                // Delegates to elicit_impl, mapping its String error to McpError::tool_execution.
                 match self.elicit_impl(request).await {
                     Ok(result) => Ok(result),
                     Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
@@ -71,9 +68,8 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         impl #struct_name {
-            /// Override this method to provide custom elicitation logic
+            /// Returns a sample accepted result containing a single "response" entry.
             pub async fn elicit_impl(&self, _request: #mcp_protocol::elicitation::ElicitCreateRequest) -> Result<#mcp_protocol::elicitation::ElicitResult, String> {
-                // Default: return a sample result
                 use std::collections::HashMap;
                 let mut content = HashMap::new();
                 content.insert("response".to_string(), #json_crate::Value::String("User input collected".to_string()));
@@ -128,7 +124,6 @@ fn generate_field_schema(field: &Field) -> Result<TokenStream> {
         .description
         .unwrap_or_else(|| "No description".to_string());
 
-    // Generate schema based on field type
     let type_name = &field.ty;
     let schema = match type_name {
         syn::Type::Path(path) if path.path.is_ident("String") => {
@@ -242,7 +237,6 @@ mod tests {
         let result = derive_mcp_elicitation_impl(input);
         assert!(result.is_ok());
 
-        // Check that the generated code contains required trait implementations
         let code = result.unwrap().to_string();
         assert!(code.contains("HasElicitationMetadata"));
         assert!(code.contains("HasElicitationSchema"));

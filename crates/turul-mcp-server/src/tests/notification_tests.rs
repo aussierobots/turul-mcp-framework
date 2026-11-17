@@ -376,9 +376,7 @@ mod notification_delivery_tests {
 
         let session_id = manager.create_session().await;
 
-        // Note: For testing SSE subscription, we need access to session internals
-        // In a real implementation, this would be handled by the HTTP/SSE layer
-        // For now, we'll test the manager's event sending capability
+        // The SSE layer owns subscription; this test covers only the manager's event sending.
 
         // Send a test event
         let test_event = SessionEvent::Custom {
@@ -611,10 +609,6 @@ mod notification_error_tests {
 #[cfg(test)]
 mod notification_performance_tests {
     use super::*;
-    // Removed AtomicUsize, Ordering imports - no longer needed after removing performance tests
-
-    // test_notification_throughput removed - caused async deadlocks in unit tests
-    // Performance tests should be integration tests with separate server/client processes
 
     #[tokio::test]
     async fn test_broadcast_performance() {

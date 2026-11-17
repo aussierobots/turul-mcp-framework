@@ -9,14 +9,14 @@ use syn::{Ident, LitStr, Result, Token, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
-/// Implementation function for the notification!{} declarative macro
+/// Expands the `notification!{}` declarative macro.
 pub fn notification_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let input = syn::parse::<NotificationMacroInput>(input)?;
     let output = notification_declarative_impl_inner(input);
     Ok(output.into())
 }
 
-/// Internal implementation that works with proc_macro2::TokenStream for testing
+/// Expands the macro input to a `proc_macro2::TokenStream`, so tests can call it outside a proc-macro context.
 pub fn notification_declarative_impl_inner(
     input: NotificationMacroInput,
 ) -> proc_macro2::TokenStream {
@@ -43,7 +43,7 @@ pub fn notification_declarative_impl_inner(
     }
 }
 
-/// Parse input for the notification!{} macro
+/// Parsed input of the `notification!{}` macro.
 pub struct NotificationMacroInput {
     name: String,
     fields: Vec<NotificationField>,
@@ -69,7 +69,7 @@ impl Parse for NotificationMacroInput {
     }
 }
 
-/// Individual field in notification macro
+/// A single field declared in the `notification!{}` macro.
 struct NotificationField {
     name: String,
     field_type: syn::Type,
@@ -141,7 +141,6 @@ fn generate_default_impl(
 
     let field_defaults = fields.iter().map(|field| {
         let field_name = syn::Ident::new(&field.name, proc_macro2::Span::call_site());
-        // Generate sensible defaults based on type
         let field_type = &field.field_type;
         let default_value = match field_type {
             syn::Type::Path(path) if path.path.is_ident("String") => quote! { String::new() },

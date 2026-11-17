@@ -278,7 +278,8 @@ pub fn sanitize_authorizer_field_name(field: &str) -> String {
 /// ```
 /// The API Gateway stage lambda_http prefixed onto this request's path, if it
 /// did: a REST or HTTP API stage other than `$default`, unless
-/// `AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH` told lambda_http not to (ADR-038 §6).
+/// `AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH` told lambda_http not to. Route matching
+/// retries without this prefix, so `/prod/mcp/server-card` still matches `/mcp/server-card`.
 pub(crate) fn api_gateway_stage_prefix(req: &LambdaRequest) -> Option<String> {
     use lambda_http::request::RequestContext;
     if std::env::var_os("AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH").is_some() {
@@ -292,6 +293,12 @@ pub(crate) fn api_gateway_stage_prefix(req: &LambdaRequest) -> Option<String> {
     (stage != "$default" && !stage.is_empty()).then_some(stage)
 }
 
+/// Returns the API Gateway authorizer context fields of a request as string key/value pairs.
+///
+/// Keys pass through [`sanitize_authorizer_field_name`]; string values are kept as-is and
+/// other JSON values are serialized. For REST API (V1) contexts a nested `lambda` object
+/// is preferred, and `principalId`, `integrationLatency` and `usageIdentifierKey` are skipped.
+/// The map is empty when the request carries no API Gateway request context or no authorizer.
 pub fn extract_authorizer_context(req: &LambdaRequest) -> HashMap<String, String> {
     use lambda_http::request::RequestContext;
 

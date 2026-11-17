@@ -16,7 +16,7 @@ use std::collections::HashMap;
 use crate::logging::LoggingLevel;
 use turul_rpc::RequestId;
 
-/// Base notification parameters that can include _meta
+/// Base notification parameters that can include `_meta`.
 ///
 /// Schema retypes `_meta` from `MetaObject` to `NotificationMetaObject` (which
 /// extends `MetaObject` with the optional
@@ -46,6 +46,7 @@ impl Default for NotificationParams {
 }
 
 impl NotificationParams {
+    /// Creates empty parameters with no `_meta` and no other fields.
     pub fn new() -> Self {
         Self {
             meta: None,
@@ -53,11 +54,13 @@ impl NotificationParams {
         }
     }
 
+    /// Sets the `_meta` object and returns the parameters.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
+    /// Inserts a notification-specific parameter under `key`, replacing any existing value, and returns the parameters.
     pub fn with_param(mut self, key: impl Into<String>, value: Value) -> Self {
         self.other.insert(key.into(), value);
         self
@@ -65,9 +68,8 @@ impl NotificationParams {
 }
 
 // `Params` and `HasMetaParam` impls live at the bottom of this file alongside
-// the rest of the notifications trait impls. Adding the `HasNotificationMeta` and
-// `HasDataParam` impls (which the json_rpc layer needs) here for visibility
-// with the struct definition.
+// the rest of the notifications trait impls; `HasNotificationMeta` and
+// `HasDataParam` sit here beside the struct definition.
 impl crate::traits::HasNotificationMeta for NotificationParams {
     fn meta(&self) -> Option<&crate::meta::MetaObject> {
         self.meta.as_ref()
@@ -80,7 +82,7 @@ impl crate::traits::HasDataParam for NotificationParams {
     }
 }
 
-/// Base notification structure following MCP TypeScript specification
+/// Base notification structure: a `method` and optional `params`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Notification {
@@ -92,6 +94,7 @@ pub struct Notification {
 }
 
 impl Notification {
+    /// Creates a notification with the given method and no parameters.
     pub fn new(method: impl Into<String>) -> Self {
         Self {
             method: method.into(),
@@ -99,6 +102,7 @@ impl Notification {
         }
     }
 
+    /// Sets the notification parameters and returns the notification.
     pub fn with_params(mut self, params: NotificationParams) -> Self {
         self.params = Some(params);
         self
@@ -128,6 +132,7 @@ impl Default for ResourceListChangedNotification {
 }
 
 impl ResourceListChangedNotification {
+    /// Creates a `notifications/resources/list_changed` payload with no params.
     pub fn new() -> Self {
         Self {
             method: "notifications/resources/list_changed".to_string(),
@@ -135,6 +140,7 @@ impl ResourceListChangedNotification {
         }
     }
 
+    /// Attaches `_meta` as the params and returns the notification.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params = Some(NotificationParams::new().with_meta(meta));
         self
@@ -147,12 +153,16 @@ impl ResourceListChangedNotification {
 /// MCP-specific fields (`method`, `params`), NOT the `jsonrpc: "2.0"` envelope required
 /// for transport. To send on the wire, wrap in `JsonRpcNotification`:
 ///
-/// ```rust,ignore
+/// ```rust
+/// use turul_mcp_protocol_2026_07_28::{JsonRpcNotification, ToolListChangedNotification};
+///
 /// // CORRECT — wire-complete:
-/// let wire_msg = JsonRpcNotification::new("notifications/tools/list_changed".to_string());
+/// let wire_msg = JsonRpcNotification::new_no_params("notifications/tools/list_changed".to_string());
+/// assert_eq!(serde_json::to_value(&wire_msg).unwrap()["jsonrpc"], "2.0");
 ///
 /// // WRONG — missing jsonrpc field, will fail client validation:
 /// let payload = ToolListChangedNotification::new(); // NOT wire-complete
+/// assert!(serde_json::to_value(&payload).unwrap().get("jsonrpc").is_none());
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -171,6 +181,7 @@ impl Default for ToolListChangedNotification {
 }
 
 impl ToolListChangedNotification {
+    /// Creates a `notifications/tools/list_changed` payload with no params.
     pub fn new() -> Self {
         Self {
             method: "notifications/tools/list_changed".to_string(),
@@ -178,6 +189,7 @@ impl ToolListChangedNotification {
         }
     }
 
+    /// Attaches `_meta` as the params and returns the notification.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params = Some(NotificationParams::new().with_meta(meta));
         self
@@ -205,6 +217,7 @@ impl Default for PromptListChangedNotification {
 }
 
 impl PromptListChangedNotification {
+    /// Creates a `notifications/prompts/list_changed` payload with no params.
     pub fn new() -> Self {
         Self {
             method: "notifications/prompts/list_changed".to_string(),
@@ -212,13 +225,14 @@ impl PromptListChangedNotification {
         }
     }
 
+    /// Attaches `_meta` as the params and returns the notification.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params = Some(NotificationParams::new().with_meta(meta));
         self
     }
 }
 
-/// Method: "notifications/progress"
+/// Notification for `notifications/progress`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProgressNotification {
@@ -228,12 +242,13 @@ pub struct ProgressNotification {
     pub params: ProgressNotificationParams,
 }
 
-/// Progress token value. Deprecated alias for [`crate::meta::ProgressToken`] —
-/// the schema has one `ProgressToken = string | number` type used at both
-/// request-meta and progress-notification carriers; both sites now reference
-/// the unified type. Kept as a re-export for any caller pinning the old name.
+/// Alias for [`crate::meta::ProgressToken`].
+///
+/// The schema has one `ProgressToken = string | number` type used at both the
+/// request-meta and progress-notification carriers.
 pub use crate::meta::ProgressToken as ProgressTokenValue;
 
+/// Parameters of a `notifications/progress` notification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProgressNotificationParams {
@@ -254,6 +269,7 @@ pub struct ProgressNotificationParams {
 }
 
 impl ProgressNotification {
+    /// Creates a progress notification for the given token and amount of work completed so far, with no total, message or `_meta`.
     pub fn new(progress_token: impl Into<crate::meta::ProgressToken>, progress: f64) -> Self {
         Self {
             method: "notifications/progress".to_string(),
@@ -267,23 +283,26 @@ impl ProgressNotification {
         }
     }
 
+    /// Sets the total amount of work, when known, and returns the notification.
     pub fn with_total(mut self, total: f64) -> Self {
         self.params.total = Some(total);
         self
     }
 
+    /// Sets a human-readable status message and returns the notification.
     pub fn with_message(mut self, message: impl Into<String>) -> Self {
         self.params.message = Some(message.into());
         self
     }
 
+    /// Sets the `_meta` object and returns the notification.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params.meta = Some(meta);
         self
     }
 }
 
-/// Method: "notifications/resources/updated"
+/// Notification for `notifications/resources/updated`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceUpdatedNotification {
@@ -293,6 +312,7 @@ pub struct ResourceUpdatedNotification {
     pub params: ResourceUpdatedNotificationParams,
 }
 
+/// Parameters of a `notifications/resources/updated` notification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceUpdatedNotificationParams {
@@ -305,6 +325,7 @@ pub struct ResourceUpdatedNotificationParams {
 }
 
 impl ResourceUpdatedNotification {
+    /// Creates a notification that the resource at the given URI was updated.
     pub fn new(uri: impl Into<String>) -> Self {
         Self {
             method: "notifications/resources/updated".to_string(),
@@ -315,13 +336,14 @@ impl ResourceUpdatedNotification {
         }
     }
 
+    /// Sets the `_meta` object and returns the notification.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params.meta = Some(meta);
         self
     }
 }
 
-/// Method: "notifications/cancelled"
+/// Notification for `notifications/cancelled`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CancelledNotification {
@@ -331,6 +353,7 @@ pub struct CancelledNotification {
     pub params: CancelledNotificationParams,
 }
 
+/// Parameters of a `notifications/cancelled` notification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CancelledNotificationParams {
@@ -350,8 +373,8 @@ pub struct CancelledNotificationParams {
 }
 
 impl CancelledNotification {
-    /// Cancel a specific in-flight request (or close a `subscriptions/listen`
-    /// stream, on stdio, by its request id).
+    /// Creates a notification cancelling a specific in-flight request (or
+    /// closing a `subscriptions/listen` stream, on stdio, by its request id).
     pub fn new(request_id: RequestId) -> Self {
         Self {
             method: "notifications/cancelled".to_string(),
@@ -363,18 +386,20 @@ impl CancelledNotification {
         }
     }
 
+    /// Sets the human-readable reason for cancelling and returns the notification.
     pub fn with_reason(mut self, reason: impl Into<String>) -> Self {
         self.params.reason = Some(reason.into());
         self
     }
 
+    /// Sets the `_meta` object and returns the notification.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params.meta = Some(meta);
         self
     }
 }
 
-/// Method: "notifications/message".
+/// Notification for `notifications/message`.
 ///
 /// **Deprecated** per SEP-2577 — the whole Logging surface (this
 /// notification, the per-request `_meta` logLevel opt-in, and the
@@ -413,7 +438,7 @@ pub struct LoggingMessageNotificationParams {
     /// Optional logger name
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logger: Option<String>,
-    /// Log data (per MCP spec - any serializable type)
+    /// Log data; any JSON-serializable value.
     pub data: Value,
     /// Optional MCP meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
@@ -423,6 +448,7 @@ pub struct LoggingMessageNotificationParams {
 
 #[allow(deprecated)]
 impl LoggingMessageNotification {
+    /// Creates a log message notification with the given level and data.
     pub fn new(level: LoggingLevel, data: Value) -> Self {
         Self {
             method: "notifications/message".to_string(),
@@ -435,11 +461,13 @@ impl LoggingMessageNotification {
         }
     }
 
+    /// Sets the name of the logger that produced the message and returns the notification.
     pub fn with_logger(mut self, logger: impl Into<String>) -> Self {
         self.params.logger = Some(logger.into());
         self
     }
 
+    /// Sets the `_meta` object and returns the notification.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params.meta = Some(meta);
         self
@@ -575,11 +603,9 @@ impl CancelledNotificationTrait for CancelledNotification {}
 
 // LoggingMessageNotification — `notifications/message` wire payload.
 //
-// **Deprecated** per SEP-2577 in 2026-07-28; concrete `#[deprecated]`
-// attributes live on the struct definitions below. The trait impls here are
-// gated with `#[allow(deprecated)]` so the unimplementable-from-outside trait
-// surface still compiles internally without forcing every reader to chase a
-// warning through framework-internal code.
+// **Deprecated** per SEP-2577 in 2026-07-28; the `#[deprecated]` attributes
+// are on the struct definitions above. The trait impls here carry
+// `#[allow(deprecated)]` so they compile without deprecation warnings.
 #[allow(deprecated)]
 impl HasMethod for LoggingMessageNotification {
     fn method(&self) -> &str {

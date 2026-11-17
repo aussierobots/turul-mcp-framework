@@ -12,39 +12,39 @@ use turul_mcp_protocol::logging::LoggingLevel;
 #[cfg(feature = "protocol-2025-11-25")]
 use turul_mcp_protocol::logging::{LoggingMessageNotification, SetLevelRequest};
 
-/// Trait for logging metadata (method, logger name)
+/// Supplies logging metadata: method, logger name and `_meta`.
 pub trait HasLoggingMetadata {
-    /// The logging method name
+    /// Returns the logging method name.
     fn method(&self) -> &str;
 
-    /// Optional logger name/identifier
+    /// Returns the optional logger name.
     fn logger_name(&self) -> Option<&str> {
         None
     }
 
-    /// Optional `_meta` sent on the notification
+    /// Returns the optional `_meta` sent on the notification.
     fn meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
         None
     }
 }
 
-/// Trait for logging level configuration
+/// Supplies the logging level and level-based filtering.
 pub trait HasLogLevel {
-    /// The current or target logging level
+    /// Returns the current or target logging level.
     fn level(&self) -> LoggingLevel;
 
-    /// Check if a message at the given level should be logged
+    /// Returns whether a message at `message_level` should be logged at this level.
     fn should_log(&self, message_level: LoggingLevel) -> bool {
         message_level.should_log(self.level())
     }
 }
 
-/// Trait for log message formatting and data
+/// Supplies log data and formats it as a message.
 pub trait HasLogFormat {
-    /// Get the log data
+    /// Returns the log data.
     fn data(&self) -> &Value;
 
-    /// Format the log message for output
+    /// Formats the log data as a string, using JSON text for non-string values.
     fn format_message(&self) -> String {
         // Default: try to format as string, fallback to JSON
         match self.data() {
@@ -56,29 +56,28 @@ pub trait HasLogFormat {
     }
 }
 
-/// Trait for logging transport and delivery
+/// Controls logging delivery and batching.
 pub trait HasLogTransport {
-    /// Optional filtering criteria
+    /// Returns whether a message at `_level` should be delivered.
     fn should_deliver(&self, _level: LoggingLevel) -> bool {
         true
     }
 
-    /// Optional batching configuration
+    /// Returns the batch size, or `None` when batching is not configured.
     fn batch_size(&self) -> Option<usize> {
         None
     }
 }
 
-/// Complete MCP Logger Definition trait
+/// Defines a complete MCP logger.
 ///
-/// This trait represents a complete, working MCP logger.
 /// When you implement the required traits, you automatically get
 /// `LoggerDefinition` for free via blanket implementation.
 #[cfg(feature = "protocol-2025-11-25")]
 pub trait LoggerDefinition:
     HasLoggingMetadata + HasLogLevel + HasLogFormat + HasLogTransport
 {
-    /// Convert this logger definition to a LoggingMessageNotification
+    /// Converts this logger definition to a `LoggingMessageNotification`.
     fn to_message_notification(&self) -> LoggingMessageNotification {
         let mut notification = LoggingMessageNotification::new(self.level(), self.data().clone());
         if let Some(logger) = self.logger_name() {
@@ -90,7 +89,7 @@ pub trait LoggerDefinition:
         notification
     }
 
-    /// Convert this logger definition to a SetLevelRequest
+    /// Converts this logger definition to a `SetLevelRequest`.
     fn to_set_level_request(&self) -> SetLevelRequest {
         SetLevelRequest::new(self.level())
     }

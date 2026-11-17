@@ -10,36 +10,45 @@ use turul_mcp_protocol::{McpResult, notifications::Notification};
 /// Notification delivery status
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeliveryStatus {
+    /// The notification has been created but not yet sent.
     Pending,
+    /// The notification has been handed to the transport.
     Sent,
+    /// The recipient has confirmed receipt.
     Acknowledged,
+    /// Delivery failed.
     Failed,
+    /// Delivery failed and is being attempted again.
     Retrying,
 }
 
 /// Notification delivery result
 #[derive(Debug, Clone)]
 pub struct DeliveryResult {
+    /// Delivery state after the last attempt.
     pub status: DeliveryStatus,
+    /// Number of delivery attempts made.
     pub attempts: u32,
+    /// Error message from the last failed attempt, if any.
     pub error: Option<String>,
+    /// Unix timestamp of successful delivery, or `None` if not delivered.
     pub delivered_at: Option<u64>, // Unix timestamp
 }
 
-/// High-level trait for implementing MCP notifications
+/// High-level trait for implementing MCP notifications.
 ///
 /// McpNotification extends NotificationDefinition with execution capabilities.
 /// All metadata is provided by the NotificationDefinition trait, ensuring
 /// consistency between concrete Notification structs and dynamic implementations.
 #[async_trait]
 pub trait McpNotification: NotificationDefinition + Send + Sync {
-    /// Send a notification (per MCP spec)
+    /// Send a notification (per MCP spec).
     ///
     /// This method processes and delivers notifications to clients,
     /// handling serialization, transport, and error recovery.
     async fn send(&self, payload: Value) -> McpResult<DeliveryResult>;
 
-    /// Optional: Check if this notification handler can send the given notification
+    /// Optional: Check if this notification handler can send the given notification.
     ///
     /// This allows for conditional notification handling based on method type,
     /// payload content, or transport availability.
@@ -47,7 +56,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
         method == self.method()
     }
 
-    /// Optional: Get notification handler priority
+    /// Optional: Get notification handler priority.
     ///
     /// Higher priority handlers are tried first when multiple handlers
     /// can send the same notification type.
@@ -55,7 +64,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
         0
     }
 
-    /// Optional: Validate the notification payload
+    /// Optional: Validate the notification payload.
     ///
     /// This method can perform validation of notification data before sending.
     async fn validate_payload(&self, payload: &Value) -> McpResult<()> {
@@ -68,7 +77,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
         Ok(())
     }
 
-    /// Optional: Transform payload before sending
+    /// Optional: Transform payload before sending.
     ///
     /// This allows for data enrichment, filtering, or formatting
     /// before the notification is transmitted.
@@ -76,7 +85,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
         Ok(payload)
     }
 
-    /// Optional: Handle notification delivery errors
+    /// Optional: Handle notification delivery errors.
     ///
     /// This method is called when notification delivery fails, allowing
     /// for retry logic, fallback notifications, or error logging.
@@ -89,7 +98,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
         Ok(attempt < self.max_retries())
     }
 
-    /// Optional: Batch multiple notifications
+    /// Optional: Batch multiple notifications.
     ///
     /// This method can be used to optimize notification delivery by batching
     /// multiple notifications together when supported.
@@ -102,7 +111,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
         Ok(results)
     }
 
-    /// Optional: Subscribe to notification acknowledgments
+    /// Optional: Subscribe to notification acknowledgments.
     ///
     /// This method can be used to track which notifications have been
     /// successfully received and processed by clients.
@@ -111,7 +120,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
         Ok(())
     }
 
-    /// Optional: Check delivery status
+    /// Optional: Check delivery status.
     ///
     /// This method allows querying the current delivery status of notifications.
     async fn check_status(&self, _notification_id: &str) -> McpResult<DeliveryStatus> {
@@ -120,7 +129,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
     }
 }
 
-/// Convert an McpNotification trait object to a Notification
+/// Convert an McpNotification trait object to a Notification.
 ///
 /// This is a convenience function for converting notification definitions
 /// to protocol notifications.

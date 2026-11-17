@@ -1,6 +1,6 @@
 //! `Skill.frontmatter` (`skills.mdx` §Frontmatter). [`Frontmatter::from_skill_md`]
 //! projects `turul-agent-skills`' parse into JSON — scalars typed by its YAML 1.2
-//! core resolver — and refuses anything a host could read differently (ADR-033 §3, §9).
+//! core resolver — and refuses anything a host could read differently.
 
 use serde_json::{Map, Value};
 use turul_agent_skills::{CoreScalar, RawValue, parse_skill_md};
@@ -30,7 +30,7 @@ pub enum FrontmatterError {
 pub struct Frontmatter(Map<String, Value>);
 
 impl Frontmatter {
-    /// Project the frontmatter of `skill_md`.
+    /// Projects the frontmatter of `skill_md`.
     pub fn from_skill_md(skill_md: &str) -> Result<Self, FrontmatterError> {
         let raw = parse_skill_md(skill_md).map_err(|e| FrontmatterError::Parse(e.to_string()))?;
         if let Some(original) = raw.repaired {
@@ -111,7 +111,7 @@ mod tests {
 
     const DOC: &str = "---\nname: refunds\ndescription: Process refunds\nlicense: Apache-2.0\nmetadata:\n  author: acme\n  version: \"1.0\"\ntags:\n  - a\n  - 'b'\n---\nBody\n";
 
-    /// S-G3: every field the author wrote passes through, nested shapes included.
+    /// Every field the author wrote passes through, nested shapes included.
     #[test]
     fn s_g3_string_fields_round_trip() {
         let fm = Frontmatter::from_skill_md(DOC).unwrap();
@@ -133,7 +133,7 @@ mod tests {
         format!("---\nname: a\ndescription: d\n{extra}\n---\n")
     }
 
-    /// ADR-033 §9: plain scalars both schemas agree on are served with their
+    /// Plain scalars both schemas agree on are served with their
     /// YAML 1.2 core type; quoted scalars stay strings.
     #[test]
     fn s_g3_typed_scalars_served() {
@@ -156,7 +156,7 @@ mod tests {
         }
     }
 
-    /// ADR-033 §9: a plain scalar YAML 1.1 reads differently is refused, with its path.
+    /// A plain scalar YAML 1.1 reads differently is refused, with its path.
     #[test]
     fn s_g3_schema_disagreement_refused() {
         for (extra, at) in [
@@ -176,7 +176,7 @@ mod tests {
         }
     }
 
-    /// ADR-033 §9: values JSON cannot carry exactly are refused, with their path.
+    /// Values JSON cannot carry exactly are refused, with their path.
     #[test]
     fn s_g3_unrepresentable_refused() {
         for (extra, at) in [
@@ -192,7 +192,7 @@ mod tests {
         }
     }
 
-    /// ADR-033 §3: `name` and `description` must still be strings once typed.
+    /// `name` and `description` must still be strings once typed.
     #[test]
     fn s_g3_required_fields_must_be_strings() {
         assert_eq!(
@@ -201,7 +201,7 @@ mod tests {
         );
     }
 
-    /// S-G3 / ADR-033 §3: lenient repair means a strict host parse would disagree.
+    /// Lenient repair means a strict host parse would disagree.
     #[test]
     fn s_g3_repaired_refused() {
         let doc = "---\nname: a\ndescription: Use when: asked\n---\n";
@@ -219,7 +219,7 @@ mod tests {
         );
     }
 
-    /// S-G3 (:496): what we serve equals an independent YAML parse of the same
+    /// What we serve equals an independent YAML parse of the same
     /// bytes — `serde_yml`, not `turul-agent-skills`' parser.
     #[test]
     fn s_g3_independent_parse_agrees() {

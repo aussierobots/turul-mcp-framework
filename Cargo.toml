@@ -258,7 +258,7 @@ turul-rpc = { version = "0.2", default-features = false }
 # turul-mcp-oauth::jwt. Published crates.io pin (not a path dep) so the branch
 # builds without a sibling checkout. `rust_crypto` keeps the workspace's
 # existing jsonwebtoken backend; the crate defaults to aws_lc_rs.
-turul-jwt-validator = { version = "0.3", default-features = false, features = ["rust_crypto"] }
+turul-jwt-validator = { version = "0.3.5", default-features = false, features = ["rust_crypto"] }
 
 # Internal crate dependencies.
 # Per-crate independent versioning: each crate publishes at its own semver.
@@ -268,20 +268,20 @@ turul-jwt-validator = { version = "0.3", default-features = false, features = ["
 # its own cadence.
 turul-mcp-json-rpc-server = { version = "0.3", path = "crates/turul-mcp-json-rpc-server" }
 turul-mcp-protocol-2025-11-25 = { version = "0.3", path = "crates/turul-mcp-protocol-2025-11-25" }
-turul-mcp-protocol-2026-07-28 = { version = "0.4.4", path = "crates/turul-mcp-protocol-2026-07-28" }
-turul-mcp-schema-validation = { version = "0.4.3", path = "crates/turul-mcp-schema-validation" }
+turul-mcp-protocol-2026-07-28 = { version = "0.4.5", path = "crates/turul-mcp-protocol-2026-07-28" }
+turul-mcp-schema-validation = { version = "0.4.4", path = "crates/turul-mcp-schema-validation" }
 turul-mcp-protocol = { version = "0.4.2", path = "crates/turul-mcp-protocol" }
 turul-mcp-session-storage = { version = "0.4.2", path = "crates/turul-mcp-session-storage" }
 turul-mcp-task-storage = { version = "0.4.1", path = "crates/turul-mcp-task-storage" }
-turul-mcp-server-state-storage = { version = "0.4.3", path = "crates/turul-mcp-server-state-storage" }
+turul-mcp-server-state-storage = { version = "0.4.4", path = "crates/turul-mcp-server-state-storage" }
 turul-http-mcp-server = { version = "0.4.11", path = "crates/turul-http-mcp-server" }
 turul-mcp-server = { version = "0.4.18", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.4.9", path = "crates/turul-mcp-derive" }
 turul-mcp-client = { version = "0.4.14", path = "crates/turul-mcp-client" }
-turul-mcp-ext-apps = { version = "0.1.5", path = "crates/turul-mcp-ext-apps" }
-turul-mcp-ext-server-card = { version = "0.1.0", path = "crates/turul-mcp-ext-server-card" }
-turul-mcp-ext-skills = { version = "0.1.4", path = "crates/turul-mcp-ext-skills" }
-turul-mcp-ext-tasks = { version = "0.1.9", path = "crates/turul-mcp-ext-tasks" }
+turul-mcp-ext-apps = { version = "0.1.6", path = "crates/turul-mcp-ext-apps" }
+turul-mcp-ext-server-card = { version = "0.1.1", path = "crates/turul-mcp-ext-server-card" }
+turul-mcp-ext-skills = { version = "0.1.5", path = "crates/turul-mcp-ext-skills" }
+turul-mcp-ext-tasks = { version = "0.1.10", path = "crates/turul-mcp-ext-tasks" }
 turul-mcp-builders = { version = "0.4.4", path = "crates/turul-mcp-builders" }
 turul-mcp-aws-lambda = { version = "0.4.9", path = "crates/turul-mcp-aws-lambda" }
 turul-mcp-oauth = { version = "0.4.2", path = "crates/turul-mcp-oauth" }

@@ -5,13 +5,13 @@
 //!
 //! ## Table Schema
 //!
-//! New tables (v0.3.4+) use camelCase attribute names:
+//! New tables use camelCase attribute names:
 //! - **Partition Key**: `taskId` (S)
 //! - **GSI `SessionIndex`**: PK=`sessionId`, SK=`createdAt`
 //! - **GSI `StatusIndex`**: PK=`status`, SK=`createdAt`
 //! - **TTL attribute**: `ttlEpoch` (N, Unix epoch seconds)
 //!
-//! Legacy tables (pre-v0.3.4) use snake_case and are auto-detected via
+//! Tables with snake_case attribute names are auto-detected via
 //! `describe_table()` key schema inspection. Both conventions are fully supported.
 
 use crate::error::TaskStorageError;
@@ -34,13 +34,13 @@ use base64::Engine;
 
 /// Naming convention detected from an existing DynamoDB table's key schema.
 ///
-/// New tables use `CamelCase`; legacy pre-v0.3.4 tables use `SnakeCase`.
+/// New tables use `CamelCase`; tables with snake_case key attributes use `SnakeCase`.
 /// Detected automatically via `describe_table()` — callers never choose.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum NamingConvention {
-    /// Legacy pre-v0.3.4 tables with snake_case attribute names.
+    /// Tables with snake_case attribute names.
     SnakeCase,
-    /// New v0.3.4+ tables with camelCase attribute names.
+    /// Tables with camelCase attribute names.
     CamelCase,
 }
 
@@ -93,7 +93,7 @@ impl TaskAttrNames {
     }
 }
 
-/// Detect whether a DynamoDB table uses snake_case or camelCase attribute names
+/// Detects whether a DynamoDB table uses snake_case or camelCase attribute names
 /// by inspecting its key schema. Any multi-word key containing an underscore
 /// indicates a legacy snake_case table.
 #[cfg(feature = "dynamodb")]
@@ -402,12 +402,12 @@ fn item_to_task_record(
 }
 
 impl DynamoDbTaskStorage {
-    /// Create a new DynamoDB task storage with default configuration.
+    /// Creates a new DynamoDB task storage with default configuration.
     pub async fn new() -> Result<Self, TaskStorageError> {
         Self::with_config(DynamoDbTaskConfig::default()).await
     }
 
-    /// Create a new DynamoDB task storage with custom configuration.
+    /// Creates a new DynamoDB task storage with custom configuration.
     ///
     /// Auto-detects the table's naming convention (camelCase vs snake_case)
     /// from its key schema. New tables are created with camelCase.
@@ -458,7 +458,7 @@ impl DynamoDbTaskStorage {
         }
     }
 
-    /// Verify that the DynamoDB table exists and has the correct schema.
+    /// Verifies that the DynamoDB table exists and has the correct schema.
     /// Also detects and stores the table's naming convention.
     #[cfg(feature = "dynamodb")]
     async fn verify_table_schema(&mut self) -> Result<(), TaskStorageError> {
@@ -537,7 +537,7 @@ impl DynamoDbTaskStorage {
         }
     }
 
-    /// Create the DynamoDB table with camelCase key schema and GSIs.
+    /// Creates the DynamoDB table with camelCase key schema and GSIs.
     #[cfg(feature = "dynamodb")]
     async fn create_table(&self) -> Result<(), TaskStorageError> {
         use aws_sdk_dynamodb::types::{
@@ -663,7 +663,7 @@ impl DynamoDbTaskStorage {
         }
     }
 
-    /// Ensure TTL is enabled on the table, enabling it if necessary.
+    /// Ensures TTL is enabled on the table, enabling it if necessary.
     #[cfg(feature = "dynamodb")]
     async fn ensure_ttl_enabled(&self) -> Result<(), TaskStorageError> {
         info!(
@@ -729,7 +729,7 @@ impl DynamoDbTaskStorage {
         }
     }
 
-    /// Enable TTL on the `ttlEpoch` (or `ttl_epoch` for legacy) attribute.
+    /// Enables TTL on the `ttlEpoch` (or `ttl_epoch` for legacy) attribute.
     #[cfg(feature = "dynamodb")]
     async fn enable_ttl(&self) -> Result<(), TaskStorageError> {
         use aws_sdk_dynamodb::types::TimeToLiveSpecification;
@@ -774,7 +774,7 @@ impl DynamoDbTaskStorage {
         }
     }
 
-    /// Wait for the table to become active (10s intervals, 5 min max).
+    /// Waits for the table to become active (10s intervals, 5 min max).
     #[cfg(feature = "dynamodb")]
     async fn wait_for_table_active(&self) -> Result<(), TaskStorageError> {
         use aws_sdk_dynamodb::types::TableStatus;

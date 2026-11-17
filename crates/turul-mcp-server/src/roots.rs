@@ -2,8 +2,7 @@
 //!
 //! This module defines the high-level trait for implementing MCP roots functionality.
 
-// Implements the SEP-2577-deprecated-but-present roots feature; the roots protocol types are
-// deprecated in 2026-07-28 but still valid and intentionally supported here.
+// The roots protocol types are deprecated in 2026-07-28 (SEP-2577) but remain valid on the wire.
 #![allow(deprecated)]
 
 use async_trait::async_trait;
@@ -34,38 +33,42 @@ pub struct FileInfo {
 /// Access level for files and directories
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AccessLevel {
+    /// No access.
     None,
+    /// Read-only access.
     Read,
+    /// Read and write access.
     Write,
+    /// Unrestricted access.
     Full,
 }
 
-/// High-level trait for implementing MCP roots functionality
+/// High-level trait for implementing MCP roots functionality.
 ///
 /// McpRoot extends RootDefinition with execution capabilities.
 /// All metadata is provided by the RootDefinition trait, ensuring
 /// consistency between concrete Root structs and dynamic implementations.
 #[async_trait]
 pub trait McpRoot: RootDefinition + Send + Sync {
-    /// List available roots (per MCP spec)
+    /// List available roots (per MCP spec).
     ///
     /// This method processes the roots/list request and returns
     /// the complete list of available root directories.
     async fn list_roots(&self, request: ListRootsRequest) -> McpResult<ListRootsResult>;
 
-    /// List files within a root directory
+    /// List files within a root directory.
     ///
     /// This method lists files and directories within the specified path,
     /// respecting permissions and filtering rules.
     async fn list_files(&self, path: &str) -> McpResult<Vec<FileInfo>>;
 
-    /// Check access level for a specific path
+    /// Check access level for a specific path.
     ///
     /// This method determines what access level the client has
     /// for the specified file or directory path.
     async fn check_access(&self, path: &str) -> McpResult<AccessLevel>;
 
-    /// Optional: Check if this root handler can manage the given path
+    /// Optional: Check if this root handler can manage the given path.
     ///
     /// This allows for conditional root handling based on path patterns,
     /// URI schemes, or other factors.
@@ -73,7 +76,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
         path.starts_with(&self.uri().replace("file://", ""))
     }
 
-    /// Optional: Get root priority for request routing
+    /// Optional: Get root priority for request routing.
     ///
     /// Higher priority handlers are tried first when multiple handlers
     /// can manage the same path.
@@ -81,7 +84,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
         0
     }
 
-    /// Optional: Validate a file path
+    /// Optional: Validate a file path.
     ///
     /// This method can perform additional validation beyond basic access checks.
     async fn validate_path(&self, path: &str) -> McpResult<()> {
@@ -99,7 +102,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
         Ok(())
     }
 
-    /// Optional: Watch for changes in root directories
+    /// Optional: Watch for changes in root directories.
     ///
     /// This method can be used to monitor root directories for changes
     /// and send RootsListChangedNotification when needed.
@@ -114,7 +117,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
         Ok(())
     }
 
-    /// Optional: Send a roots list changed notification
+    /// Optional: Send a roots list changed notification.
     ///
     /// This method should be called when the list of roots changes
     /// to notify clients about the update.
@@ -123,7 +126,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
         Ok(RootsListChangedNotification::new())
     }
 
-    /// Optional: Get file metadata
+    /// Optional: Get file metadata.
     ///
     /// This method retrieves detailed metadata for a specific file or directory.
     async fn get_file_info(&self, path: &str) -> McpResult<Option<FileInfo>> {
@@ -169,7 +172,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
     }
 }
 
-/// Convert an McpRoot trait object to a ListRootsRequest
+/// Convert an McpRoot trait object to a ListRootsRequest.
 ///
 /// This is a convenience function for creating protocol requests.
 pub fn root_to_list_request(_root: &dyn McpRoot) -> ListRootsRequest {
@@ -340,7 +343,7 @@ mod tests {
         );
     }
 
-    // `notifications/roots/list_changed` was removed from the 2026-07-28 core.
+    // `notifications/roots/list_changed` is not part of the 2026-07-28 core.
     #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_roots_changed_notification() {

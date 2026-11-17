@@ -37,7 +37,7 @@ pub struct SqliteServerStateStorage {
 }
 
 impl SqliteServerStateStorage {
-    /// Create a new SQLite server state storage from config.
+    /// Creates a new SQLite server state storage from config.
     pub async fn new(config: SqliteServerStateConfig) -> Result<Self, ServerStateError> {
         info!(
             "Initializing SQLite server state storage: {}",
@@ -62,14 +62,14 @@ impl SqliteServerStateStorage {
         Ok(storage)
     }
 
-    /// Create from an existing pool (useful for sharing connections).
+    /// Creates storage from an existing pool (useful for sharing connections).
     pub async fn from_pool(pool: SqlitePool) -> Result<Self, ServerStateError> {
         let storage = Self { pool };
         storage.ensure_tables().await?;
         Ok(storage)
     }
 
-    /// Create tables if they do not exist.
+    /// Creates tables if they do not exist.
     async fn ensure_tables(&self) -> Result<(), ServerStateError> {
         debug!("Ensuring server state tables exist");
 
@@ -279,7 +279,7 @@ impl ServerStateStorage for SqliteServerStateStorage {
     }
 
     async fn maintenance(&self) -> Result<(), ServerStateError> {
-        // Run VACUUM to reclaim space
+        // Reclaim space
         sqlx::query("VACUUM")
             .execute(&self.pool)
             .await

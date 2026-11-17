@@ -37,7 +37,7 @@ pub struct UiClientCapabilities {
 }
 
 impl UiClientCapabilities {
-    /// True when the client supports MCP Apps HTML views.
+    /// Returns `true` when the client supports MCP Apps HTML views.
     pub fn supports_html_views(&self) -> bool {
         self.mime_types
             .as_ref()
@@ -76,7 +76,7 @@ impl UiToolMeta {
         ui_meta(self)
     }
 
-    /// Read `ui` back out of a tool's `_meta`: `Ok(None)` when absent, an
+    /// Reads `ui` back out of a tool's `_meta`: `Ok(None)` when absent, an
     /// error when present but malformed.
     pub fn from_meta(meta: &HashMap<String, Value>) -> Result<Option<Self>, serde_json::Error> {
         from_ui_meta(meta)
@@ -149,8 +149,12 @@ pub struct EmptyObject {}
 /// `resources/read` content item — `McpUiResourceMeta`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct UiResourceMeta {
+    /// Content Security Policy configuration: the external origins the UI
+    /// needs to access, which hosts use to enforce CSP headers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub csp: Option<UiResourceCsp>,
+    /// Sandbox permissions (browser capabilities) the UI resource requests;
+    /// hosts MAY honor them, so apps must not assume they are granted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permissions: Option<UiResourcePermissions>,
     /// Dedicated sandbox origin (host-dependent format).
@@ -168,7 +172,7 @@ impl UiResourceMeta {
         ui_meta(self)
     }
 
-    /// Read `ui` back out of a content item's `_meta`: `Ok(None)` when
+    /// Reads `ui` back out of a content item's `_meta`: `Ok(None)` when
     /// absent, an error when present but malformed.
     pub fn from_meta(meta: &HashMap<String, Value>) -> Result<Option<Self>, serde_json::Error> {
         from_ui_meta(meta)

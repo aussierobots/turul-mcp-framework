@@ -1,8 +1,5 @@
-//! SSE (Server-Sent Events) streaming adaptation for AWS Lambda
-//!
-//! This module handles the conversion of the framework's SSE streams to
-//! Lambda's streaming response format, enabling real-time notifications
-//! in serverless environments.
+//! Server-sent event (SSE) helpers for AWS Lambda streaming responses: event
+//! formatting, event streams, heartbeats and event validation.
 
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
@@ -10,10 +7,9 @@ use tracing::debug;
 
 use crate::error::{LambdaError, Result};
 
-/// Create an SSE event string from structured data
+/// Creates an SSE event string from data.
 ///
-/// This helper function formats data as proper SSE events with optional
-/// event type and ID fields.
+/// Formats `data` as an SSE event with optional event type and ID fields.
 pub fn format_sse_event(data: &str, event_type: Option<&str>, event_id: Option<&str>) -> String {
     let mut event = String::new();
 
@@ -34,10 +30,9 @@ pub fn format_sse_event(data: &str, event_type: Option<&str>, event_id: Option<&
     event
 }
 
-/// Create a stream of SSE events from a vector of data
+/// Creates a stream of SSE events from a vector of data.
 ///
-/// Utility function for testing and simple use cases where you have
-/// a known set of events to stream.
+/// Intended for tests and simple cases with a known set of events.
 pub fn create_sse_stream<T>(
     events: Vec<T>,
     formatter: impl Fn(&T) -> String + Send + 'static,
@@ -57,7 +52,7 @@ where
     }
 }
 
-/// Stream heartbeat events to keep SSE connections alive
+/// Creates a stream of periodic heartbeat events.
 ///
 /// Lambda has timeout limits, so sending periodic heartbeat events
 /// can help maintain long-running SSE connections.
@@ -83,10 +78,10 @@ pub fn create_heartbeat_stream(
     }
 }
 
-/// Merge multiple SSE streams into a single stream
+/// Merges two SSE streams into a single stream.
 ///
-/// This is useful when you want to combine different types of events
-/// (like notifications and heartbeats) into a single SSE stream.
+/// Combines different types of events (like notifications and heartbeats)
+/// into a single SSE stream.
 pub fn merge_sse_streams<S1, S2>(
     stream1: S1,
     stream2: S2,
@@ -100,10 +95,14 @@ where
     select(stream1.map(|item| (1, item)), stream2.map(|item| (2, item))).map(|(_, result)| result)
 }
 
-/// Validate SSE event format
+/// Validates an SSE event's format.
 ///
-/// Ensures that SSE events conform to the standard format and don't
-/// contain invalid characters that could break the stream.
+/// Rejects events containing characters that could break the stream.
+///
+/// # Errors
+///
+/// Returns [`LambdaError::Sse`] if the event contains a null byte or a
+/// standalone carriage return (a `\r` with no `\r\n` anywhere in the event).
 pub fn validate_sse_event(event: &str) -> Result<()> {
     // Check for null bytes which can break SSE
     if event.contains('\0') {

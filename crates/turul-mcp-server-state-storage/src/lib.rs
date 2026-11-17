@@ -48,6 +48,7 @@
 //! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server) and its `dynamic-tools` feature
 //! - [`dynamic-tools-server`](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/dynamic-tools-server) example
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 pub mod error;
 pub mod traits;
 

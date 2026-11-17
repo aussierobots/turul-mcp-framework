@@ -43,13 +43,13 @@
 /// security policy (DoS hardening), not a JSON Schema spec requirement.
 pub const MAX_SCHEMA_BYTES: usize = 256 * 1024;
 
-/// Reserved for a future resolved-`$ref`-chain bound. The current bounds walk
-/// is deliberately cycle-safe: it traverses only the literal JSON document
-/// tree and never resolves/follows a `$ref` (see [`validate_tool_input_schema`]
-/// docs) — a legitimate cyclic local `$ref` (e.g. a recursive tree-node
-/// schema) MUST pass. Because `$ref` targets are never resolved, there is no
-/// "chain" to measure without reintroducing the cycle risk this bound would
-/// otherwise guard against, so this constant is not currently exercised.
+/// Bound on a resolved `$ref` chain; not currently enforced.
+///
+/// The bounds walk is deliberately cycle-safe: it traverses only the literal
+/// JSON document tree and never resolves a `$ref` (see
+/// [`validate_tool_input_schema`]), so a legitimate cyclic local `$ref` (e.g. a
+/// recursive tree-node schema) passes. Because `$ref` targets are never
+/// resolved, there is no chain to measure.
 pub const MAX_REF_DEPTH: usize = 32;
 
 /// Maximum nesting depth through composition keywords (`allOf`/`anyOf`/`oneOf`/
@@ -59,32 +59,58 @@ pub const MAX_COMPOSITION_DEPTH: usize = 32;
 
 const DIALECT_2020_12: &str = "https://json-schema.org/draft/2020-12/schema";
 
-/// Why a tool `inputSchema` failed validation.
+/// Describes why a tool `inputSchema` failed validation.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SchemaValidationError {
+    /// The serialized schema is larger than [`MAX_SCHEMA_BYTES`].
     #[error("inputSchema is {bytes} bytes, exceeding the {limit}-byte limit")]
-    TooLarge { bytes: usize, limit: usize },
+    TooLarge {
+        /// Size of the serialized schema, in bytes.
+        bytes: usize,
+        /// The byte limit it exceeded.
+        limit: usize,
+    },
 
+    /// Keyword nesting is deeper than [`MAX_COMPOSITION_DEPTH`].
     #[error("inputSchema {kind} nesting exceeds the limit of {limit}")]
-    TooDeep { kind: &'static str, limit: usize },
+    TooDeep {
+        /// Which nesting exceeded the limit; currently always `"composition"`.
+        kind: &'static str,
+        /// The depth limit it exceeded.
+        limit: usize,
+    },
 
     #[error(
         "inputSchema declares unsupported dialect '{0}' (only JSON Schema 2020-12 is supported)"
     )]
+    /// `$schema` names a dialect other than JSON Schema 2020-12; carries that URI.
     UnsupportedDialect(String),
 
     #[error("inputSchema is not a well-formed JSON Schema 2020-12 document: {0}")]
+    /// The schema fails JSON Schema 2020-12 meta-validation; carries the validator's message.
     Malformed(String),
 
     #[error("remote $ref resolution is disabled by policy: '{0}'")]
+    /// A `$ref` points at a remote URI, which is never fetched; carries the reference.
     RemoteRef(String),
 }
 
-/// Validate a tool `inputSchema`: size bound, `$ref`/composition
-/// bounds (checked over the literal JSON tree only — see below), remote-`$ref`
-/// rejection, dialect check, then 2020-12 meta-validation. Checks run
-/// cheapest-first so a pathological schema is rejected before the (relatively)
-/// expensive compile step.
+/// Validates a tool `inputSchema`.
+///
+/// Checks run in order: size bound, composition-depth and remote-`$ref` checks
+/// (over the literal JSON tree only, see below), dialect check, then 2020-12
+/// meta-validation. Checks run cheapest-first so a pathological schema is
+/// rejected before the (relatively) expensive compile step.
+///
+/// # Errors
+///
+/// Returns [`SchemaValidationError::TooLarge`] when the serialized schema
+/// exceeds [`MAX_SCHEMA_BYTES`], [`SchemaValidationError::RemoteRef`] when a
+/// `$ref` reached by the bounds walk contains `://`, [`SchemaValidationError::TooDeep`] when nesting
+/// exceeds [`MAX_COMPOSITION_DEPTH`], [`SchemaValidationError::UnsupportedDialect`]
+/// when `$schema` is not the 2020-12 dialect, and
+/// [`SchemaValidationError::Malformed`] when the schema fails 2020-12
+/// compilation.
 ///
 /// **Cycle safety**: the bounds walk traverses only the literal JSON document
 /// tree (a finite structure by construction) — it does not resolve or follow

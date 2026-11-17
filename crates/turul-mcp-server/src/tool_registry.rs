@@ -1,4 +1,4 @@
-//! Dynamic Tool Registry for Runtime Tool Activation/Deactivation
+//! Runtime activation and deactivation of precompiled tools.
 //!
 //! Provides an in-process mutable registry that allows precompiled tools to be
 //! activated or deactivated at runtime. When tools change, connected clients
@@ -18,16 +18,16 @@ use tracing::{debug, info, warn};
 use crate::session::SessionManager;
 use crate::tool::{McpTool, compute_tool_fingerprint, tool_to_descriptor};
 
-/// In-process mutable tool registry for runtime activation/deactivation.
+/// Tracks which compiled tools are active, with runtime activation and deactivation.
 ///
 /// All tool implementations are compiled into the binary and registered at build time.
 /// This registry controls which of those compiled tools are currently **active** —
 /// it does not support adding new tool implementations at runtime.
 ///
-/// # Concurrency
-///
-/// Uses `tokio::sync::RwLock` for the active set. The lock is never held across
-/// await points — callers acquire a read lock, clone what they need, then release.
+/// Concurrency: the active set is guarded by a `tokio::sync::RwLock`. Activation and
+/// deactivation release the write lock before broadcasting or persisting, and
+/// readers clone what they need under the read lock. `write_state_to_storage`
+/// holds a read lock while it writes to shared storage.
 pub struct ToolRegistry {
     /// All compiled tools (immutable after construction)
     compiled_tools: HashMap<String, Arc<dyn McpTool>>,
@@ -52,7 +52,7 @@ struct ToolState {
 }
 
 impl ToolRegistry {
-    /// Create a new registry with all compiled tools initially active.
+    /// Creates a new registry with all compiled tools initially active.
     ///
     /// All activate/deactivate operations persist to the provided storage backend
     /// for cross-instance coordination.
@@ -83,10 +83,15 @@ impl ToolRegistry {
         }
     }
 
-    /// Activate a precompiled tool by name.
+    /// Activates a precompiled tool by name.
     ///
-    /// Returns `Ok(true)` if the tool was newly activated, `Ok(false)` if already active,
-    /// or `Err` if the name is not a compiled tool.
+    /// Returns `Ok(true)` if the tool was newly activated and `Ok(false)` if it was
+    /// already active.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToolRegistryError::NotCompiled`] if the name is not a compiled tool, or
+    /// [`ToolRegistryError::NotificationFailed`] if broadcasting the change fails.
     pub async fn activate_tool(&self, name: &str) -> Result<bool, ToolRegistryError> {
         if !self.compiled_tools.contains_key(name) {
             return Err(ToolRegistryError::NotCompiled(name.to_string()));
@@ -114,10 +119,15 @@ impl ToolRegistry {
         Ok(changed)
     }
 
-    /// Deactivate a precompiled tool by name.
+    /// Deactivates a precompiled tool by name.
     ///
-    /// Returns `Ok(true)` if the tool was deactivated, `Ok(false)` if already inactive,
-    /// or `Err` if the name is not a compiled tool.
+    /// Returns `Ok(true)` if the tool was deactivated and `Ok(false)` if it was
+    /// already inactive.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToolRegistryError::NotCompiled`] if the name is not a compiled tool, or
+    /// [`ToolRegistryError::NotificationFailed`] if broadcasting the change fails.
     pub async fn deactivate_tool(&self, name: &str) -> Result<bool, ToolRegistryError> {
         if !self.compiled_tools.contains_key(name) {
             return Err(ToolRegistryError::NotCompiled(name.to_string()));
@@ -145,7 +155,7 @@ impl ToolRegistry {
         Ok(changed)
     }
 
-    /// List all currently active tools as protocol `Tool` descriptors.
+    /// Lists all currently active tools as protocol `Tool` descriptors, sorted by name.
     pub async fn list_active_tools(&self) -> Vec<turul_mcp_protocol::Tool> {
         let state = self.state.read().await;
         let mut tools: Vec<turul_mcp_protocol::Tool> = self
@@ -159,9 +169,9 @@ impl ToolRegistry {
         tools
     }
 
-    /// Get an active tool by name. Returns None if the tool is inactive or not compiled.
+    /// Returns an active tool by name, or `None` if the tool is inactive or not compiled.
     ///
-    /// Clones the Arc under the read lock, then releases. Safe to call across await points.
+    /// Clones the `Arc` under the read lock, then releases it.
     pub async fn get_tool(&self, name: &str) -> Option<Arc<dyn McpTool>> {
         let state = self.state.read().await;
         if state.active.contains(name) {
@@ -171,18 +181,19 @@ impl ToolRegistry {
         }
     }
 
-    /// Get the current fingerprint.
+    /// Returns the fingerprint of the current active tool set.
     pub async fn fingerprint(&self) -> String {
         self.state.read().await.fingerprint.clone()
     }
 
-    /// Get the set of all compiled tool names (active and inactive).
-    /// Get the configured check TTL (from TURUL_TOOL_CHECK_TTL_SECS, default 10s).
-    /// Used by both check_for_changes() and start_polling().
+    /// Returns the configured check TTL (from `TURUL_TOOL_CHECK_TTL_SECS`, default 10s).
+    ///
+    /// Used by `check_for_changes()` as its cache TTL and by the server as the polling interval.
     pub fn check_ttl(&self) -> std::time::Duration {
         self.check_ttl
     }
 
+    /// Returns the sorted names of all tools registered at build time, whether currently active or not.
     pub fn compiled_tool_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self.compiled_tools.keys().cloned().collect();
         names.sort();
@@ -207,25 +218,27 @@ impl ToolRegistry {
             .map_err(ToolRegistryError::NotificationFailed)
     }
 
-    /// Sync local tool state against shared storage on startup.
+    /// Syncs local tool state against shared storage on startup.
     ///
-    /// Compares the local fingerprint (from compiled tools) against the stored
-    /// fingerprint. If they differ, this instance's state wins and is written
-    /// to storage. If they match, the active set from storage is loaded into
-    /// the in-memory registry.
+    /// Compares the local fingerprint (of the active tool set) against the stored
+    /// fingerprint. If none is stored or they differ, this instance's state wins and
+    /// is written to storage. If they match, the active set from storage is loaded
+    /// into the in-memory registry.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToolRegistryError::StorageError`] if reading or writing shared
+    /// storage fails.
     pub async fn sync_from_storage(&self) -> Result<SyncResult, ToolRegistryError> {
         let storage = &self.server_state;
 
-        // 1. Compute local fingerprint from compiled tools
         let local_fp = self.fingerprint().await;
 
-        // 2. Read stored fingerprint
         let stored_fp = storage
             .get_fingerprint("tools")
             .await
             .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
 
-        // 3. Compare
         match stored_fp {
             None => {
                 // First server to start — write our state to storage
@@ -238,7 +251,7 @@ impl ToolRegistry {
                 Ok(SyncResult::InSync)
             }
             Some(stored) => {
-                // Different — this instance has newer tools
+                // Different — this instance's state wins
                 warn!(
                     "Tool fingerprint mismatch: local={}, storage={}. Updating storage.",
                     local_fp, stored
@@ -256,7 +269,6 @@ impl ToolRegistry {
         let storage = &self.server_state;
         let state = self.state.read().await;
 
-        // Write each active tool
         for name in &state.active {
             let entity = turul_mcp_server_state_storage::EntityState {
                 entity_id: name.clone(),
@@ -270,7 +282,6 @@ impl ToolRegistry {
                 .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
         }
 
-        // Write fingerprint
         storage
             .set_fingerprint("tools", state.fingerprint.clone())
             .await
@@ -283,13 +294,11 @@ impl ToolRegistry {
     async fn load_state_from_storage(&self) -> Result<(), ToolRegistryError> {
         let storage = &self.server_state;
 
-        // Read active entities from storage
         let active_ids = storage
             .get_active_entities("tools")
             .await
             .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
 
-        // Update in-memory state
         let mut state = self.state.write().await;
         state.active = active_ids.into_iter().collect();
         state.fingerprint = Self::compute_fingerprint_for(&self.compiled_tools, &state.active);
@@ -313,14 +322,13 @@ impl ToolRegistry {
         {
             warn!("Failed to persist tool state to storage: {}", e);
         }
-        // Update fingerprint in storage
         let fp = self.fingerprint().await;
         if let Err(e) = self.server_state.set_fingerprint("tools", fp).await {
             warn!("Failed to persist fingerprint to storage: {}", e);
         }
     }
 
-    /// Check shared storage for external fingerprint changes (request-time detection).
+    /// Checks shared storage for external fingerprint changes (request-time detection).
     ///
     /// Uses a TTL cache (default 10s, configurable via `TURUL_TOOL_CHECK_TTL_SECS`)
     /// to avoid hitting storage on every request. Returns immediately if the cache
@@ -331,8 +339,13 @@ impl ToolRegistry {
     ///
     /// Designed for Lambda / request-driven environments where background polling
     /// is not available — call this at the start of each request instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ToolRegistryError::StorageError`] if reading the stored fingerprint or
+    /// the active set fails, or [`ToolRegistryError::NotificationFailed`] if broadcasting
+    /// the change fails.
     pub async fn check_for_changes(&self) -> Result<bool, ToolRegistryError> {
-        // TTL check — skip storage read if cache is fresh
         {
             let last = self.last_check.read().await;
             if let Some(instant) = *last
@@ -342,14 +355,12 @@ impl ToolRegistry {
             }
         }
 
-        // Cache expired — check storage
         let stored_fp = self
             .server_state
             .get_fingerprint("tools")
             .await
             .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
 
-        // Update last check timestamp
         *self.last_check.write().await = Some(std::time::Instant::now());
 
         let local_fp = self.fingerprint().await;
@@ -369,7 +380,7 @@ impl ToolRegistry {
         }
     }
 
-    /// Start a background polling task that periodically checks shared storage
+    /// Starts a background polling task that periodically checks shared storage
     /// for fingerprint changes from other instances.
     ///
     /// When a change is detected, reloads the active tool set from storage and
@@ -416,7 +427,7 @@ impl ToolRegistry {
         })
     }
 
-    /// Compute fingerprint for a given active tool subset.
+    /// Computes the fingerprint for a given active tool subset.
     fn compute_fingerprint_for(
         compiled: &HashMap<String, Arc<dyn McpTool>>,
         active: &HashSet<String>,
@@ -430,22 +441,25 @@ impl ToolRegistry {
     }
 }
 
-/// Errors from tool registry operations.
+/// Describes errors raised by tool registry operations.
 #[derive(Debug, thiserror::Error)]
 pub enum ToolRegistryError {
     #[error(
         "Tool '{0}' is not a compiled tool — cannot activate/deactivate tools that were not registered at build time"
     )]
+    /// Returned when the named tool was not registered at build time, so it cannot be activated or deactivated.
     NotCompiled(String),
 
     #[error("Storage error: {0}")]
+    /// Returned when shared storage cannot be read or written; carries the storage error text.
     StorageError(String),
 
     #[error("Notification persistence failed: {0}")]
+    /// Returned when writing a notification for a tool-list change fails.
     NotificationFailed(String),
 }
 
-/// Result of syncing local tool state against shared storage.
+/// Describes the outcome of syncing local tool state against shared storage.
 #[derive(Debug)]
 pub enum SyncResult {
     /// First server to start — wrote local state to storage.
@@ -453,7 +467,10 @@ pub enum SyncResult {
     /// Fingerprints match — loaded active set from storage.
     InSync,
     /// Fingerprint mismatch — updated storage with local state.
-    UpdatedStorage { old_fingerprint: String },
+    UpdatedStorage {
+        /// Fingerprint that was in shared storage before it was overwritten.
+        old_fingerprint: String,
+    },
 }
 
 #[cfg(test)]
@@ -774,8 +791,8 @@ mod tests {
         );
     }
 
-    /// Verify the exact notification payload matches the MCP 2025-11-25 wire format.
-    /// ADR-023 pins: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
+    /// Verify the exact notification payload matches the MCP 2025-11-25 wire format:
+    /// {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
     #[tokio::test]
     async fn test_notification_payload_matches_mcp_wire_format() {
         let session_manager = test_session_manager();
@@ -890,7 +907,7 @@ mod tests {
         assert!(registry.get_tool("alpha").await.is_none());
     }
 
-    /// ADR-023 MUST: Notification support does NOT bypass stale session rejection.
+    /// Notification support does NOT bypass stale session rejection.
     /// Even after a notification is emitted, the server's fingerprint changes,
     /// meaning existing sessions have a stale fingerprint and MUST be rejected.
     #[tokio::test]
@@ -1002,7 +1019,7 @@ mod tests {
         let result_a = registry_a.sync_from_storage().await.unwrap();
         assert!(matches!(result_a, SyncResult::InitializedStorage));
 
-        // Registry B syncs — must be InSync, not LocalNewer
+        // Registry B syncs — must be InSync, not UpdatedStorage
         let registry_b = ToolRegistry::new(tools_b, test_session_manager(), storage.clone());
         let result_b = registry_b.sync_from_storage().await.unwrap();
         assert!(
@@ -1028,8 +1045,7 @@ mod tests {
         registry1.sync_from_storage().await.unwrap();
         let old_fp = storage.get_fingerprint("tools").await.unwrap().unwrap();
 
-        // Second server has different tools (simulate by deactivating one first)
-        // Create with only 2 of the 3 tools
+        // Second server has different tools: only 2 of the 3
         let mut fewer_tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
         fewer_tools.insert(
             "alpha".to_string(),
@@ -1335,9 +1351,8 @@ mod tests {
         let _session_id = sm.create_session().await;
 
         let registry = ToolRegistry::new(test_tools(), sm, test_storage());
-        // Deactivate first (without dispatcher — to avoid counting that event)
-        // Actually the dispatcher is already installed, so deactivate will also produce an event.
-        // Reset by checking count after activate.
+        // The dispatcher is already installed, so deactivate also records an event;
+        // compare counts around activate.
         registry.deactivate_tool("beta").await.unwrap();
         let count_after_deactivate = dispatcher.event_count().await;
 

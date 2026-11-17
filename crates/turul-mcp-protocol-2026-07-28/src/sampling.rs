@@ -50,6 +50,7 @@ pub struct ModelHint {
 
 #[allow(deprecated)]
 impl ModelHint {
+    /// Creates a hint naming the preferred model.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: Some(name.into()),
@@ -116,19 +117,21 @@ pub struct ToolChoice {
 
 #[allow(deprecated)]
 impl ToolChoice {
+    /// Returns a choice with mode `"auto"`: the model decides whether to use tools.
     pub fn auto() -> Self {
         Self {
             mode: Some(ToolChoiceMode::Auto),
         }
     }
 
+    /// Returns a choice with mode `"none"`: the model must not use any tools.
     pub fn none() -> Self {
         Self {
             mode: Some(ToolChoiceMode::None),
         }
     }
 
-    /// Create tool choice requiring at least one tool. Wire value: `"required"`.
+    /// Returns a choice requiring the model to use at least one tool. Wire value: `"required"`.
     pub fn required() -> Self {
         Self {
             mode: Some(ToolChoiceMode::Required),
@@ -165,64 +168,89 @@ impl ToolChoice {
 #[serde(tag = "type")]
 pub enum SamplingMessageContentBlock {
     #[serde(rename = "text")]
+    /// Text provided to or from an LLM.
     Text {
+        /// The text content of the message.
         text: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        /// Optional annotations for the client.
         annotations: Option<crate::meta::Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object for protocol-reserved metadata.
         meta: Option<std::collections::HashMap<String, Value>>,
     },
     #[serde(rename = "image")]
+    /// An image provided to or from an LLM.
     Image {
+        /// The base64-encoded image data.
         data: String,
         #[serde(rename = "mimeType")]
+        /// The MIME type of the image, for example `image/png`.
         mime_type: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        /// Optional annotations for the client.
         annotations: Option<crate::meta::Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object for protocol-reserved metadata.
         meta: Option<std::collections::HashMap<String, Value>>,
     },
     #[serde(rename = "audio")]
+    /// Audio provided to or from an LLM.
     Audio {
+        /// The base64-encoded audio data.
         data: String,
         #[serde(rename = "mimeType")]
+        /// The MIME type of the audio, for example `audio/wav`.
         mime_type: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        /// Optional annotations for the client.
         annotations: Option<crate::meta::Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object for protocol-reserved metadata.
         meta: Option<std::collections::HashMap<String, Value>>,
     },
     #[serde(rename = "tool_use")]
+    /// A request from the assistant to call a tool.
     ToolUse {
+        /// A unique identifier for this tool use, which the corresponding tool result echoes as `toolUseId`.
         id: String,
+        /// The name of the tool to call.
         name: String,
         #[serde(serialize_with = "crate::serde_maps::sorted")]
+        /// The arguments to pass to the tool, conforming to the tool's input schema.
         input: std::collections::HashMap<String, Value>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object for protocol-reserved metadata.
         meta: Option<std::collections::HashMap<String, Value>>,
     },
     #[serde(rename = "tool_result")]
+    /// The result of a tool use, provided by the user back to the assistant.
     ToolResult {
         #[serde(rename = "toolUseId")]
+        /// The `id` of the tool use this result corresponds to; it must match a previous tool use.
         tool_use_id: String,
+        /// The unstructured result of the tool use, in the same format as a `tools/call` result's `content`.
         content: Vec<ContentBlock>,
         #[serde(rename = "structuredContent", skip_serializing_if = "Option::is_none")]
+        /// The structured result of the tool use, as any JSON value; it should conform to the tool's output schema when one is defined.
         structured_content: Option<Value>,
         #[serde(rename = "isError", skip_serializing_if = "Option::is_none")]
+        /// Whether the tool use resulted in an error; absent means `false`.
         is_error: Option<bool>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object for protocol-reserved metadata.
         meta: Option<std::collections::HashMap<String, Value>>,
     },
 }
 
 #[allow(deprecated)]
 impl SamplingMessageContentBlock {
-    /// Construct a text block.
+    /// Constructs a text block.
     pub fn text(text: impl Into<String>) -> Self {
         Self::Text {
             text: text.into(),
@@ -267,10 +295,13 @@ pub enum SamplingMessageContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SamplingMessage {
+    /// The sender of the message: `user` or `assistant`.
     pub role: Role,
+    /// The message content, either a single block or an array of blocks.
     pub content: SamplingMessageContent,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+    /// Optional `_meta` object for protocol-reserved metadata.
     pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
@@ -325,8 +356,7 @@ pub struct CreateMessageRequestParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
     // Per schema, `CreateMessageRequestParams` does NOT extend `RequestParams`
-    // — no `_meta` field. The earlier Rust-side `meta: Option<HashMap>` was a
-    // non-spec carryover, removed for Protocol Crate Purity.
+    // — no `_meta` field.
 }
 
 /// Complete sampling/createMessage request (matches TypeScript CreateMessageRequest interface).
@@ -362,17 +392,23 @@ pub struct CreateMessageRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateMessageResult {
+    /// The role of the generated message.
     pub role: Role,
+    /// The generated content, either a single block or an array of blocks.
     pub content: SamplingMessageContent,
+    /// The name of the model that generated the message.
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Why sampling stopped, if known: standard values are `endTurn`, `stopSequence`, `maxTokens` and `toolUse`, and providers may send others.
     pub stop_reason: Option<String>,
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    /// Optional `_meta` object carrying result metadata.
     pub meta: Option<crate::meta::ResultMetaObject>,
 }
 
 #[allow(deprecated)]
 impl CreateMessageRequestParams {
+    /// Creates parameters from the conversation messages and the maximum number of tokens to sample; all other fields are unset.
     pub fn new(messages: Vec<SamplingMessage>, max_tokens: u32) -> Self {
         Self {
             messages,
@@ -388,31 +424,37 @@ impl CreateMessageRequestParams {
         }
     }
 
+    /// Sets the tools the model may use during sampling.
     pub fn with_tools(mut self, tools: Vec<crate::tools::Tool>) -> Self {
         self.tools = Some(tools);
         self
     }
 
+    /// Sets how the model may choose among the supplied tools.
     pub fn with_tool_choice(mut self, tool_choice: ToolChoice) -> Self {
         self.tool_choice = Some(tool_choice);
         self
     }
 
+    /// Sets the server's model preferences.
     pub fn with_model_preferences(mut self, preferences: ModelPreferences) -> Self {
         self.model_preferences = Some(preferences);
         self
     }
 
+    /// Sets the system prompt requested for sampling.
     pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(prompt.into());
         self
     }
 
+    /// Sets the sampling temperature.
     pub fn with_temperature(mut self, temperature: f64) -> Self {
         self.temperature = Some(temperature);
         self
     }
 
+    /// Sets the sequences that end generation when produced.
     pub fn with_stop_sequences(mut self, sequences: Vec<String>) -> Self {
         self.stop_sequences = Some(sequences);
         self
@@ -500,6 +542,7 @@ impl CreateMessageRequestParams {
 
 #[allow(deprecated)]
 impl CreateMessageRequest {
+    /// Creates a `sampling/createMessage` request from the messages and the maximum number of tokens to sample.
     pub fn new(messages: Vec<SamplingMessage>, max_tokens: u32) -> Self {
         Self {
             method: "sampling/createMessage".to_string(),
@@ -507,37 +550,43 @@ impl CreateMessageRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Attaches a fully-constructed params struct.
     pub fn with_params(mut self, params: CreateMessageRequestParams) -> Self {
         self.params = params;
         self
     }
 
+    /// Sets the server's model preferences on the request parameters.
     pub fn with_model_preferences(mut self, preferences: ModelPreferences) -> Self {
         self.params = self.params.with_model_preferences(preferences);
         self
     }
 
+    /// Sets the system prompt on the request parameters.
     pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.params = self.params.with_system_prompt(prompt);
         self
     }
 
+    /// Sets the sampling temperature on the request parameters.
     pub fn with_temperature(mut self, temperature: f64) -> Self {
         self.params = self.params.with_temperature(temperature);
         self
     }
 
+    /// Sets the stop sequences on the request parameters.
     pub fn with_stop_sequences(mut self, sequences: Vec<String>) -> Self {
         self.params = self.params.with_stop_sequences(sequences);
         self
     }
 
+    /// Sets the tools the model may use on the request parameters.
     pub fn with_tools(mut self, tools: Vec<crate::tools::Tool>) -> Self {
         self.params = self.params.with_tools(tools);
         self
     }
 
+    /// Sets the tool choice on the request parameters.
     pub fn with_tool_choice(mut self, tool_choice: ToolChoice) -> Self {
         self.params = self.params.with_tool_choice(tool_choice);
         self
@@ -546,6 +595,7 @@ impl CreateMessageRequest {
 
 #[allow(deprecated)]
 impl CreateMessageResult {
+    /// Creates a result from the role, content and model name; `stop_reason` and `meta` are unset.
     pub fn new(role: Role, content: SamplingMessageContent, model: impl Into<String>) -> Self {
         Self {
             role,
@@ -565,11 +615,13 @@ impl CreateMessageResult {
         Self::new(role, SamplingMessageContent::Single(block), model)
     }
 
+    /// Sets the reason sampling stopped.
     pub fn with_stop_reason(mut self, reason: impl Into<String>) -> Self {
         self.stop_reason = Some(reason.into());
         self
     }
 
+    /// Sets the result's `_meta` object.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
@@ -706,6 +758,7 @@ impl crate::traits::CreateMessageResult for CreateMessageResult {
 
 #[allow(deprecated)]
 impl ModelPreferences {
+    /// Creates preferences with no hints and no priorities.
     pub fn new() -> Self {
         Self {
             hints: None,
@@ -715,21 +768,25 @@ impl ModelPreferences {
         }
     }
 
+    /// Sets the model name hints; the client evaluates them in order and takes the first match.
     pub fn with_hints(mut self, hints: Vec<ModelHint>) -> Self {
         self.hints = Some(hints);
         self
     }
 
+    /// Sets how much to prioritise cost when selecting a model, from 0 (unimportant) to 1 (most important).
     pub fn with_cost_priority(mut self, priority: f64) -> Self {
         self.cost_priority = Some(priority);
         self
     }
 
+    /// Sets how much to prioritise sampling speed (latency) when selecting a model, from 0 (unimportant) to 1 (most important).
     pub fn with_speed_priority(mut self, priority: f64) -> Self {
         self.speed_priority = Some(priority);
         self
     }
 
+    /// Sets how much to prioritise intelligence and capabilities when selecting a model, from 0 (unimportant) to 1 (most important).
     pub fn with_intelligence_priority(mut self, priority: f64) -> Self {
         self.intelligence_priority = Some(priority);
         self
@@ -745,6 +802,7 @@ impl Default for ModelPreferences {
 
 #[allow(deprecated)]
 impl SamplingMessage {
+    /// Creates a message with the given role and content and no `_meta`.
     pub fn new(role: Role, content: SamplingMessageContent) -> Self {
         Self {
             role,
@@ -758,14 +816,17 @@ impl SamplingMessage {
         Self::new(role, SamplingMessageContent::Single(block))
     }
 
+    /// Creates a user-role message holding a single text block.
     pub fn user_text(text: impl Into<String>) -> Self {
         Self::single(Role::User, SamplingMessageContentBlock::text(text))
     }
 
+    /// Creates an assistant-role message holding a single text block.
     pub fn assistant_text(text: impl Into<String>) -> Self {
         Self::single(Role::Assistant, SamplingMessageContentBlock::text(text))
     }
 
+    /// Sets the message's `_meta` object.
     pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self

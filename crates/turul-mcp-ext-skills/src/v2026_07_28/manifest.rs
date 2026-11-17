@@ -1,7 +1,6 @@
 //! Skill file manifests (`skills.mdx` §Resources, §Limits, §Integrity and
 //! Verification). [`SkillResource::of`] is the only producer of a `sha256:`
-//! digest; [`Manifest::new`] is the only producer of a complete manifest
-//! (ADR-033 §4).
+//! digest; [`Manifest::new`] is the only producer of a complete manifest.
 
 use std::collections::BTreeSet;
 
@@ -69,13 +68,28 @@ pub enum ManifestError {
     Duplicate(String),
     /// A URI is not inside the skill's directory.
     #[error("{uri} is not inside skill {root}")]
-    Foreign { uri: String, root: String },
+    Foreign {
+        /// The URI outside the skill's directory.
+        uri: String,
+        /// The skill root directory URI.
+        root: String,
+    },
     /// More than [`MAX_RESOURCES_PER_SKILL`] entries.
     #[error("skill {root} has {count} files; the limit is {MAX_RESOURCES_PER_SKILL}")]
-    TooManyFiles { root: String, count: usize },
+    TooManyFiles {
+        /// The skill root directory URI.
+        root: String,
+        /// Number of manifest entries.
+        count: usize,
+    },
     /// Total size above [`MAX_TOTAL_BYTES_PER_SKILL`].
     #[error("skill {root} totals {total} bytes; the limit is {MAX_TOTAL_BYTES_PER_SKILL}")]
-    TooLarge { root: String, total: u64 },
+    TooLarge {
+        /// The skill root directory URI.
+        root: String,
+        /// Sum of the entries' sizes, in bytes.
+        total: u64,
+    },
 }
 
 /// A complete, ordered manifest of one skill's files.
@@ -84,7 +98,7 @@ pub enum ManifestError {
 pub struct Manifest(Vec<SkillResource>);
 
 impl Manifest {
-    /// Check completeness, uniqueness, containment and limits, and order entries
+    /// Checks completeness, uniqueness, containment and limits, and orders entries
     /// by URI so equal file sets produce identical manifests.
     pub fn new(path: &SkillPath, mut entries: Vec<SkillResource>) -> Result<Self, ManifestError> {
         let root = path.root_uri();
@@ -137,7 +151,7 @@ mod tests {
         SkillResource::of(path().file_uri(rel).unwrap(), bytes)
     }
 
-    /// S-G4: `sha256:` + 64 lowercase hex over the raw bytes; `size` is their length.
+    /// `sha256:` + 64 lowercase hex over the raw bytes; `size` is their length.
     #[test]
     fn s_g4_digest_format_and_size() {
         let r = SkillResource::of("skill://x/SKILL.md".into(), b"abc");
@@ -154,7 +168,7 @@ mod tests {
         assert_eq!(empty.size(), 0);
     }
 
-    /// ADR-033 §Tests: distinct content produces distinct digests.
+    /// Distinct content produces distinct digests.
     #[test]
     fn distinct_bytes_produce_distinct_digests() {
         assert_ne!(
@@ -163,7 +177,7 @@ mod tests {
         );
     }
 
-    /// ADR-033 §4: the manifest producer is deterministic under input order.
+    /// The manifest producer is deterministic under input order.
     #[test]
     fn manifest_is_deterministic_under_input_order() {
         let files = [("SKILL.md", &b"s"[..]), ("b.md", b"b"), ("a/c.md", b"c")];
@@ -181,7 +195,7 @@ mod tests {
         assert_eq!(uris, sorted);
     }
 
-    /// S-G4: the manifest includes an entry for the skill's own `SKILL.md`.
+    /// The manifest includes an entry for the skill's own `SKILL.md`.
     #[test]
     fn s_g4_manifest_requires_skill_md() {
         assert_eq!(
@@ -192,7 +206,7 @@ mod tests {
         );
     }
 
-    /// S-G4: each file exactly once, all within the skill's directory.
+    /// Each file exactly once, all within the skill's directory.
     #[test]
     fn s_g4_manifest_refuses_duplicates_and_foreign_uris() {
         let dup = vec![res("SKILL.md", b"s"), res("SKILL.md", b"s")];
@@ -210,7 +224,7 @@ mod tests {
         ));
     }
 
-    /// S-G8: at most 512 entries and 16 MiB in total; both bounds inclusive.
+    /// At most 512 entries and 16 MiB in total; both bounds inclusive.
     #[test]
     fn s_g8_limits() {
         let at_limit: Vec<_> = std::iter::once(res("SKILL.md", b"s"))

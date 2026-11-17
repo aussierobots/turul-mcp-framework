@@ -4,7 +4,7 @@ use super::{DispatcherResult, MiddlewareError, RequestContext, SessionInjection}
 use async_trait::async_trait;
 use turul_mcp_session_storage::SessionView;
 
-/// Core middleware trait for intercepting MCP requests and responses
+/// Core middleware trait for intercepting MCP requests and responses.
 ///
 /// Middleware can inspect and modify requests before they reach the dispatcher,
 /// and inspect/modify responses before they're sent to the client.
@@ -70,7 +70,7 @@ use turul_mcp_session_storage::SessionView;
 /// ```
 #[async_trait]
 pub trait McpMiddleware: Send + Sync {
-    /// Whether this middleware runs before session creation (pre-session phase)
+    /// Returns whether this middleware runs before session creation (pre-session phase).
     ///
     /// Pre-session middleware runs before any session lookup or creation.
     /// This is required for OAuth 2.1 auth — unauthenticated requests must be
@@ -85,7 +85,7 @@ pub trait McpMiddleware: Send + Sync {
         false
     }
 
-    /// Called before the MCP method handler executes
+    /// Called before the MCP method handler executes.
     ///
     /// # Parameters
     ///
@@ -113,7 +113,7 @@ pub trait McpMiddleware: Send + Sync {
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError>;
 
-    /// Called after the MCP method handler completes (optional)
+    /// Called after the MCP method handler completes.
     ///
     /// # Parameters
     ///

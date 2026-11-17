@@ -1,4 +1,4 @@
-//! Server Cards (experimental, ADR-038): the hosted card's HTTP contract and its
+//! Server Cards (experimental): the hosted card's HTTP contract and its
 //! consistency with `server/discover`.
 #![cfg(feature = "ext-server-card")]
 

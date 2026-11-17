@@ -1,4 +1,4 @@
-//! Implementation of #[derive(McpPrompt)] macro
+//! Implements the `#[derive(McpPrompt)]` macro.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -6,12 +6,16 @@ use syn::{Data, DeriveInput, Fields, Result};
 
 use crate::utils::{extract_field_meta, extract_prompt_meta};
 
+/// Expands `#[derive(McpPrompt)]` into the prompt metadata, description, arguments, annotations, meta and icons impls.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when the type is not a struct, is a tuple struct, or the `#[prompt(...)]` attribute or a field attribute is invalid.
 pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
     let mcp_builders = crate::utils::builders_path();
     let mcp_protocol = crate::utils::protocol_path();
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes from #[prompt(...)]
     let prompt_meta = extract_prompt_meta(&input.attrs)?;
     let name = &prompt_meta.name;
     let description = &prompt_meta.description;
@@ -29,7 +33,6 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
     let icons_impl =
         crate::tool_derive::generate_icons_impl(struct_name, prompt_meta.icons.as_ref());
 
-    // Check if it's a struct
     let data = match &input.data {
         Data::Struct(data) => data,
         _ => {
@@ -40,7 +43,6 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
         }
     };
 
-    // Generate argument definitions from struct fields
     let argument_fields = generate_argument_fields(&input.ident, data)?;
 
     let expanded = quote! {
@@ -116,7 +118,7 @@ fn generate_argument_fields(
                     .description
                     .unwrap_or_else(|| "No description".to_string());
 
-                // For now, all prompt arguments are optional - can be enhanced later
+                // Generated arguments carry no `required` flag.
                 argument_fields.push(quote! {
                     #mcp_protocol::prompts::PromptArgument::new(#field_name_str)
                         .with_description(#description)

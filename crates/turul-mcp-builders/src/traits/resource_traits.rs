@@ -1,4 +1,4 @@
-//! Framework traits for MCP resource construction
+//! Defines framework traits for constructing MCP resources.
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 //! The MCP specification defines concrete types only.
@@ -6,55 +6,61 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import protocol types (spec-defined)
 use turul_mcp_protocol::Resource;
 use turul_mcp_protocol::meta::Annotations;
 
+/// Supplies the identity and display fields of a resource.
 pub trait HasResourceMetadata {
-    /// Programmatic identifier (fallback display name)
+    /// Returns the programmatic identifier, used as the fallback display name.
     fn name(&self) -> &str;
 
-    /// Human-readable display name (UI contexts)
+    /// Returns the human-readable display name for UI contexts.
     fn title(&self) -> Option<&str> {
         None
     }
 }
 
-/// Resource description trait
+/// Provides the optional resource description.
 pub trait HasResourceDescription {
+    /// Returns the human-readable resource description, or `None` when it has none.
     fn description(&self) -> Option<&str> {
         None
     }
 }
 
-/// Resource URI trait
+/// Provides the resource URI.
 pub trait HasResourceUri {
+    /// Returns the URI the client uses to read the resource.
     fn uri(&self) -> &str;
 }
 
-/// Resource MIME type trait
+/// Provides the optional resource MIME type.
 pub trait HasResourceMimeType {
+    /// Returns the MIME type of the resource, or `None` when it is unknown.
     fn mime_type(&self) -> Option<&str> {
         None
     }
 }
 
-/// Resource size trait
+/// Provides the optional resource size.
 pub trait HasResourceSize {
+    /// Returns the raw resource size in bytes, or `None` when it is unknown.
     fn size(&self) -> Option<u64> {
         None
     }
 }
 
-/// Resource annotations trait
+/// Provides the optional resource annotations.
 pub trait HasResourceAnnotations {
+    /// Returns the resource annotations (audience, priority), or `None` when it has none.
     fn annotations(&self) -> Option<&Annotations> {
         None
     }
 }
 
-/// Resource-specific meta trait (separate from RPC _meta)
+/// Provides the optional resource-specific `_meta`, separate from the RPC-level `_meta`.
 pub trait HasResourceMeta {
+    /// Returns the resource-specific `_meta` map, or `None` when it has none.
     fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
         None
     }
@@ -134,7 +140,7 @@ pub trait HasResourceMeta {
 ///
 /// ## Usage Patterns
 ///
-/// ### Easy: Use Derive Macros (see turul-mcp-derive crate)
+/// ### Minimal: Manual Implementation
 /// ```rust
 /// // Example of manual implementation without macros
 /// use turul_mcp_protocol::Resource;
@@ -219,12 +225,12 @@ pub trait ResourceDefinition:
     Send +
     Sync
 {
-    /// Display name precedence: title > name (matches TypeScript spec)
+    /// Returns the display name, preferring `title` over `name`.
     fn display_name(&self) -> &str {
         self.title().unwrap_or_else(|| self.name())
     }
 
-    /// Convert to concrete Resource struct for protocol serialization
+    /// Converts this definition to a protocol `Resource` for serialization.
     fn to_resource(&self) -> Resource {
         Resource {
             uri: self.uri().to_string(),

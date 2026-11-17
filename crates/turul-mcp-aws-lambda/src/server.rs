@@ -1,6 +1,6 @@
-//! Lambda MCP server
+//! Lambda MCP server.
 //!
-//! A [`LambdaMcpServer`] wraps the [`McpServer`] its builder produced (ADR-035)
+//! A [`LambdaMcpServer`] wraps the [`McpServer`] its builder produced
 //! and adds only Lambda transport: the request adapter, streaming, CORS and the
 //! Lambda `ServerConfig`. Handlers, capabilities and the resource-security
 //! policy are the core server's.
@@ -19,12 +19,12 @@ use crate::handler::LambdaMcpHandler;
 #[cfg(feature = "cors")]
 use crate::cors::CorsConfig;
 
-/// Main Lambda MCP server.
+/// Lambda MCP server wrapping the core [`McpServer`].
 pub struct LambdaMcpServer {
     /// Server implementation information, as built.
     pub implementation: Implementation,
     /// Server capabilities, as built. Read-only: capabilities are configured
-    /// through the builder (ADR-035), and `server/discover` reports those.
+    /// through the builder, and `server/discover` reports those.
     pub capabilities: ServerCapabilities,
     /// The core server: the single owner of handlers and capabilities.
     core: McpServer,
@@ -40,7 +40,7 @@ pub struct LambdaMcpServer {
 }
 
 impl LambdaMcpServer {
-    /// Wrap a built core server with Lambda transport settings (use the builder).
+    /// Wraps a built core server with Lambda transport settings (use the builder).
     pub(crate) fn new(
         core: McpServer,
         server_config: ServerConfig,
@@ -60,12 +60,12 @@ impl LambdaMcpServer {
         }
     }
 
-    /// Get a reference to the server capabilities.
+    /// Returns a reference to the server capabilities.
     pub fn capabilities(&self) -> &ServerCapabilities {
         &self.capabilities
     }
 
-    /// Create a Lambda handler ready for use with the Lambda runtime.
+    /// Creates a Lambda handler ready for use with the Lambda runtime.
     ///
     /// The Lambda counterpart of `McpServer::run_http()`: it serves the core
     /// server's dispatcher through the Lambda adapter. Call once per cold start.
@@ -201,7 +201,7 @@ impl LambdaMcpServer {
         Ok(handler)
     }
 
-    /// Get information about the session storage backend
+    /// Returns a fixed description of the session storage backend.
     pub fn session_storage_info(&self) -> &str {
         "Session storage configured"
     }

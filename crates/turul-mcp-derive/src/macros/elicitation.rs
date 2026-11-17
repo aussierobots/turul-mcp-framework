@@ -9,14 +9,14 @@ use syn::{Ident, LitStr, Result, Token, Type, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
-/// Implementation function for the elicitation!{} declarative macro
+/// Expands the `elicitation!{}` declarative macro.
 pub fn elicitation_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let input = syn::parse::<ElicitationMacroInput>(input)?;
     let output = elicitation_declarative_impl_inner(input);
     Ok(output.into())
 }
 
-/// Internal implementation that works with proc_macro2::TokenStream for testing
+/// Expands the macro input to a `proc_macro2::TokenStream`, so tests can call it outside a proc-macro context.
 pub fn elicitation_declarative_impl_inner(
     input: ElicitationMacroInput,
 ) -> proc_macro2::TokenStream {
@@ -45,7 +45,7 @@ pub fn elicitation_declarative_impl_inner(
     }
 }
 
-/// Parse input for the elicitation!{} macro
+/// Parsed input of the `elicitation!{}` macro.
 pub struct ElicitationMacroInput {
     name: String,
     message: String,
@@ -81,7 +81,7 @@ impl Parse for ElicitationMacroInput {
     }
 }
 
-/// Individual field in elicitation macro
+/// A single field declared in the `elicitation!{}` macro.
 struct ElicitationField {
     name: String,
     field_type: Type,

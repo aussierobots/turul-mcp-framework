@@ -252,7 +252,7 @@ async fn test_all_levels_handle_missing_params() {
     // Level 1
     let level1_tool = calculator_add_function();
     // Derive-generated tools report a missing argument as an `isError` tool result
-    // (ADR-002 § Input schema strictness); the other levels own their own error path.
+    // (their generated `call` checks every declared argument); the other levels own their own error path.
     let level1_result = level1_tool
         .call(incomplete_args.clone(), None)
         .await

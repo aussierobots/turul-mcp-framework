@@ -1,4 +1,4 @@
-//! Streamable HTTP session management for MCP transport
+//! Streamable HTTP session management for the MCP transport.
 //!
 //! This module implements a lightweight session management system
 //! for MCP streamable HTTP with SSE support.
@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::protocol::McpProtocolVersion;
 
-/// Per-session state
+/// Holds per-session state.
 pub struct Session {
     /// Broadcast sender for SSE notifications
     pub sender: broadcast::Sender<String>,
@@ -22,18 +22,21 @@ pub struct Session {
 }
 
 impl Session {
-    /// Update the "last used" timestamp to now (touch mechanism)
+    /// Resets the session's `created` timestamp to now, marking it as recently used.
     pub fn touch(&mut self) {
         self.created = Instant::now();
     }
 }
 
-/// A handle to a session's message stream
+/// Handle to a session's message stream.
 pub struct SessionHandle {
+    /// Identifier of the newly created session, a UUID v7 in simple (hyphen-free) hex form.
     pub session_id: String,
+    /// Receives the messages broadcast to this session, ready to drive an SSE stream.
     pub receiver: broadcast::Receiver<String>,
 }
 
+/// Map from session identifier to its live session state, guarded by an async mutex.
 pub type SessionMap = Mutex<HashMap<String, Session>>;
 
 lazy_static::lazy_static! {
@@ -41,8 +44,9 @@ lazy_static::lazy_static! {
     static ref SESSIONS: SessionMap = Mutex::new(HashMap::new());
 }
 
-/// Create a brand new session.
-/// Returns the `session_id` and a `Receiver<String>` you can use to drive an SSE stream.
+/// Creates a new session.
+///
+/// Returns the `session_id` and a `Receiver<String>` that can drive an SSE stream.
 pub async fn new_session(mcp_version: McpProtocolVersion) -> SessionHandle {
     let session_id = Uuid::now_v7().as_simple().to_string();
     // 128-slot broadcast channel for JSON-RPC notifications
@@ -59,20 +63,19 @@ pub async fn new_session(mcp_version: McpProtocolVersion) -> SessionHandle {
     }
 }
 
-/// Fetch and "touch" the sender for this session, extending its lifetime.
+/// Fetches the sender for this session and touches it, extending its lifetime.
+///
 /// Returns `None` if the session does not exist or has already expired.
 pub async fn get_sender(session_id: &str) -> Option<broadcast::Sender<String>> {
     let mut sessions = SESSIONS.lock().await;
     if let Some(session) = sessions.get_mut(session_id) {
-        // Bump the creation time to now
         session.touch();
-        // Return a clone of the sender
         return Some(session.sender.clone());
     }
     None
 }
 
-/// Get a session's receiver for SSE streaming
+/// Returns a new receiver for the session's SSE stream, touching the session.
 pub async fn get_receiver(session_id: &str) -> Option<broadcast::Receiver<String>> {
     let mut sessions = SESSIONS.lock().await;
     if let Some(session) = sessions.get_mut(session_id) {
@@ -82,7 +85,7 @@ pub async fn get_receiver(session_id: &str) -> Option<broadcast::Receiver<String
     None
 }
 
-/// Check if a session exists and touch it
+/// Returns whether the session exists, touching it if so.
 pub async fn session_exists(session_id: &str) -> bool {
     let mut sessions = SESSIONS.lock().await;
     if let Some(session) = sessions.get_mut(session_id) {
@@ -93,13 +96,14 @@ pub async fn session_exists(session_id: &str) -> bool {
     }
 }
 
-/// Explicitly remove/terminate a session.
-/// You can call this on client disconnect or after HTTP GET SSE finishes.
+/// Removes a session, returning whether it existed.
+///
+/// Call this on client disconnect or after HTTP GET SSE finishes.
 pub async fn remove_session(session_id: &str) -> bool {
     SESSIONS.lock().await.remove(session_id).is_some()
 }
 
-/// Expire any sessions older than `max_age`, dropping them from the map.
+/// Drops every session last touched more than `max_age` ago.
 pub async fn expire_old(max_age: Duration) {
     let cutoff = Instant::now() - max_age;
     let mut sessions = SESSIONS.lock().await;
@@ -112,7 +116,7 @@ pub async fn expire_old(max_age: Duration) {
     });
 }
 
-/// Send the given JSON-RPC message to a specific session
+/// Sends the JSON-RPC message to a specific session, returning `false` if the session does not exist or has no subscribed receiver.
 pub async fn send_to_session(session_id: &str, message: String) -> bool {
     if let Some(sender) = get_sender(session_id).await {
         sender.send(message).is_ok()
@@ -121,7 +125,7 @@ pub async fn send_to_session(session_id: &str, message: String) -> bool {
     }
 }
 
-/// Send the given JSON-RPC message to every active session.
+/// Sends the JSON-RPC message to every active session.
 pub async fn broadcast_to_all(message: String) {
     let sessions = SESSIONS.lock().await;
     for (sid, session) in sessions.iter() {
@@ -131,7 +135,7 @@ pub async fn broadcast_to_all(message: String) {
     }
 }
 
-/// Disconnect all sessions
+/// Disconnects all sessions.
 pub async fn disconnect_all() {
     let mut sessions = SESSIONS.lock().await;
     // Just clear the map: dropping each Session.sender
@@ -139,13 +143,13 @@ pub async fn disconnect_all() {
     info!("All sessions have been disconnected");
 }
 
-/// Get count of active sessions
+/// Returns the number of active sessions.
 pub async fn session_count() -> usize {
     let sessions = SESSIONS.lock().await;
     sessions.len()
 }
 
-/// Spawn session cleanup task for automatic session management
+/// Spawns a background task that expires sessions idle for 30 minutes, checking every 60 seconds.
 pub fn spawn_session_cleanup() {
     tokio::spawn(async {
         let mut interval = tokio::time::interval(Duration::from_secs(60));

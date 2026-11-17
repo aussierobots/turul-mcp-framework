@@ -44,18 +44,33 @@ impl std::fmt::Display for CacheScope {
     }
 }
 
-/// Cacheable-result mixin per schema. Embed via `#[serde(flatten)]`:
+/// Defines the cacheable-result mixin from the schema. Embed via `#[serde(flatten)]`:
 ///
-/// ```ignore
-/// pub struct ListToolsResult {
+/// ```rust
+/// use serde::{Deserialize, Serialize};
+/// use turul_mcp_protocol_2026_07_28::caching::CacheableResult;
+/// use turul_mcp_protocol_2026_07_28::result_type::ResultType;
+///
+/// #[derive(Serialize, Deserialize)]
+/// #[serde(rename_all = "camelCase")]
+/// pub struct ListThingsResult {
 ///     #[serde(default)]
-///     pub result_type: crate::result_type::ResultType,
+///     pub result_type: ResultType,
 ///
 ///     #[serde(flatten)]
-///     pub cache: crate::caching::CacheableResult,
+///     pub cache: CacheableResult,
 ///
-///     // ... domain-specific fields ...
+///     pub names: Vec<String>,
 /// }
+///
+/// let result = ListThingsResult {
+///     result_type: ResultType::default(),
+///     cache: CacheableResult::private_60s(),
+///     names: vec![],
+/// };
+/// let json = serde_json::to_value(&result).unwrap();
+/// assert_eq!(json["ttlMs"], 60000);
+/// assert_eq!(json["cacheScope"], "private");
 /// ```
 ///
 /// Both fields are REQUIRED on the wire. Constructors should always set them.
@@ -78,7 +93,7 @@ pub struct CacheableResult {
 }
 
 impl CacheableResult {
-    /// Construct with both required fields.
+    /// Constructs a value with both required fields.
     pub fn new(ttl_ms: f64, cache_scope: CacheScope) -> Self {
         Self {
             ttl_ms,
@@ -86,7 +101,7 @@ impl CacheableResult {
         }
     }
 
-    /// Convenience: immediately-stale public response (`ttlMs=0`, public scope).
+    /// Creates an immediately-stale public response (`ttlMs=0`, public scope).
     pub fn stale_public() -> Self {
         Self::new(0.0, CacheScope::Public)
     }
@@ -104,6 +119,7 @@ impl CacheableResult {
 pub mod ttl_ms_serde {
     use serde::{Deserialize, Deserializer, Serializer};
 
+    /// Serializes `ttlMs`, as an integer when the value is whole and within exact `f64` integer range, otherwise as a float.
     pub fn serialize<S: Serializer>(value: &f64, serializer: S) -> Result<S::Ok, S::Error> {
         if value.fract() == 0.0 && *value >= 0.0 && *value <= (1u64 << 53) as f64 {
             serializer.serialize_u64(*value as u64)
@@ -112,6 +128,7 @@ pub mod ttl_ms_serde {
         }
     }
 
+    /// Deserializes `ttlMs`, rejecting negative and non-finite numbers.
     pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<f64, D::Error> {
         let value = f64::deserialize(deserializer)?;
         if !value.is_finite() || value < 0.0 {

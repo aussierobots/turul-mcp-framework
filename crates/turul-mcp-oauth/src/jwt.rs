@@ -29,12 +29,12 @@ pub const DEFAULT_MAX_AGE: Duration = Duration::from_secs(15 * 60);
 /// revocation exposure is the sum of the two: 20 minutes.
 pub const DEFAULT_STALE_WINDOW: Duration = Duration::from_secs(5 * 60);
 
-/// Bounded retry for transient JWKS transport failures.
+/// Number of attempts for transient JWKS transport failures.
 pub const DEFAULT_RETRY_ATTEMPTS: usize = 3;
 /// Base delay for the retry backoff.
 pub const DEFAULT_RETRY_BASE_DELAY: Duration = Duration::from_millis(100);
 
-/// Build a [`JwtValidator`] carrying this framework's hardening policy.
+/// Builds a [`JwtValidator`] carrying this framework's hardening policy.
 ///
 /// `turul-jwt-validator` ships `max_age`, the stale window and retry all
 /// disabled, so a bare [`JwtValidator::new`] validates tokens against a key it
@@ -46,8 +46,8 @@ pub const DEFAULT_RETRY_BASE_DELAY: Duration = Duration::from_millis(100);
 ///
 /// # Errors
 ///
-/// [`OAuthError::InvalidConfiguration`] if `jwks_uri` is neither `https` nor
-/// `http` on a loopback host.
+/// [`OAuthError::InvalidConfiguration`] if `jwks_uri` is not a valid URL, or
+/// is neither `https` nor `http` on a loopback host.
 pub fn hardened_validator(jwks_uri: &str, audience: &str) -> Result<JwtValidator, OAuthError> {
     require_secure_jwks_uri(jwks_uri)?;
     Ok(JwtValidator::new(jwks_uri, audience)
@@ -56,7 +56,7 @@ pub fn hardened_validator(jwks_uri: &str, audience: &str) -> Result<JwtValidator
         .with_retry(DEFAULT_RETRY_ATTEMPTS, DEFAULT_RETRY_BASE_DELAY))
 }
 
-/// Reject a JWKS URI that would fetch signing keys over plaintext.
+/// Rejects a JWKS URI that would fetch signing keys over plaintext.
 ///
 /// `http` on a loopback host is exempt so local development against a non-TLS
 /// authorization server keeps working. No other scheme is.

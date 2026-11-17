@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::coverage::{CASES, Case, Kind};
 use super::fetch::{self, PIN, Pin, list_example_dirs, list_json_files};
 
-/// Single fixture's result.
+/// Holds the result for a single fixture.
 #[derive(Debug)]
 pub struct FixtureResult {
     pub dir: &'static str,
@@ -48,7 +48,7 @@ impl Report {
     }
 }
 
-/// Run the harness end-to-end: ensure fixtures, walk CASES, return a Report.
+/// Runs the harness end-to-end: ensures fixtures, walks `CASES`, returns a `Report`.
 /// Used by both `tests/upstream_fixtures.rs` and `src/bin/compliance.rs` —
 /// identical code path is the bidirectional guarantee.
 pub fn run_all(dest: &Path) -> Result<Report, super::fetch::FetchError> {
@@ -137,7 +137,7 @@ fn check_fixture(case: &Case, raw: &str) -> Outcome {
     }
 }
 
-/// Compare two JSON values semantically. Returns `None` on match, or a
+/// Compares two JSON values semantically. Returns `None` on match, or a
 /// human-readable description of the first divergence.
 pub fn semantic_diff(a: &Value, b: &Value) -> Option<String> {
     semantic_diff_at("$", a, b)

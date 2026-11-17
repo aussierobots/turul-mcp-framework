@@ -1,4 +1,4 @@
-//! SessionView adapter for BoxedSessionStorage
+//! `SessionView` adapter for `BoxedSessionStorage`.
 //!
 //! Provides a SessionView implementation that bridges between middleware
 //! and the session storage backend. This allows middleware to read/write
@@ -9,7 +9,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use turul_mcp_session_storage::{BoxedSessionStorage, SessionView};
 
-/// SessionView adapter backed by BoxedSessionStorage
+/// Implements `SessionView` on top of `BoxedSessionStorage`.
 ///
 /// This adapter implements the SessionView trait by delegating to the underlying
 /// session storage backend. It handles:
@@ -23,7 +23,7 @@ use turul_mcp_session_storage::{BoxedSessionStorage, SessionView};
 /// Middleware → SessionView → StorageBackedSessionView → BoxedSessionStorage
 /// ```
 ///
-/// # Example
+/// # Examples
 ///
 /// ```rust,no_run
 /// use std::sync::Arc;
@@ -47,7 +47,7 @@ pub struct StorageBackedSessionView {
 }
 
 impl StorageBackedSessionView {
-    /// Create a new session view adapter
+    /// Creates a session view adapter for `session_id` over `storage`.
     ///
     /// # Parameters
     ///
@@ -68,19 +68,16 @@ impl SessionView for StorageBackedSessionView {
     }
 
     async fn get_state(&self, key: &str) -> Result<Option<Value>, String> {
-        // Get session from storage
         let session = self
             .storage
             .get_session(&self.session_id)
             .await
             .map_err(|e| format!("Failed to get session: {}", e))?;
 
-        // Extract state value
         Ok(session.and_then(|s| s.state.get(key).cloned()))
     }
 
     async fn set_state(&self, key: &str, value: Value) -> Result<(), String> {
-        // Get current session
         let mut session = self
             .storage
             .get_session(&self.session_id)
@@ -88,13 +85,10 @@ impl SessionView for StorageBackedSessionView {
             .map_err(|e| format!("Failed to get session: {}", e))?
             .ok_or_else(|| format!("Session '{}' not found", self.session_id))?;
 
-        // Update state
         session.state.insert(key.to_string(), value);
 
-        // Update last activity timestamp
         session.last_activity = chrono::Utc::now().timestamp_millis() as u64;
 
-        // Write back to storage
         self.storage
             .update_session(session)
             .await
@@ -126,13 +120,10 @@ impl SessionView for StorageBackedSessionView {
             .map_err(|e| format!("Failed to get session: {}", e))?
             .ok_or_else(|| format!("Session '{}' not found", self.session_id))?;
 
-        // Update metadata
         session.metadata.insert(prefixed_key, value);
 
-        // Update last activity timestamp
         session.last_activity = chrono::Utc::now().timestamp_millis() as u64;
 
-        // Write back to storage
         self.storage
             .update_session(session)
             .await
@@ -151,7 +142,6 @@ mod tests {
     async fn test_session_view_state() {
         let storage: Arc<BoxedSessionStorage> = Arc::new(InMemorySessionStorage::new());
 
-        // Create a session
         let session_info = storage
             .create_session(ServerCapabilities::default())
             .await
@@ -159,10 +149,8 @@ mod tests {
 
         let session_id = session_info.session_id.clone();
 
-        // Create adapter
         let view = StorageBackedSessionView::new(session_id.clone(), Arc::clone(&storage));
 
-        // Test state operations
         assert_eq!(view.get_state("key1").await.unwrap(), None);
 
         view.set_state("key1", json!("value1")).await.unwrap();
@@ -189,7 +177,6 @@ mod tests {
         let session_id = session_info.session_id.clone();
         let view = StorageBackedSessionView::new(session_id.clone(), Arc::clone(&storage));
 
-        // Test metadata operations
         assert_eq!(view.get_metadata("meta1").await.unwrap(), None);
 
         view.set_metadata("meta1", json!("metadata_value"))

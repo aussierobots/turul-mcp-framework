@@ -4,8 +4,7 @@
 // (`CallToolResult.isError`, "Invalid tool input error") the refusal is a tool result
 // with `isError: true` whose text names each offending argument, so the model can
 // self-correct; it is not a JSON-RPC error. The advertised `inputSchema` carries
-// `additionalProperties: false`. Declared-only calls are unchanged. See ADR-002
-// § Input schema strictness.
+// `additionalProperties: false`. Declared-only calls are unchanged.
 
 use serde_json::{Value, json};
 use turul_mcp_builders::prelude::*;
@@ -188,7 +187,7 @@ async fn null_arguments_name_the_missing_required_parameter() {
 }
 
 // Nested strictness is the argument type's own serde contract: the framework closes the
-// top-level object only (ADR-002 § Input schema strictness).
+// top-level object only.
 #[derive(
     serde::Deserialize, serde::Serialize, turul_mcp_builders::schemars::JsonSchema, Clone, Default,
 )]

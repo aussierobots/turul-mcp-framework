@@ -10,10 +10,10 @@ use std::collections::HashMap;
 use turul_mcp_protocol::Prompt;
 use turul_mcp_protocol::prompts::PromptArgument;
 
-/// Framework-side prompt annotations (display hints). This is a FRAMEWORK
-/// type — the wire `Prompt` carries no annotations object in 2026-07-28;
-/// the schema's display affordances are `title` and `icons` on the prompt
-/// itself.
+/// Framework-side prompt annotations (display hints).
+///
+/// This is a framework type: the wire `Prompt` carries no annotations object in
+/// 2026-07-28; its display affordances are `title` and `icons` on the prompt itself.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PromptAnnotations {
     /// Display name (precedence: Prompt.title > Prompt.name)
@@ -22,56 +22,62 @@ pub struct PromptAnnotations {
 }
 
 impl PromptAnnotations {
+    /// Creates annotations with no fields set.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the display name and returns the annotations.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 }
 
+/// Supplies the identity and display fields of a prompt.
 pub trait HasPromptMetadata {
-    /// Programmatic identifier (fallback display name)
+    /// Returns the programmatic identifier, used as the fallback display name.
     fn name(&self) -> &str;
 
-    /// Human-readable display name (UI contexts)
+    /// Returns the human-readable display name for UI contexts.
     fn title(&self) -> Option<&str> {
         None
     }
 }
 
-/// Prompt description trait
+/// Supplies the prompt description.
 pub trait HasPromptDescription {
+    /// Returns the human-readable prompt description, or `None` when it has none.
     fn description(&self) -> Option<&str> {
         None
     }
 }
 
-/// Prompt arguments trait
+/// Supplies the prompt arguments.
 pub trait HasPromptArguments {
+    /// Returns the arguments the prompt accepts, or `None` when it takes none.
     fn arguments(&self) -> Option<&Vec<PromptArgument>> {
         None
     }
 }
 
-/// Prompt annotations trait
+/// Supplies the prompt annotations.
 pub trait HasPromptAnnotations {
+    /// Returns the prompt annotations, or `None` when it has none.
     fn annotations(&self) -> Option<&PromptAnnotations> {
         None
     }
 }
 
-/// Prompt-specific meta trait (separate from RPC _meta)
+/// Supplies prompt-specific `_meta`, separate from the RPC `_meta`.
 pub trait HasPromptMeta {
+    /// Returns the prompt-specific `_meta` map, or `None` when it has none.
     fn prompt_meta(&self) -> Option<&HashMap<String, Value>> {
         None
     }
 }
 
-/// Complete prompt definition - composed from fine-grained traits
-/// **Complete MCP Prompt Creation** - Build reusable prompt templates that generate contextual content.
+/// Defines a complete MCP prompt, composed from fine-grained traits.
 ///
 /// This trait represents a **complete, working MCP prompt** that can be registered with a server
 /// and invoked by clients. When you implement the required metadata traits, you automatically
@@ -226,12 +232,12 @@ pub trait PromptDefinition:
     Send +
     Sync
 {
-    /// Display name precedence: title > name (matches TypeScript spec)
+    /// Returns the display name: the title when present, otherwise the name.
     fn display_name(&self) -> &str {
         self.title().unwrap_or_else(|| self.name())
     }
 
-    /// Convert to concrete Prompt struct for protocol serialization
+    /// Converts this definition to a concrete [`Prompt`] for protocol serialization.
     fn to_prompt(&self) -> Prompt {
         Prompt {
             name: self.name().to_string(),

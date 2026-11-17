@@ -59,6 +59,7 @@
 //! - [`turul-mcp-server`](https://docs.rs/turul-mcp-server) to build servers
 //! - [Examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 // Spec-coexistence features are mutually exclusive. Bilingual (default) links
 // both protocol crates; narrowing to one requires --no-default-features.
 #[cfg(any(

@@ -24,8 +24,8 @@ use std::collections::HashMap;
 use crate::meta::{ProgressToken, RequestMetaObject};
 use crate::traits::{HasDataParam, HasMetaParam, HasProgressTokenParam, Params};
 
-/// JSON-RPC version constant. Mirrors `turul_rpc::JSONRPC_VERSION` for the
-/// few sites that still need a `&str` literal rather than the typed enum.
+/// JSON-RPC version constant. Mirrors `turul_rpc::JSONRPC_VERSION` for sites
+/// that need a `&str` literal rather than the typed enum.
 pub const JSONRPC_VERSION: &str = "2.0";
 
 /// JSON-RPC `params` object for any request — `_meta` is **required** per
@@ -40,14 +40,14 @@ pub struct RequestParams {
     #[serde(rename = "_meta")]
     pub meta: RequestMetaObject,
 
-    /// All other method-specific parameters
+    /// All other method-specific parameters.
     #[serde(flatten)]
     #[serde(serialize_with = "crate::serde_maps::sorted")]
     pub other: HashMap<String, Value>,
 }
 
 impl RequestParams {
-    /// Construct with the required `_meta`. Extra parameters start empty.
+    /// Creates params from the required `_meta`. Extra parameters start empty.
     pub fn new(meta: RequestMetaObject) -> Self {
         Self {
             meta,
@@ -55,7 +55,7 @@ impl RequestParams {
         }
     }
 
-    /// Insert a method-specific parameter key.
+    /// Inserts a method-specific parameter key.
     pub fn with(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.other.insert(key.into(), value.into());
         self
@@ -106,16 +106,18 @@ pub struct PaginatedRequestParams {
 }
 
 impl PaginatedRequestParams {
-    /// Construct with the required `_meta`. No cursor by default.
+    /// Creates params from the required `_meta`. No cursor by default.
     pub fn new(meta: RequestMetaObject) -> Self {
         Self { cursor: None, meta }
     }
 
+    /// Sets the pagination cursor from a previous result's `nextCursor`.
     pub fn with_cursor(mut self, cursor: crate::meta::Cursor) -> Self {
         self.cursor = Some(cursor);
         self
     }
 
+    /// Replaces the required per-request `_meta`.
     pub fn with_meta(mut self, meta: RequestMetaObject) -> Self {
         self.meta = meta;
         self

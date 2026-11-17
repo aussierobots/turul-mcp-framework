@@ -1,12 +1,11 @@
-//! Framework trait implementations for protocol types
+//! Framework trait implementations for protocol types.
 //!
-//! This module provides framework trait implementations for concrete protocol types
-//! (Resource, Prompt, Tool, Root, etc.) from turul_mcp_protocol, enabling them to be used
-//! with framework features like ResourceDefinition, PromptDefinition, ToolDefinition, etc.
+//! Implements the framework traits for the concrete protocol types (`Resource`, `Prompt`,
+//! `Tool`, `Root`, and others) from `turul_mcp_protocol`, so they can be used wherever a
+//! `ResourceDefinition`, `PromptDefinition`, `ToolDefinition`, etc. is expected.
 //!
-//! **CRITICAL**: Every protocol type that has corresponding framework traits MUST have
-//! implementations here. Missing implementations break the trait hierarchy and cause
-//! compilation failures in user code.
+//! A protocol type with corresponding framework traits needs its implementations here;
+//! without them it does not satisfy the definition traits.
 
 use crate::traits::*;
 use turul_mcp_protocol::completion::{
@@ -118,7 +117,7 @@ impl HasPromptArguments for Prompt {
 
 impl HasPromptAnnotations for Prompt {
     fn annotations(&self) -> Option<&crate::traits::prompt_traits::PromptAnnotations> {
-        // Prompt struct doesn't have annotations field in current protocol
+        // `Prompt` has no annotations field.
         None
     }
 }
@@ -219,12 +218,12 @@ impl HasRootMetadata for Root {
 
 #[allow(deprecated)]
 impl HasRootPermissions for Root {
-    // Root struct doesn't have permissions field - framework can add later if needed
+    // `Root` has no permissions field; the trait defaults apply.
 }
 
 #[allow(deprecated)]
 impl HasRootFiltering for Root {
-    // Root struct doesn't have filtering field - framework can add later if needed
+    // `Root` has no filtering field; the trait defaults apply.
 }
 
 #[allow(deprecated)]
@@ -520,7 +519,7 @@ impl HasNotificationPayload for ProgressNotification {
 
 impl HasNotificationRules for ProgressNotification {
     fn priority(&self) -> u32 {
-        2 // Progress notifications have higher priority
+        2 // Higher than the default priority
     }
 }
 
@@ -556,7 +555,7 @@ impl HasNotificationPayload for CancelledNotification {
 
 impl HasNotificationRules for CancelledNotification {
     fn priority(&self) -> u32 {
-        3 // Cancellation has highest priority
+        3 // Highest priority
     }
 }
 
@@ -581,7 +580,7 @@ impl HasNotificationPayload for InitializedNotification {
 #[cfg(feature = "protocol-2025-11-25")]
 impl HasNotificationRules for InitializedNotification {
     fn priority(&self) -> u32 {
-        3 // Initialization has highest priority
+        3 // Highest priority
     }
 }
 

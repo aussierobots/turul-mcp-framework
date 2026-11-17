@@ -23,7 +23,9 @@ use turul_mcp_session_storage::SseEvent;
 
 /// Connection ID for tracking individual SSE streams
 pub type ConnectionId = String;
+/// The open SSE connections of a single session: connection identifier to event sender.
 pub type SessionConnections = HashMap<ConnectionId, mpsc::Sender<SseEvent>>;
+/// Shared map from session identifier to that session's open SSE connections.
 pub type ConnectionsMap = Arc<RwLock<HashMap<String, SessionConnections>>>;
 
 /// Enhanced stream manager with resumability support (MCP spec compliant)
@@ -109,16 +111,22 @@ impl Drop for SseStream {
 #[derive(Debug, thiserror::Error)]
 pub enum StreamError {
     #[error("Session not found: {0}")]
+    /// The session does not exist.
     SessionNotFound(String),
     #[error("Stream not found: session={0}, stream={1}")]
+    /// The session has no stream with the given identifier (session, stream).
     StreamNotFound(String, String),
     #[error("Storage error: {0}")]
+    /// The session storage backend failed; the message gives the reason.
     StorageError(String),
     #[error("Connection error: {0}")]
+    /// Delivering to a connection failed; the message gives the reason.
     ConnectionError(String),
     #[error("No connections available for session: {0}")]
+    /// The session has no open connections to deliver to.
     NoConnections(String),
     #[error("Session {0} not subscribed to notification type: {1}")]
+    /// The session is not subscribed to the given notification type (session, notification type).
     NotSubscribed(String, String),
 }
 
@@ -236,7 +244,7 @@ impl StreamManager {
                        session_id_clone, connection_id_clone);
             }
 
-            // 2. Then, stream real-time events from dedicated channel
+            // Then stream real-time events from the dedicated channel
             let mut keepalive_interval = tokio::time::interval(
                 tokio::time::Duration::from_secs(config.keepalive_interval_seconds)
             );
@@ -954,7 +962,7 @@ impl StreamManager {
             .sum();
 
         StreamStats {
-            active_broadcasters: total_connections, // Now tracks active connections
+            active_broadcasters: total_connections, // counts active connections
             total_sessions: session_count,
             total_events: event_count,
             channel_buffer_size: self.config.channel_buffer_size,
@@ -975,9 +983,13 @@ impl Drop for StreamManager {
 /// Stream manager statistics
 #[derive(Debug, Clone)]
 pub struct StreamStats {
+    /// Number of active SSE connections.
     pub active_broadcasters: usize,
+    /// Number of sessions in session storage (0 if the count fails).
     pub total_sessions: usize,
+    /// Number of SSE events in session storage (0 if the count fails).
     pub total_events: usize,
+    /// Capacity of each connection's outgoing event channel.
     pub channel_buffer_size: usize,
 }
 

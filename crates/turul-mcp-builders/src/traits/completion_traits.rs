@@ -1,41 +1,40 @@
-//! Framework traits for MCP completion construction
+//! Framework traits for MCP completion construction.
 //!
-//! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
+//! These are framework features, not part of the MCP specification.
 
 use turul_mcp_protocol::completion::{
     CompleteArgument, CompleteRequest, CompletionContext, CompletionReference,
 };
 
-/// Trait for completion metadata (method, reference)
+/// Completion metadata: the method name and the reference being completed.
 pub trait HasCompletionMetadata {
-    /// The completion method name
+    /// Returns the completion method name.
     fn method(&self) -> &str;
 
-    /// The reference being completed (prompt or resource)
+    /// Returns the reference being completed (prompt or resource).
     fn reference(&self) -> &CompletionReference;
 }
 
-/// Trait for completion context (argument, context)
+/// Completion context: the argument being completed and optional extra context.
 pub trait HasCompletionContext {
-    /// The argument being completed
+    /// Returns the argument being completed.
     fn argument(&self) -> &CompleteArgument;
 
-    /// Optional completion context
+    /// Returns the optional completion context; the default is `None`.
     fn context(&self) -> Option<&CompletionContext> {
         None
     }
 }
 
-/// Trait for completion validation and processing
+/// Completion request validation and value filtering.
 pub trait HasCompletionHandling {
-    /// Validate the completion request
+    /// Validates the completion request; the default accepts every request.
     fn validate_request(&self, _request: &CompleteRequest) -> Result<(), String> {
         Ok(())
     }
 
-    /// Filter completion values based on current input
+    /// Keeps the values that start with the current input, compared case-insensitively.
     fn filter_completions(&self, values: Vec<String>, current_value: &str) -> Vec<String> {
-        // Default: simple prefix matching
         values
             .into_iter()
             .filter(|v| v.to_lowercase().starts_with(&current_value.to_lowercase()))
@@ -43,7 +42,7 @@ pub trait HasCompletionHandling {
     }
 }
 
-/// Complete MCP Completion Definition trait
+/// Complete MCP completion definition.
 ///
 /// This trait represents a complete, working MCP completion provider.
 /// When you implement the required traits, you automatically get
@@ -51,7 +50,7 @@ pub trait HasCompletionHandling {
 pub trait CompletionDefinition:
     HasCompletionMetadata + HasCompletionContext + HasCompletionHandling
 {
-    /// Convert this completion definition to a protocol CompleteRequest
+    /// Converts this completion definition to a protocol `CompleteRequest`.
     #[cfg(feature = "protocol-2025-11-25")]
     fn to_complete_request(&self) -> CompleteRequest {
         let mut request = CompleteRequest::new(self.reference().clone(), self.argument().clone());
