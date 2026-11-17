@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.32] - 2026-11-17
+
+`turul-mcp-aws-lambda` 0.4.11 → 0.4.12.
+
+### Fixed
+
+- **Lambda custom routes match behind an API Gateway stage (ADR-038 §6).** `lambda_http`
+  prefixes the path with `/{stage}` for any stage other than `$default`, so a Server Card
+  route at `/mcp/server-card` missed `/prod/mcp/server-card`, and the request fell through
+  to the MCP handler. Routes now match exactly first, then without that one stage prefix.
+  This covers REST and HTTP APIs, and is skipped when `AWS_LAMBDA_HTTP_IGNORE_STAGE_IN_PATH`
+  is set. `RouteRegistry` stays exact-match. A custom-domain base path is not stripped; set
+  `mcp_path` to include it.
+- **The dynamic-tools change check runs only for requests bound for MCP.** It ran before
+  route matching, so every Server Card or other custom-route request read shared tool state
+  first.
+
 ## [0.4.31] - 2026-11-17
 
 New crate `turul-mcp-ext-server-card` 0.1.0; `turul-http-mcp-server` 0.4.12 → 0.4.13,
