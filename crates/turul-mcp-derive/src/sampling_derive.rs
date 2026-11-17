@@ -1,4 +1,4 @@
-//! Implementation of #[derive(McpSampling)] macro
+//! Expansion of `#[derive(McpSampling)]`, which generates the sampling metadata and `McpSampling` trait impls.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -14,7 +14,6 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
     let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes
     let max_tokens = extract_string_attribute(&input.attrs, "max_tokens")
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(1000);
@@ -22,7 +21,6 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
     let temperature =
         extract_string_attribute(&input.attrs, "temperature").and_then(|s| s.parse::<f64>().ok());
 
-    // Generate temperature tokens
     let temperature_tokens = if let Some(temp_val) = temperature {
         quote! { Some(#temp_val) }
     } else {
@@ -31,7 +29,6 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let model = extract_string_attribute(&input.attrs, "model");
 
-    // Generate proper tokens for model preferences
     let model_prefs_impl = if let Some(ref model_name) = model {
         quote! {
             static MODEL_PREFS: std::sync::OnceLock<Option<#mcp_protocol::sampling::ModelPreferences>> = std::sync::OnceLock::new();
@@ -117,13 +114,13 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
         #[automatically_derived]
         impl #mcp_builders::HasSamplingTools for #struct_name {}
 
-        // SamplingDefinition is automatically implemented via blanket impl
+        // SamplingDefinition comes from its blanket impl in the builders crate.
 
         #[automatically_derived]
         #[#async_trait::async_trait]
         impl #mcp_server::McpSampling for #struct_name {
             async fn sample(&self, request: #mcp_protocol::sampling::CreateMessageRequest) -> #mcp_protocol::McpResult<#mcp_protocol::sampling::CreateMessageResult> {
-                // Default implementation - this should be overridden by implementing sample_impl
+                // Delegates to sample_impl.
                 match self.sample_impl(request).await {
                     Ok(result) => Ok(result),
                     Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),

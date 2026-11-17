@@ -1,6 +1,6 @@
 //! Pagination Integration Tests
 //!
-//! Tests for MCP pagination features (current spec: 2025-11-25).
+//! Tests for MCP pagination features (2025-11-25 lane only).
 
 use crate::handlers::{McpHandler, ResourcesListHandler};
 use async_trait::async_trait;

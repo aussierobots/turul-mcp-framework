@@ -1,4 +1,4 @@
-//! Prelude module for common MCP protocol imports
+//! Prelude module for common MCP protocol imports.
 //!
 //! This module provides a convenient way to import the most commonly used
 //! types and traits from the MCP protocol crate.
@@ -29,7 +29,7 @@ pub use crate::tools::{
     CallToolRequest, CallToolRequestParams, CallToolResult, Tool, ToolResult, ToolSchema,
 };
 
-// Notification types (using specific structs that exist).
+// Notification types.
 pub use crate::notifications::{
     Notification, NotificationParams, ProgressNotification, ProgressNotificationParams,
     ResourceUpdatedNotification, ResourceUpdatedNotificationParams,
@@ -53,7 +53,7 @@ pub use crate::sampling::{CreateMessageResult, SamplingMessage};
 // Completion types (spec-pure structs only)
 pub use crate::completion::{CompleteRequestParams, CompleteResult, CompletionReference};
 
-// Capability types (initialize handshake removed in 2026-07-28 stateless core)
+// Version, icon and capability types.
 pub use crate::McpVersion;
 pub use crate::icons::Icon;
 pub use crate::initialize::{ClientCapabilities, Implementation};

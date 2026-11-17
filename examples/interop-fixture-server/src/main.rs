@@ -141,8 +141,9 @@ impl ConfirmTool {
 ///
 /// Emits `steps` progress notifications carrying the client's own
 /// `_meta.progressToken`, then returns. A peer that supplied no token gets no
-/// notifications and a plain JSON answer — which is the ADR-006 content
-/// negotiation rule, and is itself worth asserting.
+/// notifications and a plain JSON answer — a response is an SSE stream only
+/// when the request opted in with a progress token, and that is itself worth
+/// asserting.
 #[derive(McpTool, Default, Clone)]
 #[tool(
     name = "count",

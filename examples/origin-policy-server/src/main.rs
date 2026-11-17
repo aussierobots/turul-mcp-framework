@@ -4,7 +4,7 @@
 //! present and not loopback is rejected with HTTP 403 before auth or
 //! dispatch. The `Host` header is NOT consulted — it is attacker-controlled,
 //! and trusting agreement between Origin and Host admitted exactly the attack
-//! below (fixed 2026-08-15, ADR-031 revision log). This stops DNS-rebinding — a malicious page on
+//! below (fixed 2026-08-15). This stops DNS-rebinding — a malicious page on
 //! `https://evil.example` rebinding its hostname to 127.0.0.1 so the
 //! victim's browser posts to your local MCP server with the browser's
 //! ambient network position.
@@ -35,7 +35,7 @@ use turul_mcp_derive::McpTool;
 use turul_mcp_server::prelude::*;
 
 #[derive(Parser)]
-#[command(about = "MCP server demonstrating OriginPolicy (ADR DNS-rebinding protection)")]
+#[command(about = "MCP server demonstrating OriginPolicy (DNS-rebinding protection)")]
 struct Args {
     #[arg(long, default_value = "8643")]
     port: u16,

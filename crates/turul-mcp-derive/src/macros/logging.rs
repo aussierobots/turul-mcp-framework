@@ -9,14 +9,14 @@ use syn::{Ident, LitStr, Result, Token, Type, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
-/// Implementation function for the logging!{} declarative macro
+/// Expands the `logging!{}` declarative macro.
 pub fn logging_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let input = syn::parse::<LoggingMacroInput>(input)?;
     let output = logging_declarative_impl_inner(input);
     Ok(output.into())
 }
 
-/// Internal implementation that works with proc_macro2::TokenStream for testing
+/// Expands the macro input to a `proc_macro2::TokenStream`, so tests can call it outside a proc-macro context.
 pub fn logging_declarative_impl_inner(input: LoggingMacroInput) -> proc_macro2::TokenStream {
     let mcp_derive = crate::utils::derive_path();
     let serde_attr = crate::utils::serde_attr_path();
@@ -41,7 +41,7 @@ pub fn logging_declarative_impl_inner(input: LoggingMacroInput) -> proc_macro2::
     }
 }
 
-/// Parse input for the logging!{} macro
+/// Parsed input of the `logging!{}` macro.
 pub struct LoggingMacroInput {
     name: String,
     fields: Vec<LoggingField>,
@@ -67,7 +67,7 @@ impl Parse for LoggingMacroInput {
     }
 }
 
-/// Individual field in logging macro
+/// A single field declared in the `logging!{}` macro.
 struct LoggingField {
     name: String,
     field_type: Type,

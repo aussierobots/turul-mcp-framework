@@ -53,48 +53,9 @@ pub enum ResourceContents {
     Blob(BlobResourceContents),
 }
 
-/// Resource reference for resource links.
-///
-/// Mirrors the schema's `Resource` interface so `ContentBlock::ResourceLink`
-/// (which the schema declares as `ResourceLink extends Resource`) round-trips
-/// all spec-permitted fields including `size` and `icons`.
-///
-/// Carries the same fields as [`crate::resources::Resource`]; the parallel
-/// type is preserved for now because `ContentBlock::ResourceLink` flattens
-/// this body and we don't want to cascade the type swap through
-/// `prompts.rs`/`lib.rs` re-exports in this slice. Collapsing onto a single
-/// `Resource` struct is the cleaner end-state.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceReference {
-    /// The URI of this resource
-    pub uri: String,
-    /// A human-readable name for this resource
-    pub name: String,
-    /// A human-readable title for this resource
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    /// A description of what this resource represents or contains
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    /// The MIME type of this resource, if known
-    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
-    pub mime_type: Option<String>,
-    /// Size of the raw resource content, in bytes. Hosts use this for file-size
-    /// display and context-window estimation.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub size: Option<u64>,
-    /// Display icons (from `Resource extends Icons`). Most consumers won't need this.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub icons: Option<Vec<crate::icons::Icon>>,
-    /// Client annotations for this resource
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub annotations: Option<Annotations>,
-    /// Additional metadata for this resource
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
-    pub meta: Option<HashMap<String, Value>>,
-}
+/// A resource link's resource: the schema's `ResourceLink` extends `Resource`, so
+/// this names [`crate::resources::Resource`] rather than defining a second struct.
+pub type ResourceReference = crate::resources::Resource;
 
 /// Content block union — `text | image | audio | resource_link | resource | tool_use | tool_result`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,11 +64,14 @@ pub enum ContentBlock {
     /// Text content
     #[serde(rename = "text")]
     Text {
+        /// The text content.
         text: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        /// Optional annotations for the client: audience, priority and last-modified hints.
         annotations: Option<Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object carrying protocol-reserved and implementation-specific metadata.
         meta: Option<HashMap<String, Value>>,
     },
     /// Image content
@@ -119,9 +83,11 @@ pub enum ContentBlock {
         #[serde(rename = "mimeType")]
         mime_type: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        /// Optional annotations for the client: audience, priority and last-modified hints.
         annotations: Option<Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object carrying protocol-reserved and implementation-specific metadata.
         meta: Option<HashMap<String, Value>>,
     },
     /// Audio content
@@ -133,9 +99,11 @@ pub enum ContentBlock {
         #[serde(rename = "mimeType")]
         mime_type: String,
         #[serde(skip_serializing_if = "Option::is_none")]
+        /// Optional annotations for the client: audience, priority and last-modified hints.
         annotations: Option<Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object carrying protocol-reserved and implementation-specific metadata.
         meta: Option<HashMap<String, Value>>,
     },
     /// Resource link (ResourceLink from MCP spec).
@@ -148,16 +116,20 @@ pub enum ContentBlock {
     #[serde(rename = "resource_link")]
     ResourceLink {
         #[serde(flatten)]
+        /// The linked resource's descriptor, flattened into the block (carries its own `annotations` and `_meta`).
         resource: ResourceReference,
     },
     /// Embedded resource (EmbeddedResource from MCP spec)
     #[serde(rename = "resource")]
     Resource {
+        /// The embedded resource contents, text or base64 blob.
         resource: ResourceContents,
         #[serde(skip_serializing_if = "Option::is_none")]
+        /// Optional annotations for the client: audience, priority and last-modified hints.
         annotations: Option<Annotations>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object carrying protocol-reserved and implementation-specific metadata.
         meta: Option<HashMap<String, Value>>,
     },
     /// Tool use content block.
@@ -177,6 +149,7 @@ pub enum ContentBlock {
         input: HashMap<String, Value>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object carrying protocol-reserved and implementation-specific metadata.
         meta: Option<HashMap<String, Value>>,
     },
     /// Tool result content block.
@@ -200,12 +173,13 @@ pub enum ContentBlock {
         is_error: Option<bool>,
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+        /// Optional `_meta` object carrying protocol-reserved and implementation-specific metadata.
         meta: Option<HashMap<String, Value>>,
     },
 }
 
 impl ContentBlock {
-    /// Create text content
+    /// Creates text content.
     pub fn text(text: impl Into<String>) -> Self {
         Self::Text {
             text: text.into(),
@@ -214,7 +188,7 @@ impl ContentBlock {
         }
     }
 
-    /// Create text content with annotations
+    /// Creates text content with annotations.
     pub fn text_with_annotations(text: impl Into<String>, annotations: Annotations) -> Self {
         Self::Text {
             text: text.into(),
@@ -223,7 +197,7 @@ impl ContentBlock {
         }
     }
 
-    /// Create image content
+    /// Creates image content.
     pub fn image(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
         Self::Image {
             data: data.into(),
@@ -233,7 +207,7 @@ impl ContentBlock {
         }
     }
 
-    /// Create audio content
+    /// Creates audio content.
     pub fn audio(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
         Self::Audio {
             data: data.into(),
@@ -243,12 +217,12 @@ impl ContentBlock {
         }
     }
 
-    /// Create resource link
+    /// Creates a resource link.
     pub fn resource_link(resource: ResourceReference) -> Self {
         Self::ResourceLink { resource }
     }
 
-    /// Create embedded resource
+    /// Creates an embedded resource.
     pub fn resource(resource: ResourceContents) -> Self {
         Self::Resource {
             resource,
@@ -257,7 +231,7 @@ impl ContentBlock {
         }
     }
 
-    /// Create tool use content block
+    /// Creates a tool use content block.
     #[allow(deprecated)]
     #[deprecated(
         since = "0.4.0",
@@ -276,7 +250,7 @@ impl ContentBlock {
         }
     }
 
-    /// Create tool result content block
+    /// Creates a tool result content block.
     #[allow(deprecated)]
     #[deprecated(
         since = "0.4.0",
@@ -292,7 +266,7 @@ impl ContentBlock {
         }
     }
 
-    /// Create tool result error content block
+    /// Creates a tool result error content block.
     #[allow(deprecated)]
     #[deprecated(
         since = "0.4.0",
@@ -328,7 +302,7 @@ impl ContentBlock {
         self
     }
 
-    /// Add meta to any content block
+    /// Adds meta to any content block.
     #[allow(deprecated)] // matches the SEP-2577-deprecated variants
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         match &mut self {
@@ -349,7 +323,7 @@ impl ContentBlock {
 }
 
 impl ResourceContents {
-    /// Create text resource contents with required URI
+    /// Creates text resource contents with required URI.
     pub fn text(uri: impl Into<String>, text: impl Into<String>) -> Self {
         Self::Text(TextResourceContents {
             uri: uri.into(),
@@ -359,7 +333,7 @@ impl ResourceContents {
         })
     }
 
-    /// Create text resource contents with MIME type
+    /// Creates text resource contents with MIME type.
     pub fn text_with_mime(
         uri: impl Into<String>,
         text: impl Into<String>,
@@ -373,7 +347,7 @@ impl ResourceContents {
         })
     }
 
-    /// Create blob resource contents with required URI
+    /// Creates blob resource contents with required URI.
     pub fn blob(
         uri: impl Into<String>,
         blob: impl Into<String>,
@@ -388,67 +362,8 @@ impl ResourceContents {
     }
 }
 
-impl ResourceReference {
-    /// Create resource reference
-    pub fn new(uri: impl Into<String>, name: impl Into<String>) -> Self {
-        Self {
-            uri: uri.into(),
-            name: name.into(),
-            title: None,
-            description: None,
-            mime_type: None,
-            size: None,
-            icons: None,
-            annotations: None,
-            meta: None,
-        }
-    }
-
-    /// Add title
-    pub fn with_title(mut self, title: impl Into<String>) -> Self {
-        self.title = Some(title.into());
-        self
-    }
-
-    /// Add description
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
-        self
-    }
-
-    /// Add MIME type
-    pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
-        self.mime_type = Some(mime_type.into());
-        self
-    }
-
-    /// Set the raw content size in bytes.
-    pub fn with_size(mut self, size: u64) -> Self {
-        self.size = Some(size);
-        self
-    }
-
-    /// Attach display icons.
-    pub fn with_icons(mut self, icons: Vec<crate::icons::Icon>) -> Self {
-        self.icons = Some(icons);
-        self
-    }
-
-    /// Add annotations
-    pub fn with_annotations(mut self, annotations: Annotations) -> Self {
-        self.annotations = Some(annotations);
-        self
-    }
-
-    /// Add meta information
-    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
-        self
-    }
-}
-
 impl TextResourceContents {
-    /// Create new text resource contents
+    /// Creates new text resource contents.
     pub fn new(uri: impl Into<String>, text: impl Into<String>) -> Self {
         Self {
             uri: uri.into(),
@@ -458,13 +373,13 @@ impl TextResourceContents {
         }
     }
 
-    /// Add MIME type
+    /// Sets the MIME type.
     pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
         self.mime_type = Some(mime_type.into());
         self
     }
 
-    /// Add meta information
+    /// Sets the `_meta` map.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -472,7 +387,7 @@ impl TextResourceContents {
 }
 
 impl BlobResourceContents {
-    /// Create new blob resource contents
+    /// Creates new blob resource contents.
     pub fn new(
         uri: impl Into<String>,
         blob: impl Into<String>,
@@ -486,7 +401,7 @@ impl BlobResourceContents {
         }
     }
 
-    /// Add meta information
+    /// Sets the `_meta` map.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -497,6 +412,25 @@ impl BlobResourceContents {
 #[allow(deprecated)] // exercises SEP-2577-deprecated surfaces
 mod tests {
     use super::*;
+
+    #[test]
+    fn resource_link_carries_the_one_resource_type() {
+        // `ResourceReference` names `resources::Resource`; there is one definition.
+        let r: crate::resources::Resource = ResourceReference::new("file:///a.txt", "a")
+            .with_annotations(Annotations::default())
+            .with_icons(vec![crate::icons::Icon::new("https://example.com/i.png")]);
+        let block = ContentBlock::resource_link(r);
+        let wire = serde_json::to_value(&block).unwrap();
+        assert_eq!(wire["type"], "resource_link");
+        assert_eq!(wire["uri"], "file:///a.txt");
+        assert_eq!(wire["name"], "a");
+        assert!(
+            wire.get("annotations").is_some() && wire.get("icons").is_some(),
+            "{wire}"
+        );
+        let back: ContentBlock = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(&back).unwrap(), wire);
+    }
     use serde_json::json;
 
     #[test]

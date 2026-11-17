@@ -56,21 +56,25 @@ impl SubscriptionFilter {
         Self::default()
     }
 
+    /// Opts in to `notifications/tools/list_changed`.
     pub fn with_tools_list_changed(mut self, enabled: bool) -> Self {
         self.tools_list_changed = Some(enabled);
         self
     }
 
+    /// Opts in to `notifications/prompts/list_changed`.
     pub fn with_prompts_list_changed(mut self, enabled: bool) -> Self {
         self.prompts_list_changed = Some(enabled);
         self
     }
 
+    /// Opts in to `notifications/resources/list_changed`.
     pub fn with_resources_list_changed(mut self, enabled: bool) -> Self {
         self.resources_list_changed = Some(enabled);
         self
     }
 
+    /// Opts in to `notifications/resources/updated` for the given resource URIs.
     pub fn with_resource_subscriptions(mut self, uris: Vec<String>) -> Self {
         self.resource_subscriptions = Some(uris);
         self
@@ -116,6 +120,7 @@ impl SubscriptionsListenRequestParams {
 pub struct SubscriptionsListenRequest {
     /// Always `"subscriptions/listen"`.
     pub method: String,
+    /// The request parameters.
     pub params: SubscriptionsListenRequestParams,
 }
 
@@ -143,14 +148,17 @@ impl SubscriptionsListenRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionsAcknowledgedNotificationParams {
+    /// The notifications the server agreed to honor on this stream.
     pub notifications: SubscriptionFilter,
 
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+    /// Optional `_meta` object carrying protocol-reserved and implementation-specific metadata.
     pub meta: Option<HashMap<String, Value>>,
 }
 
 impl SubscriptionsAcknowledgedNotificationParams {
+    /// Creates params from the granted subset of the requested filter.
     pub fn new(notifications: SubscriptionFilter) -> Self {
         Self {
             notifications,
@@ -165,10 +173,12 @@ impl SubscriptionsAcknowledgedNotificationParams {
 pub struct SubscriptionsAcknowledgedNotification {
     /// Always `"notifications/subscriptions/acknowledged"`.
     pub method: String,
+    /// The acknowledgement parameters.
     pub params: SubscriptionsAcknowledgedNotificationParams,
 }
 
 impl SubscriptionsAcknowledgedNotification {
+    /// Creates the acknowledgement for the granted subset of the requested filter.
     pub fn new(notifications: SubscriptionFilter) -> Self {
         Self {
             method: SUBSCRIPTIONS_ACKNOWLEDGED_METHOD.to_string(),
@@ -193,6 +203,7 @@ impl SubscriptionsAcknowledgedNotification {
 #[derive(Debug, Clone, Deserialize)]
 pub struct SubscriptionsListenResultMetaObject {
     #[serde(rename = "io.modelcontextprotocol/subscriptionId")]
+    /// Id of the `subscriptions/listen` request this result closes.
     pub subscription_id: turul_rpc::RequestId,
 
     /// Identifies the responding server. Optional.
@@ -238,6 +249,7 @@ impl serde::Serialize for SubscriptionsListenResultMetaObject {
 }
 
 impl SubscriptionsListenResultMetaObject {
+    /// Creates the meta from the id of the closed `subscriptions/listen` request, with no server info or extra keys.
     pub fn new(subscription_id: turul_rpc::RequestId) -> Self {
         Self {
             subscription_id,
@@ -263,13 +275,16 @@ impl SubscriptionsListenResultMetaObject {
 #[serde(rename_all = "camelCase")]
 pub struct SubscriptionsListenResult {
     #[serde(default)]
+    /// Result discriminator; `complete` for this result.
     pub result_type: crate::result_type::ResultType,
 
     #[serde(rename = "_meta")]
+    /// Result `_meta`; carries the required subscription id.
     pub meta: SubscriptionsListenResultMetaObject,
 }
 
 impl SubscriptionsListenResult {
+    /// Creates a result closing the `subscriptions/listen` request with the given id.
     pub fn new(subscription_id: turul_rpc::RequestId) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -286,6 +301,7 @@ pub struct SubscriptionsListenResultResponse {
     pub jsonrpc: String,
     /// Request id this response is for.
     pub id: serde_json::Value,
+    /// The result closing the subscription.
     pub result: SubscriptionsListenResult,
 }
 
@@ -424,7 +440,7 @@ mod tests {
 
     #[test]
     fn listen_params_meta_required_on_wire() {
-        // _meta is a required typed field on the wire — no longer omittable.
+        // `_meta` is a required typed field on the wire, so it is always serialized.
         let p =
             SubscriptionsListenRequestParams::new(SubscriptionFilter::new(), test_request_meta());
         let v = serde_json::to_value(&p).unwrap();

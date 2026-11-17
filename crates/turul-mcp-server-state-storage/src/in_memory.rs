@@ -23,6 +23,7 @@ pub struct InMemoryServerStateStorage {
 }
 
 impl InMemoryServerStateStorage {
+    /// Creates an empty store with no entities or fingerprints.
     pub fn new() -> Self {
         Self {
             entities: RwLock::new(HashMap::new()),

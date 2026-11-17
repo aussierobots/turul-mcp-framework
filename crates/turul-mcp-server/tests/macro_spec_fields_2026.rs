@@ -1,4 +1,4 @@
-//! ADR-037: every macro form can declare `_meta`, and the resource and prompt
+//! Every macro form can declare `_meta`, and the resource and prompt
 //! forms can declare `icons`, `annotations`, `title` and (resources) `size`,
 //! all the way to the served list JSON. `prompts/get` returns
 //! `McpPrompt::get_response`, so a prompt's result `_meta` and its
@@ -160,7 +160,7 @@ impl McpPrompt for PlainPrompt {
 }
 
 /// Overrides `get_response` to set result `_meta`, and `validate_args` to
-/// reject `mode = "bad"`; neither ran on the wire before ADR-037 rev 2.
+/// reject `mode = "bad"`; `prompts/get` must call both on the wire.
 #[derive(McpPrompt, Clone, Default)]
 #[prompt(name = "result_meta_prompt", description = "Sets result _meta")]
 struct ResultMetaPrompt {}

@@ -12,7 +12,7 @@
 //! last-write-wins and silently drop an input round.
 //!
 //! **2. Native TTL.** DynamoDB deletes items itself from a numeric
-//! epoch-seconds attribute (`ttl`), so old tasks cost nothing to reap —
+//! epoch-seconds attribute (`ttlEpoch`), so old tasks cost nothing to reap —
 //! no sweep job, no scan. The catch, and the reason [`TaskStore::sweep`] is
 //! still implemented and reads still filter: **that deletion is eventual**,
 //! documented by AWS as typically within 48 hours of expiry. An expired item
@@ -49,9 +49,8 @@ const ATTR_STATUS: &str = "status";
 /// DynamoDB TTL attribute: **Number, Unix epoch SECONDS**. DynamoDB
 /// silently ignores any other unit or type, so this is not a free choice.
 ///
-/// Named `ttlEpoch`, matching `turul-mcp-task-storage` — this crate is that
-/// store's successor and holds the same concept. The name is deliberately
-/// NOT `ttl`, because `TaskFields.ttlMs` inside the `state` document is a
+/// Named `ttlEpoch`, matching `turul-mcp-task-storage`. The name is
+/// deliberately NOT `ttl`, because `TaskFields.ttlMs` inside the `state` document is a
 /// DURATION while this is an absolute INSTANT; one crate carrying both under
 /// near-identical names is how someone eventually writes milliseconds into
 /// the attribute DynamoDB reads as seconds, which fails silently.
@@ -79,8 +78,8 @@ pub struct DynamoDbTaskStore {
 }
 
 impl DynamoDbTaskStore {
-    /// Use an existing client (the normal path — an application configures
-    /// region and credentials once).
+    /// Creates a store over an existing client (the normal path — an
+    /// application configures region and credentials once).
     pub fn new(client: Client, table: impl Into<String>) -> Self {
         Self {
             client,
@@ -89,7 +88,7 @@ impl DynamoDbTaskStore {
         }
     }
 
-    /// Write `ttl` on every item according to `policy`, letting
+    /// Writes `ttlEpoch` on every item according to `policy`, letting
     /// DynamoDB reclaim old tasks with no sweep job. Call
     /// [`Self::ensure_table`] (or enable TTL out of band) for it to take
     /// effect — writing the attribute does nothing until TTL is enabled on
@@ -99,7 +98,7 @@ impl DynamoDbTaskStore {
         self
     }
 
-    /// Create the table if absent and enable TTL on `ttl`.
+    /// Creates the table if absent and enables TTL on `ttlEpoch`.
     ///
     /// Intended for tests and local development. In a real deployment the
     /// table is usually provisioned by IaC — in which case enable TTL there,
@@ -302,7 +301,7 @@ impl DynamoDbTaskStore {
 #[async_trait::async_trait]
 impl TaskStore for DynamoDbTaskStore {
     async fn create(&self, state: TaskState) -> Result<(), TaskStoreError> {
-        // A durable write before returning: SEP-2663 line 302 requires a
+        // A durable write before returning: SEP-2663 requires a
         // `tasks/get` — possibly on another instance — to resolve the instant
         // `CreateTaskResult` is answered.
         let item = self.item_for(&state, 1)?;
@@ -491,9 +490,7 @@ mod conformance {
         }
         let client = local_client().await;
         // Reachability is checked here so an unreachable endpoint FAILS.
-        // These tests must never report green without contacting a server —
-        // the Postgres backend silently skipped for exactly that reason
-        // before this pattern was adopted.
+        // These tests must never report green without contacting a server.
         if let Err(e) = client.list_tables().send().await {
             panic!(
                 "DynamoDB Local unreachable at {}: {e}\n\
@@ -531,7 +528,7 @@ mod conformance {
 
     /// The TTL attribute is the point of this backend's retention: DynamoDB
     /// reclaims items itself, with no sweep job. Two things are asserted —
-    /// that `ttl` is actually written (an unwritten attribute expires
+    /// that `ttlEpoch` is actually written (an unwritten attribute expires
     /// nothing), and that an already-expired item reads as absent despite
     /// DynamoDB's deletion being eventual.
     #[tokio::test]
@@ -545,7 +542,7 @@ mod conformance {
             return;
         };
 
-        // A live task with its own ttlMs carries ttl = createdAt + ttlMs.
+        // A live task with its own ttlMs carries ttlEpoch = createdAt + ttlMs.
         let mut live = parity::seed("t-ttl", None);
         live.fields.ttl_ms = crate::v2026_07_28::types::Nullable(Some(3_600_000.0));
         live.fields.created_at =

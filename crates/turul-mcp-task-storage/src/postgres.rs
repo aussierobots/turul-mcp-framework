@@ -71,12 +71,12 @@ pub struct PostgresTaskStorage {
 }
 
 impl PostgresTaskStorage {
-    /// Create a new PostgreSQL task storage with default configuration.
+    /// Creates a new PostgreSQL task storage with default configuration.
     pub async fn new() -> Result<Self, TaskStorageError> {
         Self::with_config(PostgresTaskConfig::default()).await
     }
 
-    /// Create a new PostgreSQL task storage with custom configuration.
+    /// Creates a new PostgreSQL task storage with custom configuration.
     pub async fn with_config(config: PostgresTaskConfig) -> Result<Self, TaskStorageError> {
         info!(
             "Initializing PostgreSQL task storage at {}",
@@ -107,7 +107,7 @@ impl PostgresTaskStorage {
         Ok(storage)
     }
 
-    /// Create a PostgreSQL task storage from an existing connection pool.
+    /// Creates a PostgreSQL task storage from an existing connection pool.
     pub async fn with_pool(
         pool: PgPool,
         config: PostgresTaskConfig,
@@ -123,7 +123,7 @@ impl PostgresTaskStorage {
         Ok(storage)
     }
 
-    /// Run database schema migrations.
+    /// Runs database schema migrations.
     async fn migrate(&self) -> Result<(), TaskStorageError> {
         debug!("Running PostgreSQL task storage migrations");
 
@@ -175,7 +175,7 @@ impl PostgresTaskStorage {
         Ok(())
     }
 
-    /// Start background cleanup task for expired tasks.
+    /// Starts background cleanup task for expired tasks.
     fn start_cleanup_task(&self) {
         let pool = self.pool.clone();
         let interval_minutes = self.config.cleanup_interval_minutes;
@@ -261,7 +261,7 @@ fn row_to_task_record(row: &PgRow) -> Result<TaskRecord, TaskStorageError> {
     })
 }
 
-/// Background cleanup: expire tasks whose TTL has elapsed.
+/// Deletes tasks whose TTL has elapsed.
 async fn run_background_cleanup(pool: &PgPool) -> Result<(), TaskStorageError> {
     let mut tx = pool.begin().await?;
 
@@ -284,7 +284,7 @@ async fn run_background_cleanup(pool: &PgPool) -> Result<(), TaskStorageError> {
     Ok(())
 }
 
-/// Mask sensitive information in database URL for logging.
+/// Masks sensitive information in database URL for logging.
 fn mask_db_url(url: &str) -> String {
     if let Some(at_pos) = url.find('@') {
         let (prefix, suffix) = url.split_at(at_pos);

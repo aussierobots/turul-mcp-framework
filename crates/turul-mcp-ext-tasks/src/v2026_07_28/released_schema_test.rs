@@ -1,8 +1,8 @@
 //! The wire types validate against the vendored released schema
 //! (`schema/schema.json`, ext-tasks `schema/2026-07-28/` at `0d0a6bd4`).
 //!
-//! ADR-028 (2026-11-14, e): the dated schema is normative, so every result and
-//! notification this crate serializes must validate against its `$defs`.
+//! The dated schema is normative, so every result and notification this crate
+//! serializes must validate against its `$defs`.
 
 use serde_json::{Value, json};
 

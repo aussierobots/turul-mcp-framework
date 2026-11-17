@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-task-storage"
-version = "0.4.2"
+version = "0.4.3"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -11,6 +11,12 @@ readme = "README.md"
 documentation = "https://docs.rs/turul-mcp-task-storage"
 keywords.workspace = true
 categories = ["network-programming"]
+
+
+[package.metadata.docs.rs]
+# Build the opt-in features too, so their API appears on docs.rs.
+features = ["sqlite", "postgres", "dynamodb"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
 # Core dependencies
@@ -24,7 +30,7 @@ uuid = { workspace = true, features = ["v4", "v7"] }
 chrono = { workspace = true, features = ["serde"] }
 
 # Protocol types
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.3", default-features = false }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.4", default-features = false }
 # Optional database support
 sqlx = { workspace = true, optional = true }
 

@@ -43,7 +43,7 @@ pub struct InMemoryTaskStorage {
 }
 
 impl InMemoryTaskStorage {
-    /// Create a new in-memory task storage with default configuration.
+    /// Creates a new in-memory task storage with default configuration.
     pub fn new() -> Self {
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -51,7 +51,7 @@ impl InMemoryTaskStorage {
         }
     }
 
-    /// Create a new in-memory task storage with custom configuration.
+    /// Creates a new in-memory task storage with custom configuration.
     pub fn with_config(config: InMemoryTaskConfig) -> Self {
         Self {
             tasks: Arc::new(RwLock::new(HashMap::new())),
@@ -59,7 +59,7 @@ impl InMemoryTaskStorage {
         }
     }
 
-    /// Generate a new task ID using UUID v7 (temporal ordering).
+    /// Generates a new task ID using UUID v7 (temporal ordering).
     pub fn generate_task_id() -> String {
         Uuid::now_v7().as_simple().to_string()
     }
@@ -88,7 +88,6 @@ impl TaskStorage for InMemoryTaskStorage {
             return Err(TaskStorageError::MaxTasksReached(self.config.max_tasks));
         }
 
-        // Ensure timestamps are set
         if task.created_at.is_empty() {
             task.created_at = Self::now_iso8601();
         }

@@ -1,8 +1,7 @@
-//! SQLite Session Storage Implementation
+//! SQLite backend for persistent session storage.
 //!
-//! Production-ready SQLite backend for persistent session storage.
-//! Ideal for single-instance deployments requiring data persistence
-//! across server restarts.
+//! Suited to single-instance deployments that need sessions to survive
+//! server restarts.
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -20,18 +19,23 @@ use turul_mcp_protocol::ServerCapabilities;
 #[derive(Error, Debug)]
 pub enum SqliteError {
     #[error("Database error: {0}")]
+    /// A database operation failed in the underlying `sqlx` driver.
     Database(#[from] sqlx::Error),
 
     #[error("Serialization error: {0}")]
+    /// A value could not be serialized to or deserialized from JSON.
     Serialization(#[from] serde_json::Error),
 
     #[error("Session not found: {0}")]
+    /// No session exists for the given session ID.
     SessionNotFound(String),
 
     #[error("Connection error: {0}")]
+    /// The parent directory of the database file could not be created.
     Connection(String),
 
     #[error("Migration error: {0}")]
+    /// A schema migration failed; this backend reports migration failures as `Database` instead.
     Migration(String),
 }
 
@@ -46,9 +50,9 @@ pub struct SqliteConfig {
     pub connection_timeout_secs: u64,
     /// Session expiration timeout in minutes
     pub session_timeout_minutes: u32,
-    /// Event cleanup interval in minutes
+    /// Interval in minutes between background cleanups of expired sessions and excess events
     pub cleanup_interval_minutes: u32,
-    /// Maximum events to keep per session (for memory management)
+    /// Maximum events to keep per session
     pub max_events_per_session: u32,
     /// Verify table existence at startup and run migrations.
     /// When false, tables are assumed to exist.
@@ -76,19 +80,29 @@ impl Default for SqliteConfig {
     }
 }
 
-/// SQLite-backed session storage implementation
+/// SQLite-backed session storage.
 pub struct SqliteSessionStorage {
     pool: SqlitePool,
     config: SqliteConfig,
 }
 
 impl SqliteSessionStorage {
-    /// Create new SQLite session storage with default configuration
+    /// Creates SQLite session storage with the default configuration.
+    ///
+    /// # Errors
+    ///
+    /// Fails as described for [`SqliteSessionStorage::with_config`].
     pub async fn new() -> Result<Self, SqliteError> {
         Self::with_config(SqliteConfig::default()).await
     }
 
-    /// Create SQLite session storage with custom configuration
+    /// Creates SQLite session storage with the given configuration and starts the background cleanup task.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SqliteError::Connection`] if the database directory cannot be created,
+    /// and [`SqliteError::Database`] if connecting or, when `verify_tables` is set,
+    /// migrating fails.
     pub async fn with_config(config: SqliteConfig) -> Result<Self, SqliteError> {
         info!(
             "Initializing SQLite session storage at {:?}",
@@ -110,7 +124,6 @@ impl SqliteSessionStorage {
             .filename(&config.database_path)
             .create_if_missing(config.create_database_if_missing);
 
-        // Create connection pool
         let pool = SqlitePool::connect_with(connect_options).await?;
 
         let verify = config.verify_tables;
@@ -128,11 +141,10 @@ impl SqliteSessionStorage {
         Ok(storage)
     }
 
-    /// Run database schema migrations
+    /// Creates the sessions and events tables and their indexes if they do not exist.
     async fn migrate(&self) -> Result<(), SqliteError> {
         debug!("Running database migrations");
 
-        // Create sessions table
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS sessions (
@@ -150,7 +162,6 @@ impl SqliteSessionStorage {
         .execute(&self.pool)
         .await?;
 
-        // Create events table
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS events (
@@ -188,7 +199,7 @@ impl SqliteSessionStorage {
         Ok(())
     }
 
-    /// Start background cleanup task for expired sessions and old events
+    /// Spawns a background task that runs `cleanup_expired_data` every `cleanup_interval_minutes`.
     async fn start_cleanup_task(&self) {
         let pool = self.pool.clone();
         let config = self.config.clone();
@@ -209,7 +220,7 @@ impl SqliteSessionStorage {
     }
 }
 
-/// Background cleanup for expired sessions and old events
+/// Deletes expired sessions and events beyond `max_events_per_session` per session.
 async fn cleanup_expired_data(pool: &SqlitePool, config: &SqliteConfig) -> Result<(), SqliteError> {
     let now = chrono::Utc::now().timestamp_millis() as u64;
     let expiration_threshold = now - (config.session_timeout_minutes as u64 * 60 * 1000);
@@ -415,7 +426,6 @@ impl SessionStorage for SqliteSessionStorage {
         key: &str,
         value: Value,
     ) -> Result<(), Self::Error> {
-        // Get current state
         let current_state_json =
             sqlx::query_scalar::<_, String>("SELECT state FROM sessions WHERE session_id = ?")
                 .bind(session_id)
@@ -521,7 +531,6 @@ impl SessionStorage for SqliteSessionStorage {
         session_id: &str,
         mut event: SseEvent,
     ) -> Result<SseEvent, Self::Error> {
-        // Check if session exists
         let session_exists = sqlx::query_scalar::<_, bool>(
             "SELECT EXISTS(SELECT 1 FROM sessions WHERE session_id = ?)",
         )
@@ -653,7 +662,6 @@ impl SessionStorage for SqliteSessionStorage {
                 .fetch_all(&self.pool)
                 .await?;
 
-        // Delete expired sessions
         sqlx::query("DELETE FROM sessions WHERE last_activity < ?")
             .bind(threshold_millis)
             .execute(&self.pool)

@@ -1,9 +1,8 @@
 //! SQLite [`TaskStore`] — restart-durable, and shared by every instance that
 //! opens the same file.
 //!
-//! **Schema: one JSON document per task, keyed by `task_id`.** Unlike the
-//! superseded 2025 store's column-per-field table, nothing here needs to
-//! query by anything but the id: SEP-2663 removed `tasks/list`, so the whole
+//! **Schema: one JSON document per task, keyed by `task_id`.** Nothing here
+//! needs to query by anything but the id: SEP-2663 removed `tasks/list`, so the whole
 //! trait is keyed on `task_id`. A document keeps the backends' storage shapes
 //! aligned with DynamoDB's and keeps the state machine in one place — see
 //! [`super::traits`], which owns every status rule, owner check and
@@ -36,7 +35,7 @@ pub struct SqliteTaskStore {
 }
 
 impl SqliteTaskStore {
-    /// Open (creating if absent) a task database at `path`.
+    /// Opens (creating if absent) a task database at `path`.
     pub async fn open(path: impl AsRef<std::path::Path>) -> Result<Self, TaskStoreError> {
         let options = SqliteConnectOptions::new()
             .filename(path.as_ref())
@@ -55,7 +54,7 @@ impl SqliteTaskStore {
         Self::from_pool(pool).await
     }
 
-    /// Adopt an existing pool (shared with the rest of an application).
+    /// Adopts an existing pool (shared with the rest of an application).
     pub async fn from_pool(pool: SqlitePool) -> Result<Self, TaskStoreError> {
         let store = Self { pool };
         store.migrate().await?;
@@ -159,7 +158,7 @@ fn uuid_like() -> String {
 #[async_trait::async_trait]
 impl TaskStore for SqliteTaskStore {
     async fn create(&self, state: TaskState) -> Result<(), TaskStoreError> {
-        // Committed before this returns: SEP-2663 line 302 requires a
+        // Committed before this returns: SEP-2663 requires a
         // `tasks/get` to resolve the instant `CreateTaskResult` is answered.
         let mut tx = self.pool.begin().await.map_err(backend)?;
         write_state(&mut tx, &state).await?;

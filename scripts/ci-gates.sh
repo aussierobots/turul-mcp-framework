@@ -180,11 +180,24 @@ gate_mutex() {
   fi
 }
 
+PUBLISHED_DOC_CRATES="-p turul-http-mcp-server@0.4 -p turul-mcp-aws-lambda@0.4 -p turul-mcp-builders@0.4 -p turul-mcp-client@0.4 -p turul-mcp-derive@0.4 -p turul-mcp-ext-apps@0.1 -p turul-mcp-ext-server-card@0.1 -p turul-mcp-ext-skills@0.1 -p turul-mcp-ext-tasks@0.1 -p turul-mcp-oauth@0.4 -p turul-mcp-protocol@0.4 -p turul-mcp-protocol-2026-07-28@0.4 -p turul-mcp-schema-validation@0.4 -p turul-mcp-server@0.4 -p turul-mcp-server-state-storage@0.4 -p turul-mcp-session-storage@0.4"
+
 gate_docs() {
   echo "=== rustdoc (deny warnings) ==="
   if RUSTDOCFLAGS="-D warnings" cargo doc --no-deps; then echo "  PASS"; else echo "  FAIL"; fail=1; fi
   # The derive doctests gated to the opt-in lane are `rust,ignore` under the
   # default build, so the run above never type-checks them.
+  # Every public item of every published default-lane crate is documented.
+  echo "=== rustdoc: published crates document every public item ==="
+  if RUSTDOCFLAGS="-D warnings -D missing_docs" cargo doc --no-deps $PUBLISHED_DOC_CRATES; then
+    echo "  PASS"
+  else
+    echo "  FAIL"; fail=1
+  fi
+  # docs.rs builds each crate on nightly with --cfg docsrs and the features in its
+  # [package.metadata.docs.rs]; build the same thing so a docs.rs failure shows here.
+  echo "=== rustdoc: docs.rs builds (nightly, --cfg docsrs) ==="
+  if ./scripts/docsrs-check.sh; then echo "  PASS"; else echo "  FAIL"; fail=1; fi
   echo "=== rustdoc: 2025-11-25 lane derive examples ==="
   if RUSTDOCFLAGS="-D warnings" cargo doc -p turul-mcp-derive --no-deps \
        --no-default-features --features protocol-2025-11-25; then

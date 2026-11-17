@@ -3,7 +3,7 @@
 //! Serves this repository's own plugin skills
 //! (`plugins/turul-mcp-skills/skills/*`) over MCP: `skills/list`,
 //! `skills/get`, and every skill file through `resources/read` with the digest
-//! and size its manifest declares (ADR-033).
+//! and size its manifest declares.
 //!
 //! ```bash
 //! cargo run -p ext-skills-server            # http://127.0.0.1:8650/mcp

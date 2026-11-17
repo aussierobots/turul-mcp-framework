@@ -5,7 +5,7 @@
 //! `Origin` header is present and invalid, servers MUST respond with
 //! HTTP 403 Forbidden."
 //!
-//! Policy contract is ADR-031: default `SameOriginOrLoopback`, additive
+//! Policy contract: default `SameOriginOrLoopback`, additive
 //! `AllowList`, opt-out `Disabled`. Origin-absent requests always pass.
 //!
 //! Built only under the 2026 feature; compiles to nothing under 2025-11-25.
@@ -110,8 +110,8 @@ async fn loopback_origin_is_allowed_by_default() {
 /// Named `same_host_origin_is_allowed_by_default` until 2026-08-15, which
 /// overstated it: no non-loopback host is reachable in this fixture, so the
 /// former `Host`-matching branch was never exercised here. That is why this
-/// suite stayed green through the DNS-rebinding bypass — see ADR-031
-/// (2026-08-15) and `origin.rs::matching_host_header_does_not_admit_a_foreign_origin`,
+/// suite stayed green through the DNS-rebinding bypass;
+/// see `origin.rs::matching_host_header_does_not_admit_a_foreign_origin`,
 /// which covers the case this one cannot.
 #[tokio::test]
 async fn servers_own_loopback_origin_is_allowed_by_default() {
@@ -175,7 +175,7 @@ async fn disabled_policy_skips_validation() {
     assert_eq!(resp.status(), 200);
 }
 
-/// OPTIONS preflight is exempt (ADR-031): the actual request is what gets
+/// OPTIONS preflight is exempt: the actual request is what gets
 /// gated, and the gated POST after a passing preflight still returns 403.
 #[tokio::test]
 async fn options_preflight_is_exempt_but_actual_request_is_gated() {

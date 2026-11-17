@@ -130,12 +130,12 @@ fn row_to_task_record(row: sqlx::sqlite::SqliteRow) -> Result<TaskRecord, TaskSt
 }
 
 impl SqliteTaskStorage {
-    /// Create new SQLite task storage with default configuration.
+    /// Creates a new SQLite task storage with default configuration.
     pub async fn new() -> Result<Self, TaskStorageError> {
         Self::with_config(SqliteTaskConfig::default()).await
     }
 
-    /// Create SQLite task storage with custom configuration.
+    /// Creates SQLite task storage with custom configuration.
     pub async fn with_config(config: SqliteTaskConfig) -> Result<Self, TaskStorageError> {
         info!(
             "Initializing SQLite task storage at {:?}",
@@ -182,7 +182,7 @@ impl SqliteTaskStorage {
         Ok(storage)
     }
 
-    /// Run database schema migrations.
+    /// Runs database schema migrations.
     async fn migrate(&self) -> Result<(), TaskStorageError> {
         debug!("Running task storage database migrations");
 
@@ -225,7 +225,7 @@ impl SqliteTaskStorage {
         Ok(())
     }
 
-    /// Start background cleanup task for expired tasks.
+    /// Starts background cleanup task for expired tasks.
     fn start_cleanup_task(&self) {
         let pool = self.pool.clone();
         let interval_mins = self.config.cleanup_interval_minutes;
@@ -248,7 +248,7 @@ impl SqliteTaskStorage {
     }
 }
 
-/// Background cleanup: expire tasks that have exceeded their TTL.
+/// Deletes tasks that have exceeded their TTL.
 async fn run_cleanup(pool: &SqlitePool) -> Result<(), TaskStorageError> {
     let deleted = sqlx::query(
         r#"

@@ -1,9 +1,9 @@
-//! MCP Server Implementation and Session-Aware Handlers
+//! Core MCP server (`McpServer`) and the session-aware handlers that bridge MCP
+//! protocol requests to business logic.
 //!
-//! This module contains the core MCP server implementation (`McpServer`) and
-//! session-aware handlers that bridge MCP protocol requests with business logic.
-//! Includes handlers for initialization, tool execution, and tool listing with
-//! automatic session management and protocol compliance.
+//! Includes handlers for `initialize` (2025-11-25 lane), `server/discover`
+//! (2026-07-28 lane), `tools/list` and `tools/call`, with session management
+//! and lifecycle enforcement.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -133,7 +133,7 @@ pub struct McpServer {
 }
 
 /// What a transport adapter needs to serve an [`McpServer`]; see
-/// [`McpServer::transport_parts`] (ADR-035). Transports add only their own
+/// [`McpServer::transport_parts`]. Transports add only their own
 /// I/O (an HTTP listener, the AWS Lambda runtime adapter, CORS, streaming).
 #[cfg(feature = "http")]
 pub struct TransportParts {
@@ -157,7 +157,7 @@ pub struct TransportParts {
     pub tool_fingerprint: String,
     /// Delivers `notifications/tools/list_changed` through the session manager.
     pub tool_notifier: Arc<dyn turul_http_mcp_server::ToolChangeNotifier>,
-    /// Origin policy set on the builder, if any (ADR-031).
+    /// Origin policy set on the builder, if any.
     pub origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
     /// 2025-11-25 task runtime, if configured.
     #[cfg(feature = "protocol-2025-11-25")]
@@ -171,7 +171,7 @@ pub struct TransportParts {
 }
 
 impl McpServer {
-    /// Create a new MCP server (use builder instead)
+    /// Creates a new MCP server; use [`McpServer::builder`] instead.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         implementation: Implementation,
@@ -313,9 +313,9 @@ impl McpServer {
         }
     }
 
-    /// Create a new builder
+    /// Creates a new builder.
     ///
-    /// # Example
+    /// # Examples
     /// ```rust,no_run
     /// use turul_mcp_server::McpServer;
     ///
@@ -327,7 +327,7 @@ impl McpServer {
         McpServerBuilder::new()
     }
 
-    /// Create a `ToolRegistry` with optional shared storage for coordination.
+    /// Creates a `ToolRegistry` with optional shared storage for coordination.
     ///
     /// If explicit storage is provided, it is used for cross-instance coordination.
     /// Otherwise, an in-memory backend is created automatically.
@@ -343,7 +343,7 @@ impl McpServer {
         crate::tool_registry::ToolRegistry::new(compiled_tools, session_manager, storage)
     }
 
-    /// Activate a precompiled tool at runtime. Only available in `Dynamic` mode.
+    /// Activates a precompiled tool at runtime. Only available in `Dynamic` mode.
     ///
     /// Connected clients receive `notifications/tools/list_changed` via SSE.
     /// Existing sessions continue — fingerprint is updated on next request.
@@ -364,7 +364,7 @@ impl McpServer {
         }
     }
 
-    /// Deactivate a precompiled tool at runtime. Only available in `Dynamic` mode.
+    /// Deactivates a precompiled tool at runtime. Only available in `Dynamic` mode.
     #[cfg(feature = "dynamic-tools")]
     pub async fn deactivate_tool(
         &self,
@@ -381,18 +381,18 @@ impl McpServer {
         }
     }
 
-    /// Get the dynamic tool registry, if in Dynamic mode.
+    /// Returns the dynamic tool registry, if in Dynamic mode.
     #[cfg(feature = "dynamic-tools")]
     pub fn tool_registry(&self) -> Option<&Arc<crate::tool_registry::ToolRegistry>> {
         self.tool_registry.as_ref()
     }
 
-    /// Get the server's configured capabilities
+    /// Returns the server's configured capabilities.
     pub fn capabilities(&self) -> &turul_mcp_protocol::ServerCapabilities {
         &self.capabilities
     }
 
-    /// Get the task runtime, if task support is configured.
+    /// Returns the task runtime, if task support is configured.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn task_runtime(&self) -> Option<&Arc<crate::task::runtime::TaskRuntime>> {
         self.task_runtime.as_ref()
@@ -410,7 +410,7 @@ impl McpServer {
         }
     }
 
-    /// Run the server with the default transport (HTTP if available)
+    /// Runs the server with the default transport (HTTP if available).
     pub async fn run(&self) -> Result<()> {
         #[cfg(feature = "http")]
         {
@@ -426,11 +426,11 @@ impl McpServer {
     }
 
     /// Every MCP method handler for the active protocol lane, in one
-    /// dispatcher. The single owner of method registration (ADR-035): the HTTP
+    /// dispatcher. The single owner of method registration: the HTTP
     /// transport ([`Self::run_http`]) and other transports
     /// ([`Self::transport_parts`], e.g. AWS Lambda) serve exactly this table.
     /// Handlers registered through the builder come last, so they win a
-    /// method name, as before.
+    /// method name.
     fn mcp_dispatcher(&self) -> turul_rpc::JsonRpcDispatcher<McpError> {
         let mut dispatcher = turul_rpc::JsonRpcDispatcher::<McpError>::new();
 
@@ -529,8 +529,8 @@ impl McpServer {
         dispatcher
     }
 
-    /// Everything a transport adapter needs to serve this server without
-    /// re-assembling any of it (ADR-035): the method dispatcher, capabilities,
+    /// Returns everything a transport adapter needs to serve this server without
+    /// re-assembling any of it: the method dispatcher, capabilities,
     /// identity, session machinery, middleware and custom routes. The HTTP
     /// transport is built from the same pieces.
     #[cfg(feature = "http")]
@@ -558,7 +558,7 @@ impl McpServer {
         }
     }
 
-    /// Build the HTTP server builder with every MCP method handler
+    /// Builds the HTTP server builder with every MCP method handler
     /// registered for the active protocol lane, WITHOUT binding or running.
     /// Single source of method registration shared by `run_http` and
     /// `run_with_sse_access` so the two entry points cannot register divergent
@@ -596,7 +596,7 @@ impl McpServer {
         builder
     }
 
-    /// The JSON-RPC method names this server registers for the active protocol
+    /// Returns the JSON-RPC method names this server registers for the active protocol
     /// lane. Mirrors `LambdaMcpServerBuilder`'s handler accessor of the same
     /// name so a cross-builder parity test can assert both register an identical
     /// set — catching the class of bug where one transport silently omits a
@@ -608,7 +608,7 @@ impl McpServer {
             .registered_methods()
     }
 
-    /// Run the server with HTTP transport (requires "http" feature)
+    /// Runs the server with HTTP transport (requires the `http` feature).
     #[cfg(feature = "http")]
     pub async fn run_http(&self) -> Result<()> {
         info!(
@@ -679,7 +679,7 @@ impl McpServer {
 
         let http_server = self.build_configured_http_builder().build();
 
-        // SSE is now integrated directly into the session management
+        // SSE is integrated directly into the session management
         if self.enable_sse {
             debug!("SSE support enabled with integrated session management");
 
@@ -709,7 +709,7 @@ impl McpServer {
         Ok(())
     }
 
-    /// Install the awaited event dispatcher backed by StreamManager.
+    /// Installs the awaited event dispatcher backed by `StreamManager`.
     /// This makes `broadcast_event()` persist Custom events synchronously
     /// on the request path, rather than relying on the detached bridge task.
     #[cfg(feature = "http")]
@@ -720,7 +720,7 @@ impl McpServer {
         debug!("Event dispatcher installed (guaranteed persistence for Custom events)");
     }
 
-    /// Set up event forwarding bridge between SessionManager and StreamManager.
+    /// Sets up the event forwarding bridge between `SessionManager` and `StreamManager`.
     /// With the event dispatcher installed, Custom events are observer-only here —
     /// the dispatcher handles persistence on the request path.
     async fn setup_sse_event_bridge(&self) {
@@ -759,7 +759,7 @@ impl McpServer {
         info!("✅ SSE event bridge established successfully");
     }
 
-    /// Run the server and return the HTTP server handle for SSE access (requires "http" feature)
+    /// Runs the server and returns the HTTP server handle for SSE access (requires the `http` feature).
     #[cfg(feature = "http")]
     pub async fn run_with_sse_access(
         &self,
@@ -844,7 +844,7 @@ impl McpServer {
         Ok((http_server, server_task))
     }
 
-    /// Get session storage configuration info
+    /// Returns session storage configuration info.
     pub fn session_storage_info(&self) -> &str {
         if let Some(storage) = &self.session_storage {
             debug!(
@@ -858,7 +858,7 @@ impl McpServer {
     }
 }
 
-/// Session-aware bridge handler that adapts McpHandler to JsonRpcHandler
+/// Session-aware bridge handler that adapts `McpHandler` to `JsonRpcHandler`.
 ///
 /// Provides session management and lifecycle enforcement for custom MCP handlers,
 /// automatically injecting session context and enforcing initialization requirements.
@@ -869,7 +869,7 @@ pub struct SessionAwareMcpHandlerBridge {
 }
 
 impl SessionAwareMcpHandlerBridge {
-    /// Creates a new session-aware handler bridge
+    /// Creates a new session-aware handler bridge.
     pub fn new(
         handler: Arc<dyn McpHandler>,
         session_manager: Arc<SessionManager>,
@@ -906,7 +906,7 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
                 self.session_manager.get_storage(),
             ))
         } else {
-            // Fallback: extract session ID from params (legacy behavior)
+            // Fallback: extract session ID from params
             let session_id = extract_session_id_from_params(&params);
             if let Some(sid) = session_id {
                 debug!("Fallback: extracted session_id from params: {}", sid);
@@ -1018,14 +1018,12 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
     }
 }
 
-/// Extract session ID from request parameters (placeholder implementation)
+/// Extracts a session ID from request parameters; always returns `None`.
 fn extract_session_id_from_params(_params: &Option<turul_rpc::RequestParams>) -> Option<String> {
-    // In a real implementation, this would extract session ID from HTTP headers
-    // For now, return None as we'll implement proper session extraction later
     None
 }
 
-/// Session-aware handler for initialize requests
+/// Session-aware handler for `initialize` requests.
 #[cfg(feature = "protocol-2025-11-25")]
 pub struct SessionAwareInitializeHandler {
     implementation: Implementation,
@@ -1070,13 +1068,15 @@ impl SessionAwareInitializeHandler {
         self
     }
 
-    /// Negotiate protocol version with client
+    /// Negotiates the protocol version with the client.
     ///
-    /// Server supports backward compatibility with older protocol versions.
     /// The negotiation follows this priority:
-    /// 1. Use client's requested version if server supports it
-    /// 2. Use the highest version both client and server support
-    /// 3. Fall back to minimum compatible version
+    /// 1. Use the client's requested version if the server supports it
+    /// 2. Use the highest supported version not newer than the requested one
+    /// 3. Return an error if no supported version is at or below the requested one
+    ///
+    /// An unrecognised date-like version newer than `McpVersion::LATEST` falls back to `LATEST`;
+    /// any other unrecognised or malformed version string is an error.
     fn negotiate_version(&self, client_version: &str) -> std::result::Result<McpVersion, String> {
         use turul_mcp_protocol::version::McpVersion;
 
@@ -1143,10 +1143,10 @@ impl SessionAwareInitializeHandler {
         }
     }
 
-    /// Adjust server capabilities based on negotiated protocol version
+    /// Returns the server capabilities for the negotiated protocol version.
     ///
-    /// Some capabilities are only available in newer protocol versions.
-    /// This method filters capabilities to match what the negotiated version supports.
+    /// No capability currently differs by version, so the configured
+    /// capabilities are returned unchanged.
     fn adjust_capabilities_for_version(&self, version: McpVersion) -> ServerCapabilities {
         let adjusted = self.capabilities.clone();
 
@@ -1347,8 +1347,6 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
                 .await;
         }
 
-        // Store negotiated version before initialization (differs by mode)
-
         // Store the negotiated version in session state for tools to access
         self.session_manager
             .set_session_state(
@@ -1430,6 +1428,8 @@ pub struct DiscoverHandler {
 
 #[cfg(feature = "protocol-2026-07-28")]
 impl DiscoverHandler {
+    /// Creates a handler answering `server/discover` with `capabilities`, optional
+    /// `instructions`, and the spec version this build speaks.
     pub fn new(capabilities: ServerCapabilities, instructions: Option<String>) -> Self {
         Self {
             capabilities,
@@ -1440,7 +1440,7 @@ impl DiscoverHandler {
 }
 
 /// The `supportedVersions` `server/discover` answers with: the one spec this
-/// build speaks. Server Cards read the same list (ADR-038 §2).
+/// build speaks. Server Cards read the same list.
 #[cfg(feature = "protocol-2026-07-28")]
 pub(crate) fn discover_supported_versions() -> Vec<String> {
     vec![McpVersion::V2026_07_28.as_str().to_string()]
@@ -1481,7 +1481,7 @@ impl JsonRpcHandler for DiscoverHandler {
     }
 }
 
-/// Handler for tools/list requests
+/// Handler for `tools/list` requests.
 pub struct ListToolsHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
     session_manager: Option<Arc<SessionManager>>,
@@ -1493,6 +1493,9 @@ pub struct ListToolsHandler {
 }
 
 impl ListToolsHandler {
+    /// Creates a handler without a session manager, so no lifecycle check applies.
+    ///
+    /// On the 2025-11-25 lane, `has_tasks = false` strips `execution` from every listed tool.
     pub fn new(tools: HashMap<String, Arc<dyn McpTool>>, has_tasks: bool) -> Self {
         Self {
             tools,
@@ -1504,6 +1507,11 @@ impl ListToolsHandler {
         }
     }
 
+    /// Creates a handler bound to `session_manager`.
+    ///
+    /// On the 2025-11-25 lane, `strict_lifecycle` rejects requests from sessions that have not
+    /// sent `notifications/initialized`, and `has_tasks = false` strips `execution` from every
+    /// listed tool.
     pub fn new_with_session_manager(
         tools: HashMap<String, Arc<dyn McpTool>>,
         session_manager: Arc<SessionManager>,
@@ -1520,7 +1528,7 @@ impl ListToolsHandler {
         }
     }
 
-    /// Set a dynamic tool registry for Dynamic mode.
+    /// Sets a dynamic tool registry for Dynamic mode.
     #[cfg(feature = "dynamic-tools")]
     pub fn with_tool_registry(mut self, registry: Arc<crate::tool_registry::ToolRegistry>) -> Self {
         self.tool_registry = Some(registry);
@@ -1744,14 +1752,14 @@ impl JsonRpcHandler for ListToolsHandler {
     }
 }
 
-/// Session-aware handler for tool execution
-/// Runtime + the task-election tool map (`name → election`).
+/// Runtime and task-election tool map (`name → election`) for the Tasks extension.
 #[cfg(feature = "ext-tasks")]
 type ExtTasksWiring = (
     Arc<crate::ext_tasks::ExtTasksRuntime>,
     Arc<HashMap<String, crate::ext_tasks::ExtTaskElection>>,
 );
 
+/// Session-aware handler for `tools/call` requests.
 pub struct SessionAwareToolHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
     session_manager: Arc<SessionManager>,
@@ -1767,6 +1775,10 @@ pub struct SessionAwareToolHandler {
 }
 
 impl SessionAwareToolHandler {
+    /// Creates a handler over `tools`, using `session_manager` to resolve sessions.
+    ///
+    /// On the 2025-11-25 lane, `strict_lifecycle` rejects calls from sessions that have not
+    /// sent `notifications/initialized`.
     pub fn new(
         tools: HashMap<String, Arc<dyn McpTool>>,
         session_manager: Arc<SessionManager>,
@@ -1792,6 +1804,7 @@ impl SessionAwareToolHandler {
     }
 
     #[cfg(feature = "ext-tasks")]
+    /// Wires the `io.modelcontextprotocol/tasks` extension runtime into the server, with the map of tool names to their task election.
     pub fn with_ext_tasks(
         mut self,
         runtime: Arc<crate::ext_tasks::ExtTasksRuntime>,
@@ -1801,7 +1814,7 @@ impl SessionAwareToolHandler {
         self
     }
 
-    /// Set a dynamic tool registry for Dynamic mode.
+    /// Sets a dynamic tool registry for Dynamic mode.
     #[cfg(feature = "dynamic-tools")]
     pub fn with_tool_registry(mut self, registry: Arc<crate::tool_registry::ToolRegistry>) -> Self {
         self.tool_registry = Some(registry);
@@ -1874,7 +1887,6 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         let params =
             params.ok_or_else(|| McpError::MissingParameter("CallToolRequest".to_string()))?;
 
-        // Use the parameter extraction pattern from the other project
         use turul_mcp_protocol::param_extraction::extract_params;
 
         #[cfg(feature = "protocol-2025-11-25")]
@@ -2109,7 +2121,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                 // `inputResponses` is the discriminator because it is the only
                 // thing on the wire that distinguishes the rounds:
                 // `CallToolRequestParams extends InputResponseRequestParams`
-                // (schema.ts:1863). The client cannot ask for a flow — it does
+                // in the 2026-07-28 schema. The client cannot ask for a flow — it does
                 // not know a task is coming — so the server decides, and it
                 // must decide before running the tool.
                 let withhold = election.mrtr_first && call_params.input_responses.is_none();

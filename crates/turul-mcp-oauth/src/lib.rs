@@ -5,7 +5,7 @@
 //! serves RFC 9728 Protected Resource Metadata. It does not implement an
 //! authorization server.
 //!
-//! # Example
+//! # Examples
 //!
 //! ```toml
 //! [dependencies]
@@ -68,7 +68,7 @@ use std::sync::Arc;
 /// A route entry: `(path, handler)` pair for registration with the server builder.
 pub type RouteEntry = (String, Arc<dyn turul_http_mcp_server::routes::RouteHandler>);
 
-/// Convenience function to create both the OAuth middleware and well-known route handlers
+/// Creates both the OAuth middleware and the well-known route handlers.
 ///
 /// Requires exactly one authorization server in the metadata. For multi-AS deployments,
 /// build the validator with [`hardened_validator`] and wire `OAuthResourceMiddleware`
@@ -81,14 +81,31 @@ pub type RouteEntry = (String, Arc<dyn turul_http_mcp_server::routes::RouteHandl
 /// - `/.well-known/oauth-protected-resource` (root form, always)
 /// - `/.well-known/oauth-protected-resource/mcp` (path form, when resource has a path)
 ///
-/// Register all routes with the server builder:
-/// ```rust,ignore
-/// let (middleware, routes) = oauth_resource_server(metadata, jwks_uri)?;
-/// let mut builder = McpServer::builder().middleware(middleware);
-/// for (path, handler) in routes {
-///     builder = builder.route(&path, handler);
-/// }
+/// Pass `middleware` to `McpServer::builder().middleware(..)` in `turul-mcp-server`, and
+/// each `(path, handler)` in `routes` to `.route(&path, handler)`:
+/// ```rust
+/// # use turul_mcp_oauth::{ProtectedResourceMetadata, oauth_resource_server};
+/// let metadata = ProtectedResourceMetadata::new(
+///     "https://example.com/mcp",
+///     vec!["https://auth.example.com".to_string()],
+/// )?;
+/// let (_middleware, routes) =
+///     oauth_resource_server(metadata, "https://auth.example.com/.well-known/jwks.json")?;
+/// let paths: Vec<&str> = routes.iter().map(|(path, _handler)| path.as_str()).collect();
+/// assert_eq!(
+///     paths,
+///     [
+///         "/.well-known/oauth-protected-resource",
+///         "/.well-known/oauth-protected-resource/mcp",
+///     ]
+/// );
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+///
+/// # Errors
+///
+/// [`OAuthError::InvalidConfiguration`] if the metadata does not list exactly one
+/// authorization server, or if `jwks_uri` is rejected by [`hardened_validator`].
 pub fn oauth_resource_server(
     metadata: ProtectedResourceMetadata,
     jwks_uri: &str,

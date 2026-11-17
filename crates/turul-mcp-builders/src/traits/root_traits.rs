@@ -1,4 +1,4 @@
-//! Framework traits for MCP root construction
+//! Defines framework traits for constructing MCP roots.
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
@@ -10,6 +10,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use turul_mcp_protocol::roots::Root;
 
+/// Supplies the URI and display fields of a root.
 pub trait HasRootMetadata {
     /// The root URI (must start with "file://")
     fn uri(&self) -> &str;
@@ -27,17 +28,17 @@ pub trait HasRootMetadata {
 
 /// Trait for root permissions and security
 pub trait HasRootPermissions {
-    /// Check if read access is allowed for this path
+    /// Returns whether read access is allowed for this path.
     fn can_read(&self, _path: &str) -> bool {
         true
     }
 
-    /// Check if write access is allowed for this path
+    /// Returns whether write access is allowed for this path.
     fn can_write(&self, _path: &str) -> bool {
         false // Default: read-only
     }
 
-    /// Get maximum depth for directory traversal
+    /// Returns the maximum directory traversal depth, if any.
     fn max_depth(&self) -> Option<usize> {
         None // No limit by default
     }
@@ -45,17 +46,17 @@ pub trait HasRootPermissions {
 
 /// Trait for root filtering and exclusions
 pub trait HasRootFiltering {
-    /// File extensions to include (None = all)
+    /// Returns the file extensions to include; `None` allows all.
     fn allowed_extensions(&self) -> Option<&[String]> {
         None
     }
 
-    /// File patterns to exclude (glob patterns)
+    /// Returns the patterns to exclude; `should_include` matches them as substrings of the path.
     fn excluded_patterns(&self) -> Option<&[String]> {
         None
     }
 
-    /// Check if a file should be included
+    /// Returns whether a file passes the exclusion patterns and, when set, the extension allow-list.
     fn should_include(&self, path: &str) -> bool {
         // Default: include everything unless filtered
         if let Some(patterns) = self.excluded_patterns() {
@@ -79,12 +80,12 @@ pub trait HasRootFiltering {
 
 /// Trait for root annotations and custom metadata
 pub trait HasRootAnnotations {
-    /// Get custom metadata
+    /// Returns custom metadata, which `to_root` sends as the root's `_meta`.
     fn annotations(&self) -> Option<&HashMap<String, Value>> {
         None
     }
 
-    /// Get root-specific tags or labels
+    /// Returns root-specific tags or labels.
     fn tags(&self) -> Option<&[String]> {
         None
     }
@@ -196,7 +197,7 @@ pub trait HasRootAnnotations {
 pub trait RootDefinition:
     HasRootMetadata + HasRootPermissions + HasRootFiltering + HasRootAnnotations
 {
-    /// Convert this root definition to a protocol Root
+    /// Converts this root definition to a protocol `Root`.
     fn to_root(&self) -> Root {
         let mut root = Root::new(self.uri());
         if let Some(name) = self.name() {
@@ -208,7 +209,11 @@ pub trait RootDefinition:
         root
     }
 
-    /// Validate this root definition
+    /// Validates this root definition.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err` when the URI does not start with `file://`.
     fn validate(&self) -> Result<(), String> {
         if !self.uri().starts_with("file://") {
             return Err("Root URI must start with 'file://'".to_string());

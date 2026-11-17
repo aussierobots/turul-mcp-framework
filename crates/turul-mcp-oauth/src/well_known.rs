@@ -1,4 +1,4 @@
-//! `.well-known/oauth-protected-resource` route handler
+//! `.well-known/oauth-protected-resource` route handler.
 //!
 //! Serves the RFC 9728 Protected Resource Metadata document at the
 //! well-known path, enabling clients to discover the authorization server.
@@ -12,13 +12,17 @@ use turul_http_mcp_server::routes::{RouteBody, RouteHandler};
 
 use crate::metadata::ProtectedResourceMetadata;
 
-/// Route handler that serves the Protected Resource Metadata document
+/// Route handler that serves the Protected Resource Metadata document.
 pub struct WellKnownOAuthHandler {
     metadata_json: String,
 }
 
 impl WellKnownOAuthHandler {
-    /// Create a new handler from metadata
+    /// Creates a new handler from metadata.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the metadata cannot be serialized to JSON.
     pub fn new(metadata: &ProtectedResourceMetadata) -> Self {
         Self {
             metadata_json: serde_json::to_string(metadata)
@@ -47,7 +51,7 @@ impl RouteHandler for WellKnownOAuthHandler {
 mod tests {
     use super::*;
 
-    // T28: Well-known endpoint returns metadata
+    // Well-known endpoint returns metadata
     #[tokio::test]
     async fn test_well_known_endpoint_returns_metadata() {
         let metadata = ProtectedResourceMetadata::new(

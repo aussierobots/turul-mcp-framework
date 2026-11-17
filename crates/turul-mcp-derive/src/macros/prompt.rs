@@ -1,9 +1,8 @@
-//! Declarative prompt! macro implementation
+//! Implements the declarative `prompt!` macro.
 //!
 //! This module provides the `prompt!` macro for creating MCP prompts using concise syntax.
 
 use proc_macro::TokenStream;
-// use proc_macro2::TokenStream as TokenStream2; // Currently unused
 use quote::quote;
 use syn::{
     Expr, Ident, LitStr, Result, Token,
@@ -11,7 +10,7 @@ use syn::{
     punctuated::Punctuated,
 };
 
-/// Parsed content of a prompt! macro
+/// Parsed content of a `prompt!` macro.
 pub struct PromptMacro {
     pub name: LitStr,
     pub description: Option<LitStr>,
@@ -22,7 +21,7 @@ pub struct PromptMacro {
     pub template: Expr,
 }
 
-/// A single prompt argument
+/// A single prompt argument.
 pub struct PromptArgument {
     pub name: Ident,
     pub arg_type: Ident,
@@ -99,7 +98,6 @@ impl Parse for PromptArgument {
         input.parse::<Token![=>]>()?;
         let description: LitStr = input.parse()?;
 
-        // Optional required flag
         let required = if input.peek(Token![,]) && input.peek2(Ident) {
             let lookahead = input.fork();
             lookahead.parse::<Token![,]>()?;
@@ -124,7 +122,7 @@ impl Parse for PromptArgument {
     }
 }
 
-/// Implementation of the prompt! declarative macro
+/// Expands the `prompt!` declarative macro.
 pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let async_trait = crate::utils::async_trait_path();
     let json_crate = crate::utils::serde_json_path();
@@ -157,7 +155,6 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let icons_impl =
         crate::tool_derive::generate_icons_impl(&prompt_ident, prompt_def.icons.as_ref());
 
-    // Generate arguments
     let prompt_args = if prompt_def.arguments.is_empty() {
         quote! { None }
     } else {

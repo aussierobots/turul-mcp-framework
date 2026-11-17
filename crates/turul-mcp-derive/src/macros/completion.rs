@@ -9,14 +9,14 @@ use syn::{Ident, LitStr, Result, Token, Type, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
-/// Implementation function for the completion!{} declarative macro
+/// Expands the `completion!{}` declarative macro.
 pub fn completion_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let input = syn::parse::<CompletionMacroInput>(input)?;
     let output = completion_declarative_impl_inner(input);
     Ok(output.into())
 }
 
-/// Internal implementation that works with proc_macro2::TokenStream for testing
+/// Expands the macro input to a `proc_macro2::TokenStream`, so tests can call it outside a proc-macro context.
 pub fn completion_declarative_impl_inner(input: CompletionMacroInput) -> proc_macro2::TokenStream {
     let mcp_derive = crate::utils::derive_path();
     let serde_attr = crate::utils::serde_attr_path();
@@ -41,7 +41,7 @@ pub fn completion_declarative_impl_inner(input: CompletionMacroInput) -> proc_ma
     }
 }
 
-/// Parse input for the completion!{} macro
+/// Parsed input of the `completion!{}` macro.
 pub struct CompletionMacroInput {
     name: String,
     fields: Vec<CompletionField>,
@@ -67,7 +67,7 @@ impl Parse for CompletionMacroInput {
     }
 }
 
-/// Individual field in completion macro
+/// A single field declared in the `completion!{}` macro.
 struct CompletionField {
     name: String,
     field_type: Type,

@@ -51,7 +51,7 @@ pub enum FetchError {
     CachePoisoned(PathBuf),
 }
 
-/// Ensure the pinned example tree is materialised under `dest`. Returns the
+/// Ensures the pinned example tree is materialised under `dest`. Returns the
 /// absolute path to the `examples/` directory inside the cache.
 ///
 /// Idempotent: if `dest/.pin` already matches `pin.sha`, no network is hit.

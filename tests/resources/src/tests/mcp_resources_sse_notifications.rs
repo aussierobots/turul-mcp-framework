@@ -78,7 +78,7 @@ async fn test_notification_json_serialization_format() {
 #[tokio::test]
 async fn test_sse_event_type_mapping_correctness() {
     // Test that notification methods would map correctly to SSE event types
-    // Per ADR-005: event type should match method name exactly
+    // The SSE event type must match the notification method name exactly
 
     let test_cases = vec![
         (

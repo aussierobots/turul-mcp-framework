@@ -1,4 +1,4 @@
-//! Implementation of #[mcp_resource] attribute macro
+//! Implements the `#[mcp_resource]` attribute macro.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -6,13 +6,17 @@ use syn::{FnArg, ItemFn, Lit, Meta, Pat, Result, Token, punctuated::Punctuated};
 
 use crate::macros::shared::capitalize;
 
+/// Expands `#[mcp_resource(...)]` on a function into a resource wrapper struct implementing `McpResource`, keeping the function as `<name>_impl`.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when an argument is not one of the accepted keys, or when `uri` is missing.
 pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result<TokenStream> {
     let async_trait = crate::utils::async_trait_path();
     let json_crate = crate::utils::serde_json_path();
     let mcp_builders = crate::utils::builders_path();
     let mcp_protocol = crate::utils::protocol_path();
     let mcp_server = crate::utils::server_path();
-    // Parse macro arguments
     let mut resource_uri = None;
     let mut resource_name = None;
     let mut resource_description = None;
@@ -83,7 +87,6 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     let fn_vis = &input.vis;
     let _return_type = &input.sig.output;
 
-    // Generate struct name from function name with proper capitalization
     let struct_name = syn::Ident::new(
         &format!("{}ResourceImpl", capitalize(&fn_name.to_string())),
         fn_name.span(),
@@ -100,31 +103,25 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     let annotations_impl =
         crate::tool_derive::generate_resource_annotations_impl(&struct_name, annotations.as_ref());
 
-    // Use function name as resource name if not provided
     let resource_name = resource_name.unwrap_or_else(|| fn_name.to_string());
 
-    // Default description if not provided
     let resource_description =
         resource_description.unwrap_or_else(|| format!("Resource: {}", resource_name));
 
-    // Generate title expression for HasResourceMetadata::title()
     let title_expr = match resource_title {
         Some(ref t) => quote! { Some(#t) },
         None => quote! { None },
     };
 
-    // Handle mime_type properly for quote! generation
     let mime_type_expr = match mime_type {
         Some(mt) => quote! { Some(#mt) },
         None => quote! { None },
     };
 
-    // Extract template variables from URI for parameter extraction
     let mut template_vars = Vec::new();
     let mut fn_call_args = Vec::new();
     let mut has_params_arg = false;
 
-    // Check for template variables in URI (e.g., {ticker}, {id})
     let re = regex::Regex::new(r"\{([^}]+)\}").unwrap();
     for capture in re.captures_iter(&resource_uri) {
         if let Some(var_name) = capture.get(1) {
@@ -134,7 +131,6 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
         }
     }
 
-    // Process function parameters
     for input_arg in &input.sig.inputs {
         if let FnArg::Typed(pat_type) = input_arg
             && let Pat::Ident(pat_ident) = pat_type.pat.as_ref()
@@ -142,9 +138,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             let param_name = &pat_ident.ident;
             let param_type = &pat_type.ty;
 
-            // Check if this parameter name matches a template variable
             if template_vars.contains(&param_name.to_string()) {
-                // Generate parameter extraction from template variables
                 let param_name_str = param_name.to_string();
                 fn_call_args.push(quote! {
                     {
@@ -163,11 +157,9 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             } else if param_name == "params"
                 && matches!(**param_type, syn::Type::Path(ref p) if p.path.segments.last().unwrap().ident == "Value")
             {
-                // This is the params argument - unwrap the Option
                 has_params_arg = true;
                 fn_call_args.push(quote! { params.unwrap_or_default() });
             } else {
-                // Regular parameter - extract from params
                 let param_name_str = param_name.to_string();
                 fn_call_args.push(quote! {
                     {
@@ -188,23 +180,18 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
         // but the function signature doesn't include params
     }
 
-    // Function will be called directly from the generated McpResource implementation
-
     // Rename the function to avoid name collision with the resource constructor
     let mut clean_input = input.clone();
     clean_input
         .attrs
         .retain(|attr| !attr.path().is_ident("mcp_resource"));
 
-    // Rename the function with _impl suffix
     let impl_fn_name = syn::Ident::new(&format!("{}_impl", fn_name), fn_name.span());
     clean_input.sig.ident = impl_fn_name.clone();
 
     let expanded = quote! {
-        // Keep the original function for direct use (with cleaned attributes)
         #clean_input
 
-        // Generate wrapper struct
         #[derive(Clone)]
         #fn_vis struct #struct_name;
 
@@ -214,7 +201,6 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             }
         }
 
-        // Implement resource metadata traits
         impl #mcp_builders::traits::HasResourceMetadata for #struct_name {
             fn name(&self) -> &str {
                 #resource_name
@@ -251,17 +237,13 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
 
         #icons_impl
 
-        // Implement McpResource trait with session-aware signature
         #[#async_trait::async_trait]
         impl #mcp_server::McpResource for #struct_name {
             async fn read(&self, params: Option<#json_crate::Value>, _session: Option<&#mcp_server::SessionContext>) -> #mcp_server::McpResult<Vec<#mcp_protocol::resources::ResourceContent>> {
-                // Call the renamed implementation function with extracted parameters
                 #impl_fn_name(#(#fn_call_args),*).await
             }
         }
 
-        // Create a constructor function with the same name as the original function
-        // This allows using the function name directly in .tool_fn() style
         #fn_vis fn #fn_name() -> #struct_name {
             #struct_name::new()
         }

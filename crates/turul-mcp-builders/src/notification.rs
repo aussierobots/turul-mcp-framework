@@ -6,7 +6,6 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import protocol types
 #[allow(deprecated)] // SEP-2577 migration window
 use turul_mcp_protocol::logging::LoggingLevel;
 use turul_rpc::types::RequestId;
@@ -22,10 +21,9 @@ use turul_mcp_protocol::notifications::{
 #[cfg(feature = "protocol-2025-11-25")]
 use turul_mcp_protocol::notifications::{InitializedNotification, RootsListChangedNotification};
 
-// Import framework traits from local crate
 use crate::traits::{HasNotificationMetadata, HasNotificationPayload, HasNotificationRules};
 
-/// Builder for creating notifications at runtime
+/// Builder for creating notifications at runtime.
 pub struct NotificationBuilder {
     method: String,
     params: Option<NotificationParams>,
@@ -35,7 +33,7 @@ pub struct NotificationBuilder {
 }
 
 impl NotificationBuilder {
-    /// Create a new notification builder with the given method
+    /// Creates a new notification builder with the given method.
     pub fn new(method: impl Into<String>) -> Self {
         Self {
             method: method.into(),
@@ -46,13 +44,13 @@ impl NotificationBuilder {
         }
     }
 
-    /// Set notification parameters
+    /// Sets notification parameters.
     pub fn params(mut self, params: NotificationParams) -> Self {
         self.params = Some(params);
         self
     }
 
-    /// Add a parameter to the notification
+    /// Adds a parameter to the notification.
     pub fn param(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.params.is_none() {
             self.params = Some(NotificationParams::new());
@@ -65,7 +63,7 @@ impl NotificationBuilder {
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         if self.params.is_none() {
             self.params = Some(NotificationParams::new());
@@ -74,7 +72,7 @@ impl NotificationBuilder {
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.params.is_none() {
             self.params = Some(NotificationParams::new());
@@ -87,25 +85,25 @@ impl NotificationBuilder {
         self
     }
 
-    /// Set notification priority (higher = more important)
+    /// Sets notification priority (higher = more important).
     pub fn priority(mut self, priority: u32) -> Self {
         self.priority = priority;
         self
     }
 
-    /// Set whether this notification can be batched with others
+    /// Sets whether this notification can be batched with others.
     pub fn can_batch(mut self, can_batch: bool) -> Self {
         self.can_batch = can_batch;
         self
     }
 
-    /// Set maximum retry attempts
+    /// Sets maximum retry attempts.
     pub fn max_retries(mut self, max_retries: u32) -> Self {
         self.max_retries = max_retries;
         self
     }
 
-    /// Build the notification
+    /// Builds the notification.
     pub fn build(self) -> Notification {
         let mut notification = Notification::new(self.method);
         if let Some(params) = self.params {
@@ -114,7 +112,7 @@ impl NotificationBuilder {
         notification
     }
 
-    /// Build a dynamic notification that implements the definition traits
+    /// Builds a dynamic notification that implements the definition traits.
     pub fn build_dynamic(self) -> DynamicNotification {
         DynamicNotification {
             method: self.method,
@@ -126,7 +124,7 @@ impl NotificationBuilder {
     }
 }
 
-/// Dynamic notification created by NotificationBuilder
+/// Dynamic notification created by NotificationBuilder.
 #[derive(Debug)]
 pub struct DynamicNotification {
     method: String,
@@ -136,7 +134,6 @@ pub struct DynamicNotification {
     max_retries: u32,
 }
 
-// Implement all fine-grained traits for DynamicNotification
 impl HasNotificationMetadata for DynamicNotification {
     fn method(&self) -> &str {
         &self.method
@@ -172,7 +169,7 @@ impl HasNotificationRules for DynamicNotification {
 
 // NotificationDefinition is automatically implemented via blanket impl!
 
-/// Builder for progress notifications
+/// Builder for progress notifications.
 pub struct ProgressNotificationBuilder {
     progress_token: String,
     progress: f64,
@@ -182,6 +179,7 @@ pub struct ProgressNotificationBuilder {
 }
 
 impl ProgressNotificationBuilder {
+    /// Creates a builder for the given progress token and current progress value.
     pub fn new(progress_token: impl Into<String>, progress: f64) -> Self {
         Self {
             progress_token: progress_token.into(),
@@ -192,25 +190,25 @@ impl ProgressNotificationBuilder {
         }
     }
 
-    /// Set total work amount
+    /// Sets total work amount.
     pub fn total(mut self, total: f64) -> Self {
         self.total = Some(total);
         self
     }
 
-    /// Set progress message
+    /// Sets progress message.
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.message = Some(message.into());
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -219,7 +217,7 @@ impl ProgressNotificationBuilder {
         self
     }
 
-    /// Build the progress notification
+    /// Builds the progress notification.
     pub fn build(self) -> ProgressNotification {
         let mut notification = ProgressNotification::new(self.progress_token, self.progress);
         if let Some(total) = self.total {
@@ -235,13 +233,14 @@ impl ProgressNotificationBuilder {
     }
 }
 
-/// Builder for resource updated notifications
+/// Builder for resource updated notifications.
 pub struct ResourceUpdatedNotificationBuilder {
     uri: String,
     meta: Option<HashMap<String, Value>>,
 }
 
 impl ResourceUpdatedNotificationBuilder {
+    /// Creates a builder for the resource at the given URI.
     pub fn new(uri: impl Into<String>) -> Self {
         Self {
             uri: uri.into(),
@@ -249,13 +248,13 @@ impl ResourceUpdatedNotificationBuilder {
         }
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -264,7 +263,7 @@ impl ResourceUpdatedNotificationBuilder {
         self
     }
 
-    /// Build the resource updated notification
+    /// Builds the resource updated notification.
     pub fn build(self) -> ResourceUpdatedNotification {
         let mut notification = ResourceUpdatedNotification::new(self.uri);
         if let Some(meta) = self.meta {
@@ -274,7 +273,7 @@ impl ResourceUpdatedNotificationBuilder {
     }
 }
 
-/// Builder for cancelled notifications
+/// Builder for cancelled notifications.
 pub struct CancelledNotificationBuilder {
     request_id: RequestId,
     reason: Option<String>,
@@ -282,6 +281,7 @@ pub struct CancelledNotificationBuilder {
 }
 
 impl CancelledNotificationBuilder {
+    /// Creates a builder for cancelling the request with the given ID.
     pub fn new(request_id: RequestId) -> Self {
         Self {
             request_id,
@@ -290,19 +290,19 @@ impl CancelledNotificationBuilder {
         }
     }
 
-    /// Set cancellation reason
+    /// Sets cancellation reason.
     pub fn reason(mut self, reason: impl Into<String>) -> Self {
         self.reason = Some(reason.into());
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -311,7 +311,7 @@ impl CancelledNotificationBuilder {
         self
     }
 
-    /// Build the cancelled notification
+    /// Builds the cancelled notification.
     pub fn build(self) -> CancelledNotification {
         let mut notification = CancelledNotification::new(self.request_id);
         if let Some(reason) = self.reason {
@@ -324,36 +324,36 @@ impl CancelledNotificationBuilder {
     }
 }
 
-/// Convenience methods for common notification patterns
+/// Convenience methods for common notification patterns.
 impl NotificationBuilder {
-    /// Create a resource list changed notification
+    /// Creates a resource list changed notification.
     pub fn resource_list_changed() -> ResourceListChangedNotification {
         ResourceListChangedNotification::new()
     }
 
-    /// Create a tool list changed notification
+    /// Creates a tool list changed notification.
     pub fn tool_list_changed() -> ToolListChangedNotification {
         ToolListChangedNotification::new()
     }
 
-    /// Create a prompt list changed notification
+    /// Creates a prompt list changed notification.
     pub fn prompt_list_changed() -> PromptListChangedNotification {
         PromptListChangedNotification::new()
     }
 
-    /// Create a roots list changed notification
+    /// Creates a roots list changed notification.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn roots_list_changed() -> RootsListChangedNotification {
         RootsListChangedNotification::new()
     }
 
-    /// Create an initialized notification
+    /// Creates an initialized notification.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn initialized() -> InitializedNotification {
         InitializedNotification::new()
     }
 
-    /// Create a progress notification builder
+    /// Creates a progress notification builder.
     pub fn progress(
         progress_token: impl Into<String>,
         progress: f64,
@@ -361,28 +361,28 @@ impl NotificationBuilder {
         ProgressNotificationBuilder::new(progress_token, progress)
     }
 
-    /// Create a resource updated notification builder
+    /// Creates a resource updated notification builder.
     pub fn resource_updated(uri: impl Into<String>) -> ResourceUpdatedNotificationBuilder {
         ResourceUpdatedNotificationBuilder::new(uri)
     }
 
-    /// Create a cancelled notification builder
+    /// Creates a cancelled notification builder.
     pub fn cancelled(request_id: RequestId) -> CancelledNotificationBuilder {
         CancelledNotificationBuilder::new(request_id)
     }
 
-    /// Create a logging message notification builder
+    /// Creates a logging message notification builder.
     #[allow(deprecated)]
     pub fn logging_message(level: LoggingLevel, data: Value) -> LoggingMessageNotification {
         LoggingMessageNotification::new(level, data)
     }
 
-    /// Create a custom notification
+    /// Creates a custom notification.
     pub fn custom(method: impl Into<String>) -> Self {
         Self::new(method)
     }
 
-    /// Create a server-to-client notification
+    /// Creates a server-to-client notification.
     pub fn server_notification(method: impl Into<String>) -> Self {
         let method = method.into();
         // Ensure it follows MCP notification method pattern
@@ -394,16 +394,25 @@ impl NotificationBuilder {
     }
 }
 
-/// Collection of common notification methods as constants
+/// Collection of common notification methods as constants.
 pub mod methods {
+    /// Method name of the resource list changed notification.
     pub const RESOURCE_LIST_CHANGED: &str = "notifications/resources/list_changed";
+    /// Method name of the tool list changed notification.
     pub const TOOL_LIST_CHANGED: &str = "notifications/tools/list_changed";
+    /// Method name of the prompt list changed notification.
     pub const PROMPT_LIST_CHANGED: &str = "notifications/prompts/list_changed";
+    /// Method name of the roots list changed notification.
     pub const ROOTS_LIST_CHANGED: &str = "notifications/roots/list_changed";
+    /// Method name of the progress notification.
     pub const PROGRESS: &str = "notifications/progress";
+    /// Method name of the resource updated notification.
     pub const RESOURCE_UPDATED: &str = "notifications/resources/updated";
+    /// Method name of the cancelled notification.
     pub const CANCELLED: &str = "notifications/cancelled";
+    /// Method name of the initialized notification.
     pub const INITIALIZED: &str = "notifications/initialized";
+    /// Method name of the log message notification.
     pub const MESSAGE: &str = "notifications/message";
 }
 
@@ -509,8 +518,7 @@ mod tests {
 
         assert_eq!(notification.method, "notifications/cancelled");
         // CancelledNotificationParams.request_id is a required bare RequestId
-        // on both lanes (the 2026-07-02 re-pin reverted the 2026-05-31
-        // Option<RequestId> relaxation on the 2026-07-28 lane).
+        // on both lanes.
         assert_eq!(notification.params.request_id, RequestId::Number(123));
         assert_eq!(
             notification.params.reason,

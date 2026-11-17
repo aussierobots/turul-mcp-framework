@@ -1,4 +1,4 @@
-//! Implementation of #[derive(McpRoot)] macro
+//! Expansion of `#[derive(McpRoot)]`, which generates the root metadata and `McpRoot` trait impls.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -14,7 +14,6 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
     let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes from #[root(...)]
     let root_meta = extract_root_meta(&input.attrs)?;
 
     // Convert strings to syn::LitStr immediately to avoid move issues
@@ -110,13 +109,13 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        // RootDefinition is automatically implemented via blanket impl
+        // RootDefinition comes from its blanket impl in the builders crate.
 
         #[automatically_derived]
         #[#async_trait::async_trait]
         impl #mcp_server::McpRoot for #struct_name {
             async fn list_roots(&self, request: #mcp_protocol::roots::ListRootsRequest) -> #mcp_protocol::McpResult<#mcp_protocol::roots::ListRootsResult> {
-                // Default implementation - this should be overridden by implementing list_roots_impl
+                // Delegates to list_roots_impl.
                 match self.list_roots_impl(request).await {
                     Ok(result) => Ok(result),
                     Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
@@ -124,7 +123,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
             }
 
             async fn list_files(&self, path: &str) -> #mcp_protocol::McpResult<Vec<#mcp_server::roots::FileInfo>> {
-                // Default implementation - this should be overridden by implementing list_files_impl
+                // Delegates to list_files_impl.
                 match self.list_files_impl(path).await {
                     Ok(result) => Ok(result),
                     Err(e) => Err(#mcp_protocol::McpError::tool_execution(&e)),
@@ -196,7 +195,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
                                                     t.duration_since(std::time::UNIX_EPOCH).ok().map(|d| d.as_secs())
                                                 })
                                             }),
-                                            mime_type: None, // Could be enhanced with mime detection
+                                            mime_type: None,
                                         };
                                         files.push(file_info);
                                     }

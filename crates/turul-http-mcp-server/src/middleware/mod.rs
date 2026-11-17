@@ -1,4 +1,4 @@
-//! Middleware system for MCP servers
+//! Middleware system for MCP servers.
 //!
 //! This module provides a trait-based middleware architecture that allows intercepting
 //! and modifying MCP requests and responses. Middleware can be used for authentication,

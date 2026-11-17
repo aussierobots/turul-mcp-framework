@@ -1,4 +1,4 @@
-//! ADR-036: every `HashMap` field of a wire type serializes in sorted key
+//! Every `HashMap` field of a wire type serializes in sorted key
 //! order. A source scan, so a new field cannot skip `serde_maps` unnoticed.
 
 use std::path::Path;

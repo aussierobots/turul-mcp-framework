@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use crate::SessionContext;
 use turul_mcp_protocol::McpError;
 
-/// Rate limiting configuration
+/// Rate limiting configuration.
 #[derive(Debug, Clone)]
 pub struct RateLimitConfig {
     /// Maximum requests per window
@@ -36,10 +36,10 @@ impl Default for RateLimitConfig {
     }
 }
 
-/// Rate limiter implementation using sliding window
-// Type alias for complex rate limiter bucket type
+/// Per-session request timestamps and burst count, keyed by session ID.
 type SessionBuckets = Arc<Mutex<HashMap<String, (Vec<Instant>, u32)>>>;
 
+/// Per-session sliding-window rate limiter with a burst allowance.
 #[derive(Debug)]
 pub struct RateLimiter {
     config: RateLimitConfig,
@@ -48,6 +48,7 @@ pub struct RateLimiter {
 }
 
 impl RateLimiter {
+    /// Creates a limiter enforcing `config`, with per-session request buckets.
     pub fn new(config: RateLimitConfig) -> Self {
         Self {
             config,
@@ -111,7 +112,8 @@ impl RateLimiter {
     }
 }
 
-/// Whether any path segment of `uri` is `..` once percent-decoded (ADR-007).
+/// Returns whether any path segment of `uri` is `..` once percent-decoded.
+///
 /// The part before any `?` or `#` is decoded first and then split on `/` and
 /// `\\`, so an encoded separator (`%2e%2e%2Fx`) cannot hide a segment.
 /// `a..b` is not one.
@@ -177,7 +179,7 @@ impl Default for ResourceAccessControl {
 impl ResourceAccessControl {
     /// Validate if a URI is allowed
     pub fn validate_uri(&self, uri: &str) -> Result<(), McpError> {
-        // Dot segments first, independent of the configured patterns (ADR-007).
+        // Dot segments first, independent of the configured patterns.
         if has_dot_dot_segment(uri) {
             return Err(McpError::invalid_param_type(
                 "uri",
@@ -266,6 +268,7 @@ impl Default for InputValidator {
 }
 
 impl InputValidator {
+    /// Creates a validator limiting JSON nesting depth, string length and collection size to the given maxima.
     pub fn new(
         max_json_depth: usize,
         max_string_length: usize,
@@ -370,6 +373,8 @@ pub struct SecurityMiddleware {
 }
 
 impl SecurityMiddleware {
+    /// Creates middleware with the default rate limit (100 requests per 60 s window, burst 10),
+    /// resource access control and input validation.
     pub fn new() -> Self {
         Self {
             rate_limiter: Some(RateLimiter::new(RateLimitConfig::default())),
@@ -383,21 +388,25 @@ impl SecurityMiddleware {
         &self.resource_access_control
     }
 
+    /// Enables rate limiting under `config`, replacing any previous limiter.
     pub fn with_rate_limiting(mut self, config: RateLimitConfig) -> Self {
         self.rate_limiter = Some(RateLimiter::new(config));
         self
     }
 
+    /// Disables rate limiting.
     pub fn without_rate_limiting(mut self) -> Self {
         self.rate_limiter = None;
         self
     }
 
+    /// Sets the resource access control policy.
     pub fn with_resource_access_control(mut self, config: ResourceAccessControl) -> Self {
         self.resource_access_control = config;
         self
     }
 
+    /// Sets the input validator.
     pub fn with_input_validation(mut self, validator: InputValidator) -> Self {
         self.input_validator = validator;
         self

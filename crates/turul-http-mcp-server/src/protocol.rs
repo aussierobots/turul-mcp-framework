@@ -1,9 +1,6 @@
-//! MCP Protocol Version Detection and Features
-//!
-//! This module handles MCP protocol version detection from HTTP headers
-//! and provides feature flags for different protocol versions.
+//! MCP protocol version detection from HTTP headers, and per-version feature flags.
 
-/// Supported MCP protocol versions and features.
+/// Identifies a supported MCP protocol version and its features.
 ///
 /// This is the crate's single definition — the transport modules and the public
 /// prelude share it, so a version the transport accepts is one a consumer can
@@ -14,7 +11,7 @@ pub enum McpProtocolVersion {
     V2024_11_05,
     /// Protocol including streamable HTTP (introduced 2025-03-26)
     V2025_03_26,
-    /// Protocol with structured _meta, cursor, progressToken, and elicitation (introduced 2025-06-18)
+    /// Protocol with structured `_meta`, cursor, progressToken, and elicitation (introduced 2025-06-18)
     V2025_06_18,
     /// Protocol with tasks, icons, URL elicitation, and sampling tools (introduced 2025-11-25)
     V2025_11_25,
@@ -84,7 +81,8 @@ impl McpProtocolVersion {
     }
 
     /// Returns whether this version supports structured user elicitation via JSON Schema.
-    /// Deprecated-but-present in 2026-07-28.
+    ///
+    /// Elicitation is deprecated but present in 2026-07-28.
     pub fn supports_elicitation(&self) -> bool {
         matches!(
             self,
@@ -92,8 +90,9 @@ impl McpProtocolVersion {
         )
     }
 
-    /// Returns whether this version carries the task system in core. 2025-11-25 only —
-    /// SEP-2663 moved Tasks to the `io.modelcontextprotocol/tasks` extension.
+    /// Returns whether this version carries the task system in core.
+    ///
+    /// Only 2025-11-25 does; 2026-07-28 moves Tasks to the `io.modelcontextprotocol/tasks` extension.
     pub fn supports_tasks(&self) -> bool {
         matches!(self, Self::V2025_11_25)
     }
@@ -103,7 +102,7 @@ impl McpProtocolVersion {
         matches!(self, Self::V2025_11_25 | Self::V2026_07_28)
     }
 
-    /// Get a list of supported features for this protocol version
+    /// Returns the names of the features this protocol version supports.
     pub fn supported_features(&self) -> Vec<&'static str> {
         let mut features = vec![];
         if self.supports_streamable_http() {
@@ -130,8 +129,9 @@ impl McpProtocolVersion {
         features
     }
 
-    /// The protocol version this build serves. A build enables exactly one spec
-    /// feature, so this tracks the enabled lane rather than the newest variant.
+    /// The protocol version this build serves.
+    ///
+    /// A build enables exactly one spec feature, so this tracks the enabled lane rather than the newest variant.
     pub const LATEST: McpProtocolVersion = {
         #[cfg(feature = "protocol-2026-07-28")]
         {
@@ -158,7 +158,9 @@ impl std::fmt::Display for McpProtocolVersion {
     }
 }
 
-/// Extract MCP protocol version from HTTP request headers
+/// Extracts the MCP protocol version from HTTP request headers.
+///
+/// Returns [`McpProtocolVersion::LATEST`] when the header is absent or unrecognised.
 pub fn extract_protocol_version(headers: &hyper::HeaderMap) -> McpProtocolVersion {
     headers
         .get("MCP-Protocol-Version")
@@ -167,7 +169,7 @@ pub fn extract_protocol_version(headers: &hyper::HeaderMap) -> McpProtocolVersio
         .unwrap_or(McpProtocolVersion::LATEST)
 }
 
-/// Extract MCP session ID from HTTP request headers
+/// Extracts the `Mcp-Session-Id` header value, if present and valid UTF-8.
 pub fn extract_session_id(headers: &hyper::HeaderMap) -> Option<String> {
     headers
         .get("Mcp-Session-Id")
@@ -175,7 +177,9 @@ pub fn extract_session_id(headers: &hyper::HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
-/// Extract Last-Event-ID from HTTP request headers for SSE resumability
+/// Extracts the `Last-Event-ID` header as a `u64` for SSE resumability.
+///
+/// Returns `None` when the header is absent or not a valid `u64`.
 pub fn extract_last_event_id(headers: &hyper::HeaderMap) -> Option<u64> {
     headers
         .get("Last-Event-ID")
@@ -183,10 +187,10 @@ pub fn extract_last_event_id(headers: &hyper::HeaderMap) -> Option<u64> {
         .and_then(|s| s.parse::<u64>().ok())
 }
 
-/// Normalize an HTTP header value by trimming whitespace and lowercasing.
+/// Normalizes an HTTP header value by trimming whitespace and lowercasing.
 ///
 /// HTTP media types are case-insensitive (RFC 7231 §3.1.1.1).
-/// This function ensures consistent comparison regardless of client formatting.
+/// Normalizing ensures consistent comparison regardless of client formatting.
 pub fn normalize_header_value(value: &str) -> String {
     value.trim().to_ascii_lowercase()
 }

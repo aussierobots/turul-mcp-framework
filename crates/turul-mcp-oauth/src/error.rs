@@ -1,37 +1,39 @@
-//! OAuth error types
+//! OAuth error types.
 
 use std::fmt;
 
-/// Errors from OAuth resource server operations
+/// Errors from OAuth resource server operations.
 ///
 /// Non-exhaustive: variants track the upstream JWT validator's error surface,
 /// which is itself non-exhaustive, so new discriminants must not break callers.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum OAuthError {
-    /// JWT validation failed
+    /// JWT validation failed.
     InvalidToken(String),
-    /// Token has expired
+    /// Token has expired.
     TokenExpired,
-    /// Wrong audience claim
+    /// Wrong audience claim.
     InvalidAudience,
-    /// Wrong issuer claim
+    /// Wrong issuer claim.
     InvalidIssuer,
-    /// Algorithm not allowed
+    /// Algorithm not allowed.
     UnsupportedAlgorithm(String),
     /// JWKS fetch or parse error, carrying the upstream discriminant so callers
     /// can distinguish a timeout from a 404 or an unparseable key set.
     JwksFetchError {
+        /// The upstream validator's classification of the failure.
         kind: turul_jwt_validator::JwksFetchErrorKind,
+        /// Human-readable detail describing the fetch or parse failure.
         message: String,
     },
-    /// Key not found in JWKS
+    /// Key not found in JWKS.
     KeyNotFound(String),
-    /// Token decoding error
+    /// Token decoding error.
     DecodingError(String),
-    /// Resource URI validation failed
+    /// Resource URI validation failed.
     InvalidResourceUri(String),
-    /// Configuration error
+    /// Configuration error.
     InvalidConfiguration(String),
 }
 

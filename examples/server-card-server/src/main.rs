@@ -1,4 +1,4 @@
-//! Serves a Server Card (**experimental** upstream; ADR-038) at
+//! Serves a Server Card (**experimental** upstream) at
 //! `GET /mcp/server-card` beside an ordinary MCP endpoint.
 //!
 //! ```text

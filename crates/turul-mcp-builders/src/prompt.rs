@@ -9,16 +9,14 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-// Import traits from local traits module
 use crate::traits::{
     HasIcons, HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
     HasPromptMetadata,
 };
-// Import protocol types
 use turul_mcp_protocol::icons::Icon;
 use turul_mcp_protocol::prompts::{ContentBlock, GetPromptResult, PromptArgument, PromptMessage};
 
-/// Type alias for dynamic prompt generation function
+/// Type alias for dynamic prompt generation function.
 pub type DynamicPromptFn = Box<
     dyn Fn(
             HashMap<String, String>,
@@ -27,7 +25,7 @@ pub type DynamicPromptFn = Box<
         + Sync,
 >;
 
-/// Builder for creating prompts at runtime
+/// Builder for creating prompts at runtime.
 pub struct PromptBuilder {
     name: String,
     title: Option<String>,
@@ -40,7 +38,7 @@ pub struct PromptBuilder {
 }
 
 impl PromptBuilder {
-    /// Create a new prompt builder with the given name
+    /// Creates a new prompt builder with the given name.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -54,25 +52,25 @@ impl PromptBuilder {
         }
     }
 
-    /// Set the prompt title (display name)
+    /// Sets the prompt title (display name).
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
-    /// Set the prompt description
+    /// Sets the prompt description.
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    /// Add an argument to the prompt
+    /// Adds an argument to the prompt.
     pub fn argument(mut self, argument: PromptArgument) -> Self {
         self.arguments.push(argument);
         self
     }
 
-    /// Add a string argument (required by default)
+    /// Adds a string argument (required by default).
     pub fn string_argument(
         mut self,
         name: impl Into<String>,
@@ -85,7 +83,7 @@ impl PromptBuilder {
         self
     }
 
-    /// Add an optional string argument
+    /// Adds an optional string argument.
     pub fn optional_string_argument(
         mut self,
         name: impl Into<String>,
@@ -98,13 +96,13 @@ impl PromptBuilder {
         self
     }
 
-    /// Add a message to the prompt
+    /// Adds a message to the prompt.
     pub fn message(mut self, message: PromptMessage) -> Self {
         self.messages.push(message);
         self
     }
 
-    /// Add a system message with text content
+    /// Adds a system message with text content.
     pub fn system_message(mut self, text: impl Into<String>) -> Self {
         // Note: System role not defined in current MCP spec, using User as fallback
         self.messages
@@ -112,50 +110,50 @@ impl PromptBuilder {
         self
     }
 
-    /// Add a user message with text content
+    /// Adds a user message with text content.
     pub fn user_message(mut self, text: impl Into<String>) -> Self {
         self.messages.push(PromptMessage::user_text(text));
         self
     }
 
-    /// Add an assistant message with text content
+    /// Adds an assistant message with text content.
     pub fn assistant_message(mut self, text: impl Into<String>) -> Self {
         self.messages.push(PromptMessage::assistant_text(text));
         self
     }
 
-    /// Add a user message with image content
+    /// Adds a user message with image content.
     pub fn user_image(mut self, data: impl Into<String>, mime_type: impl Into<String>) -> Self {
         self.messages
             .push(PromptMessage::user_image(data, mime_type));
         self
     }
 
-    /// Add a templated user message (will be processed during get)
+    /// Adds a templated user message (will be processed during get).
     pub fn template_user_message(mut self, template: impl Into<String>) -> Self {
         self.messages.push(PromptMessage::user_text(template));
         self
     }
 
-    /// Add a templated assistant message (will be processed during get)
+    /// Adds a templated assistant message (will be processed during get).
     pub fn template_assistant_message(mut self, template: impl Into<String>) -> Self {
         self.messages.push(PromptMessage::assistant_text(template));
         self
     }
 
-    /// Set the prompt icons (display hints)
+    /// Sets the prompt icons (display hints).
     pub fn icons(mut self, icons: Vec<Icon>) -> Self {
         self.icons = Some(icons);
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Set the get function for dynamic prompt generation
+    /// Sets the get function for dynamic prompt generation.
     pub fn get<F, Fut>(mut self, f: F) -> Self
     where
         F: Fn(HashMap<String, String>) -> Fut + Send + Sync + 'static,
@@ -165,7 +163,7 @@ impl PromptBuilder {
         self
     }
 
-    /// Build the dynamic prompt
+    /// Builds the dynamic prompt.
     pub fn build(self) -> Result<DynamicPrompt, String> {
         // If no get function provided, create a template processor
         let get_fn = if let Some(f) = self.get_fn {
@@ -201,7 +199,7 @@ impl PromptBuilder {
     }
 }
 
-/// Dynamic prompt created by PromptBuilder
+/// Dynamic prompt created by PromptBuilder.
 pub struct DynamicPrompt {
     name: String,
     title: Option<String>,
@@ -213,13 +211,12 @@ pub struct DynamicPrompt {
 }
 
 impl DynamicPrompt {
-    /// Get the prompt with argument substitution
+    /// Gets the prompt with argument substitution.
     pub async fn get(&self, args: HashMap<String, String>) -> Result<GetPromptResult, String> {
         (self.get_fn)(args).await
     }
 }
 
-// Implement all fine-grained traits for DynamicPrompt
 impl HasPromptMetadata for DynamicPrompt {
     fn name(&self) -> &str {
         &self.name
@@ -258,7 +255,7 @@ impl HasPromptMeta for DynamicPrompt {
     }
 }
 
-/// Implements HasIcons for DynamicPrompt providing optional icons
+/// Implements HasIcons for DynamicPrompt providing optional icons.
 impl HasIcons for DynamicPrompt {
     fn icons(&self) -> Option<&Vec<Icon>> {
         self.icons.as_ref()
@@ -267,7 +264,7 @@ impl HasIcons for DynamicPrompt {
 
 // PromptDefinition is automatically implemented via blanket impl!
 
-/// Simple template processing for message content
+/// Simple template processing for message content.
 fn process_template_messages(
     messages: Vec<PromptMessage>,
     args: &HashMap<String, String>,
@@ -295,7 +292,7 @@ fn process_template_messages(
     Ok(processed)
 }
 
-/// Simple template string processing (replaces {arg_name} with values)
+/// Simple template string processing (replaces {arg_name} with values).
 fn process_template_string(template: &str, args: &HashMap<String, String>) -> String {
     let mut result = template.to_string();
 

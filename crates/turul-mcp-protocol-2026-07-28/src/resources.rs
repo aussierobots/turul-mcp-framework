@@ -41,6 +41,7 @@ pub struct ResourceTemplate {
 }
 
 impl ResourceTemplate {
+    /// Creates a template with the given `name` and RFC 6570 `uri_template`.
     pub fn new(name: impl Into<String>, uri_template: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -54,31 +55,37 @@ impl ResourceTemplate {
         }
     }
 
+    /// Sets the human-readable display name.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Sets the description of what the template represents.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the MIME type shared by resources matching the template.
     pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
         self.mime_type = Some(mime_type.into());
         self
     }
 
+    /// Sets the annotations for the client.
     pub fn with_annotations(mut self, annotations: crate::meta::Annotations) -> Self {
         self.annotations = Some(annotations);
         self
     }
 
+    /// Sets the icons clients may display for the template.
     pub fn with_icons(mut self, icons: Vec<crate::icons::Icon>) -> Self {
         self.icons = Some(icons);
         self
     }
 
+    /// Sets the `_meta` map.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -119,6 +126,7 @@ pub struct Resource {
 }
 
 impl Resource {
+    /// Creates a resource with the given `uri` and `name` and no optional fields.
     pub fn new(uri: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             uri: uri.into(),
@@ -133,36 +141,43 @@ impl Resource {
         }
     }
 
+    /// Sets the human-readable display name.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Sets the description of what the resource represents.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the MIME type of the resource.
     pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
         self.mime_type = Some(mime_type.into());
         self
     }
 
+    /// Sets the size of the raw resource content, in bytes.
     pub fn with_size(mut self, size: u64) -> Self {
         self.size = Some(size);
         self
     }
 
+    /// Sets the annotations for the client.
     pub fn with_annotations(mut self, annotations: crate::meta::Annotations) -> Self {
         self.annotations = Some(annotations);
         self
     }
 
+    /// Sets the icons clients may display for the resource.
     pub fn with_icons(mut self, icons: Vec<crate::icons::Icon>) -> Self {
         self.icons = Some(icons);
         self
     }
 
+    /// Sets the `_meta` map.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -183,7 +198,7 @@ pub struct ListResourcesRequest {
 }
 
 impl ListResourcesRequest {
-    /// Construct with the required `_meta`.
+    /// Creates a request with the required `_meta`.
     pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "resources/list".to_string(),
@@ -191,17 +206,19 @@ impl ListResourcesRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Replaces the params with a fully-constructed params struct.
     pub fn with_params(mut self, params: crate::json_rpc::PaginatedRequestParams) -> Self {
         self.params = params;
         self
     }
 
+    /// Sets the pagination cursor returned by a previous `resources/list` result.
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.params = self.params.with_cursor(cursor);
         self
     }
 
+    /// Replaces the request `_meta`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.params = self.params.with_meta(meta);
         self
@@ -243,7 +260,7 @@ pub struct ListResourcesResult {
 }
 
 impl ListResourcesResult {
-    /// Construct with required CacheableResult defaults (`ttl_ms=0`, `cache_scope=Public`).
+    /// Creates a result with `CacheableResult` defaults (`ttl_ms=0`, `cache_scope=Public`).
     pub fn new(resources: Vec<Resource>) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -255,17 +272,19 @@ impl ListResourcesResult {
         }
     }
 
+    /// Sets the cursor clients pass to fetch the next page.
     pub fn with_next_cursor(mut self, cursor: Cursor) -> Self {
         self.next_cursor = Some(cursor);
         self
     }
 
+    /// Sets the result `_meta`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
     }
 
-    /// Attach cache hints.
+    /// Sets the cache hints from the `CacheableResult` mixin.
     pub fn with_cache(mut self, cache: crate::caching::CacheableResult) -> Self {
         self.ttl_ms = cache.ttl_ms;
         self.cache_scope = cache.cache_scope;
@@ -299,7 +318,7 @@ pub struct ReadResourceRequestParams {
 }
 
 impl ReadResourceRequestParams {
-    /// Construct with the required `_meta` and resource `uri`.
+    /// Creates params with the required `_meta` and resource `uri`.
     pub fn new(uri: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             uri: uri.into(),
@@ -309,12 +328,13 @@ impl ReadResourceRequestParams {
         }
     }
 
+    /// Replaces the request `_meta`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.meta = meta;
         self
     }
 
-    /// Attach prior `InputRequiredResult` responses + verbatim state echo.
+    /// Sets the prior `InputRequiredResult` responses and the verbatim state echo.
     pub fn with_input_responses(
         mut self,
         responses: crate::input_required::InputResponses,
@@ -337,7 +357,7 @@ pub struct ReadResourceRequest {
 }
 
 impl ReadResourceRequest {
-    /// Construct with the required `_meta` and resource `uri`.
+    /// Creates a request with the required `_meta` and resource `uri`.
     pub fn new(uri: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "resources/read".to_string(),
@@ -345,12 +365,13 @@ impl ReadResourceRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Replaces the params with a fully-constructed params struct.
     pub fn with_params(mut self, params: ReadResourceRequestParams) -> Self {
         self.params = params;
         self
     }
 
+    /// Replaces the request `_meta`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.params = self.params.with_meta(meta);
         self
@@ -410,11 +431,14 @@ pub struct BlobResourceContents {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ResourceContent {
+    /// Text contents, serialized with a `text` field.
     Text(TextResourceContents),
+    /// Binary contents, serialized with a base64 `blob` field.
     Blob(BlobResourceContents),
 }
 
 impl ResourceContent {
+    /// Creates `text/plain` text contents for `uri`.
     pub fn text(uri: impl Into<String>, text: impl Into<String>) -> Self {
         Self::Text(TextResourceContents {
             uri: uri.into(),
@@ -424,6 +448,7 @@ impl ResourceContent {
         })
     }
 
+    /// Creates `application/json` text contents for `uri` from a serialized JSON string.
     pub fn json(uri: impl Into<String>, json: impl Into<String>) -> Self {
         Self::Text(TextResourceContents {
             uri: uri.into(),
@@ -433,6 +458,7 @@ impl ResourceContent {
         })
     }
 
+    /// Creates binary contents for `uri` from base64 `blob` data and its `mime_type`.
     pub fn blob(
         uri: impl Into<String>,
         blob: impl Into<String>,
@@ -446,7 +472,7 @@ impl ResourceContent {
         })
     }
 
-    /// Set the `mimeType` reported for this content, replacing the default the
+    /// Sets the `mimeType` reported for this content, replacing the default the
     /// [`Self::text`] / [`Self::json`] / [`Self::blob`] constructors pick. Without
     /// it a provider cannot describe text that is not `text/plain`, and
     /// `resources/read` contradicts the `mimeType` its `resources/list` entry
@@ -475,7 +501,7 @@ pub struct ListResourceTemplatesRequest {
 }
 
 impl ListResourceTemplatesRequest {
-    /// Construct with the required `_meta`.
+    /// Creates a request with the required `_meta`.
     pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "resources/templates/list".to_string(),
@@ -483,7 +509,7 @@ impl ListResourceTemplatesRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Replaces the params with a fully-constructed params struct.
     pub fn with_params(mut self, params: crate::json_rpc::PaginatedRequestParams) -> Self {
         self.params = params;
         self
@@ -517,7 +543,7 @@ pub struct ListResourceTemplatesResult {
 }
 
 impl ListResourceTemplatesResult {
-    /// Construct with required CacheableResult defaults (`ttl_ms=0`, `cache_scope=Public`).
+    /// Creates a result with `CacheableResult` defaults (`ttl_ms=0`, `cache_scope=Public`).
     pub fn new(resource_templates: Vec<ResourceTemplate>) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -529,17 +555,19 @@ impl ListResourceTemplatesResult {
         }
     }
 
+    /// Sets the cursor clients pass to fetch the next page.
     pub fn with_next_cursor(mut self, cursor: Cursor) -> Self {
         self.next_cursor = Some(cursor);
         self
     }
 
+    /// Sets the result `_meta`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
     }
 
-    /// Attach cache hints (CacheableResult mixin per schema).
+    /// Sets the cache hints from the `CacheableResult` mixin.
     pub fn with_cache(mut self, cache: crate::caching::CacheableResult) -> Self {
         self.ttl_ms = cache.ttl_ms;
         self.cache_scope = cache.cache_scope;
@@ -575,7 +603,7 @@ pub struct ReadResourceResult {
 }
 
 impl ReadResourceResult {
-    /// Construct with required CacheableResult defaults (`ttl_ms=0`,
+    /// Creates a result with `CacheableResult` defaults (`ttl_ms=0`,
     /// `cache_scope=Private`).
     ///
     /// Unlike the list results, `resources/read` defaults to `private`: read
@@ -593,17 +621,19 @@ impl ReadResourceResult {
         }
     }
 
-    /// Attach cache hints (CacheableResult mixin per schema).
+    /// Sets the cache hints from the `CacheableResult` mixin.
     pub fn with_cache(mut self, cache: crate::caching::CacheableResult) -> Self {
         self.ttl_ms = cache.ttl_ms;
         self.cache_scope = cache.cache_scope;
         self
     }
 
+    /// Creates a result holding a single content item.
     pub fn single(content: ResourceContent) -> Self {
         Self::new(vec![content])
     }
 
+    /// Sets the result `_meta`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self

@@ -23,8 +23,11 @@ pub enum TaskOutcome {
     Success(Value),
     /// The underlying request failed — contains the JSON-RPC error fields
     Error {
+        /// JSON-RPC error code of the failed request.
         code: i64,
+        /// Human-readable JSON-RPC error message.
         message: String,
+        /// Optional structured JSON-RPC error data; `None` when the error carried none.
         #[serde(skip_serializing_if = "Option::is_none")]
         data: Option<Value>,
     },
@@ -63,7 +66,7 @@ pub struct TaskRecord {
 }
 
 impl TaskRecord {
-    /// Convert this record to a protocol `Task` for wire transmission.
+    /// Converts this record to a protocol `Task` for wire transmission.
     pub fn to_protocol_task(&self) -> turul_mcp_protocol::Task {
         let mut task = turul_mcp_protocol::Task::new(
             &self.task_id,
@@ -102,26 +105,26 @@ pub struct TaskListPage {
 /// Uses `TaskStorageError` as the unified error type.
 #[async_trait]
 pub trait TaskStorage: Send + Sync {
-    /// Human-readable name of the storage backend (e.g., "in-memory", "sqlite")
+    /// Returns the human-readable name of the storage backend (e.g., "in-memory", "sqlite").
     fn backend_name(&self) -> &'static str;
 
     // === Task CRUD ===
 
-    /// Create a new task record. Returns the created record.
+    /// Creates a new task record and returns the created record.
     async fn create_task(&self, task: TaskRecord) -> Result<TaskRecord, TaskStorageError>;
 
-    /// Get a task by ID. Returns `None` if not found.
+    /// Gets a task by ID, returning `None` if not found.
     async fn get_task(&self, task_id: &str) -> Result<Option<TaskRecord>, TaskStorageError>;
 
-    /// Update an existing task record (full replacement).
+    /// Updates an existing task record (full replacement).
     async fn update_task(&self, task: TaskRecord) -> Result<(), TaskStorageError>;
 
-    /// Delete a task by ID. Returns `true` if deleted, `false` if not found.
+    /// Deletes a task by ID, returning `true` if deleted and `false` if not found.
     async fn delete_task(&self, task_id: &str) -> Result<bool, TaskStorageError>;
 
     // === Task Listing (paginated) ===
 
-    /// List tasks with cursor-based pagination.
+    /// Lists tasks with cursor-based pagination.
     async fn list_tasks(
         &self,
         cursor: Option<&str>,
@@ -130,10 +133,10 @@ pub trait TaskStorage: Send + Sync {
 
     // === Task Status Updates (state machine enforcement) ===
 
-    /// Update a task's status with state machine validation.
+    /// Updates a task's status with state machine validation.
     ///
     /// Returns the updated `TaskRecord` on success.
-    /// Returns `TaskStorageError::InvalidTransition` or `TaskStorageError::TerminalState`
+    /// Returns [`TaskStorageError::InvalidTransition`] or [`TaskStorageError::TerminalState`]
     /// if the transition is not allowed.
     async fn update_task_status(
         &self,
@@ -144,31 +147,31 @@ pub trait TaskStorage: Send + Sync {
 
     // === Result Storage ===
 
-    /// Store the outcome of the underlying request for a task.
+    /// Stores the outcome of the underlying request for a task.
     async fn store_task_result(
         &self,
         task_id: &str,
         result: TaskOutcome,
     ) -> Result<(), TaskStorageError>;
 
-    /// Get the stored outcome for a task.
+    /// Gets the stored outcome for a task.
     async fn get_task_result(&self, task_id: &str)
     -> Result<Option<TaskOutcome>, TaskStorageError>;
 
     // === Cleanup ===
 
-    /// Expire tasks that have exceeded their TTL. Returns IDs of expired tasks.
+    /// Expires tasks that have exceeded their TTL and returns the IDs of expired tasks.
     async fn expire_tasks(&self) -> Result<Vec<String>, TaskStorageError>;
 
-    /// Get the total number of tasks in storage.
+    /// Returns the total number of tasks in storage.
     async fn task_count(&self) -> Result<usize, TaskStorageError>;
 
-    /// Perform periodic maintenance (cleanup, compaction, etc.)
+    /// Performs periodic maintenance (cleanup, compaction, etc.).
     async fn maintenance(&self) -> Result<(), TaskStorageError>;
 
     // === Session Binding ===
 
-    /// List tasks bound to a specific session, with cursor-based pagination.
+    /// Lists tasks bound to a specific session, with cursor-based pagination.
     async fn list_tasks_for_session(
         &self,
         session_id: &str,
@@ -178,7 +181,7 @@ pub trait TaskStorage: Send + Sync {
 
     // === Recovery ===
 
-    /// Mark all non-terminal tasks older than `max_age_ms` as Failed.
+    /// Marks all non-terminal tasks older than `max_age_ms` as Failed.
     ///
     /// Called on server startup to recover from unclean shutdown.
     /// Returns the IDs of tasks that were marked as failed.

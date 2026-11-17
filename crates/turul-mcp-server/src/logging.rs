@@ -1,6 +1,4 @@
-//! MCP Logging Trait
-//!
-//! This module defines the high-level trait for implementing MCP logging.
+//! The high-level trait for implementing MCP logging.
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -10,26 +8,26 @@ use turul_mcp_protocol::{
     logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest},
 };
 
-/// High-level trait for implementing MCP logging
+/// High-level trait for implementing MCP logging.
 ///
 /// McpLogger extends LoggerDefinition with execution capabilities.
 /// All metadata is provided by the LoggerDefinition trait, ensuring
 /// consistency between concrete Logger structs and dynamic implementations.
 #[async_trait]
 pub trait McpLogger: LoggerDefinition + Send + Sync {
-    /// Log a message (per MCP spec)
+    /// Logs a message (per MCP spec).
     ///
     /// This method processes log messages and sends them via the appropriate
     /// transport mechanism (notifications/message).
     async fn log(&self, level: LoggingLevel, data: Value) -> McpResult<()>;
 
-    /// Set the logging level (per MCP spec)
+    /// Sets the logging level (per MCP spec).
     ///
     /// This method processes logging/setLevel requests to configure
     /// the minimum level for log message delivery.
     async fn set_level(&self, request: SetLevelRequest) -> McpResult<()>;
 
-    /// Optional: Check if this logger can handle the given level
+    /// Returns whether this logger can handle the given level.
     ///
     /// This allows for conditional logging based on logger capabilities,
     /// transport availability, or other factors.
@@ -37,7 +35,7 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
         self.should_log(level)
     }
 
-    /// Optional: Get logger priority for routing
+    /// Returns the logger priority for routing.
     ///
     /// Higher priority loggers are used first when multiple loggers
     /// can handle the same message.
@@ -45,7 +43,7 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
         0
     }
 
-    /// Optional: Validate the log data
+    /// Validates the log data before processing.
     ///
     /// This method can perform validation of log data before processing.
     async fn validate_data(&self, _data: &Value) -> McpResult<()> {
@@ -58,7 +56,7 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
         Ok(())
     }
 
-    /// Optional: Transform log data before sending
+    /// Transforms log data before sending.
     ///
     /// This allows for data enrichment, filtering, or formatting
     /// before the log message is transmitted.
@@ -66,7 +64,7 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
         Ok(data)
     }
 
-    /// Optional: Handle logging errors
+    /// Handles a logging error.
     ///
     /// This method is called when log delivery fails, allowing
     /// for retry logic, fallback logging, or error notifications.
@@ -78,7 +76,7 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
         )))
     }
 
-    /// Optional: Batch multiple log messages
+    /// Flushes any batched log messages.
     ///
     /// This method can be used to optimize log delivery by batching
     /// multiple messages together.
@@ -88,7 +86,7 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
     }
 }
 
-/// Convert an McpLogger trait object to a LoggingMessageNotification
+/// Converts an `McpLogger` trait object to a `LoggingMessageNotification`.
 ///
 /// This is a convenience function for converting logger definitions
 /// to protocol notifications.
@@ -108,7 +106,6 @@ pub fn logger_to_notification(
 mod tests {
     use super::*;
     use serde_json::json;
-    // HasLoggingMetadata, HasLogLevel, etc.
 
     struct TestLogger {
         logger_name: String,

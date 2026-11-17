@@ -1,5 +1,4 @@
-//! HTTP header name constants for MCP Streamable HTTP transport (SEP-2243,
-//! changelog Minor #4).
+//! HTTP header name constants for MCP Streamable HTTP transport (SEP-2243).
 //!
 //! These header names are required on Streamable HTTP POST requests per
 //! SEP-2243 ("HTTP Header Standardization for Streamable HTTP Transport").
@@ -8,13 +7,16 @@
 //! protocol constants so transport implementations can import a single source
 //! of truth.
 
-/// `MCP-Protocol-Version` — REQUIRED on every Streamable HTTP POST. Must match
+/// `MCP-Protocol-Version` — REQUIRED on every Streamable HTTP POST.
+///
+/// Must match
 /// `_meta.io.modelcontextprotocol/protocolVersion` in the request body
 /// (servers MUST return `400 Bad Request` on mismatch per the
 /// `RequestMetaObject` schema).
 pub const HTTP_HEADER_PROTOCOL_VERSION: &str = "MCP-Protocol-Version";
 
 /// `Mcp-Method` — REQUIRED per SEP-2243 on all requests and notifications.
+///
 /// Carries the JSON-RPC `method` string at the HTTP layer to enable
 /// intelligent routing without body inspection. Servers MUST reject requests
 /// where this header and the body's `method` disagree.
@@ -22,6 +24,7 @@ pub const HTTP_HEADER_METHOD: &str = "Mcp-Method";
 
 /// `Mcp-Name` — REQUIRED per SEP-2243 for `tools/call` (`params.name`),
 /// `resources/read` (`params.uri`), and `prompts/get` (`params.name`).
+///
 /// Servers MUST reject requests where this header and the body's value
 /// disagree.
 pub const HTTP_HEADER_NAME: &str = "Mcp-Name";
@@ -51,7 +54,9 @@ pub const MCP_PARAM_BASE64_PREFIX: &str = "=?base64?";
 /// Sentinel suffix closing a Base64-encoded `Mcp-Param-*` value.
 pub const MCP_PARAM_BASE64_SUFFIX: &str = "?=";
 
-/// JSON-RPC error code for header-validation failures. Matches the schema's
+/// JSON-RPC error code for header-validation failures.
+///
+/// Matches the schema's
 /// `HEADER_MISMATCH` const and `HeaderMismatchError` interface. Returned with
 /// HTTP `400 Bad Request` when a required standard header is missing/malformed
 /// or a header value does not match the corresponding request-body value.
@@ -97,15 +102,23 @@ pub struct McpParamBinding {
     pub schema_type: String,
 }
 
-/// Scan a tool `inputSchema` for `x-mcp-header` annotations (any nesting depth)
-/// and validate the SEP-2243 constraints. A violation makes the WHOLE tool
-/// definition invalid — Streamable HTTP clients MUST exclude such a tool from
-/// `tools/list` results.
+/// Scans a tool `inputSchema` for `x-mcp-header` annotations (any nesting depth)
+/// and validates the SEP-2243 constraints.
+///
+/// A violation makes the WHOLE tool definition invalid — Streamable HTTP
+/// clients MUST exclude such a tool from `tools/list` results.
 ///
 /// Constraints: non-empty; RFC 9110 `1*tchar` field-name syntax (which excludes
 /// CR/LF and all control characters); case-insensitively unique within the
 /// schema; only on `string`/`integer`/`boolean` properties (`number` is not
 /// permitted).
+///
+/// # Errors
+///
+/// Returns `Err` with a description when an annotation is not a string, is
+/// empty, contains a non-`tchar` character, targets a property whose `type` is
+/// not `string`/`integer`/`boolean`, or repeats another annotation's name
+/// case-insensitively.
 pub fn scan_x_mcp_headers(
     input_schema: &serde_json::Value,
 ) -> Result<Vec<McpParamBinding>, String> {
@@ -179,8 +192,10 @@ pub fn scan_x_mcp_headers(
     Ok(out)
 }
 
-/// Scan a tool `inputSchema` for an `x-mcp-header` annotation that
-/// [`scan_x_mcp_headers`] cannot see: one reachable only through `items`,
+/// Scans a tool `inputSchema` for an `x-mcp-header` annotation that
+/// [`scan_x_mcp_headers`] cannot see.
+///
+/// Such an annotation is reachable only through `items`,
 /// a composition keyword (`oneOf`/`anyOf`/`allOf`/`not`), a conditional
 /// (`if`/`then`/`else`), or `$ref` indirection — rather than a plain
 /// `properties` chain. `scan_x_mcp_headers` silently skips these (it only
@@ -302,7 +317,7 @@ pub fn find_misplaced_x_mcp_header(input_schema: &serde_json::Value) -> Option<S
     walk(input_schema, input_schema, "", true, 0)
 }
 
-/// Encode a parameter value for an `Mcp-Param-*` header per SEP-2243.
+/// Encodes a parameter value for an `Mcp-Param-*` header per SEP-2243.
 ///
 /// `string` is used as-is, `integer` as its decimal representation (must be
 /// within the JavaScript safe range), `boolean` as lowercase. Values that
@@ -339,8 +354,15 @@ pub fn encode_param_value(value: &serde_json::Value) -> Option<String> {
     }
 }
 
-/// Decode an `Mcp-Param-*` header value: unwrap the `=?base64?…?=` sentinel
-/// when present, otherwise return the value verbatim.
+/// Decodes an `Mcp-Param-*` header value.
+///
+/// Unwraps the `=?base64?…?=` sentinel when present, otherwise returns the
+/// value verbatim.
+///
+/// # Errors
+///
+/// Returns `Err` when the sentinel's payload is not valid Base64 or the decoded
+/// bytes are not UTF-8.
 pub fn decode_param_value(raw: &str) -> Result<String, String> {
     if let Some(inner) = raw
         .strip_prefix(MCP_PARAM_BASE64_PREFIX)
@@ -443,17 +465,15 @@ mod param_tests {
 
     /// Scoped claim only: `scan_x_mcp_headers` never EMITS an `Mcp-Param-*`
     /// header binding for an `x-mcp-header` annotation nested under `items`,
-    /// composition keywords (`oneOf`/`anyOf`/`allOf`), or `$ref` — `walk` only
-    /// recurses via a property's own `properties` map, so these are silently
-    /// skipped (not an error) while a genuinely top-level property is found.
+    /// composition keywords (`oneOf`/`anyOf`/`allOf`), or `$ref` — the walk in
+    /// `scan_x_mcp_headers` only recurses via a property's own `properties`
+    /// map, so these are silently skipped (not an error) while a genuinely
+    /// top-level property is found.
     ///
-    /// This does NOT prove the separate SEP-2243 MUST — "a Streamable HTTP
-    /// client MUST reject/exclude the WHOLE tool definition" when such a
-    /// misplaced annotation is present. That requires first *detecting* the
-    /// annotation to reject on, which `walk` cannot do (it never inspects
-    /// `items`/composition/`$ref` at all, so it has no way to see a violation
-    /// there to act on). That MUST is unimplemented in this workspace; do not
-    /// read this test as covering it.
+    /// This does NOT cover the separate SEP-2243 MUST that a Streamable HTTP
+    /// client reject the WHOLE tool definition when such a misplaced
+    /// annotation is present; detection of that case is
+    /// `find_misplaced_x_mcp_header`, tested below.
     #[test]
     fn x_mcp_header_emits_only_statically_reachable_properties() {
         // Array items — not statically reachable (any array element could
@@ -580,8 +600,8 @@ mod misplaced_x_mcp_header_tests {
             "properties": { "region": {"$ref": "#/$defs/Region"} },
             "$defs": { "Region": {"type": "string", "x-mcp-header": "Region"} }
         });
-        // With `$defs` now traversed generically (see the positional-rule
-        // doc comment on `walk`), the annotation may be reported either at
+        // `$defs` is traversed generically (see the positional-rule
+        // doc comment on `walk`), so the annotation may be reported either at
         // `/$defs/Region` or `/properties/region/$ref` depending on object
         // key iteration order — both are valid "tool is invalid" signals.
         // The contract is "is the tool invalid", not the exact pointer.
@@ -594,9 +614,8 @@ mod misplaced_x_mcp_header_tests {
         assert_eq!(find_misplaced_x_mcp_header(&schema), None);
     }
 
-    /// R4: the allowlist walk must catch applicators beyond the original
-    /// enumerated set — these are the keywords an earlier enumerate-the-bad-
-    /// keywords version missed entirely (confirmed by independent wire tests).
+    /// The allowlist walk must catch applicators beyond an enumerated set of
+    /// known-bad keywords, such as `patternProperties`.
     #[test]
     fn annotation_under_pattern_properties_is_flagged() {
         let schema = json!({"properties": {

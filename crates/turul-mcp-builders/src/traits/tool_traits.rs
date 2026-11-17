@@ -6,55 +6,59 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import protocol types (spec-defined)
 use turul_mcp_protocol::tools::ToolAnnotations;
 use turul_mcp_protocol::{Tool, ToolSchema};
 
-/// Base metadata trait - matches TypeScript BaseMetadata interface
+/// Provides the base metadata (`name`, `title`), mirroring `BaseMetadata` in the MCP schema.
 pub trait HasBaseMetadata {
-    /// Programmatic identifier (fallback display name)
+    /// Returns the programmatic identifier, used as the fallback display name.
     fn name(&self) -> &str;
 
-    /// Human-readable display name (UI contexts)
+    /// Returns the human-readable display name for UI contexts.
     fn title(&self) -> Option<&str> {
         None
     }
 }
 
-/// Tool description trait
+/// Provides the optional tool description.
 pub trait HasDescription {
+    /// Returns the human-readable tool description, or `None` when it has none.
     fn description(&self) -> Option<&str> {
         None
     }
 }
 
-/// Input schema trait
+/// Provides the tool input schema.
 pub trait HasInputSchema {
+    /// Returns the JSON Schema describing the tool's input arguments.
     fn input_schema(&self) -> &ToolSchema;
 }
 
-/// Output schema trait
+/// Provides the optional tool output schema.
 pub trait HasOutputSchema {
+    /// Returns the JSON Schema describing the tool's structured output, or `None` when it declares none.
     fn output_schema(&self) -> Option<&ToolSchema> {
         None
     }
 }
 
-/// Annotations trait
+/// Provides the optional tool annotations.
 pub trait HasAnnotations {
+    /// Returns the tool annotations (behavior hints), or `None` when it has none.
     fn annotations(&self) -> Option<&ToolAnnotations> {
         None
     }
 }
 
-/// Tool-specific meta trait (separate from RPC _meta)
+/// Provides the optional tool-specific `_meta`, separate from the RPC-level `_meta`.
 pub trait HasToolMeta {
+    /// Returns the tool-specific `_meta` map, or `None` when it has none.
     fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
         None
     }
 }
 
-/// Complete tool definition - composed from fine-grained traits
+/// Defines a complete tool, composed from fine-grained traits.
 ///
 /// This trait represents a complete MCP tool that can be registered with a server
 /// and invoked by clients. When you implement the required metadata traits, you automatically
@@ -72,7 +76,7 @@ pub trait ToolDefinition:
     Send +
     Sync
 {
-    /// Display name precedence: title > name (matches TypeScript spec)
+    /// Returns the display name, preferring `title` over `name`.
     fn display_name(&self) -> &str {
         if let Some(title) = self.title() {
             title
@@ -81,7 +85,7 @@ pub trait ToolDefinition:
         }
     }
 
-    /// Convert to concrete Tool struct for protocol serialization
+    /// Converts this definition to a protocol `Tool` for serialization.
     fn to_tool(&self) -> Tool {
         Tool {
             name: self.name().to_string(),
@@ -114,6 +118,7 @@ where
     // Default implementations provided by trait definition
 }
 
+/// Defines a complete tool, composed from fine-grained traits.
 #[cfg(feature = "protocol-2026-07-28")]
 pub trait ToolDefinition:
     HasBaseMetadata +           // name, title
@@ -126,7 +131,7 @@ pub trait ToolDefinition:
     Send +
     Sync
 {
-    /// Display name precedence: title > name (matches TypeScript spec)
+    /// Returns the display name, preferring `title` over `name`.
     fn display_name(&self) -> &str {
         if let Some(title) = self.title() {
             title
@@ -135,7 +140,7 @@ pub trait ToolDefinition:
         }
     }
 
-    /// Convert to concrete Tool struct for protocol serialization
+    /// Converts this definition to a protocol `Tool` for serialization.
     fn to_tool(&self) -> Tool {
         Tool {
             name: self.name().to_string(),

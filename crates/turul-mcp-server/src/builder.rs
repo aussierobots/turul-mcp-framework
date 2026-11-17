@@ -1,6 +1,7 @@
-//! MCP Server Builder
+//! Builder for MCP servers.
 //!
-//! This module provides a builder pattern for creating MCP servers.
+//! Defines [`McpServerBuilder`], which collects server metadata, capabilities and
+//! registered tools, resources, prompts and handlers, then validates them in `build()`.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -18,9 +19,9 @@ use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::initialize::*;
 use turul_mcp_protocol::{Icon, Implementation, ServerCapabilities};
 
-/// Builder for MCP servers
+/// Builder for MCP servers.
 pub struct McpServerBuilder {
-    /// Server implementation info
+    /// Server implementation info.
     name: String,
     version: String,
     title: Option<String>,
@@ -28,30 +29,30 @@ pub struct McpServerBuilder {
     website_url: Option<String>,
     icons: Option<Vec<Icon>>,
 
-    /// Server capabilities
+    /// Server capabilities.
     capabilities: ServerCapabilities,
 
-    /// Tools registered with the server
+    /// Tools registered with the server.
     tools: HashMap<String, Arc<dyn McpTool>>,
 
-    /// Resources registered with the server
+    /// Resources registered with the server.
     resources: HashMap<String, Arc<dyn McpResource>>,
 
-    /// Template resources (URI template -> resource)
+    /// Template resources (URI template -> resource).
     template_resources: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>,
 
-    /// Prompts registered with the server
+    /// Prompts registered with the server.
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 
-    /// Elicitations registered with the server
+    /// Elicitations registered with the server.
     #[cfg(feature = "protocol-2025-11-25")]
     elicitations: HashMap<String, Arc<dyn McpElicitation>>,
 
-    /// Sampling providers registered with the server
+    /// Sampling providers registered with the server.
     #[cfg(feature = "protocol-2025-11-25")]
     sampling: Vec<Arc<dyn McpSampling>>,
 
-    /// Completion providers registered with the server
+    /// Completion providers registered with the server.
     completions: Vec<Arc<dyn McpCompletion>>,
     /// Tasks-extension store (SEP-2663); presence advertises the extension.
     #[cfg(feature = "ext-tasks")]
@@ -64,77 +65,77 @@ pub struct McpServerBuilder {
     ext_task_tools: std::collections::HashMap<String, crate::ext_tasks::ExtTaskElection>,
     /// Retention policy + interval for the background sweep. `None` means no
     /// sweep task is spawned at all, which is the default: retention is
-    /// opt-in, and an unconfigured server behaves exactly as before.
+    /// opt-in.
     #[cfg(feature = "ext-tasks")]
     ext_task_retention: Option<(turul_mcp_ext_tasks::RetentionPolicy, std::time::Duration)>,
 
     /// Resource URIs served by the Skills extension. One URI serves one
-    /// content (ADR-033 §5): a later `.resource()` on one of these is refused.
+    /// content: a later `.resource()` on one of these is refused.
     #[cfg(feature = "ext-skills")]
     ext_skill_uris: std::collections::HashSet<String>,
 
     /// Whether the transport serves `subscriptions/listen` resource
-    /// subscriptions; decides `resources.subscribe` (ADR-035 §3).
+    /// subscriptions; decides `resources.subscribe`.
     #[cfg(feature = "protocol-2026-07-28")]
     resource_subscriptions: bool,
 
-    /// Loggers registered with the server
+    /// Loggers registered with the server.
     #[cfg(feature = "protocol-2025-11-25")]
     loggers: HashMap<String, Arc<dyn McpLogger>>,
 
-    /// Root providers registered with the server
+    /// Root providers registered with the server.
 
-    /// Notification providers registered with the server
+    /// Notification providers registered with the server.
     notifications: HashMap<String, Arc<dyn McpNotification>>,
 
-    /// Handlers registered with the server
+    /// Handlers registered with the server.
     handlers: HashMap<String, Arc<dyn McpHandler>>,
 
-    /// Roots configured for the server
+    /// Roots configured for the server.
     // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
     #[allow(deprecated)]
     /// 2025-11-25 only: the 2026 server never hosts an inbound `roots/list`.
     #[cfg(feature = "protocol-2025-11-25")]
     roots: Vec<turul_mcp_protocol::roots::Root>,
 
-    /// Optional instructions for clients
+    /// Optional instructions for clients.
     instructions: Option<String>,
 
-    /// Session configuration
+    /// Session configuration.
     session_timeout_minutes: Option<u64>,
     session_cleanup_interval_seconds: Option<u64>,
 
-    /// Session storage backend (defaults to InMemory if None)
+    /// Session storage backend (defaults to InMemory if None).
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
 
-    /// Task storage / runtime (None = tasks not supported)
+    /// Task storage / runtime (None = tasks not supported).
     #[cfg(feature = "protocol-2025-11-25")]
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
 
-    /// Recovery timeout for stuck tasks (milliseconds), default 5 minutes
+    /// Recovery timeout for stuck tasks (milliseconds), default 5 minutes.
     #[cfg(feature = "protocol-2025-11-25")]
     task_recovery_timeout_ms: u64,
 
-    /// MCP Lifecycle enforcement configuration
+    /// MCP Lifecycle enforcement configuration.
     strict_lifecycle: bool,
 
-    /// Test mode - disables security middleware for test servers
+    /// Test mode - disables security middleware for test servers.
     test_mode: bool,
 
-    /// Middleware stack for request/response interception
+    /// Middleware stack for request/response interception.
     middleware_stack: crate::middleware::MiddlewareStack,
 
-    /// Custom HTTP route registry (e.g., .well-known paths)
+    /// Custom HTTP route registry (e.g., .well-known paths).
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
-    /// Server Card to serve at `<mcp_path>/server-card` (ADR-038)
+    /// Server Card to serve at `<mcp_path>/server-card`.
     #[cfg(feature = "ext-server-card")]
     server_card: Option<turul_mcp_ext_server_card::v1::ServerCard>,
 
-    /// HTTP configuration (if enabled)
+    /// HTTP configuration (if enabled).
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
-    /// Caller-bound socket the server serves on instead of binding (ADR-034)
+    /// Caller-bound socket the server serves on instead of binding.
     #[cfg(feature = "http")]
     listener: Option<turul_http_mcp_server::PreboundListener>,
     #[cfg(feature = "http")]
@@ -148,19 +149,19 @@ pub struct McpServerBuilder {
     #[cfg(feature = "http")]
     origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
 
-    /// Validation errors collected during builder configuration
+    /// Validation errors collected during builder configuration.
     validation_errors: Vec<String>,
 
-    /// Tool change detection mode (default: Static)
+    /// Tool change detection mode (default: Static).
     tool_change_mode: crate::ToolChangeMode,
 
-    /// Server state storage for cross-instance coordination (optional)
+    /// Server state storage for cross-instance coordination (optional).
     #[cfg(feature = "dynamic-tools")]
     server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
 }
 
 impl McpServerBuilder {
-    /// Create a new builder
+    /// Creates a new builder.
     pub fn new() -> Self {
         let tools = HashMap::new();
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
@@ -266,7 +267,7 @@ impl McpServerBuilder {
             "notifications/roots/list_changed".to_string(),
             notifications_handler.clone(),
         );
-        // Legacy compat: accept camelCase from older clients
+        // Also accept camelCase method names from clients that send them
         handlers.insert(
             "notifications/resources/listChanged".to_string(),
             notifications_handler.clone(),
@@ -356,7 +357,7 @@ impl McpServerBuilder {
         }
     }
 
-    /// Set the tool change detection mode.
+    /// Sets the tool change detection mode.
     ///
     /// - `Static` (default): No change detection, no fingerprint, no notifications. `listChanged=false`.
     /// - `Dynamic` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
@@ -367,7 +368,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Set the server state storage backend for cross-instance coordination.
+    /// Sets the server state storage backend for cross-instance coordination.
     ///
     /// When provided with `ToolChangeMode::Dynamic`, tool activation state is
     /// persisted to this backend so multiple server instances share the same
@@ -382,19 +383,19 @@ impl McpServerBuilder {
         self
     }
 
-    /// Sets the server name for identification
+    /// Sets the server name for identification.
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
 
-    /// Sets the server version string
+    /// Sets the server version string.
     pub fn version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
         self
     }
 
-    /// Sets the human-readable server title
+    /// Sets the human-readable server title.
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
@@ -413,7 +414,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Sets icons for the server (displayed by MCP clients like Claude Desktop)
+    /// Sets icons for the server (displayed by MCP clients like Claude Desktop).
     ///
     /// ```rust,no_run
     /// use turul_mcp_server::prelude::*;
@@ -431,15 +432,15 @@ impl McpServerBuilder {
         self
     }
 
-    /// Sets usage instructions for MCP clients
+    /// Sets usage instructions for MCP clients.
     pub fn instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = Some(instructions.into());
         self
     }
 
-    /// Registers a tool that clients can execute
-    /// Tool-name format check (Tools §Tool Names, all SHOULD-level):
-    /// 1–128 chars; only `A-Z a-z 0-9 _ - .`; no spaces or commas.
+    /// Returns a description of the first tool-name format violation in `name`, or `None`.
+    ///
+    /// Tools §Tool Names (all SHOULD-level): 1–128 chars; only `A-Z a-z 0-9 _ - .`; no spaces or commas.
     pub(crate) fn tool_name_violation(name: &str) -> Option<String> {
         if name.is_empty() || name.len() > 128 {
             return Some(format!(
@@ -452,6 +453,10 @@ impl McpServerBuilder {
             .map(|c| format!("tool name {name:?} contains disallowed character {c:?}"))
     }
 
+    /// Registers a tool, keyed by `tool.name()`; a later tool with the same name replaces it.
+    ///
+    /// A name outside the spec's recommended form (1..=128 chars of `A-Z a-z 0-9 _ - .`)
+    /// logs a warning; the tool is still registered.
     pub fn tool<T: McpTool + 'static>(mut self, tool: T) -> Self {
         if let Some(violation) = Self::tool_name_violation(tool.name()) {
             tracing::warn!(
@@ -464,7 +469,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Configure the Tasks extension (`io.modelcontextprotocol/tasks`,
+    /// Configures the Tasks extension (`io.modelcontextprotocol/tasks`,
     /// SEP-2663): advertises the extension in `capabilities.extensions` and
     /// registers the `tasks/get`/`tasks/update`/`tasks/cancel` handlers.
     /// Tools opt into task election via [`Self::ext_task_tool`] /
@@ -475,8 +480,8 @@ impl McpServerBuilder {
         self
     }
 
-    /// Serve a Server Card at `GET <mcp_path>/server-card` (**experimental**
-    /// upstream; ADR-038). `build()` copies `version`, `title`, `description`,
+    /// Serves a Server Card at `GET <mcp_path>/server-card` (**experimental**
+    /// upstream). `build()` copies `version`, `title`, `description`,
     /// `websiteUrl`, `icons` and each remote's `supportedProtocolVersions` from
     /// the server's own `server/discover` data when the card leaves them unset,
     /// and fails if a value the card sets contradicts it or the card breaks the
@@ -488,7 +493,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Serve the Skills extension (`io.modelcontextprotocol/skills`, ADR-033):
+    /// Serves the Skills extension (`io.modelcontextprotocol/skills`):
     /// advertises the extension with `directoryRead: true`, forces the
     /// `resources` capability, registers `skills/list`, `skills/get` and
     /// `resources/directory/read`, registers every manifest file as a static
@@ -497,7 +502,7 @@ impl McpServerBuilder {
     ///
     /// A manifest URI the `resources/read` policy would reject (it contains
     /// `..`, `/etc/` or `/proc/`) makes `build()` fail, naming the file, so no
-    /// unreadable URI is ever advertised (ADR-033 §5).
+    /// unreadable URI is ever advertised.
     #[cfg(feature = "ext-skills")]
     pub fn with_ext_skills(mut self, catalog: crate::ext_skills::SkillCatalog) -> Self {
         use crate::ext_skills::{
@@ -518,7 +523,7 @@ impl McpServerBuilder {
                     Some(prev) if prev.digest() != file.digest() => {
                         self.validation_errors.push(format!(
                             "skill file {} is listed with different content by two skills; \
-                             one URI serves one content (ADR-033 §5)",
+                             one URI serves one content",
                             file.uri()
                         ));
                     }
@@ -530,7 +535,7 @@ impl McpServerBuilder {
             }
         }
         // Directory index from the registered files, so a directory listing
-        // shows exactly the metadata resources/list does (ADR-033 §7).
+        // shows exactly the metadata resources/list does.
         let directories = directory_index(
             catalog.entries().map(|e| e.path().root_uri()),
             files.values(),
@@ -540,7 +545,7 @@ impl McpServerBuilder {
             if self.resources.contains_key(&uri) {
                 self.validation_errors.push(format!(
                     "skill file {uri} is already registered as another resource; \
-                     one URI serves one content (ADR-033 §5)"
+                     one URI serves one content"
                 ));
                 continue;
             }
@@ -548,7 +553,7 @@ impl McpServerBuilder {
             self.ext_skill_uris.insert(uri.clone());
             uris.push(uri);
         }
-        // Dynamic skills: one `{+file}` template each (ADR-033 §8).
+        // Dynamic skills: one `{+file}` template each.
         let slot: crate::ext_skills::RuntimeSlot = Default::default();
         for (path, skill) in catalog.dynamic_skills() {
             self = self.resource(DynamicSkillResource::new(
@@ -565,7 +570,7 @@ impl McpServerBuilder {
             if let Err(e) = policy.validate_request("resources/read", Some(&probe), None) {
                 self.validation_errors.push(format!(
                     "skill file {uri} would be unreadable through resources/read ({e}); \
-                     a served skill must not advertise it (ADR-033 §5)"
+                     a served skill must not advertise it"
                 ));
             }
         }
@@ -587,7 +592,7 @@ impl McpServerBuilder {
             .handler(DirectoryReadHandler(runtime))
     }
 
-    /// Run the task retention sweep on a timer.
+    /// Runs the task retention sweep on a timer.
     ///
     /// **Without this call no sweep runs at all**, so orphaned tasks stay
     /// `working` forever and terminal tasks accumulate. That is the correct
@@ -599,19 +604,24 @@ impl McpServerBuilder {
     /// between a worker's writes, or a slow-but-healthy task is killed — the
     /// store cannot tell "stuck" from "slow", only how long it has been quiet.
     ///
-    /// ```ignore
+    /// ```rust
+    /// use std::sync::Arc;
     /// use std::time::Duration;
-    /// use turul_mcp_ext_tasks::RetentionPolicy;
+    /// use turul_mcp_ext_tasks::{InMemoryTaskStore, RetentionPolicy};
+    /// use turul_mcp_server::prelude::*;
     ///
-    /// .with_ext_tasks(store)
-    /// .with_ext_tasks_retention(
-    ///     RetentionPolicy {
-    ///         orphan_after_ms: Some(15 * 60_000),
-    ///         delete_terminal_after_ms: Some(24 * 60 * 60_000),
-    ///         honour_task_ttl: true,
-    ///     },
-    ///     Duration::from_secs(60),
-    /// )
+    /// let builder = McpServer::builder()
+    ///     .name("tasks")
+    ///     .version("1.0.0")
+    ///     .with_ext_tasks(Arc::new(InMemoryTaskStore::new()))
+    ///     .with_ext_tasks_retention(
+    ///         RetentionPolicy {
+    ///             orphan_after_ms: Some(15 * 60_000),
+    ///             delete_terminal_after_ms: Some(24 * 60 * 60_000),
+    ///             honour_task_ttl: true,
+    ///         },
+    ///         Duration::from_secs(60),
+    ///     );
     /// ```
     #[cfg(feature = "ext-tasks")]
     pub fn with_ext_tasks_retention(
@@ -623,7 +633,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a tool that runs as a task when the request's declared
+    /// Registers a tool that runs as a task when the request's declared
     /// `clientCapabilities.extensions` activates the Tasks extension, and
     /// synchronously otherwise (progressive enhancement).
     #[cfg(feature = "ext-tasks")]
@@ -631,7 +641,7 @@ impl McpServerBuilder {
         self.ext_task_tool_with(tool, crate::ext_tasks::ExtTaskElection::optional())
     }
 
-    /// Register a tool that REQUIRES task execution: calls from clients that
+    /// Registers a tool that REQUIRES task execution: calls from clients that
     /// did not declare the Tasks extension are rejected with `-32021` and
     /// `data.requiredCapabilities.extensions`.
     #[cfg(feature = "ext-tasks")]
@@ -639,17 +649,24 @@ impl McpServerBuilder {
         self.ext_task_tool_with(tool, crate::ext_tasks::ExtTaskElection::required())
     }
 
-    /// Register a task-electing tool with an explicit
+    /// Registers a task-electing tool with an explicit
     /// [`ExtTaskElection`](crate::ext_tasks::ExtTaskElection).
     ///
     /// Needed for the SEP-2663 MRTR composition, which the two shorthands
     /// above cannot express:
     ///
-    /// ```ignore
+    /// ```rust
     /// use turul_mcp_server::ext_tasks::ExtTaskElection;
+    /// use turul_mcp_server::prelude::*;
+    ///
+    /// #[mcp_tool(name = "confirm_then_run", description = "Confirms, then runs")]
+    /// async fn confirm_then_run() -> McpResult<String> { Ok("done".into()) }
     ///
     /// // Gathers input synchronously, THEN mints the task.
-    /// .ext_task_tool_with(ConfirmThenRun, ExtTaskElection::required().with_mrtr_first())
+    /// let builder = McpServer::builder()
+    ///     .name("tasks")
+    ///     .version("1.0.0")
+    ///     .ext_task_tool_with(confirm_then_run(), ExtTaskElection::required().with_mrtr_first());
     /// ```
     ///
     /// The tool must return [`McpError::InputRequired`] when the call carries
@@ -666,7 +683,7 @@ impl McpServerBuilder {
         self.tool(tool)
     }
 
-    /// Register a function tool created with `#[mcp_tool]` macro
+    /// Registers a function tool created with `#[mcp_tool]` macro.
     ///
     /// This method provides a more intuitive way to register function tools.
     /// The `#[mcp_tool]` macro generates a constructor function with the same name
@@ -754,7 +771,7 @@ impl McpServerBuilder {
         self.tool(func())
     }
 
-    /// Registers multiple tools in a batch
+    /// Registers multiple tools in a batch.
     pub fn tools<T: McpTool + 'static, I: IntoIterator<Item = T>>(mut self, tools: I) -> Self {
         for tool in tools {
             self = self.tool(tool);
@@ -762,7 +779,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Add middleware to the request/response processing chain
+    /// Adds middleware to the request/response processing chain.
     ///
     /// **This method is additive** - each call adds a new middleware to the stack.
     /// Middleware execute in the order they are registered (FIFO):
@@ -851,7 +868,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a custom HTTP route (e.g., `.well-known/oauth-protected-resource`)
+    /// Registers a custom HTTP route (e.g., `.well-known/oauth-protected-resource`).
     ///
     /// Routes are matched by exact path before returning 404.
     pub fn route(
@@ -865,7 +882,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a resource with the server
+    /// Registers a resource with the server.
     ///
     /// Automatically detects if the resource URI contains template variables (e.g., `{ticker}`, `{id}`)
     /// and registers it as either a static resource or template resource accordingly.
@@ -974,7 +991,7 @@ impl McpServerBuilder {
                 #[cfg(feature = "ext-skills")]
                 if self.ext_skill_uris.contains(&uri) {
                     self.validation_errors.push(format!(
-                        "resource {uri} is already served as a skill file; one URI serves one content (ADR-033 §5)"
+                        "resource {uri} is already served as a skill file; one URI serves one content"
                     ));
                     return self;
                 }
@@ -986,7 +1003,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a function resource created with `#[mcp_resource]` macro
+    /// Registers a function resource created with `#[mcp_resource]` macro.
     ///
     /// This method provides a more intuitive way to register function resources.
     /// The `#[mcp_resource]` macro generates a constructor function with the same name
@@ -1065,7 +1082,7 @@ impl McpServerBuilder {
         self.resource(func())
     }
 
-    /// Register multiple resources
+    /// Registers multiple resources.
     pub fn resources<R: McpResource + 'static, I: IntoIterator<Item = R>>(
         mut self,
         resources: I,
@@ -1076,9 +1093,9 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a resource with explicit URI template support
+    /// Registers a resource with explicit URI template support.
     ///
-    /// **Note**: This method is now optional. The `.resource()` method automatically detects
+    /// **Note**: This method is optional. The `.resource()` method automatically detects
     /// template URIs and handles them appropriately. Use this method only when you need
     /// explicit control over template parsing or want to add custom validators.
     ///
@@ -1177,14 +1194,14 @@ impl McpServerBuilder {
         self
     }
 
-    /// Registers a prompt template for conversation generation
+    /// Registers a prompt template for conversation generation.
     pub fn prompt<P: McpPrompt + 'static>(mut self, prompt: P) -> Self {
         let name = prompt.name().to_string();
         self.prompts.insert(name, Arc::new(prompt));
         self
     }
 
-    /// Register multiple prompts
+    /// Registers multiple prompts.
     pub fn prompts<P: McpPrompt + 'static, I: IntoIterator<Item = P>>(
         mut self,
         prompts: I,
@@ -1195,7 +1212,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register an elicitation provider with the server
+    /// Registers an elicitation provider with the server.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitation<E: McpElicitation + 'static>(mut self, elicitation: E) -> Self {
         let key = format!("elicitation_{}", self.elicitations.len());
@@ -1203,7 +1220,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register multiple elicitation providers
+    /// Registers multiple elicitation providers.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn elicitations<E: McpElicitation + 'static, I: IntoIterator<Item = E>>(
         mut self,
@@ -1215,14 +1232,14 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a sampling provider with the server
+    /// Registers a sampling provider with the server.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_provider<S: McpSampling + 'static>(mut self, sampling: S) -> Self {
         self.sampling.push(Arc::new(sampling));
         self
     }
 
-    /// Register multiple sampling providers
+    /// Registers multiple sampling providers.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampling_providers<S: McpSampling + 'static, I: IntoIterator<Item = S>>(
         mut self,
@@ -1234,13 +1251,13 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a completion provider with the server
+    /// Registers a completion provider with the server.
     pub fn completion_provider<C: McpCompletion + 'static>(mut self, completion: C) -> Self {
         self.completions.push(Arc::new(completion));
         self
     }
 
-    /// Register multiple completion providers
+    /// Registers multiple completion providers.
     pub fn completion_providers<C: McpCompletion + 'static, I: IntoIterator<Item = C>>(
         mut self,
         completions: I,
@@ -1251,7 +1268,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a logger with the server
+    /// Registers a logger with the server.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn logger<L: McpLogger + 'static>(mut self, logger: L) -> Self {
         let key = format!("logger_{}", self.loggers.len());
@@ -1259,7 +1276,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register multiple loggers
+    /// Registers multiple loggers.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn loggers<L: McpLogger + 'static, I: IntoIterator<Item = L>>(
         mut self,
@@ -1271,14 +1288,14 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a notification provider with the server
+    /// Registers a notification provider with the server.
     pub fn notification_provider<N: McpNotification + 'static>(mut self, notification: N) -> Self {
         let key = format!("notification_{}", self.notifications.len());
         self.notifications.insert(key, Arc::new(notification));
         self
     }
 
-    /// Register multiple notification providers
+    /// Registers multiple notification providers.
     pub fn notification_providers<N: McpNotification + 'static, I: IntoIterator<Item = N>>(
         mut self,
         notifications: I,
@@ -1289,12 +1306,12 @@ impl McpServerBuilder {
         self
     }
 
-    /// Check if URI contains template variables (e.g., {ticker}, {id})
+    /// Checks if URI contains template variables (e.g., {ticker}, {id}).
     fn is_template_uri(&self, uri: &str) -> bool {
         uri.contains('{') && uri.contains('}')
     }
 
-    /// Validate URI is absolute and well-formed (reusing SecurityMiddleware logic)
+    /// Validates URI is absolute and well-formed (reusing SecurityMiddleware logic).
     fn validate_uri(&self, uri: &str) -> std::result::Result<(), String> {
         // Check basic URI format - must have scheme
         if !uri.contains("://") {
@@ -1319,7 +1336,7 @@ impl McpServerBuilder {
         Ok(())
     }
 
-    /// Validate URI template pattern (basic validation for template syntax)
+    /// Validates URI template pattern (basic validation for template syntax).
     fn validate_uri_template(&self, template: &str) -> std::result::Result<(), String> {
         // First validate the base URI structure (ignoring template variables)
         let base_uri = template.replace(['{', '}'], "");
@@ -1340,27 +1357,30 @@ impl McpServerBuilder {
     // These aliases make the API more intuitive and match the zero-config vision
     // =============================================================================
 
-    /// Register a sampler - convenient alias for sampling_provider
-    /// Automatically uses "sampling/createMessage" method
+    /// Registers a sampler, an alias for `sampling_provider`.
+    ///
+    /// Serves the `sampling/createMessage` method.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn sampler<S: McpSampling + 'static>(self, sampling: S) -> Self {
         self.sampling_provider(sampling)
     }
 
-    /// Register a completer - convenient alias for completion_provider
-    /// Automatically uses "completion/complete" method
+    /// Registers a completer, an alias for `completion_provider`.
+    ///
+    /// Serves the `completion/complete` method.
     pub fn completer<C: McpCompletion + 'static>(self, completion: C) -> Self {
         self.completion_provider(completion)
     }
 
-    /// Register a notification by type - type determines method automatically
-    /// This enables the `.notification::<T>()` pattern from universal-turul-mcp-server
+    /// Registers a notification by type; the type determines the method.
+    ///
+    /// Call it as `.notification_type::<T>()`; `T::default()` is registered.
     pub fn notification_type<N: McpNotification + 'static + Default>(self) -> Self {
         let notification = N::default();
         self.notification_provider(notification)
     }
 
-    /// Register a handler with the server
+    /// Registers a handler with the server.
     pub fn handler<H: McpHandler + 'static>(mut self, handler: H) -> Self {
         let handler_arc = Arc::new(handler);
         for method in handler_arc.supported_methods() {
@@ -1369,7 +1389,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register multiple handlers
+    /// Registers multiple handlers.
     pub fn handlers<H: McpHandler + 'static, I: IntoIterator<Item = H>>(
         mut self,
         handlers: I,
@@ -1380,26 +1400,26 @@ impl McpServerBuilder {
         self
     }
 
-    /// Add completion support
+    /// Adds completion support.
     pub fn with_completion(mut self) -> Self {
         self.capabilities.completions = Some(CompletionsCapabilities::default());
         self.handler(CompletionHandler::new())
     }
 
-    /// Add prompts support
+    /// Adds prompts support.
     pub fn with_prompts(mut self) -> Self {
         self.capabilities.prompts = Some(PromptsCapabilities {
             list_changed: Some(false),
         });
 
-        // Prompts handlers are automatically registered when prompts are added via .prompt()
-        // This method now just enables the capability
+        // Prompts handlers are registered when prompts are added via .prompt();
+        // this method only enables the capability
         self
     }
 
-    /// Add resources support
+    /// Adds resources support.
     ///
-    /// **Note**: This method is now optional. The framework automatically calls this
+    /// **Note**: This method is optional. The framework automatically calls this
     /// when resources are registered via `.resource()` or `.template_resource()`.
     /// You only need to call this explicitly if you want to enable resource capabilities
     /// without registering any resources.
@@ -1456,13 +1476,11 @@ impl McpServerBuilder {
                 read_handler.add_template_resource_arc(template.clone(), resource.clone());
         }
 
-        // Update notification manager
-
         // Register both handlers
         self.handler(list_handler).handler(read_handler)
     }
 
-    /// Advertise an entry under `capabilities.experimental`.
+    /// Advertises an entry under `capabilities.experimental`.
     ///
     /// The schema models `experimental` as a free-form map, and nothing else
     /// in this builder could reach it — so a server could not advertise a
@@ -1472,12 +1490,10 @@ impl McpServerBuilder {
     /// This is deliberately unopinionated: the framework attaches no meaning
     /// to the key or value and does not register a handler. Advertising a
     /// capability you do not implement is a truthfulness violation the
-    /// framework cannot check for you — see AGENTS.md §Capabilities
-    /// Truthfulness.
+    /// framework cannot check for you.
     ///
-    /// Prefer [`Self::experimental_capability`]'s successor when a surface
-    /// graduates: a released, reverse-DNS-identified feature belongs in
-    /// [`Self::extension_capability`], not here.
+    /// A released, reverse-DNS-identified feature belongs in
+    /// `Self::extension_capability` (2026-07-28 lane), not here.
     pub fn experimental_capability(
         mut self,
         key: impl Into<String>,
@@ -1490,7 +1506,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Advertise an entry under `capabilities.extensions`.
+    /// Advertises an entry under `capabilities.extensions`.
     ///
     /// Keys are reverse-DNS extension identifiers (e.g.
     /// `"io.modelcontextprotocol/tasks"`); `{}` means support with no
@@ -1523,14 +1539,14 @@ impl McpServerBuilder {
     /// over `subscriptions/listen`. Defaults to `true`: the HTTP transport
     /// serves them. A transport that cannot (buffered AWS Lambda has no
     /// long-lived stream) passes `false` so `resources.subscribe` stays
-    /// truthful (ADR-035 §3).
+    /// truthful.
     #[cfg(feature = "protocol-2026-07-28")]
     pub fn resource_subscriptions(mut self, served: bool) -> Self {
         self.resource_subscriptions = served;
         self
     }
 
-    /// Add logging support
+    /// Adds logging support.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_logging(mut self) -> Self {
         #[allow(deprecated)] // SEP-2577 migration window
@@ -1540,7 +1556,7 @@ impl McpServerBuilder {
         self.handler(LoggingHandler)
     }
 
-    /// Add roots support.
+    /// Adds roots support.
     ///
     /// 2025-11-25 only: `roots/list` is not a member of the 2026-07-28
     /// client-to-server request union, where roots are requested from the client
@@ -1551,7 +1567,7 @@ impl McpServerBuilder {
         self.handler(RootsHandler::new())
     }
 
-    /// Add a single root directory
+    /// Adds a single root directory.
     #[allow(deprecated)]
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn root(mut self, root: turul_mcp_protocol::roots::Root) -> Self {
@@ -1559,13 +1575,13 @@ impl McpServerBuilder {
         self
     }
 
-    /// Add sampling support
+    /// Adds sampling support.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn with_sampling(self) -> Self {
         self.handler(SamplingHandler)
     }
 
-    /// Add elicitation support with default mock provider
+    /// Adds elicitation support with default mock provider.
     ///
     /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
     /// The server requests elicitation from the client; it doesn't advertise it.
@@ -1574,7 +1590,7 @@ impl McpServerBuilder {
         self.handler(ElicitationHandler::with_mock_provider())
     }
 
-    /// Add elicitation support with custom provider
+    /// Adds elicitation support with custom provider.
     ///
     /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
     /// The server requests elicitation from the client; it doesn't advertise it.
@@ -1583,31 +1599,31 @@ impl McpServerBuilder {
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
-    /// Add notifications support
+    /// Adds notifications support.
     pub fn with_notifications(self) -> Self {
         self.handler(NotificationsHandler)
     }
 
-    /// Configure session timeout (in minutes, default: 30)
+    /// Configures session timeout (in minutes, default: 30).
     pub fn session_timeout_minutes(mut self, minutes: u64) -> Self {
         self.session_timeout_minutes = Some(minutes);
         self
     }
 
-    /// Configure session cleanup interval (in seconds, default: 60)
+    /// Configures session cleanup interval (in seconds, default: 60).
     pub fn session_cleanup_interval_seconds(mut self, seconds: u64) -> Self {
         self.session_cleanup_interval_seconds = Some(seconds);
         self
     }
 
-    /// Enable strict MCP lifecycle enforcement
+    /// Enables strict MCP lifecycle enforcement.
     ///
     /// When enabled, the server will reject all operations (tools, resources, etc.)
     /// until the client sends `notifications/initialized` after receiving the
     /// initialize response.
     ///
     /// **Default: true** - MCP 2025-11-25 spec requires the full handshake.
-    /// Set to `false` only for legacy clients that don't send `notifications/initialized`.
+    /// Set to `false` only for clients that don't send `notifications/initialized`.
     ///
     /// # Example
     /// ```rust,no_run
@@ -1625,7 +1641,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Enable strict MCP lifecycle enforcement (convenience method)
+    /// Enables strict MCP lifecycle enforcement (convenience method).
     ///
     /// Equivalent to `.strict_lifecycle(true)`. Enables strict enforcement where
     /// all operations are rejected until `notifications/initialized` is received.
@@ -1633,7 +1649,7 @@ impl McpServerBuilder {
         self.strict_lifecycle(true)
     }
 
-    /// Enable test mode - disables security middleware for test servers
+    /// Enables test mode - disables security middleware for test servers.
     ///
     /// In test mode, ResourcesReadHandler is created without security middleware,
     /// allowing custom URI schemes for testing (binary://, memory://, error://, etc.).
@@ -1658,21 +1674,21 @@ impl McpServerBuilder {
         self
     }
 
-    /// Configure sessions with recommended defaults for long-running sessions
+    /// Configures sessions with recommended defaults for long-running sessions.
     pub fn with_long_sessions(mut self) -> Self {
         self.session_timeout_minutes = Some(120); // 2 hours
         self.session_cleanup_interval_seconds = Some(300); // 5 minutes
         self
     }
 
-    /// Configure sessions with recommended defaults for short-lived sessions
+    /// Configures sessions with recommended defaults for short-lived sessions.
     pub fn with_short_sessions(mut self) -> Self {
         self.session_timeout_minutes = Some(15); // 15 minutes
         self.session_cleanup_interval_seconds = Some(30); // 30 seconds
         self
     }
 
-    /// Configure session storage backend (defaults to InMemory if not specified)
+    /// Configures session storage backend (defaults to InMemory if not specified).
     pub fn with_session_storage(
         mut self,
         storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
@@ -1681,7 +1697,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Configure task storage to enable MCP task support for long-running operations.
+    /// Configures task storage to enable MCP task support for long-running operations.
     ///
     /// When task storage is configured, the server will:
     /// - Advertise `tasks` capabilities in the initialize response
@@ -1713,7 +1729,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Configure task support with a pre-built `TaskRuntime`.
+    /// Configures task support with a pre-built `TaskRuntime`.
     ///
     /// Use this when you need fine-grained control over the task runtime configuration.
     #[cfg(feature = "protocol-2025-11-25")]
@@ -1722,7 +1738,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Set the recovery timeout for stuck tasks (in milliseconds).
+    /// Sets the recovery timeout for stuck tasks (in milliseconds).
     ///
     /// On server startup, tasks in non-terminal states older than this timeout
     /// will be marked as `Failed`. Default: 300,000 ms (5 minutes).
@@ -1732,14 +1748,14 @@ impl McpServerBuilder {
         self
     }
 
-    /// Set HTTP bind address (requires "http" feature)
+    /// Sets HTTP bind address (requires "http" feature).
     #[cfg(feature = "http")]
     pub fn bind_address(mut self, addr: SocketAddr) -> Self {
         self.bind_address = addr;
         self
     }
 
-    /// Serve on a socket the caller has already bound (ADR-034), instead of
+    /// Serves on a socket the caller has already bound, instead of
     /// binding `bind_address`. Sets `bind_address` to its local address. To
     /// start on a free port, bind `127.0.0.1:0` and pass that listener here;
     /// the port is never released, so nothing else can take it.
@@ -1753,28 +1769,28 @@ impl McpServerBuilder {
         self
     }
 
-    /// Set MCP endpoint path (requires "http" feature)
+    /// Sets MCP endpoint path (requires "http" feature).
     #[cfg(feature = "http")]
     pub fn mcp_path(mut self, path: impl Into<String>) -> Self {
         self.mcp_path = path.into();
         self
     }
 
-    /// Enable/disable CORS (requires "http" feature)
+    /// Enables or disables CORS (requires "http" feature).
     #[cfg(feature = "http")]
     pub fn cors(mut self, enable: bool) -> Self {
         self.enable_cors = enable;
         self
     }
 
-    /// Enable/disable SSE (requires "sse" feature)
+    /// Enables or disables SSE (requires "sse" feature).
     #[cfg(feature = "http")]
     pub fn sse(mut self, enable: bool) -> Self {
         self.enable_sse = enable;
         self
     }
 
-    /// Allow or disallow ping requests without Mcp-Session-Id header (requires "http" feature)
+    /// Allows or disallows ping requests without Mcp-Session-Id header (requires "http" feature).
     ///
     /// Default: `true` (sessionless pings allowed per MCP spec).
     /// Set to `false` for hardened deployments requiring session for all methods.
@@ -1784,7 +1800,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Set the Origin-header validation policy (DNS-rebinding protection;
+    /// Sets the Origin-header validation policy (DNS-rebinding protection;
     /// requires "http" feature).
     ///
     /// Default: `OriginPolicy::SameOriginOrLoopback` — requests with a
@@ -1795,7 +1811,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Auto-generate security configuration based on registered resources
+    /// Auto-generates security configuration based on registered resources.
     fn build_resource_security(&self) -> crate::security::SecurityMiddleware {
         use crate::security::{AccessLevel, ResourceAccessControl, SecurityMiddleware};
         use regex::Regex;
@@ -1817,20 +1833,17 @@ impl McpServerBuilder {
             }
         }
 
-        // Deliberately NOT deriving an allowed-MIME-type list from URI file
-        // extensions. That is what this did until 2026-08-15, and it made the
-        // server reject its own output: `resources/read` validates the mimeType
-        // the SERVER declared at registration, so a resource registered as
-        // `test://static-binary` + `image/png` was refused with -32602 because
-        // no *other* resource's URI happened to end in `.png`. Whether a
-        // resource could be read depended on unrelated URIs' cosmetics, and the
-        // derived list was strictly narrower than ResourceAccessControl's own
-        // default (which does include image/png).
+        // The allowed-MIME-type list is deliberately not derived from URI file
+        // extensions: `resources/read` validates the mimeType the SERVER
+        // declared at registration, so a derived list would refuse (-32602) a
+        // resource registered as `test://static-binary` + `image/png` unless
+        // some *other* resource's URI happened to end in `.png`, making
+        // readability depend on unrelated URIs.
         //
         // There is no security value in validating a MIME type we authored:
         // anyone who can control the declaration also controls the content. The
         // checks that DO carry value — URI allow/block patterns, traversal
-        // blocking, size limits — are unchanged below.
+        // blocking, size limits — are applied below.
         let allowed_mime_types: Option<Vec<String>> = None;
 
         // Convert pattern strings to Regex objects
@@ -1857,7 +1870,7 @@ impl McpServerBuilder {
         })
     }
 
-    /// Convert URI to base regex pattern that allows files in the same directory
+    /// Converts URI to base regex pattern that allows files in the same directory.
     fn uri_to_base_pattern(uri: &str) -> Option<String> {
         if let Some(last_slash) = uri.rfind('/') {
             let base_path = &uri[..last_slash];
@@ -1867,7 +1880,7 @@ impl McpServerBuilder {
         }
     }
 
-    /// Convert URI template to regex pattern
+    /// Converts URI template to regex pattern.
     fn template_to_regex_pattern(template: &str) -> Option<String> {
         use regex::Regex;
 
@@ -1890,7 +1903,7 @@ impl McpServerBuilder {
             } else {
                 // One raw segment of unreserved characters or percent-encoded
                 // octets (RFC 6570: `id%23x`, `a%2Fb`). Decoded dot segments
-                // are refused at extraction (ADR-007).
+                // are refused at extraction.
                 result.push_str("(?:[a-zA-Z0-9_.~-]|%[0-9A-Fa-f]{2})+");
             }
 
@@ -1903,7 +1916,16 @@ impl McpServerBuilder {
         Some(format!("^{}$", result))
     }
 
-    /// Build the MCP server
+    /// Builds the MCP server.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::ConfigurationError` when the server name or version is
+    /// empty, when registration collected validation errors (for example a
+    /// malformed resource URI), when a tool declares `taskSupport=required`
+    /// and no task runtime is configured (2025-11-25 lane), when a tool's
+    /// `inputSchema` is invalid (2026-07-28 lane), or when the Server Card
+    /// contradicts the server's own `server/discover` data.
     pub fn build(mut self) -> Result<McpServer> {
         // Validate configuration
         if self.name.is_empty() {
@@ -2239,10 +2261,7 @@ impl McpServerBuilder {
                     ))),
                 );
 
-                // The retention sweep only exists if it was asked for. Before
-                // this, `TaskStore::sweep` was implemented by every backend
-                // and called by nothing — the capability was inert, which is
-                // indistinguishable from absent to an operator.
+                // The retention sweep runs only when configured.
                 if let Some((policy, interval)) = self.ext_task_retention.take() {
                     // ONE configuration point: this also tells a backend that
                     // can expire items itself (DynamoDB's `ttlEpoch`) what the
@@ -2439,20 +2458,21 @@ mod tests {
         assert!(builder.tools.is_empty());
         #[cfg(feature = "protocol-2025-11-25")]
         {
-            assert_eq!(builder.handlers.len(), 22); // spec + legacy compat
+            assert_eq!(builder.handlers.len(), 22); // spec names + camelCase aliases
             assert!(builder.handlers.contains_key("ping"));
             assert!(builder.handlers.contains_key("notifications/message"));
             assert!(builder.handlers.contains_key("notifications/progress"));
         }
         #[cfg(feature = "protocol-2026-07-28")]
         {
-            // The stateless core drops ping/initialize, the task methods,
-            // and the inbound roots surface (roots/list + its notifications
-            // — roots is requested via MRTR on 2026, never hosted). It also
-            // drops `notifications/message` and `notifications/progress`:
-            // the 2026-07-28 `ClientNotification` union has no
-            // `ProgressNotification` member, and `notifications/message` was
-            // never a member on any pin — 12, not 14.
+            // The stateless core has no ping, logging/setLevel, sampling or
+            // elicitation handler, and no inbound roots surface (roots/list +
+            // its notifications — roots is requested via MRTR on 2026, never
+            // hosted). It also omits `notifications/message` and
+            // `notifications/progress`: the 2026-07-28 `ClientNotification`
+            // union has no `ProgressNotification` member, and
+            // `notifications/message` was never a member on any pin — 13
+            // handlers, not 22.
             assert_eq!(builder.handlers.len(), 13);
             assert!(!builder.handlers.contains_key("ping"));
             assert!(!builder.handlers.contains_key("roots/list"));
@@ -3076,7 +3096,7 @@ mod tests {
         );
     }
 
-    /// ADR-023 capability truthfulness: Static mode advertises listChanged=false
+    /// Capability truthfulness: Static mode advertises listChanged=false
     /// because the server cannot push notifications — clients must re-initialize.
     #[test]
     fn test_fingerprint_only_capability_list_changed_false() {
@@ -3089,7 +3109,7 @@ mod tests {
         assert_eq!(tools_cap.list_changed, Some(false));
     }
 
-    /// ADR-023 capability truthfulness: Dynamic mode advertises listChanged=true
+    /// Capability truthfulness: Dynamic mode advertises listChanged=true
     /// because the ToolRegistry can push notifications/tools/list_changed via SSE.
     #[cfg(feature = "dynamic-tools")]
     #[test]

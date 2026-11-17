@@ -1,7 +1,7 @@
 //! Declarative Macro Implementations
 //!
-//! This module contains the implementation of declarative macros for creating
-//! MCP tools and resources. These provide a more concise syntax compared to
+//! Implements the declarative macros (`tool!`, `resource!`, `prompt!`, `completion!`, `elicitation!`,
+//! `logging!`, `notification!`, `roots!`, `sampling!`) and `schema_for!`. They provide a more concise syntax than
 //! derive macros or manual trait implementations.
 
 pub mod completion;

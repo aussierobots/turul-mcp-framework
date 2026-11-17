@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// A prompt descriptor (matches TypeScript Prompt interface exactly)
+/// A prompt or prompt template that the server offers (`Prompt` in the schema).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Prompt {
@@ -32,6 +32,7 @@ pub struct Prompt {
 }
 
 impl Prompt {
+    /// Creates a prompt with the given `name` and no optional fields.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -43,43 +44,50 @@ impl Prompt {
         }
     }
 
+    /// Sets the human-readable display name.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Sets the description of what the prompt provides.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the arguments the prompt accepts.
     pub fn with_arguments(mut self, arguments: Vec<PromptArgument>) -> Self {
         self.arguments = Some(arguments);
         self
     }
 
+    /// Sets the icons clients may display for the prompt.
     pub fn with_icons(mut self, icons: Vec<crate::icons::Icon>) -> Self {
         self.icons = Some(icons);
         self
     }
 
+    /// Sets the `_meta` map.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 }
 
-/// The sender or recipient of messages and data in a conversation (matches MCP spec)
+/// The sender or recipient of messages and data in a conversation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     #[serde(rename = "user")]
+    /// A message authored by the user.
     User,
     #[serde(rename = "assistant")]
+    /// A message authored by the assistant.
     Assistant,
 }
 
-/// Argument definition for prompts (extends BaseMetadata per MCP spec)
+/// Argument definition for prompts (extends `BaseMetadata` in the schema).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptArgument {
@@ -97,6 +105,7 @@ pub struct PromptArgument {
 }
 
 impl PromptArgument {
+    /// Creates an argument with the given `name` and no optional fields.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -106,28 +115,32 @@ impl PromptArgument {
         }
     }
 
+    /// Sets the human-readable display name.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Sets the description of the argument.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Marks the argument as required.
     pub fn required(mut self) -> Self {
         self.required = Some(true);
         self
     }
 
+    /// Marks the argument as optional.
     pub fn optional(mut self) -> Self {
         self.required = Some(false);
         self
     }
 }
 
-/// Complete prompts/list request — `ListPromptsRequest extends PaginatedRequest
+/// Complete `prompts/list` request — `ListPromptsRequest extends PaginatedRequest
 /// { method: "prompts/list" }`.
 ///
 /// `params` is the shared [`crate::json_rpc::PaginatedRequestParams`].
@@ -141,8 +154,8 @@ pub struct ListPromptsRequest {
 }
 
 impl ListPromptsRequest {
-    /// Construct with the required `_meta` (per-request capability negotiation
-    /// is mandatory in 2026-07-28 stateless core).
+    /// Creates a request with the required `_meta` (per-request capability
+    /// negotiation is mandatory in 2026-07-28).
     pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "prompts/list".to_string(),
@@ -150,24 +163,26 @@ impl ListPromptsRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Replaces the params with a fully-constructed params struct.
     pub fn with_params(mut self, params: crate::json_rpc::PaginatedRequestParams) -> Self {
         self.params = params;
         self
     }
 
+    /// Sets the pagination cursor returned by a previous `prompts/list` result.
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.params = self.params.with_cursor(cursor);
         self
     }
 
+    /// Replaces the request `_meta`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.params = self.params.with_meta(meta);
         self
     }
 }
 
-/// Result for prompts/list (per MCP spec)
+/// Result for `prompts/list`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListPromptsResult {
@@ -198,7 +213,7 @@ pub struct ListPromptsResult {
 }
 
 impl ListPromptsResult {
-    /// Construct with required CacheableResult defaults (`ttl_ms=0`, `cache_scope=Public`).
+    /// Creates a result with `CacheableResult` defaults (`ttl_ms = 0`, `cache_scope = Public`).
     pub fn new(prompts: Vec<Prompt>) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -210,27 +225,30 @@ impl ListPromptsResult {
         }
     }
 
-    /// Attach cache hints (CacheableResult mixin per schema).
+    /// Sets the cache hints from the `CacheableResult` mixin.
     pub fn with_cache(mut self, cache: crate::caching::CacheableResult) -> Self {
         self.ttl_ms = cache.ttl_ms;
         self.cache_scope = cache.cache_scope;
         self
     }
 
+    /// Sets the cursor clients pass to fetch the next page.
     pub fn with_next_cursor(mut self, cursor: Cursor) -> Self {
         self.next_cursor = Some(cursor);
         self
     }
 
+    /// Sets the result `_meta`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
     }
 }
 
-/// Parameters for prompts/get request — `GetPromptRequestParams extends
-/// InputResponseRequestParams`. Carries the SEP-2322 multi-round-trip mixin
-/// (`inputResponses?`, `requestState?`).
+/// Parameters for the `prompts/get` request — `GetPromptRequestParams extends
+/// InputResponseRequestParams`.
+///
+/// Carries the SEP-2322 multi-round-trip mixin (`inputResponses?`, `requestState?`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPromptRequestParams {
@@ -251,13 +269,13 @@ pub struct GetPromptRequestParams {
 
     /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
     /// (`GetPromptRequestParams extends InputResponseRequestParams extends RequestParams`,
-    /// and `RequestParams._meta` is required in 2026-07-28 stateless core).
+    /// and `RequestParams._meta` is required in 2026-07-28).
     #[serde(rename = "_meta")]
     pub meta: crate::meta::RequestMetaObject,
 }
 
 impl GetPromptRequestParams {
-    /// Construct with the required `_meta` and prompt `name`.
+    /// Creates params with the required `_meta` and prompt `name`.
     pub fn new(name: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             name: name.into(),
@@ -268,17 +286,19 @@ impl GetPromptRequestParams {
         }
     }
 
+    /// Sets the argument values, keyed by argument name.
     pub fn with_arguments(mut self, arguments: HashMap<String, String>) -> Self {
         self.arguments = Some(arguments);
         self
     }
 
+    /// Replaces the request `_meta`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.meta = meta;
         self
     }
 
-    /// Attach prior `InputRequiredResult` responses + verbatim state echo.
+    /// Sets the prior `InputRequiredResult` responses and the verbatim state echo.
     pub fn with_input_responses(
         mut self,
         responses: crate::input_required::InputResponses,
@@ -290,7 +310,7 @@ impl GetPromptRequestParams {
     }
 }
 
-/// Complete prompts/get request (matches TypeScript GetPromptRequest interface)
+/// Complete `prompts/get` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetPromptRequest {
@@ -301,7 +321,7 @@ pub struct GetPromptRequest {
 }
 
 impl GetPromptRequest {
-    /// Construct with the required `_meta` and prompt `name`.
+    /// Creates a request with the required `_meta` and prompt `name`.
     pub fn new(name: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "prompts/get".to_string(),
@@ -309,37 +329,40 @@ impl GetPromptRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Replaces the params with a fully-constructed params struct.
     pub fn with_params(mut self, params: GetPromptRequestParams) -> Self {
         self.params = params;
         self
     }
 
+    /// Sets the argument values, keyed by argument name.
     pub fn with_arguments(mut self, arguments: HashMap<String, String>) -> Self {
         self.params = self.params.with_arguments(arguments);
         self
     }
 
+    /// Replaces the request `_meta`.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.params = self.params.with_meta(meta);
         self
     }
 }
 
-/// Message content for prompts (matches MCP PromptMessage interface exactly)
+/// A message returned by a prompt: a role and a content block.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptMessage {
     /// The role of the message sender
     pub role: Role,
-    /// The content of the message (ContentBlock from MCP spec)
+    /// The content of the message
     pub content: ContentBlock,
 }
 
-/// Content block within a prompt message - now imports from content module
+/// Content types used in prompt messages, re-exported from [`crate::content`].
 pub use crate::content::{ContentBlock, ResourceContents, ResourceReference};
 
 impl PromptMessage {
+    /// Creates a user-role message with a text content block.
     pub fn user_text(content: impl Into<String>) -> Self {
         Self {
             role: Role::User,
@@ -347,6 +370,7 @@ impl PromptMessage {
         }
     }
 
+    /// Creates an assistant-role message with a text content block.
     pub fn assistant_text(content: impl Into<String>) -> Self {
         Self {
             role: Role::Assistant,
@@ -354,6 +378,7 @@ impl PromptMessage {
         }
     }
 
+    /// Creates a user-role message with an image content block from base64 `data` and its `mime_type`.
     pub fn user_image(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
         Self {
             role: Role::User,
@@ -361,14 +386,16 @@ impl PromptMessage {
         }
     }
 
+    /// Creates a user-role text message; same as [`Self::user_text`].
     pub fn text(content: impl Into<String>) -> Self {
         // Backward compatibility - defaults to user
         Self::user_text(content)
     }
 }
 
-/// Result for prompts/get — extends `Result`.
-/// Note `GetPromptResultResponse.result` is a `GetPromptResult | InputRequiredResult`
+/// Result for `prompts/get` — extends `Result`.
+///
+/// `GetPromptResultResponse.result` is a `GetPromptResult | InputRequiredResult`
 /// union; callers needing the InputRequired variant should return
 /// [`crate::input_required::InputRequiredResult`] directly.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -394,6 +421,7 @@ pub struct GetPromptResult {
 }
 
 impl GetPromptResult {
+    /// Creates a result carrying the given prompt messages.
     pub fn new(messages: Vec<PromptMessage>) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -403,11 +431,13 @@ impl GetPromptResult {
         }
     }
 
+    /// Sets the description of the prompt.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the result `_meta`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self

@@ -48,12 +48,12 @@ pub struct PostgresServerStateStorage {
 }
 
 impl PostgresServerStateStorage {
-    /// Create new PostgreSQL server state storage with default configuration.
+    /// Creates new PostgreSQL server state storage with default configuration.
     pub async fn new() -> Result<Self, ServerStateError> {
         Self::with_config(PostgresServerStateConfig::default()).await
     }
 
-    /// Create PostgreSQL server state storage with custom configuration.
+    /// Creates PostgreSQL server state storage with custom configuration.
     pub async fn with_config(config: PostgresServerStateConfig) -> Result<Self, ServerStateError> {
         info!(
             "Initializing PostgreSQL server state storage at {}",
@@ -85,14 +85,14 @@ impl PostgresServerStateStorage {
         Ok(storage)
     }
 
-    /// Create PostgreSQL server state storage from an existing connection pool.
+    /// Creates PostgreSQL server state storage from an existing connection pool.
     ///
     /// Useful when sharing a pool with other storage backends.
     pub async fn from_pool(pool: PgPool) -> Result<Self, ServerStateError> {
         Ok(Self { pool })
     }
 
-    /// Run database schema migrations.
+    /// Runs database schema migrations.
     async fn migrate(&self) -> Result<(), ServerStateError> {
         debug!("Running PostgreSQL server state migrations");
 
@@ -141,7 +141,7 @@ impl PostgresServerStateStorage {
     }
 }
 
-/// Mask sensitive information in database URL for logging.
+/// Masks sensitive information in database URL for logging.
 fn mask_db_url(url: &str) -> String {
     if let Some(at_pos) = url.find('@') {
         let (prefix, suffix) = url.split_at(at_pos);

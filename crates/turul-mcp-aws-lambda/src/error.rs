@@ -1,11 +1,11 @@
-//! Error handling for Lambda MCP integration
+//! Error types for Lambda MCP integration.
 
 use thiserror::Error;
 
-/// Result type for Lambda MCP operations
+/// Result type for Lambda MCP operations.
 pub type Result<T> = std::result::Result<T, LambdaError>;
 
-/// Errors that can occur during Lambda MCP server operations
+/// Errors that can occur during Lambda MCP server operations.
 #[derive(Error, Debug)]
 pub enum LambdaError {
     /// Type conversion error between lambda_http and hyper types

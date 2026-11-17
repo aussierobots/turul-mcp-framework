@@ -11,9 +11,13 @@
 use crate::error::TaskStorageError;
 use turul_mcp_protocol::TaskStatus;
 
-/// Validate a task status transition per MCP 2025-11-25 lifecycle rules.
+/// Validates a task status transition per MCP 2025-11-25 lifecycle rules.
 ///
-/// Returns `Ok(())` if the transition is valid, or `Err(TaskStorageError)` if not.
+/// # Errors
+///
+/// Returns [`TaskStorageError::InvalidTransition`] when `from` and `to` are the same
+/// non-terminal status (`Working` to `Working`, `InputRequired` to `InputRequired`), and
+/// [`TaskStorageError::TerminalState`] when `from` is `Completed`, `Failed` or `Cancelled`.
 pub fn validate_transition(from: TaskStatus, to: TaskStatus) -> Result<(), TaskStorageError> {
     match from {
         TaskStatus::Working => match to {
@@ -42,7 +46,7 @@ pub fn validate_transition(from: TaskStatus, to: TaskStatus) -> Result<(), TaskS
     }
 }
 
-/// Returns `true` if the status is a terminal state (no further transitions allowed).
+/// Returns `true` if the status is terminal (`Completed`, `Failed` or `Cancelled`), allowing no further transitions.
 pub fn is_terminal(status: TaskStatus) -> bool {
     matches!(
         status,

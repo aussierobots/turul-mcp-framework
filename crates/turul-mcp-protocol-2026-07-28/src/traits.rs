@@ -25,7 +25,7 @@ use crate::{
     sampling::{ModelPreferences, Role},
     tools::{Tool, ToolResult},
 };
-// Imports below reference DRAFT-2026 SEP-2577-deprecated types used inside
+// Imports below reference SEP-2577-deprecated types used inside
 // trait abstractions retained for the 12-month migration window.
 #[allow(deprecated)]
 use crate::{
@@ -34,42 +34,54 @@ use crate::{
 };
 
 // JSON-RPC version constant
+/// The JSON-RPC protocol version string, `"2.0"`, carried on every request and response envelope.
 pub const JSONRPC_VERSION: &str = "2.0";
 
 // ====================
 // === Base Traits ====
 // ====================
 
+/// Marker for a typed `params` object of a request or notification.
 pub trait Params {}
 
 /// Required request id — present on requests and successful responses.
 /// Schema: `RequestId = string | number`; we expose as borrowed `Value` for
 /// permissive accept (the typed narrowing is a separate follow-up).
 pub trait HasRequestId {
+    /// Returns the request id.
     fn id(&self) -> &Value;
 }
 
 /// Optional request id — used by `JSONRPCErrorResponse` where the server may
 /// omit `id` if it couldn't parse the original request's id.
 pub trait HasOptionalRequestId {
+    /// Returns the request id, or `None` when the sender could not determine it.
     fn id(&self) -> Option<&Value>;
 }
 
+/// Exposes the `result` payload of a `JSONRPCResultResponse`.
 pub trait HasResult {
+    /// Returns the result payload.
     fn result(&self) -> &dyn RpcResult;
 }
 
+/// Exposes the `jsonrpc` version member of a JSON-RPC envelope.
 pub trait HasJsonRpcVersion {
+    /// Returns the JSON-RPC version, `"2.0"` by default.
     fn version(&self) -> &str {
         JSONRPC_VERSION
     }
 }
 
+/// Exposes the `method` name of a request or notification.
 pub trait HasMethod {
+    /// Returns the method name.
     fn method(&self) -> &str;
 }
 
+/// Exposes the optional `params` of a request or notification.
 pub trait HasParams {
+    /// Returns the params, or `None` when the message carries none.
     fn params(&self) -> Option<&dyn Params>;
 }
 
@@ -77,6 +89,7 @@ pub trait HasParams {
 /// adds `io.modelcontextprotocol/serverInfo` on top of `MetaObject`. Borrowed,
 /// typed — no JSON round-trip.
 pub trait HasMeta {
+    /// Returns the result `_meta`, or `None` when absent.
     fn meta(&self) -> Option<&crate::meta::ResultMetaObject>;
 }
 
@@ -85,6 +98,7 @@ pub trait HasMeta {
 /// with `serverInfo`, notifications with `subscriptionId`. One trait returning
 /// one type cannot model both.
 pub trait HasNotificationMeta {
+    /// Returns the notification params `_meta`, or `None` when absent.
     fn meta(&self) -> Option<&crate::meta::MetaObject>;
 }
 
@@ -93,6 +107,7 @@ pub trait HasNotificationMeta {
 /// carry this; per the schema doc-comment, absent values default to `Complete`
 /// for backward compatibility with pre-2026-07-28 servers.
 pub trait HasResultType {
+    /// Returns the result type discriminator.
     fn result_type(&self) -> crate::result_type::ResultType;
 }
 
@@ -101,6 +116,7 @@ pub trait HasResultType {
 /// `serde_json::to_value`. Retained for the rare framework site that needs an
 /// untyped view.
 pub trait HasData {
+    /// Returns the result flattened into a JSON-object map.
     fn data(&self) -> HashMap<String, Value>;
 }
 
@@ -108,6 +124,7 @@ pub trait HasData {
 /// `Error` interface maps to [`turul_rpc::error::JsonRpcErrorObject`]
 /// (`{ code, message, data? }`).
 pub trait HasErrorObject {
+    /// Returns the JSON-RPC error object.
     fn error(&self) -> &turul_rpc::error::JsonRpcErrorObject;
 }
 
@@ -115,20 +132,29 @@ pub trait HasErrorObject {
 // === Derived Interfaces ===
 // ==========================
 
+/// A JSON-RPC request body: a method name and optional params, without the `jsonrpc` and `id` envelope members.
 pub trait RpcRequest: HasMethod + HasParams {}
+/// A JSON-RPC notification body: a method name and optional params, without the `jsonrpc` envelope member.
 pub trait RpcNotification: HasMethod + HasParams {}
 /// Schema's `Result` interface: `{ _meta?: ResultMetaObject, resultType: ResultType,
 /// [key: string]: unknown }`. Bound to [`HasMeta`] + [`HasResultType`] —
 /// arbitrary `[key: string]: unknown` extra keys are domain-specific and
 /// expressed on the concrete struct itself.
 pub trait RpcResult: HasMeta + HasResultType {}
+/// A complete JSON-RPC request: version, request id, method and params.
 pub trait JsonRpcRequestTrait: HasJsonRpcVersion + HasRequestId + RpcRequest {}
+/// A complete JSON-RPC notification: version, method and params.
 pub trait JsonRpcNotificationTrait: HasJsonRpcVersion + RpcNotification {}
 
 /// `JSONRPCResultResponse` per schema — successful response carrying `result`.
 pub trait JsonRpcResultResponseTrait:
     HasJsonRpcVersion + HasRequestId + HasResult + Serialize
 {
+    /// Serialises the response to JSON bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if serialisation fails.
     fn to_bytes(&self) -> Vec<u8> {
         serde_json::to_vec(self).unwrap()
     }
@@ -138,6 +164,11 @@ pub trait JsonRpcResultResponseTrait:
 pub trait JsonRpcErrorResponseTrait:
     HasJsonRpcVersion + HasOptionalRequestId + HasErrorObject + Serialize
 {
+    /// Serialises the response to JSON bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if serialisation fails.
     fn to_bytes(&self) -> Vec<u8> {
         serde_json::to_vec(self).unwrap()
     }
@@ -147,15 +178,21 @@ pub trait JsonRpcErrorResponseTrait:
 // === Param Specialisations ===
 // ==========================
 
+/// Exposes a free-form `data` map carried in a params object.
 pub trait HasDataParam: Params {
+    /// Returns the data map.
     fn data(&self) -> &HashMap<String, Value>;
 }
 
+/// Exposes the optional `_meta` map carried in a params object.
 pub trait HasMetaParam: Params {
+    /// Returns the `_meta` map, or `None` when absent.
     fn meta(&self) -> Option<&HashMap<String, Value>>;
 }
 
+/// Exposes the optional `progressToken` a requester attached to ask for progress notifications.
 pub trait HasProgressTokenParam: Params {
+    /// Returns the progress token, or `None` when the requester did not ask for progress.
     fn progress_token(&self) -> Option<&ProgressToken>;
 }
 
@@ -183,15 +220,19 @@ pub trait HasProgressTokenParam: Params {
 
 // ---------------------- notifications/cancelled ------------------------
 
+/// Field getters for the `params` of `notifications/cancelled`.
 pub trait HasCancelledParams: Params {
     /// Schema: `requestId` — required. Must correspond to the ID of a
     /// request the client previously issued (the only server-sent form is
     /// closing a `subscriptions/listen` stream on stdio).
     fn request_id(&self) -> &turul_rpc::RequestId;
+    /// Returns the optional human-readable reason for the cancellation.
     fn reason(&self) -> Option<&str>;
 }
 
+/// Identifies a `notifications/cancelled` notification by method.
 pub trait CancelledNotificationTrait: RpcNotification {
+    /// Returns the wire method name, `"notifications/cancelled"`.
     fn method_string(&self) -> &str {
         "notifications/cancelled"
     }
@@ -199,15 +240,21 @@ pub trait CancelledNotificationTrait: RpcNotification {
 
 // ---------------------- notifications/progress ------------------------
 
+/// Field getters for the `params` of `notifications/progress`.
 pub trait HasProgressParams: Params {
+    /// Returns the token identifying the operation this progress refers to.
     fn progress_token(&self) -> &ProgressToken;
     /// `progress` is `f64` per spec — fractional progress in `[0.0, 1.0]`.
     fn progress(&self) -> f64;
+    /// Returns the total amount of work when known, in the same unit as `progress`, or `None`.
     fn total(&self) -> Option<f64>;
+    /// Returns an optional human-readable description of the current progress.
     fn message(&self) -> Option<&str>;
 }
 
+/// Identifies a `notifications/progress` notification by method.
 pub trait ProgressNotificationTrait: RpcNotification {
+    /// Returns the wire method name, `"notifications/progress"`.
     fn method_string(&self) -> &str {
         "notifications/progress"
     }
@@ -215,7 +262,9 @@ pub trait ProgressNotificationTrait: RpcNotification {
 
 // ---------------------- notifications/resources/list_changed ------------------------
 
+/// Identifies a `notifications/resources/list_changed` notification by method.
 pub trait ResourcesListChangedNotificationTrait: RpcNotification {
+    /// Returns the wire method name, `"notifications/resources/list_changed"`.
     fn method_string(&self) -> &str {
         "notifications/resources/list_changed"
     }
@@ -223,11 +272,15 @@ pub trait ResourcesListChangedNotificationTrait: RpcNotification {
 
 // ---------------------- notifications/resources/updated ------------------------
 
+/// Field getters for the `params` of `notifications/resources/updated`.
 pub trait HasResourceUpdatedParams: Params {
+    /// Returns the URI of the resource that changed.
     fn uri(&self) -> &str;
 }
 
+/// Identifies a `notifications/resources/updated` notification by method.
 pub trait ResourceUpdatedNotificationTrait: RpcNotification {
+    /// Returns the wire method name, `"notifications/resources/updated"`.
     fn method_string(&self) -> &str {
         "notifications/resources/updated"
     }
@@ -235,7 +288,9 @@ pub trait ResourceUpdatedNotificationTrait: RpcNotification {
 
 // ---------------------- notifications/prompts/list_changed ------------------------
 
+/// Identifies a `notifications/prompts/list_changed` notification by method.
 pub trait PromptListChangedNotificationTrait: RpcNotification {
+    /// Returns the wire method name, `"notifications/prompts/list_changed"`.
     fn method_string(&self) -> &str {
         "notifications/prompts/list_changed"
     }
@@ -243,7 +298,9 @@ pub trait PromptListChangedNotificationTrait: RpcNotification {
 
 // ---------------------- notifications/tools/list_changed ------------------------
 
+/// Identifies a `notifications/tools/list_changed` notification by method.
 pub trait ToolListChangedNotificationTrait: RpcNotification {
+    /// Returns the wire method name, `"notifications/tools/list_changed"`.
     fn method_string(&self) -> &str {
         "notifications/tools/list_changed"
     }
@@ -258,7 +315,9 @@ pub trait ToolListChangedNotificationTrait: RpcNotification {
             Replacement: stderr (stdio) or OpenTelemetry, plus per-request log-level opt-in. \
             Earliest removal: first release on/after 2027-07-28."
 )]
+/// Identifies a `notifications/message` notification by method.
 pub trait LoggingMessageNotificationTrait: RpcNotification {
+    /// Returns the wire method name, `"notifications/message"`.
     fn method_string(&self) -> &str {
         "notifications/message"
     }
@@ -266,100 +325,143 @@ pub trait LoggingMessageNotificationTrait: RpcNotification {
 
 // ---------------------- resources/list ------------------------
 
+/// Field getters for the `params` of `resources/list`.
 pub trait HasListResourcesParams: Params {
+    /// Returns the pagination cursor, or `None` to request the first page.
     fn cursor(&self) -> Option<&Cursor>;
 }
 
+/// A `resources/list` request.
 pub trait ListResourcesRequest: JsonRpcRequestTrait + HasListResourcesParams {
+    /// Returns the wire method name, `"resources/list"`.
     fn method(&self) -> &str {
         "resources/list"
     }
 }
 
+/// The result of `resources/list`: one page of resources.
 pub trait ListResourcesResult: RpcResult {
+    /// Returns the resources on this page.
     fn resources(&self) -> &Vec<Resource>;
+    /// Returns the cursor for the next page, or `None` when there are no more results.
     fn next_cursor(&self) -> Option<&Cursor>;
 }
 
+/// Field getters for the `params` of `resources/read`.
 pub trait HasReadResourceRequestParams: Params {
+    /// Returns the URI of the resource to read.
     fn uri(&self) -> &String;
 }
 
+/// A `resources/read` request.
 pub trait ReadResourceRequest: JsonRpcRequestTrait + HasReadResourceRequestParams {
+    /// Returns the wire method name, `"resources/read"`.
     fn method(&self) -> &str {
         "resources/read"
     }
 }
 
+/// The result of `resources/read`: the contents of the requested resource.
 pub trait ReadResourceResult: RpcResult {
+    /// Returns the contents of the resource.
     fn contents(&self) -> &Vec<crate::resources::ResourceContent>;
 }
 
 // ---------------------- prompts/list & get ------------------------
 
+/// Field getters for the `params` of `prompts/list`.
 pub trait HasListPromptsParams: Params {
+    /// Returns the pagination cursor, or `None` to request the first page.
     fn cursor(&self) -> Option<&Cursor>;
 }
 
+/// A `prompts/list` request.
 pub trait ListPromptsRequest: JsonRpcRequestTrait + HasListPromptsParams {
+    /// Returns the wire method name, `"prompts/list"`.
     fn method(&self) -> &str {
         "prompts/list"
     }
 }
 
+/// The result of `prompts/list`: one page of prompts.
 pub trait ListPromptsResult: RpcResult {
+    /// Returns the prompts on this page.
     fn prompts(&self) -> &Vec<Prompt>;
+    /// Returns the cursor for the next page, or `None` when there are no more results.
     fn next_cursor(&self) -> Option<&Cursor>;
 }
 
+/// Field getters for the `params` of `prompts/get`.
 pub trait HasGetPromptRequestParams: Params {
+    /// Returns the name of the prompt to render.
     fn name(&self) -> &String;
+    /// Returns the string-valued arguments used to render the prompt, or `None`.
     fn arguments(&self) -> Option<&HashMap<String, String>>; // MCP spec: { [key: string]: string }
 }
 
+/// A `prompts/get` request.
 pub trait GetPromptRequest: JsonRpcRequestTrait + HasGetPromptRequestParams {
+    /// Returns the wire method name, `"prompts/get"`.
     fn method(&self) -> &str {
         "prompts/get"
     }
 }
 
+/// The result of `prompts/get`: the rendered prompt.
 pub trait GetPromptResult: RpcResult {
+    /// Returns an optional description of the prompt.
     fn description(&self) -> Option<&String>;
+    /// Returns the messages that make up the rendered prompt.
     fn messages(&self) -> &Vec<PromptMessage>;
 }
 
 // ---------------------- tools/list & call ------------------------
 
+/// Field getters for the `params` of `tools/list`.
 pub trait HasListToolsParams: Params {
+    /// Returns the pagination cursor, or `None` to request the first page.
     fn cursor(&self) -> Option<&Cursor>;
 }
 
+/// A `tools/list` request.
 pub trait ListToolsRequest: JsonRpcRequestTrait + HasListToolsParams {
+    /// Returns the wire method name, `"tools/list"`.
     fn method(&self) -> &str {
         "tools/list"
     }
 }
 
+/// The result of `tools/list`: one page of tools.
 pub trait ListToolsResult: RpcResult {
+    /// Returns the tools on this page.
     fn tools(&self) -> &Vec<Tool>;
+    /// Returns the cursor for the next page, or `None` when there are no more results.
     fn next_cursor(&self) -> Option<&Cursor>;
 }
 
+/// Field getters for the `params` of `tools/call`.
 pub trait HasCallToolRequestParams: Params {
+    /// Returns the name of the tool to call.
     fn name(&self) -> &String;
     /// Tool arguments map. Schema's `arguments?: { [key: string]: unknown }`.
     fn arguments(&self) -> Option<&HashMap<String, Value>>;
+    /// Returns the request `_meta` map, or `None` when absent.
     fn meta(&self) -> Option<&HashMap<String, Value>>;
 }
 
+/// A `tools/call` request.
 pub trait CallToolRequest: JsonRpcRequestTrait + HasCallToolRequestParams {
+    /// Returns the wire method name, `"tools/call"`.
     fn method(&self) -> &str {
         "tools/call"
     }
 }
 
+/// The result of `tools/call`: the tool output.
 pub trait CallToolResult: RpcResult {
+    /// Returns the unstructured content blocks produced by the tool.
     fn content(&self) -> &Vec<ToolResult>;
+    /// Returns whether the tool call failed, or `None` when unset (treated as success).
     fn is_error(&self) -> Option<bool>;
     /// Structured content that matches the tool's `outputSchema`.
     fn structured_content(&self) -> Option<&Value>;
@@ -377,14 +479,23 @@ pub trait CallToolResult: RpcResult {
     note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface. \
             Earliest removal: first release on/after 2027-07-28."
 )]
+/// Field getters for the `params` of `sampling/createMessage`.
 pub trait HasCreateMessageRequestParams: Params {
+    /// Returns the conversation messages to sample from.
     fn messages(&self) -> &Vec<SamplingMessage>;
+    /// Returns the client model-selection preferences, or `None`.
     fn model_preferences(&self) -> Option<&ModelPreferences>;
+    /// Returns the requested system prompt, or `None`.
     fn system_prompt(&self) -> Option<&String>;
+    /// Returns which MCP server context to include with the request, or `None`.
     fn include_context(&self) -> Option<&String>;
+    /// Returns the sampling temperature, or `None`.
     fn temperature(&self) -> Option<&f64>;
+    /// Returns the maximum number of tokens to sample.
     fn max_tokens(&self) -> u32;
+    /// Returns the sequences that stop generation, or `None`.
     fn stop_sequences(&self) -> Option<&Vec<String>>;
+    /// Returns provider-specific metadata passed through to the model, or `None`.
     fn metadata(&self) -> Option<&HashMap<String, Value>>;
 }
 
@@ -394,7 +505,9 @@ pub trait HasCreateMessageRequestParams: Params {
     note = "Deprecated per SEP-2577 (2026-07-28) with the Sampling surface. \
             Earliest removal: first release on/after 2027-07-28."
 )]
+/// A `sampling/createMessage` request.
 pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestParams {
+    /// Returns the wire method name, `"sampling/createMessage"`.
     fn method(&self) -> &str {
         "sampling/createMessage"
     }
@@ -410,9 +523,13 @@ pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestPar
             Earliest removal: first release on/after 2027-07-28."
 )]
 pub trait CreateMessageResult: HasMeta {
+    /// Returns the role of the generated message.
     fn role(&self) -> &Role;
+    /// Returns the content of the generated message.
     fn content(&self) -> &SamplingMessageContent;
+    /// Returns the name of the model that generated the message.
     fn model(&self) -> &String;
+    /// Returns why sampling stopped, or `None` when unreported.
     fn stop_reason(&self) -> Option<&String>;
 }
 
@@ -438,6 +555,7 @@ pub trait CompleteRequestTrait: JsonRpcRequestTrait + HasCompleteRequestParams {
 
 /// Exposes the inner `completion` field of the response payload.
 pub trait HasCompletionResult: RpcResult {
+    /// Returns the `completion` object holding the suggested values.
     fn completion(&self) -> &Value;
 }
 
@@ -446,28 +564,38 @@ pub trait CompleteResult: RpcResult + HasCompletionResult {}
 
 // ---------------------- templates/list ------------------------
 
+/// Field getters for the `params` of `resources/templates/list`.
 pub trait HasListResourceTemplatesParams: Params {
+    /// Returns the pagination cursor, or `None` to request the first page.
     fn cursor(&self) -> Option<&Cursor>;
 }
 
+/// A `resources/templates/list` request.
 pub trait ListResourceTemplatesRequest:
     JsonRpcRequestTrait + HasListResourceTemplatesParams
 {
+    /// Returns the wire method name, `"resources/templates/list"`.
     fn method(&self) -> &str {
         "resources/templates/list"
     }
 }
 
+/// The result of `resources/templates/list`: one page of resource templates.
 pub trait ListResourceTemplatesResult: RpcResult {
+    /// Returns the resource templates on this page.
     fn resource_templates(&self) -> &Vec<crate::resources::ResourceTemplate>;
+    /// Returns the cursor for the next page, or `None` when there are no more results.
     fn next_cursor(&self) -> Option<&Cursor>;
 }
 
 // ---------------------- roots/list ------------------------
 
+/// Marker for the `params` of `roots/list`, which carries no fields of its own.
 pub trait HasListRootsParams: Params {}
 
+/// A `roots/list` request.
 pub trait ListRootsRequest: JsonRpcRequestTrait + HasListRootsParams {
+    /// Returns the wire method name, `"roots/list"`.
     fn method(&self) -> &str {
         "roots/list"
     }
@@ -477,16 +605,17 @@ pub trait ListRootsRequest: JsonRpcRequestTrait + HasListRootsParams {
 // no `_meta`, no `resultType`. The `RpcResult: HasMeta + HasResultType` bound doesn't
 // fit, so the trait is plain. **Deprecated** per SEP-2577 alongside the Roots
 // surface; retained during the migration window.
+/// The result of `roots/list`: the roots the client exposes.
 #[allow(deprecated)]
 pub trait ListRootsResult {
+    /// Returns the roots the client exposes.
     fn roots(&self) -> &Vec<Root>;
 }
 
 // ---------------------- logging ------------------------
 
-// `logging/setLevel` RPC was removed in 2026-07-28 — per-request log level
-// opt-in now rides on `RequestMetaObject.log_level`. The earlier
-// `HasSetLevelParams` / `SetLevelRequest` trait pair is gone.
+// The `logging/setLevel` RPC does not exist in 2026-07-28; per-request log
+// level opt-in rides on `RequestMetaObject.log_level`.
 
 // Field-getter traits implemented by `LoggingMessageParams` (the params for
 // `notifications/message`).
@@ -495,15 +624,19 @@ pub trait ListRootsResult {
     since = "0.4.0",
     note = "Deprecated per SEP-2577 (2026-07-28) along with the whole Logging surface."
 )]
+/// Exposes the severity `level` of a log message.
 pub trait HasLevelParam: Params {
+    /// Returns the severity level of the log message.
     #[allow(deprecated)]
     fn level(&self) -> &LogLevel;
 }
+/// Exposes the optional `logger` name that produced a log message.
 pub trait HasLoggerParam: Params {
+    /// Returns the logger name, or `None` when unnamed.
     fn logger(&self) -> Option<&String>;
 }
 
-// ---------------------- server/discover (DRAFT-2026) ------------------------
+// ---------------------- server/discover ------------------------
 
 // `*RequestTrait` traits below are bound on `RpcRequest` (which requires only
 // `HasMethod + HasParams`), NOT on `JsonRpcRequestTrait` (which would also
@@ -517,21 +650,25 @@ pub trait HasLoggerParam: Params {
 /// rides on `_meta: RequestMetaObject`. The trait gives consumers a uniform
 /// way to detect a discover request by method.
 pub trait DiscoverRequestTrait: RpcRequest {
+    /// Returns the wire method name, `"server/discover"`.
     fn method_string(&self) -> &str {
         "server/discover"
     }
 }
 
-// ---------------------- subscriptions/listen (DRAFT-2026) ------------------------
+// ---------------------- subscriptions/listen ------------------------
 
 /// Field-getter for `SubscriptionsListenRequestParams.notifications`
 /// (the `SubscriptionFilter` declaring which notification types the client
 /// opts in to on this stream).
 pub trait HasSubscriptionsListenParams: Params {
+    /// Returns the filter declaring which notification types the client opts in to on this stream.
     fn notifications(&self) -> &crate::subscriptions::SubscriptionFilter;
 }
 
+/// Identifies a `subscriptions/listen` request by method.
 pub trait SubscriptionsListenRequestTrait: RpcRequest {
+    /// Returns the wire method name, `"subscriptions/listen"`.
     fn method_string(&self) -> &str {
         "subscriptions/listen"
     }
@@ -557,12 +694,17 @@ pub trait HasInputRequiredResult: HasResultType {
 
 // ---------------------- elicitation ------------------------
 
+/// Field getters for the `params` of `elicitation/create`.
 pub trait HasElicitParams: Params {
+    /// Returns the message shown to the user explaining what is being requested.
     fn message(&self) -> &String;
+    /// Returns the JSON Schema describing the structure of the requested response.
     fn requested_schema(&self) -> &Value;
 }
 
+/// An `elicitation/create` request.
 pub trait ElicitRequest: JsonRpcRequestTrait + HasElicitParams {
+    /// Returns the wire method name, `"elicitation/create"`.
     fn method(&self) -> &str {
         "elicitation/create"
     }
@@ -570,8 +712,11 @@ pub trait ElicitRequest: JsonRpcRequestTrait + HasElicitParams {
 
 // `ElicitResult` is `{action, content?}` per the schema — bare, no `_meta`,
 // no `resultType`. The `RpcResult: HasMeta + HasResultType` bound doesn't fit.
+/// The result of `elicitation/create`: the user action and any submitted content.
 pub trait ElicitResult {
+    /// Returns the action the user took: `accept`, `decline` or `cancel`.
     fn action(&self) -> &Value;
+    /// Returns the submitted form data, or `None` unless the action is `accept`.
     fn content(&self) -> Option<&HashMap<String, Value>>;
 }
 
@@ -579,6 +724,7 @@ pub trait ElicitResult {
 
 /// Trait for extracting parameters from RequestParams using trait constraints
 pub trait ParamExtractor<T: Params> {
+    /// The error returned when extraction fails.
     type Error;
 
     /// Extract parameters from RequestParams using trait-based conversion
@@ -587,6 +733,7 @@ pub trait ParamExtractor<T: Params> {
 
 /// Trait for serde-based parameter extraction (simpler cases)
 pub trait SerdeParamExtractor<T: Params> {
+    /// The error returned when extraction fails.
     type Error;
 
     /// Extract parameters using serde deserialization
@@ -595,6 +742,7 @@ pub trait SerdeParamExtractor<T: Params> {
 
 /// Trait for field-by-field parameter extraction (complex cases)
 pub trait FieldParamExtractor<T: Params> {
+    /// The error returned when extraction fails.
     type Error;
 
     /// Extract parameters field by field with validation

@@ -2,15 +2,8 @@
 //!
 //! Each function takes `&dyn TaskStore` and asserts one invariant from the
 //! trait's documented contract. A backend is correct when it passes all of
-//! them; a backend that passes none of them is what this crate shipped
-//! before, because a per-backend test suite tests whatever that backend
+//! them; a per-backend test suite would instead test whatever that backend
 //! happens to do.
-//!
-//! Precedent, and the reason this module is *called* rather than merely
-//! written: `turul-mcp-task-storage` (the superseded 2025-11-25 store) has an
-//! equivalent `parity_tests.rs` of the same design, and nothing anywhere
-//! invokes it — its SQLite, Postgres and DynamoDB backends have never been
-//! executed by any test. Design was not the failure there; wiring was.
 //!
 //! Enabled by the `parity-harness` feature so implementors outside this
 //! workspace can hold their own backends to the same contract.
@@ -63,7 +56,7 @@ pub fn accept() -> Value {
     json!({ "action": "accept", "content": {} })
 }
 
-/// SEP-2663 line 302: a `CreateTaskResult` must not be returned until a
+/// SEP-2663: a `CreateTaskResult` must not be returned until a
 /// `tasks/get` would resolve — so `create` must be durable before it returns.
 pub async fn create_is_visible_immediately(store: &dyn TaskStore) {
     store.create(seed("t-create", None)).await.expect("create");
@@ -253,9 +246,8 @@ pub async fn input_round_completes_and_returns_request_state(store: &dyn TaskSto
 
 /// Partial fulfilment keeps the task parked AND drops the keys already
 /// answered, so a following `tasks/get` advertises only what is still
-/// outstanding. Leaving them in told the client to answer questions it had
-/// already answered, with no way to tell the difference (found by the
-/// conformance scenario `tasks-mrtr-input`).
+/// outstanding. Leaving them in would tell the client to answer questions it
+/// has already answered, with no way to tell the difference.
 pub async fn partial_delivery_drops_answered_keys(store: &dyn TaskStore) {
     store.create(seed("t-partial", None)).await.expect("create");
     let mut requests = one_request("first");
@@ -414,12 +406,11 @@ pub fn aged(
     state
 }
 
-/// Retention, which the in-memory store used to get for free by losing
-/// everything on restart. A durable table only grows, so every backend has to
+/// Retention. A durable table only grows, so every backend has to
 /// agree on exactly when a task is swept — hence these boundaries are pinned
 /// here rather than per backend.
 ///
-/// SEP-2663 makes all of this OPTIONAL (line 342: servers "MAY mark a task as
+/// SEP-2663 makes all of this OPTIONAL (servers "MAY mark a task as
 /// `failed` at any point after the TTL elapses, and subsequently delete it at
 /// any time"), so the contract is that the POLICY is obeyed, not that any
 /// particular sweeping happens.

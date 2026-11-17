@@ -1,12 +1,10 @@
-//! Session Storage Trait and Implementations
+//! Core `SessionStorage` trait, its session and SSE event types, and the unified error type.
 //!
-//! This module provides the core SessionStorage trait abstraction that enables
-//! pluggable session backends for different deployment scenarios:
-//! - InMemory: Development and testing
-//! - SQLite: Single-instance production
-//! - PostgreSQL: Multi-instance production
-//! - NATS: Distributed with JetStream
-//! - AWS: DynamoDB + SNS for Lambda/serverless
+//! The trait lets the server use pluggable session backends:
+//! - InMemory: development and testing
+//! - SQLite: single-instance deployments
+//! - PostgreSQL: multi-instance deployments
+//! - DynamoDB: Lambda and other serverless deployments
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -17,9 +15,7 @@ use uuid::Uuid;
 
 use turul_mcp_protocol::{ClientCapabilities, ServerCapabilities};
 
-// Note: SessionEvent removed to avoid circular dependency
-
-/// Comprehensive session information
+/// Persisted state of one session: identity, capabilities, key-value state and timestamps.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     /// Unique session identifier (UUID v7 for temporal ordering)
@@ -47,7 +43,7 @@ impl Default for SessionInfo {
 }
 
 impl SessionInfo {
-    /// Create a new session with UUID v7 for temporal ordering
+    /// Creates a new session whose ID is a UUID v7 (no hyphens) for temporal ordering.
     pub fn new() -> Self {
         let now = chrono::Utc::now().timestamp_millis() as u64;
         Self {
@@ -62,7 +58,7 @@ impl SessionInfo {
         }
     }
 
-    /// Create session with specific ID (for testing)
+    /// Creates a session with the given ID instead of a generated one.
     pub fn with_id(session_id: String) -> Self {
         let now = chrono::Utc::now().timestamp_millis() as u64;
         Self {
@@ -77,12 +73,12 @@ impl SessionInfo {
         }
     }
 
-    /// Update last activity timestamp
+    /// Sets `last_activity` to the current time.
     pub fn touch(&mut self) {
         self.last_activity = chrono::Utc::now().timestamp_millis() as u64;
     }
 
-    /// Check if session has been terminated (e.g., via DELETE /mcp)
+    /// Returns whether the session's `terminated` state flag is set to `true`.
     pub fn is_terminated(&self) -> bool {
         self.state
             .get("terminated")
@@ -90,7 +86,7 @@ impl SessionInfo {
             .unwrap_or(false)
     }
 
-    /// Check if session is expired based on timeout
+    /// Returns whether more than `timeout_minutes` have passed since `last_activity`.
     pub fn is_expired(&self, timeout_minutes: u64) -> bool {
         let now = chrono::Utc::now().timestamp_millis() as u64;
         let timeout_millis = timeout_minutes * 60 * 1000;
@@ -98,7 +94,7 @@ impl SessionInfo {
     }
 }
 
-/// SSE event with proper metadata for resumability
+/// SSE event carrying the metadata needed for resumability.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SseEvent {
     /// Monotonic event ID for ordering and resumability
@@ -114,7 +110,9 @@ pub struct SseEvent {
 }
 
 impl SseEvent {
-    /// Create new event with auto-generated ID
+    /// Creates an event with the current timestamp and no retry hint.
+    ///
+    /// The ID is `0` until a `SessionStorage` assigns one in `store_event`.
     pub fn new(event_type: String, data: Value) -> Self {
         Self {
             id: 0, // Will be set by SessionStorage when storing
@@ -125,63 +123,56 @@ impl SseEvent {
         }
     }
 
-    /// Format as SSE message for HTTP response
+    /// Formats the event as an SSE message for an HTTP response.
     ///
     /// MCP Inspector and the official TypeScript SDK only process SSE events
     /// with no event name or "message". Custom event names are discarded.
     /// We use "message" for all JSON-RPC notifications to ensure compatibility.
     ///
-    /// CRITICAL: Keepalive events use comment syntax (": keepalive\n\n") to preserve
+    /// Keepalive events use comment syntax (": keepalive\n\n") to preserve
     /// Last-Event-ID for MCP resumability. Including "id: 0" would reset the client's
     /// Last-Event-ID, causing full event replay on reconnection.
     pub fn format(&self) -> String {
-        // Special handling for keepalives: use comment syntax (no id, no data)
-        // This preserves Last-Event-ID for proper MCP resumability
         if self.event_type == "ping" || self.event_type == "keepalive" {
             return ": keepalive\n\n".to_string();
         }
 
         let mut result = String::new();
 
-        // Event ID for resumability (only for real events, not keepalives)
         result.push_str(&format!("id: {}\n", self.id));
 
-        // Use "message" for all JSON-RPC notifications (MCP Inspector compatible)
         result.push_str("event: message\n");
 
-        // Event data (JSON)
         if let Ok(data_str) = serde_json::to_string(&self.data) {
             result.push_str(&format!("data: {}\n", data_str));
         } else {
             result.push_str("data: {}\n");
         }
 
-        // Retry timeout if specified
         if let Some(retry) = self.retry {
             result.push_str(&format!("retry: {}\n", retry));
         }
 
-        // End of event
         result.push('\n');
 
         result
     }
 }
 
-/// Core trait for session storage backends
+/// Core trait for session storage backends.
 #[async_trait]
 pub trait SessionStorage: Send + Sync {
     /// Error type for storage operations
     type Error: std::error::Error + Send + Sync + 'static;
 
-    /// Get the backend name for logging and debugging
+    /// Returns the backend name for logging and debugging.
     fn backend_name(&self) -> &'static str;
 
     // ============================================================================
     // Session Management
     // ============================================================================
 
-    /// Create a new session with automatically generated UUID v7
+    /// Creates a new session with an automatically generated UUID v7 ID.
     ///
     /// **USE THIS METHOD** for:
     /// - Production code
@@ -197,7 +188,7 @@ pub trait SessionStorage: Send + Sync {
         capabilities: ServerCapabilities,
     ) -> Result<SessionInfo, Self::Error>;
 
-    /// Create session with a specific session ID
+    /// Creates a session with the given session ID.
     ///
     /// **ONLY USE THIS METHOD** for:
     /// - Unit tests that need predictable session IDs
@@ -209,7 +200,7 @@ pub trait SessionStorage: Send + Sync {
     /// - Normal server operations
     /// - Tests that don't specifically need custom session IDs
     ///
-    /// # Example
+    /// # Examples
     /// ```rust,no_run
     /// use turul_mcp_session_storage::{SessionStorage, SessionStorageError};
     /// use turul_mcp_protocol::ServerCapabilities;
@@ -234,13 +225,13 @@ pub trait SessionStorage: Send + Sync {
         capabilities: ServerCapabilities,
     ) -> Result<SessionInfo, Self::Error>;
 
-    /// Get session by ID
+    /// Returns the session with the given ID, or `None` if it does not exist.
     async fn get_session(&self, session_id: &str) -> Result<Option<SessionInfo>, Self::Error>;
 
-    /// Update entire session info
+    /// Replaces the stored session info.
     async fn update_session(&self, session_info: SessionInfo) -> Result<(), Self::Error>;
 
-    /// Update session state value
+    /// Sets a session state value, creating or overwriting the key.
     async fn set_session_state(
         &self,
         session_id: &str,
@@ -248,49 +239,49 @@ pub trait SessionStorage: Send + Sync {
         value: Value,
     ) -> Result<(), Self::Error>;
 
-    /// Get session state value
+    /// Returns a session state value, or `None` if the key is not set.
     async fn get_session_state(
         &self,
         session_id: &str,
         key: &str,
     ) -> Result<Option<Value>, Self::Error>;
 
-    /// Remove session state value
+    /// Removes a session state value and returns it, or `None` if the key was not set.
     async fn remove_session_state(
         &self,
         session_id: &str,
         key: &str,
     ) -> Result<Option<Value>, Self::Error>;
 
-    /// Delete session completely
+    /// Deletes the session; returns whether it existed.
     async fn delete_session(&self, session_id: &str) -> Result<bool, Self::Error>;
 
-    /// List all session IDs
+    /// Lists all session IDs.
     async fn list_sessions(&self) -> Result<Vec<String>, Self::Error>;
 
     // ============================================================================
     // Event Management (for SSE resumability)
     // ============================================================================
 
-    /// Store an event for a session (assigns unique event ID)
+    /// Stores an event for a session and returns it with its assigned event ID.
     async fn store_event(&self, session_id: &str, event: SseEvent)
     -> Result<SseEvent, Self::Error>;
 
-    /// Get events after a specific event ID (for resumability)
+    /// Returns events with an ID greater than `after_event_id`, for resumability.
     async fn get_events_after(
         &self,
         session_id: &str,
         after_event_id: u64,
     ) -> Result<Vec<SseEvent>, Self::Error>;
 
-    /// Get recent events (for initial connection)
+    /// Returns up to `limit` of the most recent events, for an initial connection.
     async fn get_recent_events(
         &self,
         session_id: &str,
         limit: usize,
     ) -> Result<Vec<SseEvent>, Self::Error>;
 
-    /// Delete old events (cleanup)
+    /// Deletes events with an ID below `before_event_id`; returns the number deleted.
     async fn delete_events_before(
         &self,
         session_id: &str,
@@ -301,62 +292,75 @@ pub trait SessionStorage: Send + Sync {
     // Cleanup and Maintenance
     // ============================================================================
 
-    /// Remove expired sessions (returns list of removed session IDs)
+    /// Removes sessions whose last activity is before `older_than` and returns their IDs.
     async fn expire_sessions(&self, older_than: SystemTime) -> Result<Vec<String>, Self::Error>;
 
-    /// Get session count for monitoring
+    /// Returns the number of sessions, for monitoring.
     async fn session_count(&self) -> Result<usize, Self::Error>;
 
-    /// Get total event count across all sessions
+    /// Returns the total number of events across all sessions.
     async fn event_count(&self) -> Result<usize, Self::Error>;
 
-    /// Perform maintenance tasks (compaction, cleanup, etc.)
+    /// Performs backend maintenance such as cleanup and compaction.
     async fn maintenance(&self) -> Result<(), Self::Error>;
 }
 
-/// Result type for session storage operations
+/// Boxed-error result type for session storage operations.
 pub type SessionResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// Unified error type for all session storage backends
+/// Unified error type for all session storage backends.
 #[derive(Debug, thiserror::Error)]
 pub enum SessionStorageError {
     #[error("Session not found: {0}")]
+    /// The requested session id does not exist in the backend.
     SessionNotFound(String),
 
     #[error("Maximum sessions limit reached: {0}")]
+    /// Creating a session would exceed the backend's configured maximum number of sessions; carries the limit.
     MaxSessionsReached(usize),
 
     #[error("Maximum events limit reached: {0}")]
+    /// Appending an event would exceed the configured maximum number of events per session; carries the limit.
     MaxEventsReached(usize),
 
     #[error("Database error: {0}")]
+    /// A database or DynamoDB operation failed; carries the backend message.
     DatabaseError(String),
 
     #[error("Serialization error: {0}")]
+    /// A value could not be serialized or deserialized; carries the serializer message.
     SerializationError(String),
 
     #[error("Connection error: {0}")]
+    /// The backend could not connect to its database or service; carries the failure message.
     ConnectionError(String),
 
     #[error("Migration error: {0}")]
+    /// Applying a schema migration failed; carries the failure message.
     MigrationError(String),
 
     #[error("AWS SDK error: {0}")]
+    /// An AWS SDK call failed; carries the SDK error message.
     AwsError(String),
 
     #[error("AWS configuration error: {0}")]
+    /// The AWS client or backend configuration is invalid or incomplete; carries the failure message.
     AwsConfigurationError(String),
 
     #[error("DynamoDB table does not exist: {0}")]
+    /// The configured DynamoDB table does not exist or its status could not be read; carries a message naming the table.
     TableNotFound(String),
 
     #[error("Invalid session data: {0}")]
+    /// Stored session data is malformed or fails validation; carries a description of the problem.
     InvalidData(String),
 
     #[error("Concurrent modification error: {0}")]
+    /// Another writer modified the same record concurrently; carries a description of the conflict.
     ConcurrentModification(String),
 
     #[error("Generic storage error: {0}")]
+    /// An error that does not fit another variant; carries the message.
     Generic(String),
 }
 
@@ -461,15 +465,19 @@ impl From<crate::dynamodb::DynamoDbError> for SessionStorageError {
     }
 }
 
-/// Type alias for boxed session storage trait object with unified error type
+/// Trait object for a session storage using the unified `SessionStorageError`.
 pub type BoxedSessionStorage = dyn SessionStorage<Error = SessionStorageError>;
 
-/// Convenience trait for creating session storage instances
+/// Builds a session storage from a backend-specific config.
 pub trait SessionStorageBuilder {
+    /// The storage type produced by `build`.
     type Storage: SessionStorage;
+    /// The backend-specific configuration consumed by `build`.
     type Config;
+    /// The error returned when `build` fails.
     type Error: std::error::Error + Send + Sync + 'static;
 
+    /// Builds a storage from `config`, returning the backend error when construction fails.
     fn build(config: Self::Config) -> Result<Self::Storage, Self::Error>;
 }
 

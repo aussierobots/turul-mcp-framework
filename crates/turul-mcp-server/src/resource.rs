@@ -8,14 +8,14 @@ use serde_json::Value;
 use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{McpResult, resources::ResourceContent};
 
-/// High-level trait for implementing MCP resources
+/// High-level trait for implementing MCP resources.
 ///
 /// McpResource extends ResourceDefinition with execution capabilities.
 /// All metadata is provided by the ResourceDefinition trait, ensuring
 /// consistency between concrete Resource structs and dynamic implementations.
 #[async_trait]
 pub trait McpResource: ResourceDefinition + Send + Sync {
-    /// Read the resource content
+    /// Read the resource content.
     ///
     /// The params parameter can contain read-specific parameters like file paths,
     /// query filters, or other resource-specific options. The session parameter
@@ -26,7 +26,7 @@ pub trait McpResource: ResourceDefinition + Send + Sync {
         session: Option<&SessionContext>,
     ) -> McpResult<Vec<ResourceContent>>;
 
-    /// Optional: Subscribe to resource changes
+    /// Optional: Subscribe to resource changes.
     ///
     /// Resources that support real-time updates can override this method.
     /// By default, returns a "method not found" error.
@@ -44,10 +44,9 @@ pub trait McpResource: ResourceDefinition + Send + Sync {
     }
 }
 
-/// Converts an McpResource trait object to a protocol Resource descriptor
+/// Converts an `McpResource` trait object to a protocol `Resource` descriptor.
 ///
-/// This is now a thin wrapper around the ResourceDefinition::to_resource() method
-/// for backward compatibility. New code should use resource.to_resource() directly.
+/// Thin wrapper around `ResourceDefinition::to_resource()`.
 pub fn resource_to_descriptor(
     resource: &dyn McpResource,
 ) -> turul_mcp_protocol::resources::Resource {

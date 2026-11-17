@@ -2,10 +2,13 @@
 //!
 //! A single `McpClient` probes the server with `server/discover` at `connect()`
 //! and locks one wire spec for its lifetime. `classify_probe` is the
-//! security-relevant core: a JSON-RPC `-32601` (Method Not Found) is the ONLY
-//! signal that downgrades to 2025-11-25. HTTP 4xx and every other JSON-RPC error
-//! abort the connect rather than silently downgrade the protocol the caller
-//! asked for — a 2026 server behind a broken gateway is not a 2025 server.
+//! security-relevant core: only a JSON-RPC legacy-server signal (`-32601`,
+//! `-32602`, a missing-`Mcp-Session-Id` `-32001`, or an
+//! UnsupportedProtocolVersionError listing 2025-11-25) downgrades to 2025-11-25.
+//! HTTP 4xx (except 404/405 when the legacy-gateway opt-in is set) and every
+//! other JSON-RPC error abort the connect rather than silently downgrade the
+//! protocol the caller asked for — a 2026 server behind a broken gateway is not
+//! a 2025 server.
 
 use serde::{Deserialize, Serialize};
 
@@ -19,7 +22,7 @@ pub enum McpVersion {
 }
 
 impl McpVersion {
-    /// The wire protocol-version string for this spec.
+    /// Returns the wire protocol-version string for this spec.
     pub fn as_str(&self) -> &'static str {
         match self {
             McpVersion::V2025_11_25 => "2025-11-25",
@@ -91,14 +94,17 @@ const MISSING_REQUIRED_CLIENT_CAPABILITY: i64 = -32021;
 /// session it was not given.
 const SESSION_REQUIRED: i64 = -32001;
 
-/// Whether a JSON-RPC error is a stateful server refusing a request for lack of
-/// an `Mcp-Session-Id`. `-32001` alone is not enough: it is also this
-/// framework's own `Unauthenticated` code, so the message must name the header.
+/// Returns whether a JSON-RPC error is a stateful server refusing a request for
+/// lack of an `Mcp-Session-Id`.
+///
+/// `-32001` alone is not enough: it is also this framework's own
+/// `Unauthenticated` code, so the message must name the header.
 pub(crate) fn is_missing_session_id(code: i64, message: Option<&str>) -> bool {
     code == SESSION_REQUIRED && message.is_some_and(|m| m.contains("Mcp-Session-Id"))
 }
 
-/// Build the probe outcome for a JSON-RPC error reply to `server/discover`.
+/// Builds the probe outcome for a JSON-RPC error reply to `server/discover`.
+///
 /// `-32001` becomes [`DiscoverProbe::MissingSessionId`] only when its message
 /// names the `Mcp-Session-Id` header; every other `-32001` stays a plain
 /// error code.
@@ -115,7 +121,7 @@ pub(crate) fn probe_from_jsonrpc_error(
     }
 }
 
-/// Decide the negotiation action from a `server/discover` probe outcome.
+/// Decides the negotiation action from a `server/discover` probe outcome.
 ///
 /// `allow_legacy_gateway_fallback` broadens the fallback trigger to additionally
 /// accept HTTP 404/405 — for operators behind gateways that return those codes
@@ -346,7 +352,8 @@ mod tests {
         // Bare HTTP status is never a downgrade trigger by default (fail-closed): an
         // attacker who can inject a 4xx must not be able to force a 2026→2025
         // downgrade. A 2025-11-25 server is detected via the trusted JSON-RPC
-        // method-not-found (-32601) path instead — see test above.
+        // method-not-found (-32601) path instead — see
+        // `legacy_error_codes_fall_back_to_2025`.
         for status in [400, 401, 403, 404, 405, 429] {
             assert!(
                 matches!(

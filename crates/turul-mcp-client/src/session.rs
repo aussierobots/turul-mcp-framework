@@ -83,7 +83,7 @@ pub struct SessionInfo {
 }
 
 impl SessionInfo {
-    /// Create a new session info
+    /// Creates a new session info.
     pub fn new() -> Self {
         let now = Instant::now();
         Self {
@@ -99,32 +99,32 @@ impl SessionInfo {
         }
     }
 
-    /// Update last activity timestamp
+    /// Updates the last activity timestamp.
     pub fn update_activity(&mut self) {
         self.last_activity = Instant::now();
     }
 
-    /// Get session duration
+    /// Returns the session duration.
     pub fn duration(&self) -> Duration {
         self.last_activity.duration_since(self.created_at)
     }
 
-    /// Get time since last activity
+    /// Returns the time since last activity.
     pub fn idle_time(&self) -> Duration {
         Instant::now().duration_since(self.last_activity)
     }
 
-    /// Check if session is active
+    /// Returns whether the session is active.
     pub fn is_active(&self) -> bool {
         self.state == SessionState::Active
     }
 
-    /// Check if session can be used for operations
+    /// Returns whether the session can be used for operations.
     pub fn is_ready(&self) -> bool {
         matches!(self.state, SessionState::Active)
     }
 
-    /// Check if session needs initialization
+    /// Returns whether the session needs initialization.
     pub fn needs_initialization(&self) -> bool {
         matches!(self.state, SessionState::Uninitialized)
     }
@@ -147,7 +147,7 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
-    /// Create a new session manager
+    /// Creates a new session manager.
     pub fn new(config: ClientConfig) -> Self {
         Self {
             session: Arc::new(RwLock::new(SessionInfo::new())),
@@ -155,12 +155,12 @@ impl SessionManager {
         }
     }
 
-    /// Get current session information
+    /// Returns the current session information.
     pub async fn session_info(&self) -> SessionInfo {
         self.session.read().await.clone()
     }
 
-    /// Get session ID (returns error if not yet initialized by server)
+    /// Returns the session ID, or an error if the server has not yet provided one.
     pub async fn session_id(&self) -> McpClientResult<String> {
         let session = self.session.read().await;
         session
@@ -169,24 +169,24 @@ impl SessionManager {
             .ok_or_else(|| SessionError::NotInitialized.into())
     }
 
-    /// Get session ID if available (returns None if not initialized)
+    /// Returns the session ID, or `None` if not initialized.
     pub async fn session_id_optional(&self) -> Option<String> {
         self.session.read().await.session_id.clone()
     }
 
-    /// Set session ID (called when server provides it during initialization)
+    /// Sets the session ID (called when the server provides it during initialization).
     pub async fn set_session_id(&self, session_id: String) -> McpClientResult<()> {
         let mut session = self.session.write().await;
         session.session_id = Some(session_id);
         Ok(())
     }
 
-    /// Get current session state
+    /// Returns the current session state.
     pub async fn state(&self) -> SessionState {
         self.session.read().await.state.clone()
     }
 
-    /// Update session state
+    /// Updates the session state.
     pub async fn set_state(&self, state: SessionState) {
         let mut session = self.session.write().await;
         debug!("Session state transition: {} -> {}", session.state, state);
@@ -194,12 +194,12 @@ impl SessionManager {
         session.update_activity();
     }
 
-    /// Check if session is ready for operations
+    /// Returns whether the session is ready for operations.
     pub async fn is_ready(&self) -> bool {
         self.session.read().await.is_ready()
     }
 
-    /// Initialize session with server capabilities
+    /// Initializes the session with server capabilities.
     pub async fn initialize(
         &self,
         client_capabilities: ClientCapabilities,
@@ -230,7 +230,7 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Mark session as initializing
+    /// Marks the session as initializing.
     pub async fn mark_initializing(&self) -> McpClientResult<()> {
         let mut session = self.session.write().await;
 
@@ -251,7 +251,7 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Terminate session.
+    /// Terminates the session.
     ///
     /// Flips state to `Terminated` and clears `session_id`. After this returns,
     /// `session_id_optional()` yields `None`, which makes a subsequent `Drop`
@@ -277,7 +277,7 @@ impl SessionManager {
         );
     }
 
-    /// Handle session error
+    /// Handles a session error.
     pub async fn handle_error(&self, error: String) {
         let mut session = self.session.write().await;
 
@@ -293,7 +293,7 @@ impl SessionManager {
         );
     }
 
-    /// Start reconnection process
+    /// Starts the reconnection process.
     pub async fn start_reconnection(&self) {
         let mut session = self.session.write().await;
 
@@ -312,7 +312,7 @@ impl SessionManager {
         );
     }
 
-    /// Reset session for new connection
+    /// Resets the session for a new connection.
     pub async fn reset(&self) {
         let mut session = self.session.write().await;
         *session = SessionInfo::new();
@@ -323,12 +323,12 @@ impl SessionManager {
         );
     }
 
-    /// Update activity timestamp
+    /// Updates the activity timestamp.
     pub async fn update_activity(&self) {
         self.session.write().await.update_activity();
     }
 
-    /// Get client capabilities for initialization, from the config-level
+    /// Returns the client capabilities for initialization, from the config-level
     /// declarations (all absent unless the application opted in).
     pub fn create_client_capabilities(&self) -> ClientCapabilities {
         let declared = &self.config.declared_capabilities;
@@ -341,7 +341,7 @@ impl SessionManager {
         }
     }
 
-    /// Create initialization request
+    /// Creates the initialization request.
     pub async fn create_initialize_request(&self) -> InitializeRequest {
         let client_info = &self.config.client_info;
 
@@ -359,7 +359,7 @@ impl SessionManager {
         }
     }
 
-    /// Validate the version the server negotiated in its `initialize` reply.
+    /// Validates the version the server negotiated in its `initialize` reply.
     ///
     /// Only 2025-11-25 is accepted, and that is not a narrowing: `initialize`
     /// exists solely on that lane, so a reply naming any other version means
@@ -377,7 +377,7 @@ impl SessionManager {
         }
     }
 
-    /// Validate server capabilities
+    /// Validates server capabilities.
     pub async fn validate_server_capabilities(
         &self,
         server_capabilities: &ServerCapabilities,
@@ -390,12 +390,11 @@ impl SessionManager {
             "Validating server capabilities"
         );
 
-        // For now, we accept any server capabilities
-        // In the future, we might want to check for required features
+        // Any server capabilities are accepted.
         Ok(())
     }
 
-    /// Get session statistics
+    /// Returns session statistics.
     pub async fn statistics(&self) -> SessionStatistics {
         let session = self.session.read().await;
 
@@ -413,21 +412,27 @@ impl SessionManager {
 /// Session statistics for monitoring and debugging
 #[derive(Debug, Clone)]
 pub struct SessionStatistics {
+    /// Server-assigned session ID, if one has been established.
     pub session_id: Option<String>,
+    /// Current lifecycle state of the session.
     pub state: SessionState,
+    /// Time elapsed since the session was created.
     pub duration: Duration,
+    /// Time elapsed since the session was last used.
     pub idle_time: Duration,
+    /// Number of connection attempts made so far.
     pub connection_attempts: u32,
+    /// Negotiated protocol version, if negotiation has completed.
     pub protocol_version: Option<String>,
 }
 
 impl SessionStatistics {
-    /// Check if session is healthy
+    /// Returns whether the session is healthy.
     pub fn is_healthy(&self) -> bool {
         matches!(self.state, SessionState::Active) && self.idle_time < Duration::from_secs(300)
     }
 
-    /// Get human-readable session status
+    /// Returns a human-readable session status.
     pub fn status_summary(&self) -> String {
         let session_display = match &self.session_id {
             Some(id) => &id[..id.len().min(8)],
@@ -458,9 +463,7 @@ mod tests {
         assert!(err.to_string().contains("2099-01-01"));
     }
 
-    /// The old version of this test asserted `PROTOCOL_VERSION == "2025-11-25"`
-    /// under a name claiming it checked the init request — it never built one.
-    /// Build the request and read the version off it.
+    /// Builds the initialize request and reads the version off it.
     #[tokio::test]
     async fn init_request_advertises_the_legacy_wire_version() {
         let manager = SessionManager::new(ClientConfig::default());

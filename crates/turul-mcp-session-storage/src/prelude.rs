@@ -1,7 +1,4 @@
-//! # Session Storage Prelude
-//!
-//! This module provides convenient re-exports of the most commonly used types
-//! from the session storage library.
+//! Re-exports the most commonly used session storage types and constructors.
 //!
 //! ```rust,no_run
 //! use turul_mcp_session_storage::prelude::*;

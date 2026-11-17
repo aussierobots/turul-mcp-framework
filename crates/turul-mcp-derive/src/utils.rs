@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Attribute, Data, DeriveInput, Fields, Result};
 
-/// Annotation metadata extracted from macro attributes (shared across all macro paths)
+/// Holds annotation metadata extracted from macro attributes, shared across all macro paths.
 #[derive(Debug, Default)]
 pub struct AnnotationMeta {
     pub annotation_title: Option<String>, // → ToolAnnotations.title
@@ -24,9 +24,10 @@ impl AnnotationMeta {
     }
 }
 
-/// Generate HasAnnotations impl from annotation metadata.
-/// If ANY field is Some → OnceLock-backed impl returning Some(ToolAnnotations { ... })
-/// If ALL fields are None → impl returning None (backward compatible)
+/// Generates the `HasAnnotations` impl from annotation metadata.
+///
+/// If any field is `Some`, the impl is `OnceLock`-backed and returns `Some(ToolAnnotations { ... })`.
+/// If all fields are `None`, the impl returns `None`.
 pub fn generate_annotations_impl(name: &syn::Ident, meta: &AnnotationMeta) -> TokenStream {
     let mcp_builders = crate::utils::builders_path();
     let mcp_protocol = crate::utils::protocol_path();
@@ -79,7 +80,7 @@ pub fn generate_annotations_impl(name: &syn::Ident, meta: &AnnotationMeta) -> To
     }
 }
 
-/// Extract tool metadata from attributes
+/// Holds tool metadata extracted from `#[tool(...)]` attributes.
 #[derive(Debug)]
 pub struct ToolMeta {
     pub name: String,
@@ -107,6 +108,12 @@ impl ToolMeta {
     }
 }
 
+/// Extracts tool metadata from `#[tool(...)]` and `#[output_type(...)]` attributes.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when `name` or `description` is missing, when `task_support`
+/// is not `"optional"`, `"required"` or `"forbidden"`, or when an attribute value fails to parse.
 pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
     let mut name = None;
     let mut description = None;
@@ -179,7 +186,7 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
                 Ok(())
             })?;
         } else if attr.path().is_ident("output_type") {
-            // Parse #[output_type(TypeName)] syntax for backward compatibility
+            // Parse the #[output_type(TypeName)] form
             if let syn::Meta::List(meta_list) = &attr.meta {
                 let ty: syn::Type = syn::parse2(meta_list.tokens.clone())?;
                 output_type = Some(ty);
@@ -224,8 +231,9 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
     })
 }
 
-/// Partial tool meta — extracts whatever attributes exist without requiring name/description.
-/// Used by zero-config derive when #[tool(...)] has output/annotations but no name/description.
+/// Holds the `#[tool(...)]` attributes that are present, without requiring `name`/`description`.
+///
+/// Used by zero-config derive when `#[tool(...)]` has output/annotations but no name/description.
 pub struct PartialToolMeta {
     pub output_type: Option<syn::Type>,
     pub output_field: Option<String>,
@@ -238,6 +246,7 @@ pub struct PartialToolMeta {
     pub open_world: Option<bool>,
 }
 
+/// Extracts whichever `#[tool(...)]` attributes are present, ignoring parse failures.
 pub fn extract_tool_meta_partial(attrs: &[Attribute]) -> PartialToolMeta {
     let mut output_type = None;
     let mut output_field = None;
@@ -310,7 +319,7 @@ pub fn extract_tool_meta_partial(attrs: &[Attribute]) -> PartialToolMeta {
     }
 }
 
-/// Extract parameter metadata from field attributes
+/// Holds parameter metadata extracted from `#[param(...)]` field attributes.
 #[derive(Debug, Default)]
 pub struct ParamMeta {
     pub description: Option<String>,
@@ -319,6 +328,12 @@ pub struct ParamMeta {
     pub max: Option<f64>,
 }
 
+/// Extracts parameter metadata from `#[param(...)]` field attributes.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when `#[param(...)]` fails to parse, including a `description`
+/// that is not a string literal or a `min`/`max` that is not a float literal.
 pub fn extract_param_meta(attrs: &[Attribute]) -> Result<ParamMeta> {
     let mut meta = ParamMeta::default();
 
@@ -362,7 +377,7 @@ pub fn extract_param_meta(attrs: &[Attribute]) -> Result<ParamMeta> {
     Ok(meta)
 }
 
-/// Generate JSON schema for a Rust type
+/// Generates a JSON schema expression for a Rust type.
 pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
     let mcp_builders = crate::utils::builders_path();
     let mcp_protocol = crate::utils::protocol_path();
@@ -476,10 +491,7 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
     }
 }
 
-/// Statement closing a generated `inputSchema` (`additionalProperties: false`) held in
-/// the mutable `ToolSchema` binding `schema`. The counterpart of
-/// [`generate_undeclared_arg_check`]: schema and behaviour agree.
-/// The `HasExecution` impl for a tool's `task_support` attribute — the one
+/// Generates the `HasExecution` impl for a tool's `task_support` attribute; the one
 /// generator both tool macros call.
 ///
 /// `ToolExecution` / `TaskSupport` exist only in the 2025-11-25 schema. On the
@@ -550,6 +562,10 @@ mod execution_impl_tests {
     }
 }
 
+/// Generates the statement that closes a generated `inputSchema` with
+/// `additionalProperties: false`, applied to the mutable `ToolSchema` binding `schema`.
+///
+/// The counterpart of [`generate_undeclared_arg_check`]: schema and behaviour agree.
 pub fn generate_close_input_schema() -> TokenStream {
     let json_crate = crate::utils::serde_json_path();
     quote! {
@@ -557,11 +573,12 @@ pub fn generate_close_input_schema() -> TokenStream {
     }
 }
 
-/// Tail of a generated `McpTool::call`: argument-validation failures (missing, wrong-typed
-/// or undeclared argument) become a tool result with `isError: true`, so the model can
-/// see the message and self-correct, as `CallToolResult.isError` in schema.ts requires.
-/// Every other `McpError` (MRTR `InputRequired`, capability gates, ...) still propagates
-/// as a JSON-RPC error.
+/// Generates the tail of a generated `McpTool::call` that maps argument errors to tool results.
+///
+/// Argument-validation failures (missing, wrong-typed or invalid argument) become a tool
+/// result with `isError: true`, so the model can see the message and self-correct, as
+/// `CallToolResult.isError` in schema.ts requires. Every other `McpError` (MRTR
+/// `InputRequired`, capability gates, ...) still propagates as a JSON-RPC error.
 pub fn generate_argument_errors_as_tool_result() -> TokenStream {
     let mcp_protocol = crate::utils::protocol_path();
     quote! {
@@ -578,10 +595,11 @@ pub fn generate_argument_errors_as_tool_result() -> TokenStream {
     }
 }
 
-/// Statement for the top of a generated `McpTool::call`: refuse any argument key the
-/// tool's own `inputSchema` does not declare with `InvalidParameters` (-32602), naming
-/// every undeclared key. Reads the schema rather than a second list of names, so the
-/// check cannot drift from what `tools/list` advertises.
+/// Generates the statement for the top of a generated `McpTool::call` that refuses undeclared arguments.
+///
+/// Any argument key the tool's own `inputSchema` does not declare is refused with
+/// `InvalidParameters` (-32602), naming every undeclared key. Reads the schema rather
+/// than a second list of names, so the check cannot drift from what `tools/list` advertises.
 pub fn generate_undeclared_arg_check() -> TokenStream {
     let json_crate = crate::utils::serde_json_path();
     let mcp_builders = crate::utils::builders_path();
@@ -633,7 +651,7 @@ pub fn generate_undeclared_arg_check() -> TokenStream {
     }
 }
 
-/// Generate parameter extraction code
+/// Generates extraction code for one tool parameter field.
 pub fn generate_param_extraction(
     field_name: &syn::Ident,
     field_type: &syn::Type,
@@ -665,12 +683,12 @@ pub fn generate_param_extraction(
         // Field is T but marked as optional, wrap in Option
         generate_optional_extraction(field_name, field_type, field_name_str)
     } else {
-        // Required field of type T
         generate_required_extraction(field_name, field_type, field_name_str)
     }
 }
 
-/// Generate extraction code for an optional parameter of inner type `inner_type`.
+/// Generates extraction code for an optional parameter of inner type `inner_type`.
+///
 /// Absent or `null` is `None`; a present value goes through the required extraction,
 /// so a wrong-typed value is refused with `-32602` instead of being read as "not
 /// provided". One conversion path for required and optional parameters.
@@ -692,9 +710,11 @@ fn generate_optional_extraction(
     }
 }
 
-/// The JSON Schema type a parameter of Rust type `ty` is advertised as, for
-/// "expected ..." in a type-mismatch message. Anything that is not a primitive,
-/// `String` or `Vec` is an object (a serde-deserialized struct or map).
+/// Returns the JSON Schema type a parameter of Rust type `ty` is advertised as, for
+/// "expected ..." in a type-mismatch message.
+///
+/// Anything that is not a primitive, `String` or `Vec` is an object (a
+/// serde-deserialized struct or map).
 fn json_type_for(ty: &syn::Type) -> &'static str {
     if let syn::Type::Path(type_path) = ty
         && type_path.path.segments.len() == 1
@@ -712,8 +732,9 @@ fn json_type_for(ty: &syn::Type) -> &'static str {
     "object"
 }
 
-/// Generate extraction code for required fields. A missing key is
-/// `MissingParameter`; a present value that does not convert is
+/// Generates extraction code for a required field.
+///
+/// A missing key is `MissingParameter`; a present value that does not convert is
 /// `InvalidParameterType` naming the declared type and the JSON type received.
 fn generate_required_extraction(
     field_name: &syn::Ident,
@@ -774,7 +795,7 @@ fn generate_required_extraction(
     }
 }
 
-/// Extract a string value from an attribute by name
+/// Returns the string value of the first `#[<name> = "..."]` attribute, if present.
 pub fn extract_string_attribute(attrs: &[Attribute], name: &str) -> Option<String> {
     for attr in attrs {
         if attr.path().is_ident(name)
@@ -790,7 +811,7 @@ pub fn extract_string_attribute(attrs: &[Attribute], name: &str) -> Option<Strin
     None
 }
 
-/// Field metadata for resources
+/// Holds field metadata for resources.
 #[derive(Default)]
 pub struct FieldMeta {
     pub content: Option<bool>,
@@ -798,7 +819,7 @@ pub struct FieldMeta {
     pub description: Option<String>,
 }
 
-/// Prompt metadata extracted from attributes
+/// Holds prompt metadata extracted from attributes.
 #[derive(Debug)]
 pub struct PromptMeta {
     pub name: String,
@@ -808,7 +829,7 @@ pub struct PromptMeta {
     pub icons: Option<syn::Expr>,
 }
 
-/// Resource metadata extracted from attributes
+/// Holds resource metadata extracted from attributes.
 #[derive(Debug)]
 pub struct ResourceMeta {
     pub name: String,
@@ -822,7 +843,11 @@ pub struct ResourceMeta {
     pub size: Option<syn::Expr>,
 }
 
-/// Extract prompt metadata from #[prompt(...)] attributes
+/// Extracts prompt metadata from `#[prompt(...)]` attributes.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when `name` is missing or an attribute value fails to parse.
 pub fn extract_prompt_meta(attrs: &[Attribute]) -> Result<PromptMeta> {
     let mut name = None;
     let mut description = None;
@@ -871,7 +896,11 @@ pub fn extract_prompt_meta(attrs: &[Attribute]) -> Result<PromptMeta> {
     })
 }
 
-/// Extract resource metadata from #[resource(...)] attributes
+/// Extracts resource metadata from `#[resource(...)]` attributes.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when `name` or `uri` is missing or an attribute value fails to parse.
 pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
     let mut name = None;
     let mut uri = None;
@@ -949,7 +978,7 @@ pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
     })
 }
 
-/// Root metadata extracted from attributes
+/// Holds root metadata extracted from attributes.
 #[derive(Debug)]
 pub struct RootMeta {
     pub uri: String,
@@ -958,7 +987,11 @@ pub struct RootMeta {
     pub read_only: bool,
 }
 
-/// Extract root metadata from #[root(...)] attributes
+/// Extracts root metadata from `#[root(...)]` attributes.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when `uri` is missing or an attribute value fails to parse.
 pub fn extract_root_meta(attrs: &[Attribute]) -> Result<RootMeta> {
     let mut uri = None;
     let mut name = None;
@@ -1013,13 +1046,17 @@ pub fn extract_root_meta(attrs: &[Attribute]) -> Result<RootMeta> {
     })
 }
 
-/// Elicitation metadata extracted from attributes
+/// Holds elicitation metadata extracted from attributes.
 #[derive(Debug)]
 pub struct ElicitationMeta {
     pub message: String,
 }
 
-/// Extract elicitation metadata from #[elicitation(...)] attributes
+/// Extracts elicitation metadata from `#[elicitation(...)]` attributes.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when `message` is missing or an attribute value fails to parse.
 pub fn extract_elicitation_meta(attrs: &[Attribute]) -> Result<ElicitationMeta> {
     let mut message = None;
 
@@ -1046,7 +1083,7 @@ pub fn extract_elicitation_meta(attrs: &[Attribute]) -> Result<ElicitationMeta> 
     Ok(ElicitationMeta { message })
 }
 
-/// Extract field metadata from attributes
+/// Extracts field metadata from `content`, `content_type` and `description` attributes.
 pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
     let mut meta = FieldMeta::default();
 
@@ -1076,9 +1113,8 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
     Ok(meta)
 }
 
-/// Determine output field name based on type and user preferences
+/// Determines the output field name from the output type and an optional custom name.
 pub fn determine_output_field_name(ty: &syn::Type, custom_field: Option<&String>) -> String {
-    // If user specified a custom field name, use it
     if let Some(field_name) = custom_field {
         return field_name.clone();
     }
@@ -1112,11 +1148,12 @@ pub fn determine_output_field_name(ty: &syn::Type, custom_field: Option<&String>
         }
     }
 
-    // Default to "output" for primitives (as requested by user)
+    // Primitives use "output"
     "output".to_string()
 }
 
-/// Convert struct name to camelCase for field names
+/// Converts a struct name to camelCase for field names.
+///
 /// Handles special cases:
 /// - All-caps acronyms: LLH → llh, GPS → gps
 /// - Leading acronyms: HTTPServer → httpServer
@@ -1133,8 +1170,8 @@ fn struct_to_camel_case(struct_name: &str) -> String {
     }
 
     // Find where the leading uppercase sequence ends
-    // HTTPServer → http_Server (lowercase leading acronym)
-    // LocationData → location_Data (just first letter)
+    // HTTPServer → httpServer (leading acronym lowercased)
+    // LocationData → locationData (first letter only)
     let mut lowercase_until = 1; // At minimum, lowercase first character
 
     for i in 1..chars.len() {
@@ -1161,8 +1198,9 @@ fn struct_to_camel_case(struct_name: &str) -> String {
     result
 }
 
-/// Extract schema content (without function wrapper) for reuse
-/// This is the core logic used by both generate_enhanced_output_schema and generate_output_schema_auto
+/// Extracts schema content (without function wrapper) for reuse.
+///
+/// This is the core logic behind [`generate_output_schema_auto`].
 fn extract_schema_content(
     ty: &syn::Type,
     field_name: &str,
@@ -1184,13 +1222,11 @@ fn extract_schema_content(
         }
     }
 
-    // Fallback - extract content from the existing function
-    // Extract just the schema creation content (not the full function)
-    // Use the basic type schema generation for types we can't introspect
+    // Types that cannot be introspected use the basic type schema
     generate_basic_type_schema_content(ty, field_name)
 }
 
-/// Extract schema content for struct (without function wrapper) - used by extract_schema_content
+/// Extracts schema content for a named-field struct (without function wrapper), for `extract_schema_content`.
 fn extract_struct_schema_content(
     fields: &syn::FieldsNamed,
     output_field_name: &str,
@@ -1251,7 +1287,7 @@ fn extract_struct_schema_content(
     }
 }
 
-/// Check if a type is Option<T> (handles qualified paths like std::option::Option)
+/// Returns whether a type is `Option<T>`, including qualified paths like `std::option::Option`.
 fn is_option_type(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {
         type_path
@@ -1264,7 +1300,8 @@ fn is_option_type(ty: &syn::Type) -> bool {
     }
 }
 
-/// Check if a type is a basic primitive that doesn't need schemars
+/// Returns whether a type is a basic primitive (`f32`, `f64`, `i8`-`i64`, `u8`-`u64`,
+/// `String`, `str`, `bool`) that doesn't need schemars.
 fn is_basic_type(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {
         if let Some(ident) = type_path.path.get_ident() {
@@ -1292,10 +1329,11 @@ fn is_basic_type(ty: &syn::Type) -> bool {
     }
 }
 
-/// Generate output schema with automatic schemars detection
+/// Generates the `output_schema` method for a tool's output type.
 ///
-/// Automatically tries to use schemars::schema_for!() on the output type first.
-/// Falls back to struct introspection if schemars is not available for that type.
+/// `Self` is introspected from the struct's named fields, and basic primitives get a
+/// simple schema without schemars. Any other type goes through `schemars::schema_for!()`
+/// and must derive `schemars::JsonSchema`.
 ///
 /// This provides zero-configuration automatic detection: if the output type has
 /// `#[derive(schemars::JsonSchema)]`, the framework automatically uses it - no
@@ -1372,7 +1410,7 @@ pub fn generate_output_schema_auto(
     }
 }
 
-/// Generate basic type schema content (without function wrapper)
+/// Generates basic type schema content (without function wrapper).
 fn generate_basic_type_schema_content(ty: &syn::Type, field_name: &str) -> TokenStream {
     let mcp_builders = crate::utils::builders_path();
     let mcp_protocol = crate::utils::protocol_path();
@@ -1515,7 +1553,7 @@ pub(crate) fn derive_path() -> TokenStream {
     private("turul_mcp_derive")
 }
 
-/// `#[serde(crate = "...")]` pointing at `serde_path()`; empty when serde is named bare.
+/// Returns `#[serde(crate = "...")]` pointing at `serde_path()`; empty when serde is named bare.
 pub(crate) fn serde_attr_path() -> TokenStream {
     match server_root() {
         Some(root) => {

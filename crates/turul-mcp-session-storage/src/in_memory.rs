@@ -1,6 +1,6 @@
-//! In-Memory Session Storage Implementation
+//! In-memory session storage backend.
 //!
-//! This implementation stores all session data in memory using Arc<RwLock<>>
+//! Stores all session data in memory behind `Arc<RwLock<..>>`
 //! for thread safety. Suitable for:
 //! - Development and testing
 //! - Single-instance deployments with session persistence not required
@@ -18,12 +18,12 @@ use tracing::{debug, info};
 use crate::{SessionInfo, SessionStorage, SessionStorageError, SseEvent};
 use turul_mcp_protocol::ServerCapabilities;
 
-/// In-memory storage for sessions and events (SSE compliant)
+/// In-memory storage for sessions and events.
 #[derive(Debug, Clone)]
 pub struct InMemorySessionStorage {
     /// All sessions by session ID
     sessions: Arc<RwLock<HashMap<String, SessionInfo>>>,
-    /// All events by session_id -> Vec\<SseEvent\>
+    /// All events by session ID, as `Vec<SseEvent>`.
     events: Arc<RwLock<HashMap<String, Vec<SseEvent>>>>,
     /// Global event ID counter for ordering
     event_counter: Arc<AtomicU64>,
@@ -31,7 +31,7 @@ pub struct InMemorySessionStorage {
     config: InMemoryConfig,
 }
 
-/// Configuration for in-memory session storage
+/// Configuration for in-memory session storage.
 #[derive(Debug, Clone)]
 pub struct InMemoryConfig {
     /// Maximum events to keep per session (for memory management)
@@ -49,16 +49,20 @@ impl Default for InMemoryConfig {
     }
 }
 
-/// Error type for in-memory storage operations
+/// Error type for in-memory storage operations.
 #[derive(Debug, thiserror::Error)]
 pub enum InMemoryError {
     #[error("Session not found: {0}")]
+    /// The requested session id does not exist.
     SessionNotFound(String),
     #[error("Maximum sessions limit reached: {0}")]
+    /// Creating a session would exceed the configured maximum number of sessions; carries the limit.
     MaxSessionsReached(usize),
     #[error("Maximum events per session limit reached: {0}")]
+    /// Appending an event would exceed the configured maximum events per session; carries the limit.
     MaxEventsReached(usize),
     #[error("Serialization error: {0}")]
+    /// A value could not be serialized or deserialized.
     SerializationError(#[from] serde_json::Error),
 }
 
@@ -69,12 +73,12 @@ impl Default for InMemorySessionStorage {
 }
 
 impl InMemorySessionStorage {
-    /// Create new in-memory session storage with default configuration
+    /// Creates a new in-memory session storage with default configuration.
     pub fn new() -> Self {
         Self::with_config(InMemoryConfig::default())
     }
 
-    /// Create new in-memory session storage with custom configuration
+    /// Creates a new in-memory session storage with custom configuration.
     pub fn with_config(config: InMemoryConfig) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
@@ -84,7 +88,7 @@ impl InMemorySessionStorage {
         }
     }
 
-    /// Get current statistics
+    /// Returns current statistics.
     pub async fn stats(&self) -> InMemoryStats {
         let sessions = self.sessions.read().await;
         let events = self.events.read().await;
@@ -99,7 +103,7 @@ impl InMemorySessionStorage {
         }
     }
 
-    /// Cleanup old events to prevent memory bloat
+    /// Removes the oldest events from any session over `max_events_per_session`, returning the number removed.
     async fn cleanup_events(&self) -> Result<u64, InMemoryError> {
         let mut events = self.events.write().await;
         let mut total_removed = 0u64;
@@ -127,12 +131,16 @@ impl InMemorySessionStorage {
     }
 }
 
-/// Statistics for in-memory storage
+/// Statistics for in-memory storage.
 #[derive(Debug, Clone)]
 pub struct InMemoryStats {
+    /// Number of sessions currently stored.
     pub session_count: usize,
+    /// Total number of events stored across all sessions.
     pub total_event_count: usize,
+    /// Configured maximum number of events retained per session.
     pub max_events_per_session: usize,
+    /// Configured maximum number of concurrent sessions.
     pub max_sessions: usize,
 }
 

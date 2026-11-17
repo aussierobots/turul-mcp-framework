@@ -1,15 +1,14 @@
-//! HTTP transport support for MCP servers
+//! HTTP transport support for MCP servers.
 //!
-//! This module provides HTTP transport functionality when the "http" feature is enabled.
+//! Available when the `http` feature is enabled; re-exports everything from `turul_http_mcp_server`.
 
-// Re-export everything from turul-http-mcp-server
 pub use turul_http_mcp_server::*;
 
-/// HTTP-specific configuration and utilities
+/// HTTP-specific configuration and utilities.
 pub mod config {
     use std::net::SocketAddr;
 
-    /// HTTP server configuration
+    /// HTTP server configuration.
     #[derive(Debug, Clone)]
     pub struct HttpConfig {
         /// Address to bind to
@@ -37,36 +36,36 @@ pub mod config {
     }
 
     impl HttpConfig {
-        /// Create a new HTTP configuration
+        /// Creates a new HTTP configuration with the default values.
         pub fn new() -> Self {
             Self::default()
         }
 
-        /// Set the bind address
+        /// Sets the bind address.
         pub fn bind_address(mut self, addr: SocketAddr) -> Self {
             self.bind_address = addr;
             self
         }
 
-        /// Set the MCP path
+        /// Sets the MCP endpoint path.
         pub fn mcp_path(mut self, path: impl Into<String>) -> Self {
             self.mcp_path = path.into();
             self
         }
 
-        /// Enable or disable CORS
+        /// Enables or disables CORS.
         pub fn cors(mut self, enable: bool) -> Self {
             self.enable_cors = enable;
             self
         }
 
-        /// Enable or disable SSE
+        /// Enables or disables SSE.
         pub fn sse(mut self, enable: bool) -> Self {
             self.enable_sse = enable;
             self
         }
 
-        /// Set maximum request body size
+        /// Sets the maximum request body size.
         pub fn max_body_size(mut self, size: usize) -> Self {
             self.max_body_size = size;
             self

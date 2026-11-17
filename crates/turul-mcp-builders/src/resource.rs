@@ -1,32 +1,28 @@
-//! Resource Builder for Runtime Resource Construction
+//! Builder for creating resources at runtime without procedural macros.
 //!
-//! This module provides a builder pattern for creating resources at runtime
-//! without requiring procedural macros. This enables dynamic resource creation
-//! for configuration-driven systems.
+//! Enables dynamic resource creation for configuration-driven systems.
 
 use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-// Import traits from local traits module
 use crate::traits::{
     HasIcons, HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
     HasResourceMimeType, HasResourceSize, HasResourceUri,
 };
-// Import protocol types
 use turul_mcp_protocol::icons::Icon;
 use turul_mcp_protocol::meta::Annotations;
 use turul_mcp_protocol::resources::ResourceContent;
 
-/// Type alias for dynamic resource read function
+/// Async function that reads a resource's content from its URI.
 pub type DynamicResourceFn = Box<
     dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<ResourceContent, String>> + Send>>
         + Send
         + Sync,
 >;
 
-/// Builder for creating resources at runtime
+/// Builder for creating resources at runtime.
 pub struct ResourceBuilder {
     uri: String,
     name: String,
@@ -42,7 +38,9 @@ pub struct ResourceBuilder {
 }
 
 impl ResourceBuilder {
-    /// Create a new resource builder with the given URI and name
+    /// Creates a new resource builder for the given URI.
+    ///
+    /// The name defaults to the last `/`-separated segment of the URI.
     pub fn new(uri: impl Into<String>) -> Self {
         let uri = uri.into();
         // Extract a reasonable default name from the URI
@@ -63,37 +61,37 @@ impl ResourceBuilder {
         }
     }
 
-    /// Set the resource name (programmatic identifier)
+    /// Sets the resource name (programmatic identifier).
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
 
-    /// Set the resource title (display name)
+    /// Sets the resource title (display name).
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
-    /// Set the resource description
+    /// Sets the resource description.
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
-    /// Set the MIME type
+    /// Sets the MIME type.
     pub fn mime_type(mut self, mime_type: impl Into<String>) -> Self {
         self.mime_type = Some(mime_type.into());
         self
     }
 
-    /// Set the resource size in bytes
+    /// Sets the resource size in bytes.
     pub fn size(mut self, size: u64) -> Self {
         self.size = Some(size);
         self
     }
 
-    /// Set static text content for this resource
+    /// Sets static text content for this resource.
     pub fn text_content(mut self, text: impl Into<String>) -> Self {
         let text = text.into();
         self.size = Some(text.len() as u64);
@@ -104,7 +102,7 @@ impl ResourceBuilder {
         self
     }
 
-    /// Set static JSON content for this resource
+    /// Sets static JSON content for this resource.
     pub fn json_content(mut self, json_value: Value) -> Self {
         let text = serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string());
         self.size = Some(text.len() as u64);
@@ -113,7 +111,7 @@ impl ResourceBuilder {
         self
     }
 
-    /// Set static blob content for this resource (base64-encoded)
+    /// Sets static blob content for this resource (base64-encoded).
     pub fn blob_content(mut self, blob: impl Into<String>, mime_type: impl Into<String>) -> Self {
         let blob = blob.into();
         let mime_type = mime_type.into();
@@ -125,19 +123,19 @@ impl ResourceBuilder {
         self
     }
 
-    /// Set annotations
+    /// Sets annotations.
     pub fn annotations(mut self, annotations: Annotations) -> Self {
         self.annotations = Some(annotations);
         self
     }
 
-    /// Set the resource icons (display hints)
+    /// Sets the resource icons (display hints).
     pub fn icons(mut self, icons: Vec<Icon>) -> Self {
         self.icons = Some(icons);
         self
     }
 
-    /// Add annotation audience (`Role` per the schema's closed
+    /// Adds annotation audience (`Role` per the schema's closed
     /// `audience?: Role[]` union).
     pub fn annotation_audience(mut self, audience: Vec<turul_mcp_protocol::prompts::Role>) -> Self {
         let mut annotations = self.annotations.unwrap_or_default();
@@ -164,7 +162,7 @@ impl ResourceBuilder {
         self
     }
 
-    /// Add annotation priority (0.0 to 1.0)
+    /// Adds annotation priority (0.0 to 1.0).
     pub fn annotation_priority(mut self, priority: f64) -> Self {
         let mut annotations = self.annotations.unwrap_or_default();
         annotations = annotations.with_priority(priority);
@@ -172,13 +170,13 @@ impl ResourceBuilder {
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Set the read function for dynamic content
+    /// Sets the read function for dynamic content.
     pub fn read<F, Fut>(mut self, f: F) -> Self
     where
         F: Fn(String) -> Fut + Send + Sync + 'static,
@@ -188,7 +186,7 @@ impl ResourceBuilder {
         self
     }
 
-    /// Convenience method to set a text read function
+    /// Sets a read function that returns text content.
     pub fn read_text<F, Fut>(mut self, f: F) -> Self
     where
         F: Fn(String) -> Fut + Send + Sync + 'static + Clone,
@@ -205,7 +203,7 @@ impl ResourceBuilder {
         self
     }
 
-    /// Build the dynamic resource
+    /// Builds the dynamic resource.
     pub fn build(self) -> Result<DynamicResource, String> {
         // The read must report the type the listing declares, whichever setter ran last.
         let mut content = self.content;
@@ -229,7 +227,7 @@ impl ResourceBuilder {
     }
 }
 
-/// Dynamic resource created by ResourceBuilder
+/// Dynamic resource created by [`ResourceBuilder`].
 pub struct DynamicResource {
     uri: String,
     name: String,
@@ -245,13 +243,16 @@ pub struct DynamicResource {
 }
 
 impl DynamicResource {
-    /// Read the resource content
+    /// Reads the resource content.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if neither static content nor a read function was set, or
+    /// the read function's error if it fails.
     pub async fn read(&self) -> Result<ResourceContent, String> {
         if let Some(ref content) = self.content {
-            // Static content
             Ok(content.clone())
         } else if let Some(ref read_fn) = self.read_fn {
-            // Dynamic content
             read_fn(self.uri.clone()).await
         } else {
             Err("No content or read function provided".to_string())
@@ -259,8 +260,7 @@ impl DynamicResource {
     }
 }
 
-// Implement all fine-grained traits for DynamicResource
-/// Implements HasResourceMetadata for DynamicResource providing name and title access
+/// Implements `HasResourceMetadata` for `DynamicResource` providing name and title access.
 impl HasResourceMetadata for DynamicResource {
     fn name(&self) -> &str {
         &self.name
@@ -271,49 +271,49 @@ impl HasResourceMetadata for DynamicResource {
     }
 }
 
-/// Implements HasResourceDescription for DynamicResource providing description text
+/// Implements `HasResourceDescription` for `DynamicResource` providing description text.
 impl HasResourceDescription for DynamicResource {
     fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
 }
 
-/// Implements HasResourceUri for DynamicResource providing URI access
+/// Implements `HasResourceUri` for `DynamicResource` providing URI access.
 impl HasResourceUri for DynamicResource {
     fn uri(&self) -> &str {
         &self.uri
     }
 }
 
-/// Implements HasResourceMimeType for DynamicResource providing MIME type information
+/// Implements `HasResourceMimeType` for `DynamicResource` providing MIME type information.
 impl HasResourceMimeType for DynamicResource {
     fn mime_type(&self) -> Option<&str> {
         self.mime_type.as_deref()
     }
 }
 
-/// Implements HasResourceSize for DynamicResource providing content size information
+/// Implements `HasResourceSize` for `DynamicResource` providing content size information.
 impl HasResourceSize for DynamicResource {
     fn size(&self) -> Option<u64> {
         self.size
     }
 }
 
-/// Implements HasResourceAnnotations for DynamicResource providing metadata annotations
+/// Implements `HasResourceAnnotations` for `DynamicResource` providing metadata annotations.
 impl HasResourceAnnotations for DynamicResource {
     fn annotations(&self) -> Option<&Annotations> {
         self.annotations.as_ref()
     }
 }
 
-/// Implements HasResourceMeta for DynamicResource providing additional metadata fields
+/// Implements `HasResourceMeta` for `DynamicResource` providing additional metadata fields.
 impl HasResourceMeta for DynamicResource {
     fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
         self.meta.as_ref()
     }
 }
 
-/// Implements HasIcons for DynamicResource providing optional icons
+/// Implements `HasIcons` for `DynamicResource` providing optional icons.
 impl HasIcons for DynamicResource {
     fn icons(&self) -> Option<&Vec<Icon>> {
         self.icons.as_ref()

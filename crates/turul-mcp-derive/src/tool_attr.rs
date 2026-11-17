@@ -1,4 +1,4 @@
-//! Implementation of #[mcp_tool] attribute macro
+//! Expansion of the `#[mcp_tool]` attribute macro, which turns an async function into a tool.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -14,7 +14,6 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     let mcp_builders = crate::utils::builders_path();
     let mcp_protocol = crate::utils::protocol_path();
     let mcp_server = crate::utils::server_path();
-    // Parse macro arguments
     let mut tool_name = None;
     let mut tool_description = None;
     let mut output_field_name = None;
@@ -403,8 +402,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                     // set is not cosmetic: `InputRequired` is MRTR control flow (SEP-2322)
                     // that the server turns into `resultType: "input_required"`, and
                     // `MissingRequiredClientCapability` is the spec's -32021 gate.
-                    // Swallowing either into `isError` silently breaks the feature — an
-                    // earlier, blanket version of this change failed 7 MRTR wire tests.
+                    // Swallowing either into `isError` silently breaks the feature.
                     Err(#mcp_protocol::McpError::ToolExecutionError(msg)) => {
                         Ok(#mcp_protocol::tools::CallToolResult::error(vec![
                             #mcp_protocol::tools::ToolResult::text(msg)
@@ -445,7 +443,7 @@ fn capitalize(s: &str) -> String {
         .join("")
 }
 
-/// Check if a type is Option<T> (handles qualified paths like std::option::Option)
+/// Returns whether a type is `Option<T>`, including qualified paths like `std::option::Option`.
 fn is_option_type(field_type: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = field_type {
         type_path
@@ -458,7 +456,7 @@ fn is_option_type(field_type: &syn::Type) -> bool {
     }
 }
 
-/// Check if a type is SessionContext or Option<SessionContext>
+/// Returns whether a type is `SessionContext` or `Option<SessionContext>`.
 fn is_session_context_type(field_type: &syn::Type) -> bool {
     match field_type {
         syn::Type::Path(type_path) => {
@@ -482,7 +480,7 @@ fn is_session_context_type(field_type: &syn::Type) -> bool {
     }
 }
 
-/// Extract the Ok type from Result<T, E> or McpResult<T>
+/// Returns the `T` of `Result<T, E>` or `McpResult<T>`, or `None` for any other type.
 fn extract_result_ok_type(ty: &syn::Type) -> Option<&syn::Type> {
     if let syn::Type::Path(type_path) = ty
         && let Some(segment) = type_path.path.segments.last()
@@ -495,7 +493,7 @@ fn extract_result_ok_type(ty: &syn::Type) -> Option<&syn::Type> {
     None
 }
 
-/// Generate output schema for function macros with automatic schemars detection
+/// Generates the output schema tokens for a function macro, with automatic schemars detection.
 fn generate_output_schema_auto_for_function(ty: &syn::Type, field_name: &str) -> TokenStream {
     // Use the same auto-detection, but without DeriveInput (function macros don't have it)
     generate_output_schema_auto(ty, field_name, None)

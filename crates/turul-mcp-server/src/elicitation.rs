@@ -1,6 +1,4 @@
-//! MCP Elicitation Trait
-//!
-//! This module defines the high-level trait for implementing MCP elicitation.
+//! The high-level trait for implementing MCP elicitation.
 
 use async_trait::async_trait;
 use turul_mcp_builders::prelude::*;
@@ -9,21 +7,20 @@ use turul_mcp_protocol::{
     elicitation::{ElicitCreateRequest, ElicitResult},
 };
 
-/// High-level trait for implementing MCP elicitation
+/// High-level trait for implementing MCP elicitation.
 ///
-/// McpElicitation extends ElicitationDefinition with execution capabilities.
+/// `McpElicitation` extends `ElicitationDefinition` with execution capabilities.
 /// All metadata is provided by the ElicitationDefinition trait, ensuring
 /// consistency between concrete Elicitation structs and dynamic implementations.
 #[async_trait]
 pub trait McpElicitation: ElicitationDefinition + Send + Sync {
-    /// Handle the elicitation request (per MCP spec)
+    /// Handles an `elicitation/create` request and returns the user's action and content.
     ///
-    /// This method processes the elicitation/create request and returns the user's action and content.
     /// The implementation should present the elicitation to the user interface and
     /// wait for user response (accept, decline, or cancel).
     async fn elicit(&self, request: ElicitCreateRequest) -> McpResult<ElicitResult>;
 
-    /// Check if this elicitation handler can handle the given request
+    /// Returns whether this handler can handle the given request.
     ///
     /// This allows for conditional elicitation handling based on request content,
     /// schema complexity, or other factors.
@@ -31,7 +28,7 @@ pub trait McpElicitation: ElicitationDefinition + Send + Sync {
         true
     }
 
-    /// Optional: Get elicitation priority for request routing
+    /// Returns the priority used for request routing.
     ///
     /// Higher priority handlers are tried first when multiple handlers
     /// can handle the same request.
@@ -39,9 +36,13 @@ pub trait McpElicitation: ElicitationDefinition + Send + Sync {
         0
     }
 
-    /// Optional: Validate the elicitation result (per MCP spec)
+    /// Validates the elicitation result.
     ///
-    /// This method can perform additional validation beyond schema validation.
+    /// The default checks only that an accepted result carries content.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::validation` when the action is `Accept` and `content` is `None`.
     async fn validate_result(&self, result: &ElicitResult) -> McpResult<()> {
         use turul_mcp_protocol::elicitation::ElicitAction;
 
@@ -53,7 +54,7 @@ pub trait McpElicitation: ElicitationDefinition + Send + Sync {
         Ok(())
     }
 
-    /// Optional: Transform result data before returning
+    /// Transforms result data before it is returned.
     ///
     /// This allows for post-processing of user input, such as formatting,
     /// normalization, or additional data enrichment.
@@ -62,10 +63,7 @@ pub trait McpElicitation: ElicitationDefinition + Send + Sync {
     }
 }
 
-/// Convert an McpElicitation trait object to an ElicitCreateRequest
-///
-/// This is a convenience function for converting elicitation definitions
-/// to protocol requests (per MCP spec).
+/// Converts an `McpElicitation` trait object to an `ElicitCreateRequest`.
 pub fn elicitation_to_create_request(elicitation: &dyn McpElicitation) -> ElicitCreateRequest {
     elicitation.to_create_request()
 }

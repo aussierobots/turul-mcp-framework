@@ -1,9 +1,9 @@
-//! Request context and session injection types
+//! Request context and session injection types.
 
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 
-/// Normalized request context across all transports (HTTP, Lambda, etc.)
+/// Holds the normalized request context across all transports (HTTP, Lambda, etc.).
 ///
 /// Provides uniform access to request data regardless of transport mechanism.
 ///
@@ -35,11 +35,11 @@ pub struct RequestContext<'a> {
     /// Transport-specific metadata (HTTP headers, Lambda event fields, etc.)
     metadata: Map<String, Value>,
 
-    /// Bearer token extracted from Authorization header (D5: isolated from metadata)
+    /// Bearer token extracted from Authorization header (never stored in `metadata`)
     bearer_token: Option<String>,
     authorization_malformed: bool,
 
-    /// Request-scoped extensions for passing data between middleware and tools (D3)
+    /// Request-scoped extensions for passing data between middleware and tools
     ///
     /// Written by pre-session middleware (e.g., auth claims), threaded through
     /// to `SessionContext.extensions` for tool access. Never persisted to storage.
@@ -47,7 +47,7 @@ pub struct RequestContext<'a> {
 }
 
 impl<'a> RequestContext<'a> {
-    /// Create a new request context
+    /// Creates a new request context.
     ///
     /// # Parameters
     ///
@@ -64,27 +64,27 @@ impl<'a> RequestContext<'a> {
         }
     }
 
-    /// Get the MCP method name
+    /// Returns the MCP method name.
     pub fn method(&self) -> &str {
         self.method
     }
 
-    /// Get request parameters (if any)
+    /// Returns the request parameters, if any.
     pub fn params(&self) -> Option<&Value> {
         self.params.as_ref()
     }
 
-    /// Get mutable request parameters
+    /// Returns the request parameters mutably, if any.
     pub fn params_mut(&mut self) -> Option<&mut Value> {
         self.params.as_mut()
     }
 
-    /// Get transport metadata (read-only)
+    /// Returns the transport metadata (read-only).
     pub fn metadata(&self) -> &Map<String, Value> {
         &self.metadata
     }
 
-    /// Add metadata entry
+    /// Adds a metadata entry.
     ///
     /// # Examples
     ///
@@ -99,52 +99,52 @@ impl<'a> RequestContext<'a> {
         self.metadata.insert(key.into(), value);
     }
 
-    /// Get the Bearer token (if extracted from Authorization header)
+    /// Returns the Bearer token, if one was extracted from the `Authorization` header.
     pub fn bearer_token(&self) -> Option<&str> {
         self.bearer_token.as_deref()
     }
 
-    /// Set the Bearer token (called by transport during extraction)
+    /// Sets the Bearer token (called by the transport during extraction).
     pub fn set_bearer_token(&mut self, token: String) {
         self.bearer_token = Some(token);
     }
 
-    /// Was an `Authorization` header present but NOT a parseable Bearer
-    /// credential? Auth middleware uses this to answer 400 invalid_request
+    /// Returns whether an `Authorization` header was present but not a parseable
+    /// Bearer credential. Auth middleware uses this to answer 400 invalid_request
     /// (RFC 6750 §3.1, "Malformed authorization request") instead of the
     /// missing-credentials 401.
     pub fn authorization_malformed(&self) -> bool {
         self.authorization_malformed
     }
 
-    /// Mark the request's `Authorization` header as present-but-malformed
-    /// (called by transport during extraction).
+    /// Marks the request's `Authorization` header as present-but-malformed
+    /// (called by the transport during extraction).
     pub fn set_authorization_malformed(&mut self, malformed: bool) {
         self.authorization_malformed = malformed;
     }
 
-    /// Get request-scoped extensions (read-only)
+    /// Returns the request-scoped extensions (read-only).
     pub fn extensions(&self) -> &HashMap<String, Value> {
         &self.extensions
     }
 
-    /// Set an extension value (used by middleware to pass data to tools)
+    /// Sets an extension value (used by middleware to pass data to tools).
     pub fn set_extension(&mut self, key: impl Into<String>, value: Value) {
         self.extensions.insert(key.into(), value);
     }
 
-    /// Get an extension value by key
+    /// Returns the extension value for `key`, if present.
     pub fn get_extension(&self, key: &str) -> Option<&Value> {
         self.extensions.get(key)
     }
 
-    /// Take ownership of extensions (used by transport to thread to SessionContext)
+    /// Takes ownership of the extensions, leaving them empty (used by the transport to thread them into `SessionContext`).
     pub fn take_extensions(&mut self) -> HashMap<String, Value> {
         std::mem::take(&mut self.extensions)
     }
 }
 
-/// Write-only mechanism for middleware to populate session state
+/// Provides a write-only mechanism for middleware to populate session state.
 ///
 /// Prevents middleware from interfering with core session management while
 /// allowing controlled injection of custom state and metadata.
@@ -183,12 +183,12 @@ pub struct SessionInjection {
 }
 
 impl SessionInjection {
-    /// Create a new empty session injection
+    /// Creates a new empty session injection.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Set a state entry
+    /// Sets a state entry.
     ///
     /// # Parameters
     ///
@@ -198,7 +198,7 @@ impl SessionInjection {
         self.state.insert(key.into(), value);
     }
 
-    /// Set a metadata entry
+    /// Sets a metadata entry.
     ///
     /// # Parameters
     ///
@@ -208,23 +208,23 @@ impl SessionInjection {
         self.metadata.insert(key.into(), value);
     }
 
-    /// Get all state entries (for internal use)
+    /// Returns all state entries (for internal use).
     pub(crate) fn state(&self) -> &HashMap<String, Value> {
         &self.state
     }
 
-    /// Get all metadata entries (for internal use)
+    /// Returns all metadata entries (for internal use).
     pub(crate) fn metadata(&self) -> &HashMap<String, Value> {
         &self.metadata
     }
 
-    /// Check if injection is empty
+    /// Returns whether the injection holds no state or metadata entries.
     pub fn is_empty(&self) -> bool {
         self.state.is_empty() && self.metadata.is_empty()
     }
 }
 
-/// Result from the MCP dispatcher (success or error)
+/// Holds the result from the MCP dispatcher (success or error).
 ///
 /// Middleware can inspect and modify this result in `after_dispatch()`.
 ///
@@ -253,17 +253,17 @@ pub enum DispatcherResult {
 }
 
 impl DispatcherResult {
-    /// Check if result is successful
+    /// Returns whether the result is a success.
     pub fn is_success(&self) -> bool {
         matches!(self, Self::Success(_))
     }
 
-    /// Check if result is an error
+    /// Returns whether the result is an error.
     pub fn is_error(&self) -> bool {
         matches!(self, Self::Error(_))
     }
 
-    /// Get success value (if any)
+    /// Returns the success value, if any.
     pub fn success(&self) -> Option<&Value> {
         match self {
             Self::Success(v) => Some(v),
@@ -271,7 +271,7 @@ impl DispatcherResult {
         }
     }
 
-    /// Get mutable success value (if any)
+    /// Returns the success value mutably, if any.
     pub fn success_mut(&mut self) -> Option<&mut Value> {
         match self {
             Self::Success(v) => Some(v),
@@ -279,7 +279,7 @@ impl DispatcherResult {
         }
     }
 
-    /// Get error message (if any)
+    /// Returns the error message, if any.
     pub fn error(&self) -> Option<&str> {
         match self {
             Self::Success(_) => None,

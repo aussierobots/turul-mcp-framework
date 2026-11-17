@@ -1,4 +1,4 @@
-//! RFC 9728 Protected Resource Metadata
+//! RFC 9728 Protected Resource Metadata.
 //!
 //! Defines the metadata document served at `/.well-known/oauth-protected-resource`
 //! that clients use to discover the authorization server for this resource.
@@ -8,13 +8,13 @@ use url::Url;
 
 use crate::error::OAuthError;
 
-/// RFC 9728 Protected Resource Metadata
+/// RFC 9728 Protected Resource Metadata.
 ///
 /// This document tells clients which authorization server(s) protect this resource
 /// and what capabilities the resource supports.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProtectedResourceMetadata {
-    /// The resource identifier (MUST match the resource's origin URL)
+    /// The resource identifier: a canonical HTTP(S) URI without a fragment.
     pub resource: String,
 
     /// Authorization servers that can issue tokens for this resource
@@ -28,7 +28,7 @@ pub struct ProtectedResourceMetadata {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scopes_supported: Option<Vec<String>>,
 
-    /// Methods for presenting Bearer tokens (default: ["header"])
+    /// Methods for presenting Bearer tokens (default: `["header"]`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bearer_methods_supported: Option<Vec<String>>,
 
@@ -73,10 +73,16 @@ fn validate_canonical_uri(uri: &str, field_name: &str) -> Result<(), OAuthError>
 }
 
 impl ProtectedResourceMetadata {
-    /// Create minimal metadata with resource URL and authorization servers
+    /// Creates minimal metadata with resource URL and authorization servers.
     ///
     /// Validates that the resource URI and all authorization server URIs are
     /// canonical HTTP(S) URIs without fragments per RFC 9728.
+    ///
+    /// # Errors
+    ///
+    /// [`OAuthError::InvalidResourceUri`] if the resource or an authorization
+    /// server URI is not a valid HTTP(S) URI with a host and no fragment, and
+    /// [`OAuthError::InvalidConfiguration`] if `authorization_servers` is empty.
     pub fn new(
         resource: impl Into<String>,
         authorization_servers: Vec<String>,
@@ -102,14 +108,13 @@ impl ProtectedResourceMetadata {
         })
     }
 
-    /// Set the JWKS URI
+    /// Sets the JWKS URI.
     pub fn with_jwks_uri(mut self, uri: impl Into<String>) -> Self {
         self.jwks_uri = Some(uri.into());
         self
     }
 
-    /// Set supported scopes
-    /// Set the advertised scopes (`scopes_supported`, echoed into the
+    /// Sets the advertised scopes (`scopes_supported`, echoed into the
     /// `WWW-Authenticate` challenge's `scope` parameter).
     ///
     /// `offline_access` is filtered out with a warning — Authorization
@@ -135,10 +140,10 @@ impl ProtectedResourceMetadata {
         self
     }
 
-    /// The well-known path for this metadata document
+    /// The well-known path for this metadata document.
     pub const WELL_KNOWN_PATH: &'static str = "/.well-known/oauth-protected-resource";
 
-    /// Compute the metadata URL (origin + well-known path) per RFC 9728 §3
+    /// Computes the metadata URL (origin + well-known path) per RFC 9728 §3.
     ///
     /// Extracts the origin (scheme + authority) from the resource URL and appends
     /// the well-known path. For `resource = "https://example.com/mcp"`, returns
@@ -158,7 +163,7 @@ impl ProtectedResourceMetadata {
         format!("{}{}", self.resource, Self::WELL_KNOWN_PATH)
     }
 
-    /// Extract the path component from the resource URL, if any.
+    /// Extracts the path component from the resource URL, if any.
     ///
     /// Returns `Some("/mcp")` for `"https://example.com/mcp"`,
     /// `None` for `"https://example.com"` (root resource).
@@ -182,7 +187,7 @@ impl ProtectedResourceMetadata {
         None
     }
 
-    /// Return all well-known paths that should serve this metadata document.
+    /// Returns all well-known paths that should serve this metadata document.
     ///
     /// Per RFC 9728 §3, resources with a path component need both:
     /// - **Root form**: `/.well-known/oauth-protected-resource`
@@ -202,7 +207,7 @@ impl ProtectedResourceMetadata {
 mod tests {
     use super::*;
 
-    // T29: Metadata JSON matches RFC 9728
+    // Metadata JSON matches RFC 9728
     #[test]
     fn test_metadata_json_matches_rfc9728() {
         let metadata = ProtectedResourceMetadata::new(

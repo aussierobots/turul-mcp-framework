@@ -7,79 +7,103 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// `StringSchema` — primitive string schema for elicitation requests.
+/// Primitive string schema for elicitation requests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StringSchema {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"string"`.
     pub schema_type: String, // "string"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable title for the property.
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description of the property.
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Default value for the property, if any.
     pub default: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Minimum length of the string, when set.
     pub min_length: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Maximum length of the string, when set.
     pub max_length: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Format constraint (`email`, `uri`, `date` or `date-time`), when set.
     pub format: Option<StringFormat>,
 }
 
-/// `NumberSchema` — primitive numeric schema; `schema_type` is `"number"` or `"integer"`.
+/// Primitive numeric schema; `schema_type` is `"number"` or `"integer"`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NumberSchema {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator: `"number"` or `"integer"`.
     pub schema_type: String, // "number" or "integer"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable title for the property.
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description of the property.
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Default value for the property, if any.
     pub default: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Inclusive lower bound, when set.
     pub minimum: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Inclusive upper bound, when set.
     pub maximum: Option<f64>,
 }
 
-/// BooleanSchema (per MCP spec)
+/// Primitive boolean schema for elicitation requests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BooleanSchema {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"boolean"`.
     pub schema_type: String, // "boolean"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable title for the property.
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description of the property.
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Default value for the property, if any.
     pub default: Option<bool>,
 }
 
-/// `LegacyTitledEnumSchema` — the pre-2026 enum shape with the non-standard
-/// `enumNames`. Schema: "Use TitledSingleSelectEnumSchema instead. This
+/// Legacy enum shape with the non-standard `enumNames`.
+///
+/// The schema marks it deprecated: "Use TitledSingleSelectEnumSchema instead. This
 /// interface will be removed in a future version."
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyTitledEnumSchema {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"string"`.
     pub schema_type: String, // "string"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable title for the property.
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description of the property.
     pub description: Option<String>,
     #[serde(rename = "enum")]
+    /// The permitted values, serialized as `enum`.
     pub enum_values: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Display names for `enum_values`, positionally aligned, serialized as `enumNames`; omitted when `None`.
     pub enum_names: Option<Vec<String>>, // Display names for enum values
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Default selected value, if any.
     pub default: Option<String>,
 }
 
-/// `EnumSchema` — the schema's enum union:
+/// The schema's enum union:
 /// `SingleSelectEnumSchema | MultiSelectEnumSchema | LegacyTitledEnumSchema`.
 ///
 /// Untagged: the single-select variants are tried first (the untitled one
@@ -88,8 +112,11 @@ pub struct LegacyTitledEnumSchema {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum EnumSchema {
+    /// A single-select enum, untitled or titled.
     SingleSelect(SingleSelectEnumSchema),
+    /// A multi-select enum, untitled or titled.
     MultiSelect(MultiSelectEnumSchema),
+    /// The legacy `enumNames` shape.
     LegacyTitled(LegacyTitledEnumSchema),
 }
 
@@ -102,18 +129,24 @@ pub enum EnumSchema {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UntitledSingleSelectEnumSchema {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"string"`.
     pub schema_type: String, // "string"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable title for the property.
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description of the property.
     pub description: Option<String>,
     #[serde(rename = "enum")]
+    /// The permitted values, serialized as `enum`.
     pub enum_values: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Default selected value, if any.
     pub default: Option<String>,
 }
 
 impl UntitledSingleSelectEnumSchema {
+    /// Creates an untitled single-select schema over the given permitted values.
     pub fn new(enum_values: Vec<String>) -> Self {
         Self {
             schema_type: "string".to_string(),
@@ -130,15 +163,19 @@ impl UntitledSingleSelectEnumSchema {
 #[serde(rename_all = "camelCase")]
 pub struct TitledSingleSelectEnumSchema {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"string"`.
     pub schema_type: String, // "string"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable title for the property.
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description of the property.
     pub description: Option<String>,
     /// Each option is `{const: <value>, title: <display>}`.
     #[serde(rename = "oneOf")]
     pub one_of: Vec<TitledEnumOption>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Default selected value (one of the option `const` values), if any.
     pub default: Option<String>,
 }
 
@@ -146,11 +183,14 @@ pub struct TitledSingleSelectEnumSchema {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TitledEnumOption {
     #[serde(rename = "const")]
+    /// The value submitted when this option is selected, serialized as `const`.
     pub const_value: String,
+    /// The display title shown to the user for this option.
     pub title: String,
 }
 
 impl TitledEnumOption {
+    /// Creates an option from its submitted value and display title.
     pub fn new(const_value: impl Into<String>, title: impl Into<String>) -> Self {
         Self {
             const_value: const_value.into(),
@@ -160,6 +200,7 @@ impl TitledEnumOption {
 }
 
 impl TitledSingleSelectEnumSchema {
+    /// Creates a titled single-select schema from its `oneOf` options.
     pub fn new(one_of: Vec<TitledEnumOption>) -> Self {
         Self {
             schema_type: "string".to_string(),
@@ -172,12 +213,15 @@ impl TitledSingleSelectEnumSchema {
 }
 
 /// Single-select union: `UntitledSingleSelectEnumSchema |
-/// TitledSingleSelectEnumSchema`. Untagged — discriminated by presence of
-/// `enum` vs `oneOf` at the wire level.
+/// TitledSingleSelectEnumSchema`.
+///
+/// Untagged — discriminated by presence of `enum` vs `oneOf` at the wire level.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SingleSelectEnumSchema {
+    /// Single-select enum without display titles (`enum`).
     Untitled(UntitledSingleSelectEnumSchema),
+    /// Single-select enum with per-option titles (`oneOf`).
     Titled(TitledSingleSelectEnumSchema),
 }
 
@@ -186,30 +230,40 @@ pub enum SingleSelectEnumSchema {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UntitledMultiSelectEnumSchema {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"array"`.
     pub schema_type: String, // "array"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable title for the property.
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description of the property.
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Minimum number of selections, when set.
     pub min_items: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Maximum number of selections, when set.
     pub max_items: Option<u32>,
     /// `{type: "string", enum: string[]}`.
     pub items: UntitledMultiSelectItems,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Default selected values, if any.
     pub default: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// The `items` schema of an untitled multi-select enum: `{type: "string", enum: string[]}`.
 pub struct UntitledMultiSelectItems {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"string"`.
     pub schema_type: String, // "string"
     #[serde(rename = "enum")]
+    /// The permitted values, serialized as `enum`.
     pub enum_values: Vec<String>,
 }
 
 impl UntitledMultiSelectEnumSchema {
+    /// Creates an untitled multi-select schema over the given permitted values.
     pub fn new(enum_values: Vec<String>) -> Self {
         Self {
             schema_type: "array".to_string(),
@@ -231,28 +285,37 @@ impl UntitledMultiSelectEnumSchema {
 #[serde(rename_all = "camelCase")]
 pub struct TitledMultiSelectEnumSchema {
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"array"`.
     pub schema_type: String, // "array"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable title for the property.
     pub title: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional human-readable description of the property.
     pub description: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Minimum number of selections, when set.
     pub min_items: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Maximum number of selections, when set.
     pub max_items: Option<u32>,
     /// `{anyOf: [{const, title}]}`.
     pub items: TitledMultiSelectItems,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Default selected values, if any.
     pub default: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// The `items` schema of a titled multi-select enum: `{anyOf: [{const, title}]}`.
 pub struct TitledMultiSelectItems {
     #[serde(rename = "anyOf")]
+    /// The selectable options, each a value and display title, serialized as `anyOf`.
     pub any_of: Vec<TitledEnumOption>,
 }
 
 impl TitledMultiSelectEnumSchema {
+    /// Creates a titled multi-select schema from its `anyOf` options.
     pub fn new(any_of: Vec<TitledEnumOption>) -> Self {
         Self {
             schema_type: "array".to_string(),
@@ -266,16 +329,18 @@ impl TitledMultiSelectEnumSchema {
     }
 }
 
-/// Multi-select union.
+/// Multi-select union of the untitled and titled multi-select enum schemas.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum MultiSelectEnumSchema {
+    /// Multi-select enum without per-option titles.
     Untitled(UntitledMultiSelectEnumSchema),
+    /// Multi-select enum with per-option titles.
     Titled(TitledMultiSelectEnumSchema),
 }
 
 /// Restricted schema definitions that only allow primitive types
-/// without nested objects or arrays (per MCP spec).
+/// without nested objects or arrays.
 ///
 /// Schema fixes a literal `type` discriminator per interface (`"string"`,
 /// `"number" | "integer"`, `"boolean"`) — `#[serde(untagged)]` alone tries
@@ -287,9 +352,13 @@ pub enum MultiSelectEnumSchema {
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum PrimitiveSchemaDefinition {
+    /// A free-text string property.
     String(StringSchema),
+    /// A numeric or integer property.
     Number(NumberSchema),
+    /// A boolean property.
     Boolean(BooleanSchema),
+    /// An enum property: single-select, multi-select or legacy titled.
     Enum(EnumSchema),
 }
 
@@ -339,18 +408,23 @@ impl<'de> Deserialize<'de> for PrimitiveSchemaDefinition {
     }
 }
 
-/// String format constraints
+/// String format constraints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum StringFormat {
+    /// An email address (`email`).
     Email,
+    /// A URI (`uri`).
     Uri,
+    /// A date (`date`).
     Date,
     #[serde(rename = "date-time")]
+    /// A date and time (`date-time`).
     DateTime,
 }
 
-/// Restricted schema for elicitation (only primitive types, no nesting) - per MCP spec
+/// Restricted schema for elicitation: an object whose properties are primitive
+/// schemas, with no nesting.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitationSchema {
@@ -359,15 +433,19 @@ pub struct ElicitationSchema {
     #[serde(rename = "$schema", skip_serializing_if = "Option::is_none")]
     pub schema_dialect: Option<String>,
     #[serde(rename = "type")]
+    /// Schema `type` discriminator; always `"object"`.
     pub schema_type: String, // Always "object"
     #[serde(serialize_with = "crate::serde_maps::sorted")]
+    /// The requested fields, keyed by property name. Serialized in sorted key order.
     pub properties: HashMap<String, PrimitiveSchemaDefinition>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Names of the properties the user must supply, when any are required.
     pub required: Option<Vec<String>>,
 }
 
-/// Form-mode elicitation params. Per schema this interface does NOT extend
-/// `RequestParams` — no `_meta` field.
+/// Form-mode elicitation params.
+///
+/// Per schema this interface does NOT extend `RequestParams` — no `_meta` field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitRequestFormParams {
@@ -382,8 +460,9 @@ pub struct ElicitRequestFormParams {
     pub requested_schema: ElicitationSchema,
 }
 
-/// URL-mode elicitation params. Per schema this interface does NOT extend
-/// `RequestParams` — no `_meta` field.
+/// URL-mode elicitation params.
+///
+/// Per schema this interface does NOT extend `RequestParams` — no `_meta` field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitRequestURLParams {
@@ -401,6 +480,7 @@ pub struct ElicitRequestURLParams {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum FormModeMarker {
+    /// The `"form"` mode value.
     Form,
 }
 
@@ -408,6 +488,7 @@ pub enum FormModeMarker {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum UrlModeMarker {
+    /// The `"url"` mode value.
     Url,
 }
 
@@ -426,18 +507,18 @@ pub enum ElicitRequestParams {
     Form(ElicitRequestFormParams),
 }
 
-/// `elicitation/create` request.
+/// The `elicitation/create` request.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitRequest {
-    /// Method name (always "elicitation/create").
+    /// Method name (always `"elicitation/create"`).
     pub method: String,
     /// Request parameters — form or URL mode.
     pub params: ElicitRequestParams,
 }
 
 impl ElicitRequest {
-    /// Construct a form-mode elicitation request.
+    /// Creates a form-mode elicitation request.
     pub fn new_form(message: impl Into<String>, requested_schema: ElicitationSchema) -> Self {
         Self {
             method: "elicitation/create".to_string(),
@@ -449,7 +530,7 @@ impl ElicitRequest {
         }
     }
 
-    /// Construct a URL-mode elicitation request.
+    /// Creates a URL-mode elicitation request.
     pub fn new_url(message: impl Into<String>, url: impl Into<String>) -> Self {
         Self {
             method: "elicitation/create".to_string(),
@@ -461,7 +542,7 @@ impl ElicitRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Replaces the request params with a fully-constructed params struct.
     pub fn with_params(mut self, params: ElicitRequestParams) -> Self {
         self.params = params;
         self
@@ -469,6 +550,7 @@ impl ElicitRequest {
 }
 
 impl ElicitRequestFormParams {
+    /// Creates form-mode params with no explicit `mode` marker.
     pub fn new(message: impl Into<String>, requested_schema: ElicitationSchema) -> Self {
         Self {
             mode: None,
@@ -479,6 +561,7 @@ impl ElicitRequestFormParams {
 }
 
 impl ElicitRequestURLParams {
+    /// Creates URL-mode params with `mode` set to `"url"`.
     pub fn new(message: impl Into<String>, url: impl Into<String>) -> Self {
         Self {
             mode: UrlModeMarker::Url,
@@ -517,6 +600,7 @@ impl Default for ElicitationSchema {
 }
 
 impl ElicitationSchema {
+    /// Creates an empty object schema with no properties and no required fields.
     pub fn new() -> Self {
         Self {
             schema_dialect: None,
@@ -526,6 +610,7 @@ impl ElicitationSchema {
         }
     }
 
+    /// Adds or replaces the property with the given name.
     pub fn with_property(
         mut self,
         name: impl Into<String>,
@@ -535,27 +620,28 @@ impl ElicitationSchema {
         self
     }
 
+    /// Sets the names of the required properties.
     pub fn with_required(mut self, required: Vec<String>) -> Self {
         self.required = Some(required);
         self
     }
 
-    /// Set the JSON Schema dialect URI (e.g. `"https://json-schema.org/draft/2020-12/schema"`).
+    /// Sets the JSON Schema dialect URI (e.g. `"https://json-schema.org/draft/2020-12/schema"`).
     pub fn with_schema_dialect(mut self, dialect: impl Into<String>) -> Self {
         self.schema_dialect = Some(dialect.into());
         self
     }
 }
 
-/// User action in response to elicitation
+/// User action in response to elicitation.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ElicitAction {
-    /// User submitted the form/confirmed the action
+    /// User submitted the form/confirmed the action.
     Accept,
-    /// User explicitly declined the action
+    /// User explicitly declined the action.
     Decline,
-    /// User dismissed without making an explicit choice
+    /// User dismissed without making an explicit choice.
     Cancel,
 }
 
@@ -569,9 +655,13 @@ pub enum ElicitAction {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ElicitResultValue {
+    /// A string value.
     String(String),
+    /// A numeric value.
     Number(f64),
+    /// A boolean value.
     Boolean(bool),
+    /// An array of strings, as produced by a multi-select enum.
     StringArray(Vec<String>),
 }
 
@@ -606,7 +696,7 @@ impl From<Vec<String>> for ElicitResultValue {
 }
 
 impl ElicitResultValue {
-    /// Return the string body if this is a string-form value; `None` otherwise.
+    /// Returns the string body if this is a string-form value; `None` otherwise.
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(s) => Some(s.as_str()),
@@ -614,7 +704,7 @@ impl ElicitResultValue {
         }
     }
 
-    /// Return the numeric body if this is a number-form value; `None` otherwise.
+    /// Returns the numeric body if this is a number-form value; `None` otherwise.
     pub fn as_f64(&self) -> Option<f64> {
         match self {
             Self::Number(n) => Some(*n),
@@ -622,7 +712,7 @@ impl ElicitResultValue {
         }
     }
 
-    /// Return the boolean body if this is a boolean-form value; `None` otherwise.
+    /// Returns the boolean body if this is a boolean-form value; `None` otherwise.
     pub fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Boolean(b) => Some(*b),
@@ -630,7 +720,7 @@ impl ElicitResultValue {
         }
     }
 
-    /// Return the string-array body if this is an array-form value; `None` otherwise.
+    /// Returns the string-array body if this is an array-form value; `None` otherwise.
     pub fn as_string_array(&self) -> Option<&[String]> {
         match self {
             Self::StringArray(values) => Some(values.as_slice()),
@@ -639,8 +729,9 @@ impl ElicitResultValue {
     }
 }
 
-/// The client's response to an elicitation request:
-/// `{ action: "accept"|"decline"|"cancel", content?: {[k]: string|number|boolean|string[]} }`.
+/// The client's response to an elicitation request.
+///
+/// Wire shape: `{ action: "accept"|"decline"|"cancel", content?: {[k]: string|number|boolean|string[]} }`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitResult {
@@ -653,6 +744,7 @@ pub struct ElicitResult {
 }
 
 impl ElicitResult {
+    /// Creates an `"accept"` result carrying the submitted form content.
     pub fn accept(content: HashMap<String, ElicitResultValue>) -> Self {
         Self {
             action: ElicitAction::Accept,
@@ -660,6 +752,7 @@ impl ElicitResult {
         }
     }
 
+    /// Creates a `"decline"` result with no content.
     pub fn decline() -> Self {
         Self {
             action: ElicitAction::Decline,
@@ -667,6 +760,7 @@ impl ElicitResult {
         }
     }
 
+    /// Creates a `"cancel"` result with no content.
     pub fn cancel() -> Self {
         Self {
             action: ElicitAction::Cancel,
@@ -683,6 +777,7 @@ impl Default for StringSchema {
 }
 
 impl StringSchema {
+    /// Creates a string schema with no title, description, default or constraints.
     pub fn new() -> Self {
         Self {
             schema_type: "string".to_string(),
@@ -695,17 +790,19 @@ impl StringSchema {
         }
     }
 
+    /// Sets the description.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the default value.
     pub fn with_default(mut self, default: impl Into<String>) -> Self {
         self.default = Some(default.into());
         self
     }
 
-    /// Create a URL string schema with format: "uri"
+    /// Creates a URL string schema with format `"uri"`.
     pub fn url() -> Self {
         Self {
             schema_type: "string".to_string(),
@@ -726,6 +823,7 @@ impl Default for NumberSchema {
 }
 
 impl NumberSchema {
+    /// Creates a `"number"` schema with no title, description, default or bounds.
     pub fn new() -> Self {
         Self {
             schema_type: "number".to_string(),
@@ -737,6 +835,7 @@ impl NumberSchema {
         }
     }
 
+    /// Creates an `"integer"` schema with no title, description, default or bounds.
     pub fn integer() -> Self {
         Self {
             schema_type: "integer".to_string(),
@@ -748,11 +847,13 @@ impl NumberSchema {
         }
     }
 
+    /// Sets the description.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the default value.
     pub fn with_default(mut self, default: f64) -> Self {
         self.default = Some(default);
         self
@@ -766,6 +867,7 @@ impl Default for BooleanSchema {
 }
 
 impl BooleanSchema {
+    /// Creates a boolean schema with no title, description or default.
     pub fn new() -> Self {
         Self {
             schema_type: "boolean".to_string(),
@@ -775,6 +877,7 @@ impl BooleanSchema {
         }
     }
 
+    /// Sets the description.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
@@ -782,6 +885,7 @@ impl BooleanSchema {
 }
 
 impl LegacyTitledEnumSchema {
+    /// Creates a legacy enum schema over the given permitted values, with no display names.
     pub fn new(enum_values: Vec<String>) -> Self {
         Self {
             schema_type: "string".to_string(),
@@ -793,16 +897,19 @@ impl LegacyTitledEnumSchema {
         }
     }
 
+    /// Sets the description.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
 
+    /// Sets the display names serialized as `enumNames`, positionally aligned with the permitted values.
     pub fn with_enum_names(mut self, enum_names: Vec<String>) -> Self {
         self.enum_names = Some(enum_names);
         self
     }
 
+    /// Sets the default selected value.
     pub fn with_default(mut self, default: impl Into<String>) -> Self {
         self.default = Some(default.into());
         self
@@ -810,13 +917,14 @@ impl LegacyTitledEnumSchema {
 }
 
 impl EnumSchema {
-    /// Spec-pure untitled single-select: `{type:"string", enum:[...]}`.
+    /// Creates a spec-pure untitled single-select: `{type:"string", enum:[...]}`.
     pub fn new(enum_values: Vec<String>) -> Self {
         Self::SingleSelect(SingleSelectEnumSchema::Untitled(
             UntitledSingleSelectEnumSchema::new(enum_values),
         ))
     }
 
+    /// Sets the description on whichever variant this holds.
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         let d = description.into();
         match &mut self {
@@ -837,8 +945,9 @@ impl EnumSchema {
         self
     }
 
-    /// The set of permitted values, across all union shapes (titled variants
-    /// carry them as `oneOf[].const`, multi-selects inside `items`).
+    /// Returns the permitted values, whichever union shape this holds.
+    ///
+    /// Titled variants carry them as `oneOf[].const`, multi-selects inside `items`.
     pub fn allowed_values(&self) -> Vec<String> {
         match self {
             Self::SingleSelect(SingleSelectEnumSchema::Untitled(v)) => v.enum_values.clone(),
@@ -856,15 +965,17 @@ impl EnumSchema {
         }
     }
 
-    /// True for the multi-select shapes (the submitted value is an array).
+    /// Returns `true` for the multi-select shapes (the submitted value is an array).
     pub fn is_multi_select(&self) -> bool {
         matches!(self, Self::MultiSelect(_))
     }
 
-    /// Per-value display names use the legacy `enumNames` wire shape; this
-    /// converts the union to [`LegacyTitledEnumSchema`], preserving any
-    /// existing single-select values. (New code wanting titles should build a
-    /// [`TitledSingleSelectEnumSchema`] with `oneOf` const/title pairs.)
+    /// Converts an untitled single-select or legacy enum to
+    /// [`LegacyTitledEnumSchema`] carrying the given `enumNames`.
+    ///
+    /// Existing values are preserved; titled and multi-select shapes are
+    /// returned unchanged. To get titles, build a
+    /// [`TitledSingleSelectEnumSchema`] with `oneOf` const/title pairs instead.
     pub fn with_enum_names(self, enum_names: Vec<String>) -> Self {
         let legacy = match self {
             Self::LegacyTitled(v) => v,
@@ -888,46 +999,52 @@ impl EnumSchema {
 
 // Convenience constructors for PrimitiveSchemaDefinition
 impl PrimitiveSchemaDefinition {
+    /// Creates a string property with no constraints.
     pub fn string() -> Self {
         Self::String(StringSchema::new())
     }
 
+    /// Creates a string property with the given description.
     pub fn string_with_description(description: impl Into<String>) -> Self {
         Self::String(StringSchema::new().with_description(description))
     }
 
-    /// Create a URL string schema with format: "uri"
+    /// Creates a URL string schema with format `"uri"`.
     pub fn url() -> Self {
         Self::String(StringSchema::url())
     }
 
-    /// Create a URL string schema with description and format: "uri"
+    /// Creates a URL string schema with a description and format `"uri"`.
     pub fn url_with_description(description: impl Into<String>) -> Self {
         Self::String(StringSchema::url().with_description(description))
     }
 
+    /// Creates a `number` property with no bounds.
     pub fn number() -> Self {
         Self::Number(NumberSchema::new())
     }
 
+    /// Creates an `integer` property with no bounds.
     pub fn integer() -> Self {
         Self::Number(NumberSchema::integer())
     }
 
+    /// Creates a boolean property.
     pub fn boolean() -> Self {
         Self::Boolean(BooleanSchema::new())
     }
 
+    /// Creates an untitled single-select enum property over the given permitted values.
     pub fn enum_values(values: Vec<String>) -> Self {
         Self::Enum(EnumSchema::new(values))
     }
 }
 
-/// Builder for creating common elicitation patterns
+/// Constructors for common single-field form-mode elicitation requests.
 pub struct ElicitationBuilder;
 
 impl ElicitationBuilder {
-    /// Create a simple text input elicitation (MCP spec compliant)
+    /// Creates a form-mode request with one required string field.
     pub fn text_input(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -944,7 +1061,7 @@ impl ElicitationBuilder {
         ElicitRequest::new_form(message, schema)
     }
 
-    /// Create a number input elicitation (MCP spec compliant)
+    /// Creates a form-mode request with one required `number` field, bounded by `min` and `max` when given.
     pub fn number_input(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -965,7 +1082,7 @@ impl ElicitationBuilder {
         ElicitRequest::new_form(message, schema)
     }
 
-    /// Create a single-field URL input elicitation (format: `"uri"`).
+    /// Creates a form-mode request with one required string field of format `"uri"`.
     pub fn url_input(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -982,7 +1099,7 @@ impl ElicitationBuilder {
         ElicitRequest::new_form(message, schema)
     }
 
-    /// Create a boolean confirmation elicitation (MCP spec compliant)
+    /// Creates a form-mode request with one required boolean field named `confirmed`.
     pub fn confirm(message: impl Into<String>) -> ElicitRequest {
         let schema = ElicitationSchema::new()
             .with_property(
@@ -995,11 +1112,7 @@ impl ElicitationBuilder {
     }
 }
 
-// ===========================================
-// === Fine-Grained Elicitation Traits ===
-// ===========================================
-
-/// Trait for elicitation metadata (message, title)
+/// Unit tests for the elicitation types.
 #[cfg(test)]
 #[allow(deprecated)]
 mod tests {
@@ -1240,8 +1353,8 @@ mod tests {
 #[cfg(test)]
 mod enum_union_fidelity_tests {
     //! Round-trip fidelity through the untagged unions: enum constraints must
-    //! survive deserialize → reserialize (they previously collapsed into
-    //! `StringSchema`, silently dropping `enum`).
+    //! survive deserialize → reserialize rather than collapsing into
+    //! `StringSchema` and dropping `enum`.
     use super::*;
     use serde_json::json;
 
@@ -1362,8 +1475,8 @@ mod enum_union_fidelity_tests {
 
     #[test]
     fn number_constraints_survive_the_union() {
-        // Pre-fix, {type:"number", minimum} could collapse into StringSchema
-        // (unknown fields silently ignored). deny_unknown_fields forbids it.
+        // {type:"number", minimum} must not collapse into StringSchema;
+        // deny_unknown_fields on StringSchema forbids it.
         let wire = json!({"type": "number", "minimum": 1.5, "maximum": 9.0});
         let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();
         assert!(
@@ -1375,9 +1488,9 @@ mod enum_union_fidelity_tests {
 
     #[test]
     fn bare_integer_discriminator_selects_number_not_string() {
-        // Regression: a bare {"type":"integer"} with no numeric-only field
-        // (minimum/maximum/default) used to fall through to StringSchema
-        // because untagged dispatch tried the String variant first and
+        // A bare {"type":"integer"} with no numeric-only field
+        // (minimum/maximum/default) must not fall through to StringSchema,
+        // which an untagged dispatch would try first since
         // schema_type: String accepts any string value.
         let wire = json!({"type": "integer"});
         let parsed: PrimitiveSchemaDefinition = serde_json::from_value(wire.clone()).unwrap();

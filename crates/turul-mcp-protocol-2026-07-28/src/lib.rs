@@ -10,7 +10,7 @@
 //! has a Rust binding here. [`MCP_VERSION`] is `"2026-07-28"`, the only version
 //! literal this crate emits or accepts (see [`version::McpVersion`]).
 //!
-//! # Example
+//! # Examples
 //!
 //! ```rust
 //! use turul_mcp_protocol_2026_07_28::tools::{Tool, ToolSchema};
@@ -116,11 +116,9 @@ pub mod tools;
 pub mod traits;
 pub mod version;
 
-// Re-export key content types for convenience
 pub use content::{
     BlobResourceContents, ContentBlock, ResourceContents, ResourceReference, TextResourceContents,
 };
-// Re-export key meta types for convenience
 pub use meta::{Annotations, MetaObject, RequestMetaObject};
 
 /// Bidirectional wire-format compliance harness against the upstream MCP spec's
@@ -134,46 +132,28 @@ pub use meta::{Annotations, MetaObject, RequestMetaObject};
 #[cfg(feature = "compliance")]
 pub mod compliance;
 
-// Re-export main types
-pub use icons::{Icon, IconTheme};
-pub use initialize::{ClientCapabilities, Implementation, ServerCapabilities};
-pub use prompts::{
-    GetPromptRequest, GetPromptResult, ListPromptsRequest, ListPromptsResult, Prompt,
-    PromptArgument, PromptMessage,
-};
-pub use resources::{
-    ListResourcesRequest, ListResourcesResult, ReadResourceRequest, ReadResourceResult, Resource,
-    ResourceContent,
-};
-pub use tools::{
-    CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, Tool, ToolOutputSchema,
-    ToolResult, ToolSchema,
-};
-pub use version::McpVersion;
-// ResourceTemplate functionality is now part of resources module
-// pub use resources::{ResourceTemplate, ListResourceTemplatesRequest, ListResourceTemplatesResult};
-pub use elicitation::{
-    ElicitAction, ElicitRequest, ElicitRequestFormParams, ElicitResult, ElicitationBuilder,
-    ElicitationSchema, PrimitiveSchemaDefinition, StringFormat,
-};
-// MCP-specific params/result shapes (what goes inside the wire envelope's
-// `params`/`result` fields). Envelopes themselves come from `turul-rpc` below.
 pub use caching::{CacheScope, CacheableResult};
 pub use discover::{
     DiscoverRequest, DiscoverResult, DiscoverResultResponse, SERVER_DISCOVER_METHOD,
+};
+pub use elicitation::{
+    ElicitAction, ElicitRequest, ElicitRequestFormParams, ElicitResult, ElicitationBuilder,
+    ElicitationSchema, PrimitiveSchemaDefinition, StringFormat,
 };
 pub use headers::{
     ERROR_CODE_HEADER_MISMATCH, HTTP_HEADER_METHOD, HTTP_HEADER_NAME, HTTP_HEADER_PARAM_PREFIX,
     HTTP_HEADER_PROTOCOL_VERSION, MCP_PARAM_BASE64_PREFIX, MCP_PARAM_BASE64_SUFFIX,
     X_MCP_HEADER_SCHEMA_KEY,
 };
+pub use icons::{Icon, IconTheme};
+pub use initialize::{ClientCapabilities, Implementation, ServerCapabilities};
 pub use input_required::{
     InputRequest, InputRequests, InputRequiredResult, InputResponse, InputResponseRequestParams,
     InputResponses,
 };
 pub use json_rpc::{JSONRPC_VERSION, PaginatedRequestParams, RequestParams};
 pub use meta::{Cursor as MetaCursor, ProgressToken};
-#[allow(deprecated)] // META_KEY_LOG_LEVEL re-exported through the SEP-2577 migration window
+#[allow(deprecated)] // META_KEY_LOG_LEVEL is deprecated per SEP-2577
 pub use meta::{
     META_KEY_BAGGAGE, META_KEY_CLIENT_CAPABILITIES, META_KEY_CLIENT_INFO, META_KEY_LOG_LEVEL,
     META_KEY_PROTOCOL_VERSION, META_KEY_SUBSCRIPTION_ID, META_KEY_TRACEPARENT, META_KEY_TRACESTATE,
@@ -184,6 +164,14 @@ pub use notifications::{
     ResourceListChangedNotification, ResourceUpdatedNotification,
     ResourceUpdatedNotificationParams, ToolListChangedNotification,
 };
+pub use prompts::{
+    GetPromptRequest, GetPromptResult, ListPromptsRequest, ListPromptsResult, Prompt,
+    PromptArgument, PromptMessage,
+};
+pub use resources::{
+    ListResourcesRequest, ListResourcesResult, ReadResourceRequest, ReadResourceResult, Resource,
+    ResourceContent,
+};
 pub use result_type::ResultType;
 pub use subscriptions::{
     SUBSCRIPTIONS_ACKNOWLEDGED_METHOD, SUBSCRIPTIONS_LISTEN_METHOD, SubscriptionFilter,
@@ -191,7 +179,12 @@ pub use subscriptions::{
     SubscriptionsListenRequest, SubscriptionsListenRequestParams, SubscriptionsListenResult,
     SubscriptionsListenResultMetaObject, SubscriptionsListenResultResponse,
 };
-// SEP-2577-deprecated re-exports kept available during the migration window.
+pub use tools::{
+    CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, Tool, ToolOutputSchema,
+    ToolResult, ToolSchema,
+};
+pub use version::McpVersion;
+// Re-exports of items deprecated by SEP-2577.
 #[allow(deprecated)]
 pub use notifications::{LoggingMessageNotification, LoggingMessageNotificationParams};
 pub use ping::{EmptyParams, EmptyResult};
@@ -219,84 +212,118 @@ pub use turul_rpc::{
 /// on the wire in `LATEST_PROTOCOL_VERSION` of the upstream `schema.ts`.
 ///
 /// The finalized schema emits the stable date literal `"2026-07-28"`. The
-/// pre-finalization draft literal is rejected by [`McpVersion`], not accepted
-/// — the transitional alias was retired.
+/// pre-finalization draft literal is rejected by [`McpVersion`], not accepted.
 pub const MCP_VERSION: &str = "2026-07-28";
 
-/// Common result type for MCP operations
+/// Common result type for MCP operations.
 pub type McpResult<T> = Result<T, McpError>;
 
-/// MCP-specific errors
+/// MCP-specific errors.
 #[derive(Debug, thiserror::Error)]
 pub enum McpError {
+    /// The protocol version in a message differs from the one this side requires.
     #[error("Protocol version mismatch: expected {expected}, got {actual}")]
-    VersionMismatch { expected: String, actual: String },
-
-    #[error("Invalid capability: {0}")]
-    InvalidCapability(String),
-
-    #[error("Tool not found: {0}")]
-    ToolNotFound(String),
-
-    #[error("Resource not found: {0}")]
-    ResourceNotFound(String),
-
-    #[error("Prompt not found: {0}")]
-    PromptNotFound(String),
-
-    #[error("Invalid request: {message}")]
-    InvalidRequest { message: String },
-
-    #[error("Invalid parameters: {0}")]
-    InvalidParameters(String),
-
-    #[error("Missing required parameter: {0}")]
-    MissingParameter(String),
-
-    #[error("Invalid parameter type for '{param}': expected {expected}, got {actual}")]
-    InvalidParameterType {
-        param: String,
+    VersionMismatch {
+        /// The protocol version this side requires.
         expected: String,
+        /// The protocol version that was received.
         actual: String,
     },
 
+    /// A capability declaration is malformed or not valid for this protocol version.
+    #[error("Invalid capability: {0}")]
+    InvalidCapability(String),
+
+    /// The requested tool name is not registered; the payload is that name.
+    #[error("Tool not found: {0}")]
+    ToolNotFound(String),
+
+    /// The requested resource URI does not resolve to a resource; the payload is that URI.
+    #[error("Resource not found: {0}")]
+    ResourceNotFound(String),
+
+    /// The requested prompt name is not registered; the payload is that name.
+    #[error("Prompt not found: {0}")]
+    PromptNotFound(String),
+
+    /// The request is not a valid MCP request.
+    #[error("Invalid request: {message}")]
+    InvalidRequest {
+        /// Human-readable description of what is wrong with the request.
+        message: String,
+    },
+
+    /// The request parameters are invalid; the payload describes why.
+    #[error("Invalid parameters: {0}")]
+    InvalidParameters(String),
+
+    /// A required parameter is absent; the payload is the parameter name.
+    #[error("Missing required parameter: {0}")]
+    MissingParameter(String),
+
+    /// A parameter was supplied with the wrong JSON type.
+    #[error("Invalid parameter type for '{param}': expected {expected}, got {actual}")]
+    InvalidParameterType {
+        /// Name of the offending parameter.
+        param: String,
+        /// The JSON type that was expected.
+        expected: String,
+        /// The JSON type that was received.
+        actual: String,
+    },
+
+    /// A parameter value violates its allowed range.
     #[error("Parameter '{param}' value {value} is out of range: {constraint}")]
     ParameterOutOfRange {
+        /// Name of the offending parameter.
         param: String,
+        /// The value that was supplied, rendered as text.
         value: String,
+        /// Description of the constraint the value violates.
         constraint: String,
     },
 
+    /// A tool handler failed while executing; the payload describes the failure.
     #[error("Tool execution failed: {0}")]
     ToolExecutionError(String),
 
+    /// A resource handler failed while reading; the payload describes the failure.
     #[error("Resource execution failed: {0}")]
     ResourceExecutionError(String),
 
+    /// A prompt handler failed while rendering; the payload describes the failure.
     #[error("Prompt execution failed: {0}")]
     PromptExecutionError(String),
 
+    /// Access to the resource is not permitted; the payload describes why.
     #[error("Resource access denied: {0}")]
     ResourceAccessDenied(String),
 
+    /// The server or component is misconfigured; the payload describes the problem.
     #[error("Configuration error: {0}")]
     ConfigurationError(String),
 
+    /// A session operation failed; the payload describes the failure.
     #[error("Session error: {0}")]
     SessionError(String),
 
+    /// Input failed validation; the payload describes the failure.
     #[error("Validation error: {0}")]
     ValidationError(String),
 
+    /// An underlying I/O operation failed.
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
 
+    /// JSON serialization or deserialization failed.
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
 
+    /// The transport failed to send or receive a message; the payload describes the failure.
     #[error("Transport error: {0}")]
     TransportError(String),
 
+    /// A JSON-RPC level protocol violation; the payload describes it.
     #[error("JSON-RPC protocol error: {0}")]
     JsonRpcProtocolError(String),
 
@@ -306,17 +333,20 @@ pub enum McpError {
     /// required by the MCP spec: "tasks/result MUST return that same JSON-RPC error."
     #[error("JSON-RPC error {code}: {message}")]
     JsonRpcError {
+        /// The JSON-RPC error code.
         code: i64,
+        /// The JSON-RPC error message.
         message: String,
+        /// The JSON-RPC error `data` member, or `None` when the error carried none.
         data: Option<serde_json::Value>,
     },
 
     /// MCP `-32021` — server requires a client capability that was not declared
-    /// in the request's `clientCapabilities`. See draft schema `MissingRequiredClientCapabilityError`.
+    /// in the request's `clientCapabilities`. See `MissingRequiredClientCapabilityError`
+    /// in the 2026-07-28 schema.
     ///
     /// Wire `data` shape: `{"requiredCapabilities": <ClientCapabilities>}`. The
-    /// `required` field is `serde_json::Value` transitionally — to be retyped
-    /// to `ClientCapabilities` from `discover` when that integration lands.
+    /// `required` field holds that capabilities object as a `serde_json::Value`.
     #[error("Missing required client capability")]
     MissingRequiredClientCapability {
         /// Capabilities the server requires from the client to process this request.
@@ -324,7 +354,7 @@ pub enum McpError {
     },
 
     /// MCP `-32022` — request's protocol version is not supported by the server.
-    /// See draft schema `UnsupportedProtocolVersionError`.
+    /// See `UnsupportedProtocolVersionError` in the 2026-07-28 schema.
     ///
     /// Wire `data` shape: `{"supported": [..], "requested": ".."}`.
     #[error("Unsupported protocol version: requested {requested}, supported {supported:?}")]
@@ -368,12 +398,12 @@ impl From<&str> for McpError {
 }
 
 impl McpError {
-    /// Create a missing parameter error
+    /// Creates a missing parameter error.
     pub fn missing_param(param: &str) -> Self {
         Self::MissingParameter(param.to_string())
     }
 
-    /// Create an invalid parameter type error
+    /// Creates an invalid parameter type error.
     pub fn invalid_param_type(param: &str, expected: &str, actual: &str) -> Self {
         Self::InvalidParameterType {
             param: param.to_string(),
@@ -382,7 +412,7 @@ impl McpError {
         }
     }
 
-    /// Create a parameter out of range error
+    /// Creates a parameter out of range error.
     pub fn param_out_of_range(param: &str, value: &str, constraint: &str) -> Self {
         Self::ParameterOutOfRange {
             param: param.to_string(),
@@ -391,42 +421,42 @@ impl McpError {
         }
     }
 
-    /// Create a tool execution error
+    /// Creates a tool execution error.
     pub fn tool_execution(message: &str) -> Self {
         Self::ToolExecutionError(message.to_string())
     }
 
-    /// Create a resource execution error
+    /// Creates a resource execution error.
     pub fn resource_execution(message: &str) -> Self {
         Self::ResourceExecutionError(message.to_string())
     }
 
-    /// Create a prompt execution error
+    /// Creates a prompt execution error.
     pub fn prompt_execution(message: &str) -> Self {
         Self::PromptExecutionError(message.to_string())
     }
 
-    /// Create a validation error
+    /// Creates a validation error.
     pub fn validation(message: &str) -> Self {
         Self::ValidationError(message.to_string())
     }
 
-    /// Create a configuration error
+    /// Creates a configuration error.
     pub fn configuration(message: &str) -> Self {
         Self::ConfigurationError(message.to_string())
     }
 
-    /// Create a transport error
+    /// Creates a transport error.
     pub fn transport(message: &str) -> Self {
         Self::TransportError(message.to_string())
     }
 
-    /// Create a JSON-RPC protocol error
+    /// Creates a JSON-RPC protocol error.
     pub fn json_rpc_protocol(message: &str) -> Self {
         Self::JsonRpcProtocolError(message.to_string())
     }
 
-    /// Create a JSON-RPC error with preserved code, message, and optional data.
+    /// Creates a JSON-RPC error with preserved code, message, and optional data.
     ///
     /// Used by `tasks/result` to reproduce original errors verbatim.
     pub fn json_rpc_error(
@@ -441,7 +471,7 @@ impl McpError {
         }
     }
 
-    /// Convert to a JsonRpcErrorObject for JSON-RPC 2.0 responses
+    /// Converts to a [`JsonRpcErrorObject`] for JSON-RPC 2.0 responses.
     pub fn to_error_object(&self) -> turul_rpc::error::JsonRpcErrorObject {
         use turul_rpc::error::JsonRpcErrorObject;
 
@@ -473,7 +503,7 @@ impl McpError {
             )),
 
             // Not-found errors map to JSON-RPC standard -32602 (Invalid Params) per the
-            // draft schema's `InvalidParamsError` doc and SEP-2164: unknown tool/prompt/resource
+            // 2026-07-28 schema's `InvalidParamsError` doc and SEP-2164: unknown tool/prompt/resource
             // names are treated as invalid parameters, not custom MCP server errors.
             McpError::ToolNotFound(name) => {
                 JsonRpcErrorObject::invalid_params(&format!("Unknown tool: {}", name))
@@ -597,7 +627,7 @@ impl McpError {
         }
     }
 
-    /// Create a JSON-RPC error response for this MCP error
+    /// Creates a JSON-RPC error response for this MCP error.
     pub fn to_json_rpc_response(
         &self,
         id: Option<turul_rpc::RequestId>,
@@ -605,7 +635,7 @@ impl McpError {
         turul_rpc::JsonRpcError::new(id, self.to_error_object())
     }
 
-    /// Legacy method for backward compatibility - use to_error_object() instead
+    /// Deprecated alias for [`to_error_object`](Self::to_error_object).
     #[deprecated(note = "Use to_error_object() instead for cleaner architecture")]
     pub fn to_json_rpc_error(&self) -> turul_rpc::error::JsonRpcErrorObject {
         self.to_error_object()
@@ -615,7 +645,6 @@ impl McpError {
 // Implement the ToJsonRpcError trait for MCP errors
 impl turul_rpc::r#async::ToJsonRpcError for McpError {
     fn to_error_object(&self) -> turul_rpc::error::JsonRpcErrorObject {
-        // Delegate to our existing type-safe implementation
         McpError::to_error_object(self)
     }
 }

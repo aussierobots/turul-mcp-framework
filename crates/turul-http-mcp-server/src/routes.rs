@@ -1,4 +1,4 @@
-//! Route registry for custom HTTP paths (e.g., `.well-known` endpoints)
+//! Route registry for custom HTTP paths (e.g., `.well-known` endpoints).
 //!
 //! Provides exact-match routing with strict security validation.
 //! All paths are matched as raw strings — no normalization is performed.
@@ -15,14 +15,14 @@ use std::sync::Arc;
 /// can be boxed into this type, making route handlers transport-portable.
 pub type RouteBody = http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>;
 
-/// Handler for a custom HTTP route
+/// Handles requests for a custom HTTP route.
 #[async_trait]
 pub trait RouteHandler: Send + Sync {
-    /// Handle an incoming HTTP request for this route
+    /// Handles an incoming HTTP request for this route.
     async fn handle(&self, req: Request<RouteBody>) -> Response<RouteBody>;
 }
 
-/// Registry of custom HTTP routes with strict path validation
+/// Registry of custom HTTP routes with strict path validation.
 ///
 /// # Security Contract
 ///
@@ -36,12 +36,12 @@ pub struct RouteRegistry {
 }
 
 impl RouteRegistry {
-    /// Create a new empty route registry
+    /// Creates an empty route registry.
     pub fn new() -> Self {
         Self { routes: Vec::new() }
     }
 
-    /// Add a route to the registry
+    /// Adds a route to the registry.
     ///
     /// # Parameters
     ///
@@ -51,23 +51,24 @@ impl RouteRegistry {
         self.routes.push((path.to_string(), handler));
     }
 
-    /// Check if the registry has any routes
+    /// Returns whether the registry has no routes.
     pub fn is_empty(&self) -> bool {
         self.routes.is_empty()
     }
 
-    /// Match a request path against registered routes
+    /// Matches a request path against registered routes.
     ///
-    /// Returns `None` if the path is rejected by security checks or doesn't match.
-    /// Returns the handler if an exact match is found.
+    /// Returns the handler for an exact match, or `Ok(None)` when no route matches.
+    ///
+    /// # Errors
+    ///
+    /// Returns the [`RouteValidationError`] from `validate_path` when the path is rejected by the security checks, before any matching.
     pub fn match_route(
         &self,
         path: &str,
     ) -> Result<Option<&Arc<dyn RouteHandler>>, RouteValidationError> {
-        // Security validation — reject before matching
         validate_path(path)?;
 
-        // Exact match only
         for (registered_path, handler) in &self.routes {
             if path == registered_path {
                 return Ok(Some(handler));
@@ -84,16 +85,16 @@ impl Default for RouteRegistry {
     }
 }
 
-/// Error returned when a request path fails security validation
+/// Error returned when a request path fails security validation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RouteValidationError {
-    /// Path contains path traversal sequences
+    /// Path contains path traversal sequences.
     PathTraversal,
-    /// Path contains double slashes
+    /// Path contains double slashes.
     DoubleSlash,
-    /// Path contains percent-encoded separators or null bytes
+    /// Path contains percent-encoded separators or null bytes, double-encoded values, or malformed percent-encoding.
     EncodedSeparator,
-    /// Path contains null bytes
+    /// Path contains a raw null byte.
     NullByte,
 }
 
@@ -111,7 +112,7 @@ impl std::fmt::Display for RouteValidationError {
 impl std::error::Error for RouteValidationError {}
 
 impl RouteValidationError {
-    /// Convert to an HTTP 400 Bad Request response
+    /// Converts the error to an HTTP 400 Bad Request response.
     pub fn into_response(self) -> Response<RouteBody> {
         Response::builder()
             .status(StatusCode::BAD_REQUEST)
@@ -133,6 +134,7 @@ impl RouteValidationError {
 /// - Percent-encoded separators: `%2f`, `%2F` (slash), `%2e` (dot), `%00` (null byte)
 /// - Double-encoded values: `%252f`, `%252e`
 /// - Null bytes: `\0` anywhere in path
+/// - Malformed percent-encoding: `%` not followed by two hex digits
 fn validate_path(path: &str) -> Result<(), RouteValidationError> {
     // Null byte check (raw)
     if path.contains('\0') {
@@ -217,7 +219,7 @@ mod tests {
 
     #[test]
     fn test_route_registry_exact_match() {
-        // T10: Exact match
+        // Exact match
         let registry = registry_with_well_known();
         let result = registry
             .match_route("/.well-known/oauth-protected-resource")
@@ -227,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_route_registry_no_prefix_match() {
-        // T11: No prefix matching
+        // No prefix matching
         let registry = registry_with_well_known();
         let result = registry
             .match_route("/.well-known/oauth-protected-resource/extra")
@@ -240,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_route_registry_case_sensitive() {
-        // T12: Case sensitive
+        // Case sensitive
         let registry = registry_with_well_known();
         let result = registry
             .match_route("/.Well-Known/OAuth-Protected-Resource")
@@ -250,7 +252,7 @@ mod tests {
 
     #[test]
     fn test_route_registry_reject_path_traversal() {
-        // T13: Path traversal rejection
+        // Path traversal rejection
         let registry = registry_with_well_known();
 
         assert!(matches!(
@@ -273,7 +275,7 @@ mod tests {
 
     #[test]
     fn test_route_reject_percent_encoded_slash() {
-        // T38: Percent-encoded slash
+        // Percent-encoded slash
         let registry = registry_with_well_known();
         assert!(matches!(
             registry.match_route("/.well-known%2foauth-protected-resource"),
@@ -287,7 +289,7 @@ mod tests {
 
     #[test]
     fn test_route_reject_double_encoding() {
-        // T39: Double encoding
+        // Double encoding
         let registry = registry_with_well_known();
         assert!(matches!(
             registry.match_route("/.well-known%252foauth"),
@@ -301,7 +303,7 @@ mod tests {
 
     #[test]
     fn test_route_reject_null_byte() {
-        // T40: Null byte
+        // Null byte
         let registry = registry_with_well_known();
         assert!(matches!(
             registry.match_route("/.well-known\x00/test"),
@@ -311,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_route_reject_double_slash() {
-        // T41: Double slash
+        // Double slash
         let registry = registry_with_well_known();
         assert!(matches!(
             registry.match_route("//.well-known/oauth-protected-resource"),

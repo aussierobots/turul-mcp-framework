@@ -78,9 +78,6 @@ pub use schemars_helpers::{
     resolve_local_refs, schemars_param_schema,
 };
 
-// Schema provider with automatic JsonSchema detection
-// schema_provider module removed - schemars detection now happens directly in derive macros
-
 // Re-export schemars for use in generated code
 // This ensures schemars::schema_for!() works in user code without requiring
 // users to add schemars as an explicit dependency
@@ -90,39 +87,39 @@ pub use schemars;
 pub use traits::*;
 
 // Re-export all builders for convenience
-/// Builder for completion provider configuration with sampling parameters
+/// Builder for completion requests.
 #[cfg(feature = "protocol-2025-11-25")]
 pub use completion::CompletionBuilder;
 #[cfg(feature = "protocol-2026-07-28")]
 pub use elicitation::validate_elicit_content;
-/// Builders for interactive data collection and result formatting
+/// Builders for interactive data collection and result formatting.
 pub use elicitation::{ElicitResultBuilder, ElicitationBuilder};
-/// Builders for structured logging messages and level configuration
+/// Builders for structured logging messages and level configuration.
 #[cfg(feature = "protocol-2025-11-25")]
 pub use logging::{LoggingBuilder, SetLevelBuilder};
-/// Builder for constructing prompt messages with role and content
+/// Builder for constructing prompt messages with role and content.
 #[cfg(feature = "protocol-2025-11-25")]
 pub use message::MessageBuilder;
-/// Builders for various MCP notification types (progress, cancellation, resource updates)
+/// Builders for various MCP notification types (progress, cancellation, resource updates).
 pub use notification::{
     CancelledNotificationBuilder, NotificationBuilder, ProgressNotificationBuilder,
     ResourceUpdatedNotificationBuilder,
 };
-/// Builder for prompt templates with arguments and message composition
+/// Builder for prompt templates with arguments and message composition.
 pub use prompt::PromptBuilder;
-/// Builder for resource definitions with content and metadata
+/// Builder for resource definitions with content and metadata.
 pub use resource::ResourceBuilder;
-/// Builders for root directory listings and workspace notifications
+/// Builders for root directory listings and workspace notifications.
 pub use root::RootBuilder;
 #[cfg(feature = "protocol-2025-11-25")]
 pub use root::{ListRootsRequestBuilder, RootsNotificationBuilder};
-/// Builder for executable tool definitions with parameters and handlers
+/// Builder for executable tool definitions with parameters and handlers.
 pub use tool::ToolBuilder;
 
 // Common types used across builders
-/// JSON value type for dynamic content construction
+/// JSON value type for dynamic content construction.
 pub use serde_json::{Value, json};
-/// Hash map type for parameter collections and metadata
+/// Hash map type for parameter collections and metadata.
 pub use std::collections::HashMap;
 
 /// Adapts a property map (`name -> structured JsonSchema`) to the value type

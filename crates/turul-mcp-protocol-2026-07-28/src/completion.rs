@@ -10,6 +10,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceTemplateReference {
+    /// Discriminator literal; always `ref/resource` for this reference.
     #[serde(rename = "type")]
     pub ref_type: String, // "ref/resource"
     /// The URI or URI template of the resource
@@ -21,6 +22,7 @@ pub struct ResourceTemplateReference {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptReference {
+    /// Discriminator literal; always `ref/prompt` for this reference.
     #[serde(rename = "type")]
     pub ref_type: String, // "ref/prompt"
     /// The name of the prompt (BaseMetadata).
@@ -44,7 +46,9 @@ pub struct PromptReference {
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum CompletionReference {
+    /// Reference to a resource or resource template, tagged `ref/resource`.
     ResourceTemplate(ResourceTemplateReference),
+    /// Reference to a prompt by name, tagged `ref/prompt`.
     Prompt(PromptReference),
 }
 
@@ -109,7 +113,7 @@ pub struct CompleteRequestParams {
 }
 
 impl CompleteRequestParams {
-    /// Construct with the required `_meta`, reference, and argument.
+    /// Constructs a value with the required `_meta`, reference, and argument.
     pub fn new(
         reference: CompletionReference,
         argument: CompleteArgument,
@@ -123,11 +127,13 @@ impl CompleteRequestParams {
         }
     }
 
+    /// Sets the context of already-resolved argument values and returns the params.
     pub fn with_context(mut self, context: CompletionContext) -> Self {
         self.context = Some(context);
         self
     }
 
+    /// Replaces the required `_meta` object and returns the params.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.meta = meta;
         self
@@ -145,7 +151,7 @@ pub struct CompleteRequest {
 }
 
 impl CompleteRequest {
-    /// Construct with the required `_meta`, reference, and argument.
+    /// Constructs a value with the required `_meta`, reference, and argument.
     pub fn new(
         reference: CompletionReference,
         argument: CompleteArgument,
@@ -163,11 +169,13 @@ impl CompleteRequest {
         self
     }
 
+    /// Sets the context of already-resolved argument values on the params and returns the request.
     pub fn with_context(mut self, context: CompletionContext) -> Self {
         self.params = self.params.with_context(context);
         self
     }
 
+    /// Replaces the required `_meta` object on the params and returns the request.
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
         self.params = self.params.with_meta(meta);
         self
@@ -217,6 +225,9 @@ pub struct CompleteResult {
 }
 
 impl CompletionResult {
+    /// Creates a result carrying the given completion values, with no `total` or `hasMore`.
+    ///
+    /// Values are not truncated here; the schema limit of 100 items is enforced by the server dispatch layer.
     pub fn new(values: Vec<String>) -> Self {
         Self {
             values,
@@ -225,11 +236,13 @@ impl CompletionResult {
         }
     }
 
+    /// Sets the total number of available completions, which may exceed the number of returned values.
     pub fn with_total(mut self, total: f64) -> Self {
         self.total = Some(total);
         self
     }
 
+    /// Sets whether more completions are available beyond the returned values.
     pub fn with_has_more(mut self, has_more: bool) -> Self {
         self.has_more = Some(has_more);
         self
@@ -237,6 +250,7 @@ impl CompletionResult {
 }
 
 impl CompleteResult {
+    /// Creates a `complete` result carrying the given completion and no `_meta`.
     pub fn new(completion: CompletionResult) -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -245,14 +259,16 @@ impl CompleteResult {
         }
     }
 
+    /// Sets the result `_meta` object and returns the result.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
     }
 }
 
-/// Convenience constructors
+/// Convenience constructors.
 impl ResourceTemplateReference {
+    /// Creates a reference to the resource or resource template with the given URI or URI template.
     pub fn new(uri: impl Into<String>) -> Self {
         Self {
             ref_type: "ref/resource".to_string(),
@@ -262,6 +278,7 @@ impl ResourceTemplateReference {
 }
 
 impl PromptReference {
+    /// Creates a reference to the prompt with the given name and no title.
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             ref_type: "ref/prompt".to_string(),
@@ -270,6 +287,7 @@ impl PromptReference {
         }
     }
 
+    /// Sets the display title of the prompt and returns the reference.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
@@ -277,16 +295,19 @@ impl PromptReference {
 }
 
 impl CompletionReference {
+    /// Creates a resource-template reference for the given URI or URI template.
     pub fn resource(uri: impl Into<String>) -> Self {
         Self::ResourceTemplate(ResourceTemplateReference::new(uri))
     }
 
+    /// Creates a prompt reference for the given prompt name.
     pub fn prompt(name: impl Into<String>) -> Self {
         Self::Prompt(PromptReference::new(name))
     }
 }
 
 impl CompleteArgument {
+    /// Creates an argument with the given name and the value typed so far.
     pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -302,10 +323,12 @@ impl Default for CompletionContext {
 }
 
 impl CompletionContext {
+    /// Creates an empty context with no previously resolved arguments.
     pub fn new() -> Self {
         Self { arguments: None }
     }
 
+    /// Sets the previously resolved argument values, keyed by argument name, and returns the context.
     pub fn with_arguments(mut self, arguments: HashMap<String, String>) -> Self {
         self.arguments = Some(arguments);
         self

@@ -1,8 +1,8 @@
-//! Middleware error types
+//! Middleware error types.
 
 use std::fmt;
 
-/// JSON-RPC 2.0 error codes for middleware errors
+/// Defines the JSON-RPC 2.0 error codes for middleware errors.
 ///
 /// These codes are used when converting `MiddlewareError` to `JsonRpcError`.
 ///
@@ -14,15 +14,13 @@ use std::fmt;
 /// reserved range `-32768..-32000`. See
 /// [Error Codes](https://modelcontextprotocol.io/specification/2026-07-28/basic/index#error-codes).
 ///
-/// The three codes below predate that partition and are frozen as legacy
-/// allocations; nothing new may join them, except `UNAUTHORIZED` — relocated
-/// below to correct a `MUST NOT` violation.
+/// The three codes below are legacy allocations; nothing new may join them.
 ///
-/// `UNAUTHORIZED` used to be `-32002`, one of the codes 2026-07-28 names as
-/// forbidden for this version to emit — it meant "resource not found" in
-/// 2025-11-25 and earlier, so a 2026 permission denial was wire-indistinguishable
-/// from a missing resource. It is now `-32005`. This trades that `MUST NOT`
-/// violation for a `SHOULD NOT`: `-32005` still sits in the legacy
+/// `UNAUTHORIZED` is `-32005` rather than `-32002`: 2026-07-28 names `-32002`
+/// as forbidden for this version to emit — it meant "resource not found" in
+/// 2025-11-25 and earlier, so a 2026 permission denial would be
+/// wire-indistinguishable from a missing resource. `-32005` trades that
+/// `MUST NOT` violation for a `SHOULD NOT`: it sits in the legacy
 /// `-32000..-32019` sub-range the spec says new implementations should avoid
 /// entirely, rather than in the unreserved space above `-32099` the spec
 /// recommends for new codes. The spec's recommended range is unreachable for
@@ -35,8 +33,8 @@ use std::fmt;
 pub mod error_codes {
     /// Authentication required (-32001)
     pub const UNAUTHENTICATED: i64 = -32001;
-    /// Permission denied (-32005). Relocated from -32002, which 2026-07-28
-    /// forbids implementations of this version from emitting.
+    /// Permission denied (-32005). Not -32002, which 2026-07-28 forbids
+    /// implementations of this version from emitting.
     pub const UNAUTHORIZED: i64 = -32005;
     /// Rate limit exceeded (-32003)
     pub const RATE_LIMIT_EXCEEDED: i64 = -32003;
@@ -46,7 +44,7 @@ pub mod error_codes {
     pub const INTERNAL_ERROR: i64 = -32603;
 }
 
-/// Errors that can occur during middleware execution
+/// Errors that can occur during middleware execution.
 ///
 /// These errors are converted to `McpError` by the framework and then to
 /// JSON-RPC error responses. Middleware should use semantic error types
@@ -181,17 +179,17 @@ impl fmt::Display for MiddlewareError {
 impl std::error::Error for MiddlewareError {}
 
 impl MiddlewareError {
-    /// Create an unauthenticated error
+    /// Creates an unauthenticated error.
     pub fn unauthenticated(msg: impl Into<String>) -> Self {
         Self::Unauthenticated(msg.into())
     }
 
-    /// Create an unauthorized error
+    /// Creates an unauthorized error.
     pub fn unauthorized(msg: impl Into<String>) -> Self {
         Self::Unauthorized(msg.into())
     }
 
-    /// Create a rate limit error
+    /// Creates a rate limit error.
     pub fn rate_limit(msg: impl Into<String>, retry_after: Option<u64>) -> Self {
         Self::RateLimitExceeded {
             message: msg.into(),
@@ -199,17 +197,17 @@ impl MiddlewareError {
         }
     }
 
-    /// Create an invalid request error
+    /// Creates an invalid request error.
     pub fn invalid_request(msg: impl Into<String>) -> Self {
         Self::InvalidRequest(msg.into())
     }
 
-    /// Create an internal error
+    /// Creates an internal error.
     pub fn internal(msg: impl Into<String>) -> Self {
         Self::Internal(msg.into())
     }
 
-    /// Create a custom error
+    /// Creates a custom error.
     pub fn custom(code: impl Into<String>, message: impl Into<String>) -> Self {
         Self::Custom {
             code: code.into(),
@@ -217,7 +215,7 @@ impl MiddlewareError {
         }
     }
 
-    /// Create an HTTP challenge error (401/403 with WWW-Authenticate header)
+    /// Creates an HTTP challenge error (401/403 with WWW-Authenticate header).
     ///
     /// Used for OAuth 2.1 Bearer token challenges. Handled at transport level only.
     pub fn http_challenge(status: u16, www_authenticate: impl Into<String>) -> Self {
@@ -228,7 +226,7 @@ impl MiddlewareError {
         }
     }
 
-    /// Create an HTTP challenge error with a response body
+    /// Creates an HTTP challenge error with a response body.
     pub fn http_challenge_with_body(
         status: u16,
         www_authenticate: impl Into<String>,
@@ -242,7 +240,7 @@ impl MiddlewareError {
     }
 }
 
-/// Convert a middleware rejection into the JSON-RPC error response the client sees.
+/// Converts a middleware rejection into the JSON-RPC error response the client sees.
 ///
 /// The sole owner of this mapping. Both transports call it, so the code a client
 /// receives cannot differ by which handler served the request.
@@ -251,8 +249,8 @@ impl MiddlewareError {
 /// are standard JSON-RPC codes with their own constructors, while
 /// `JsonRpcErrorObject::server_error` asserts the code lies in the
 /// implementation-defined `-32099..=-32000`. Routing the standard codes through
-/// `server_error` tripped that assert, so `InvalidRequest`, `Internal` and
-/// `Custom` aborted the request instead of answering it.
+/// `server_error` would trip that assert and abort the request, so
+/// `InvalidRequest`, `Internal` and `Custom` do not use it.
 ///
 /// `Custom` reports `-32603`: its `code` is a free-form application string with
 /// no JSON-RPC number, and inventing one would put it in a range the spec governs.
@@ -335,11 +333,10 @@ mod tests {
         assert_eq!(err.to_string(), "CUSTOM_ERROR: Something went wrong");
     }
 
-    /// Every variant a middleware can return must produce a response. Three of
-    /// them used to panic: `-32600`/`-32603` fall outside the
-    /// `-32099..=-32000` that `JsonRpcErrorObject::server_error` asserts, and
-    /// all six were routed through it, so `InvalidRequest`, `Internal` and
-    /// `Custom` aborted the request instead of answering it.
+    /// Every variant a middleware can return must produce a response.
+    /// `-32600`/`-32603` fall outside the `-32099..=-32000` that
+    /// `JsonRpcErrorObject::server_error` asserts, so `InvalidRequest`,
+    /// `Internal` and `Custom` must not be routed through it.
     #[test]
     fn every_returnable_variant_maps_to_a_response_without_panicking() {
         let id = turul_rpc::RequestId::Number(1);
@@ -393,11 +390,10 @@ mod tests {
     }
 
     /// `UNAUTHENTICATED` and `RATE_LIMIT_EXCEEDED` are frozen legacy
-    /// allocations. `UNAUTHORIZED` is not frozen at its old value: `-32002` is
-    /// a code 2026-07-28 lists among those implementations of this version
-    /// MUST NOT emit, so it was relocated to `-32005`. None of the three may
-    /// enter the spec-reserved sub-range, and `UNAUTHORIZED` specifically must
-    /// never again be `-32002`.
+    /// allocations. `UNAUTHORIZED` is `-32005` because `-32002` is a code
+    /// 2026-07-28 lists among those implementations of this version MUST NOT
+    /// emit. None of the three may enter the spec-reserved sub-range, and
+    /// `UNAUTHORIZED` must never be `-32002`.
     #[test]
     fn middleware_codes_are_frozen_legacy_allocations() {
         const FROZEN: [(&str, i64); 3] = [
@@ -426,10 +422,10 @@ mod tests {
         }
     }
 
-    /// The per-constant guard above did not catch `session_handler.rs`, which
-    /// emitted the literal `-32002` directly rather than through `error_codes`.
-    /// This scans the crate's own source for the literal, so a new emit site
-    /// fails regardless of how it is constructed. Source-level rather than
+    /// The per-constant guard above cannot see a literal `-32002` emitted
+    /// directly rather than through `error_codes`. This scans the crate's own
+    /// source for the literal, so a new emit site fails regardless of how it
+    /// is constructed. Source-level rather than
     /// wire-level on purpose: the invariant is "this code appears in no emit
     /// path", which no single request can demonstrate.
     #[test]

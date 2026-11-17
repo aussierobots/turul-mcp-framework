@@ -49,7 +49,7 @@
 //! # }
 //! ```
 //!
-//! The endpoint is `http://127.0.0.1:8080/mcp`; change it with
+//! The endpoint is `http://127.0.0.1:8000/mcp`; change it with
 //! [`HttpMcpServerBuilder::mcp_path`].
 //!
 //! # Features
@@ -88,7 +88,6 @@ mod tests;
 
 // Re-export main types
 pub use cors::CorsLayer;
-// McpHttpHandler removed in 0.2.0 - use SessionMcpHandler instead
 pub use notification_bridge::{
     BroadcastError, NotificationBroadcaster, SharedNotificationBroadcaster,
     StreamManagerNotificationBroadcaster,
@@ -114,6 +113,7 @@ pub use streamable_http::{StreamableHttpContext, StreamableHttpHandler};
 /// the session architecture, not directly via StreamManager.
 #[async_trait::async_trait]
 pub trait ToolChangeNotifier: Send + Sync {
+    /// Sends a `notifications/tools/list_changed` notification to the given session, returning an error message if delivery fails.
     async fn notify_tools_changed(&self, session_id: &str) -> std::result::Result<(), String>;
 }
 
@@ -130,20 +130,26 @@ pub type Result<T> = std::result::Result<T, HttpMcpError>;
 #[derive(Debug, thiserror::Error)]
 pub enum HttpMcpError {
     #[error("HTTP error: {0}")]
+    /// The underlying HTTP transport failed.
     Http(#[from] hyper::Error),
 
     #[error("JSON-RPC error: {0}")]
+    /// A JSON-RPC protocol error occurred.
     JsonRpc(#[from] turul_rpc::JsonRpcError),
 
     #[error("MCP protocol error: {0}")]
+    /// An MCP protocol error occurred.
     Mcp(#[from] turul_mcp_protocol::McpError),
 
     #[error("Serialization error: {0}")]
+    /// A JSON value could not be serialized or deserialized.
     Serialization(#[from] serde_json::Error),
 
     #[error("IO error: {0}")]
+    /// An I/O operation failed.
     Io(#[from] std::io::Error),
 
     #[error("Invalid request: {0}")]
+    /// The request was malformed or violated the transport's requirements; the message says why.
     InvalidRequest(String),
 }

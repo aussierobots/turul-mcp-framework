@@ -16,10 +16,7 @@ use crate::resource::{McpResource, resource_to_descriptor};
 use crate::{McpResult, SessionContext};
 use turul_mcp_protocol::McpError;
 
-//pub mod response;
-//pub use response::*;
-
-/// Extract limit parameter from raw params (supports both params.limit and params._meta.limit)
+/// Extracts the limit parameter from raw params (supports both `params.limit` and `params._meta.limit`).
 ///
 /// MCP spec allows arbitrary extension fields via `[key: string]: unknown` in both
 /// params root and _meta. This helper extracts limit from either location before
@@ -43,10 +40,8 @@ fn extract_cursor_from_params(params: &Option<Value>) -> Option<turul_mcp_protoc
         .map(turul_mcp_protocol::meta::Cursor::from)
 }
 
-/// Caller-supplied `_meta` keys to echo back onto the result, excluding the
-/// request-scoped routing keys defined by the protocol meta object.
-/// MRTR (SEP-2322): convert a provider's `McpError::InputRequired` outcome
-/// into a successful `InputRequiredResult` value, after enforcing that every
+/// Converts a provider's `McpError::InputRequired` outcome (SEP-2322) into a
+/// successful `InputRequiredResult` value, after enforcing that every
 /// input request targets a capability the client declared in the request's
 /// `_meta` `clientCapabilities` (undeclared → `-32021`, HTTP 400). Gating is
 /// mode-aware: URL-mode elicitation needs `elicitation.url`, form mode rides
@@ -218,13 +213,13 @@ fn paginate_list_response<T: serde::Serialize>(
     }
 }
 
-/// Generic MCP handler trait
+/// Generic MCP handler trait.
 #[async_trait]
 pub trait McpHandler: Send + Sync {
-    /// Handle an MCP request
+    /// Handles an MCP request.
     async fn handle(&self, params: Option<Value>) -> McpResult<Value>;
 
-    /// Handle an MCP request with session context (default implementation calls handle)
+    /// Handles an MCP request with session context; the default implementation calls `handle`.
     async fn handle_with_session(
         &self,
         params: Option<Value>,
@@ -233,11 +228,11 @@ pub trait McpHandler: Send + Sync {
         self.handle(params).await
     }
 
-    /// Get the methods this handler supports
+    /// Returns the methods this handler supports.
     fn supported_methods(&self) -> Vec<String>;
 }
 
-/// Ping handler for ping endpoint
+/// Handler for the `ping` method.
 pub struct PingHandler;
 
 #[async_trait]
@@ -264,10 +259,12 @@ pub struct CompletionHandler {
 }
 
 impl CompletionHandler {
+    /// Creates a handler with no completion providers.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Sets the completion providers, ordered by descending `priority()`; providers of equal priority keep their given order.
     pub fn with_providers(mut self, providers: Vec<Arc<dyn crate::McpCompletion>>) -> Self {
         self.providers = providers;
         // Stable sort: priority desc, insertion order as the tiebreak.
@@ -369,7 +366,7 @@ impl McpHandler for CompletionHandler {
     }
 }
 
-/// Prompts list handler for prompts/list endpoint only
+/// Handler for `prompts/list` only.
 pub struct PromptsListHandler {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 }
@@ -381,18 +378,21 @@ impl Default for PromptsListHandler {
 }
 
 impl PromptsListHandler {
+    /// Creates a handler with no prompts registered.
     pub fn new() -> Self {
         Self {
             prompts: HashMap::new(),
         }
     }
 
+    /// Registers a prompt under its name; a later prompt with the same name replaces it.
     pub fn add_prompt<P: McpPrompt + 'static>(mut self, prompt: P) -> Self {
         self.prompts
             .insert(prompt.name().to_string(), Arc::new(prompt));
         self
     }
 
+    /// Registers a shared prompt under its name; a later prompt with the same name replaces it.
     pub fn add_prompt_arc(mut self, prompt: Arc<dyn McpPrompt>) -> Self {
         self.prompts.insert(prompt.name().to_string(), prompt);
         self
@@ -530,7 +530,7 @@ impl McpHandler for PromptsListHandler {
     }
 }
 
-/// Prompts get handler for prompts/get endpoint only
+/// Handler for `prompts/get` only.
 pub struct PromptsGetHandler {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 }
@@ -542,18 +542,21 @@ impl Default for PromptsGetHandler {
 }
 
 impl PromptsGetHandler {
+    /// Creates a handler with no prompts registered.
     pub fn new() -> Self {
         Self {
             prompts: HashMap::new(),
         }
     }
 
+    /// Registers a prompt under its name; a later prompt with the same name replaces it.
     pub fn add_prompt<P: McpPrompt + 'static>(mut self, prompt: P) -> Self {
         self.prompts
             .insert(prompt.name().to_string(), Arc::new(prompt));
         self
     }
 
+    /// Registers a shared prompt under its name; a later prompt with the same name replaces it.
     pub fn add_prompt_arc(mut self, prompt: Arc<dyn McpPrompt>) -> Self {
         self.prompts.insert(prompt.name().to_string(), prompt);
         self
@@ -634,7 +637,7 @@ impl McpHandler for PromptsGetHandler {
             arguments
         };
 
-        // `get_response` is the one GetPromptResult constructor (ADR-037): it
+        // `get_response` is the one GetPromptResult constructor: it
         // runs validate_args, render and transform_messages, and a prompt that
         // overrides it sets the result `_meta`.
         let mut response = match prompt.get_response(Some(arguments)).await {
@@ -678,13 +681,13 @@ impl McpHandler for PromptsGetHandler {
     }
 }
 
-/// Legacy handler for backward compatibility - use PromptsListHandler instead
+/// Alias for [`PromptsListHandler`].
 pub type PromptsHandler = PromptsListHandler;
 
-/// Import the proper McpPrompt trait from the prompt module
+/// Re-export of the [`McpPrompt`] trait from the prompt module.
 pub use crate::prompt::McpPrompt;
 
-/// Resources list handler for resources/list endpoint only
+/// Handler for `resources/list` only.
 pub struct ResourcesListHandler {
     resources: HashMap<String, Arc<dyn McpResource>>,
 }
@@ -696,18 +699,21 @@ impl Default for ResourcesListHandler {
 }
 
 impl ResourcesListHandler {
+    /// Creates a handler with no resources registered.
     pub fn new() -> Self {
         Self {
             resources: HashMap::new(),
         }
     }
 
+    /// Registers a resource under its URI; a later resource with the same URI replaces it.
     pub fn add_resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         self.resources
             .insert(resource.uri().to_string(), Arc::new(resource));
         self
     }
 
+    /// Registers a shared resource under its URI; a later resource with the same URI replaces it.
     pub fn add_resource_arc(mut self, resource: Arc<dyn McpResource>) -> Self {
         self.resources.insert(resource.uri().to_string(), resource);
         self
@@ -825,7 +831,7 @@ impl McpHandler for ResourcesListHandler {
     }
 }
 
-/// Resources read handler for resources/read endpoint only
+/// Handler for `resources/read` only.
 pub struct ResourcesReadHandler {
     resources: HashMap<String, Arc<dyn McpResource>>,
     uri_registry: Arc<crate::uri_template::UriTemplateRegistry>,
@@ -839,6 +845,7 @@ impl Default for ResourcesReadHandler {
 }
 
 impl ResourcesReadHandler {
+    /// Creates a handler with no resources registered.
     pub fn new() -> Self {
         Self {
             resources: HashMap::new(),
@@ -859,12 +866,14 @@ impl ResourcesReadHandler {
         self
     }
 
+    /// Registers a resource under its URI; a later resource with the same URI replaces it.
     pub fn add_resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         self.resources
             .insert(resource.uri().to_string(), Arc::new(resource));
         self
     }
 
+    /// Registers a shared resource under its URI; a later resource with the same URI replaces it.
     pub fn add_resource_arc(mut self, resource: Arc<dyn McpResource>) -> Self {
         self.resources.insert(resource.uri().to_string(), resource);
         self
@@ -995,7 +1004,7 @@ impl McpHandler for ResourcesReadHandler {
         }
 
         // A `..` segment never reaches a resource, whatever the policy, and
-        // also under `.test_mode()` (ADR-007).
+        // also under `.test_mode()`.
         if crate::security::has_dot_dot_segment(&read_params.uri) {
             return Err(McpError::invalid_param_type(
                 "uri",
@@ -1176,7 +1185,7 @@ impl McpHandler for ResourcesReadHandler {
     }
 }
 
-/// Legacy handler for backward compatibility - use ResourcesListHandler instead
+/// Alias for [`ResourcesListHandler`].
 pub type ResourcesHandler = ResourcesListHandler;
 
 /// Logging handler for logging/setLevel endpoint
@@ -1268,7 +1277,7 @@ impl McpHandler for LoggingHandler {
     }
 }
 
-/// Roots handler for roots/list endpoint
+/// Handler for `roots/list`.
 // `Root` is deprecated-but-present in 2026-07-28 (SEP-2577); roots remain a valid feature.
 #[allow(deprecated)]
 pub struct RootsHandler {
@@ -1283,10 +1292,12 @@ impl Default for RootsHandler {
 
 #[allow(deprecated)]
 impl RootsHandler {
+    /// Creates a handler with no roots.
     pub fn new() -> Self {
         Self { roots: Vec::new() }
     }
 
+    /// Adds a root to the list this handler returns.
     pub fn add_root(mut self, root: turul_mcp_protocol::roots::Root) -> Self {
         self.roots.push(root);
         self
@@ -1504,7 +1515,7 @@ impl McpHandler for ProvidedSamplingHandler {
     }
 }
 
-/// Resource templates handler for resources/templates/list endpoint
+/// Handler for `resources/templates/list`.
 pub struct ResourceTemplatesHandler {
     templates: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>,
 }
@@ -1516,12 +1527,14 @@ impl Default for ResourceTemplatesHandler {
 }
 
 impl ResourceTemplatesHandler {
+    /// Creates a handler with no resource templates.
     pub fn new() -> Self {
         Self {
             templates: Vec::new(),
         }
     }
 
+    /// Sets the URI templates, each paired with the resource served for URIs that match it.
     pub fn with_templates(
         mut self,
         templates: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>,
@@ -1580,7 +1593,7 @@ impl McpHandler for ResourceTemplatesHandler {
                 if let Some(mime_type) = resource.mime_type() {
                     template = template.with_mime_type(mime_type);
                 }
-                // ADR-037: the template serves every field the resource declares.
+                // The template serves every field the resource declares.
                 if let Some(title) = resource.title() {
                     template = template.with_title(title);
                 }
@@ -1846,7 +1859,7 @@ impl McpHandler for NotificationsHandler {
             "notifications/tools/list_changed".to_string(),
             "notifications/prompts/list_changed".to_string(),
             "notifications/roots/list_changed".to_string(),
-            // Legacy compat (camelCase) — accepted but NOT spec-compliant
+            // camelCase spellings are accepted but are not the spec's method names.
             "notifications/resources/listChanged".to_string(),
             "notifications/tools/listChanged".to_string(),
             "notifications/prompts/listChanged".to_string(),
@@ -1862,6 +1875,7 @@ pub struct InitializedNotificationHandler {
 }
 
 impl InitializedNotificationHandler {
+    /// Creates a handler that marks sessions initialized through `session_manager`.
     pub fn new(session_manager: Arc<SessionManager>) -> Self {
         Self { session_manager }
     }

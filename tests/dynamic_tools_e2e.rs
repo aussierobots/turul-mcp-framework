@@ -1,6 +1,6 @@
 //! E2E Transport Test: Dynamic Tool Change Detection
 //!
-//! Proves the full ADR-023 Dynamic contract over Streamable HTTP:
+//! Proves the full Dynamic tools contract over Streamable HTTP:
 //! 1. Client initializes and sees initial tool set (multiply active)
 //! 2. Tool is deactivated via `deactivate_multiply` → tool registry updated
 //! 3. Same session's next tools/list shows multiply absent, activate_multiply present

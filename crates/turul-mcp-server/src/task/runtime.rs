@@ -1,4 +1,4 @@
-//! Task Runtime — bridges task storage with runtime execution state.
+//! Bridges task storage with runtime execution state.
 //!
 //! `TaskRuntime` combines durable task storage (which persists across restarts)
 //! with a pluggable `TaskExecutor` that manages how task work is actually executed.
@@ -24,16 +24,16 @@ use crate::task::tokio_executor::TokioTaskExecutor;
 /// Lives in `turul-mcp-server` (not in `turul-mcp-task-storage`) because it combines
 /// backend-agnostic storage with executor-specific runtime primitives.
 pub struct TaskRuntime {
-    /// The durable storage backend
+    /// The durable storage backend.
     storage: Arc<dyn TaskStorage>,
-    /// The task executor for running work
+    /// The task executor for running work.
     executor: Arc<dyn TaskExecutor>,
-    /// Recovery timeout for stuck tasks (milliseconds)
+    /// Recovery timeout for stuck tasks (milliseconds).
     recovery_timeout_ms: u64,
 }
 
 impl TaskRuntime {
-    /// Create a new task runtime with the given storage backend and executor.
+    /// Creates a new task runtime with the given storage backend and executor.
     pub fn new(storage: Arc<dyn TaskStorage>, executor: Arc<dyn TaskExecutor>) -> Self {
         Self {
             storage,
@@ -42,40 +42,42 @@ impl TaskRuntime {
         }
     }
 
-    /// Create a new task runtime with the given storage and the default `TokioTaskExecutor`.
+    /// Creates a new task runtime with the given storage and the default `TokioTaskExecutor`.
     pub fn with_default_executor(storage: Arc<dyn TaskStorage>) -> Self {
         Self::new(storage, Arc::new(TokioTaskExecutor::new()))
     }
 
-    /// Create with custom recovery timeout.
+    /// Creates a task runtime with a custom recovery timeout.
     pub fn with_recovery_timeout(mut self, timeout_ms: u64) -> Self {
         self.recovery_timeout_ms = timeout_ms;
         self
     }
 
-    /// Create a new task runtime with in-memory storage and the default `TokioTaskExecutor`.
+    /// Creates a new task runtime with in-memory storage and the default `TokioTaskExecutor`.
     pub fn in_memory() -> Self {
         Self::with_default_executor(Arc::new(InMemoryTaskStorage::new()))
     }
 
-    /// Get a reference to the underlying storage.
+    /// Gets a reference to the underlying storage.
     pub fn storage(&self) -> &dyn TaskStorage {
         self.storage.as_ref()
     }
 
-    /// Get a shared reference to the storage Arc.
+    /// Gets a shared reference to the storage Arc.
     pub fn storage_arc(&self) -> Arc<dyn TaskStorage> {
         Arc::clone(&self.storage)
     }
 
-    /// Get a reference to the executor.
+    /// Gets a reference to the executor.
     pub fn executor(&self) -> &dyn TaskExecutor {
         self.executor.as_ref()
     }
 
     // === Task Lifecycle ===
 
-    /// Register a new task in storage. Returns the created record.
+    /// Registers a new task in storage.
+    ///
+    /// Returns the created record.
     ///
     /// Does NOT start execution — call `executor().start_task()` separately
     /// when the work is ready to run.
@@ -90,7 +92,7 @@ impl TaskRuntime {
         Ok(created)
     }
 
-    /// Update a task's status in storage.
+    /// Updates a task's status in storage.
     pub async fn update_status(
         &self,
         task_id: &str,
@@ -105,7 +107,7 @@ impl TaskRuntime {
         Ok(updated)
     }
 
-    /// Store a task's result and update status atomically.
+    /// Stores a task's result and updates its status.
     pub async fn complete_task(
         &self,
         task_id: &str,
@@ -122,7 +124,7 @@ impl TaskRuntime {
         Ok(())
     }
 
-    /// Cancel a task: delegate to executor AND update storage status.
+    /// Cancels a task by delegating to the executor and updating the storage status.
     pub async fn cancel_task(&self, task_id: &str) -> Result<TaskRecord, TaskStorageError> {
         // Try to cancel via executor (ignore error if task not in executor — may have already completed)
         if let Err(e) = self.executor.cancel_task(task_id).await {
@@ -138,7 +140,7 @@ impl TaskRuntime {
         .await
     }
 
-    /// Wait until a task reaches terminal status via the executor.
+    /// Waits until a task reaches terminal status via the executor.
     ///
     /// Returns `None` if the task is not tracked by the executor (already completed or not in-flight).
     pub async fn await_terminal(&self, task_id: &str) -> Option<TaskStatus> {
@@ -147,12 +149,12 @@ impl TaskRuntime {
 
     // === Delegation to storage ===
 
-    /// Get a task by ID from storage.
+    /// Gets a task by ID from storage.
     pub async fn get_task(&self, task_id: &str) -> Result<Option<TaskRecord>, TaskStorageError> {
         self.storage.get_task(task_id).await
     }
 
-    /// Get a task's stored result.
+    /// Gets a task's stored result.
     pub async fn get_task_result(
         &self,
         task_id: &str,
@@ -160,7 +162,7 @@ impl TaskRuntime {
         self.storage.get_task_result(task_id).await
     }
 
-    /// List tasks with pagination.
+    /// Lists tasks with pagination.
     pub async fn list_tasks(
         &self,
         cursor: Option<&str>,
@@ -169,7 +171,7 @@ impl TaskRuntime {
         self.storage.list_tasks(cursor, limit).await
     }
 
-    /// List tasks for a specific session.
+    /// Lists tasks for a specific session.
     pub async fn list_tasks_for_session(
         &self,
         session_id: &str,
@@ -183,7 +185,9 @@ impl TaskRuntime {
 
     // === Recovery ===
 
-    /// Recover stuck tasks on startup. Called during server initialization.
+    /// Recovers stuck tasks on startup.
+    ///
+    /// Called during server initialization.
     pub async fn recover_stuck_tasks(&self) -> Result<Vec<String>, TaskStorageError> {
         let recovered = self
             .storage
@@ -201,7 +205,7 @@ impl TaskRuntime {
         Ok(recovered)
     }
 
-    /// Run periodic maintenance (TTL expiry, cleanup).
+    /// Runs periodic maintenance (TTL expiry, cleanup).
     pub async fn maintenance(&self) -> Result<(), TaskStorageError> {
         self.storage.maintenance().await
     }

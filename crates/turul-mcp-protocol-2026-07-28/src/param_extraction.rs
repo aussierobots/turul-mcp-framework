@@ -1,11 +1,11 @@
-//! Parameter extraction utilities for MCP protocol
+//! Parameter extraction utilities for MCP protocol.
 //!
 //! This module provides unified parameter extraction from JSON-RPC RequestParams
-//! to strongly-typed MCP parameter structures, matching the pattern from the other project.
+//! to strongly-typed MCP parameter structures.
 
 use crate::traits::{Params, SerdeParamExtractor};
 
-/// Macro to implement SerdeParamExtractor for any Params type that implements Deserialize
+/// Implements `SerdeParamExtractor` for a `Params` type that implements `Deserialize`.
 #[macro_export]
 macro_rules! impl_serde_extractor {
     ($param_type:ty) => {
@@ -13,10 +13,8 @@ macro_rules! impl_serde_extractor {
             type Error = $crate::McpError;
 
             fn extract_serde(params: turul_rpc::RequestParams) -> Result<$param_type, Self::Error> {
-                // Convert RequestParams to Value
                 let value = params.to_value();
 
-                // Deserialize to the target type
                 serde_json::from_value(value).map_err(|e| {
                     $crate::McpError::InvalidParameters(format!(
                         "Failed to deserialize {}: {}",
@@ -36,11 +34,10 @@ impl_serde_extractor!(crate::tools::CallToolRequestParams);
 // `ListPromptsRequest` — single shared shape.
 impl_serde_extractor!(crate::json_rpc::PaginatedRequestParams);
 impl_serde_extractor!(crate::resources::ReadResourceRequestParams);
-// Note: Subscribe/Unsubscribe don't have separate params types
+// Subscribe/Unsubscribe have no params types in 2026-07-28; `subscriptions/listen` replaces them.
 impl_serde_extractor!(crate::prompts::GetPromptRequestParams);
 impl_serde_extractor!(crate::completion::CompleteRequestParams);
-// `logging::SetLevelParams` removed (logging/setLevel not in 2026-07-28 schema).
-// `resources::SubscribeParams`/`UnsubscribeParams` removed (replaced by subscriptions/listen filter).
+// `logging/setLevel` is not in the 2026-07-28 schema, so it has no extractor.
 impl_serde_extractor!(crate::elicitation::ElicitRequestFormParams);
 // SEP-2577-deprecated; extractor retained during the migration window.
 mod sampling_extractor_impls {
@@ -49,7 +46,9 @@ mod sampling_extractor_impls {
 }
 impl_serde_extractor!(crate::ping::EmptyParams);
 
-/// Generic parameter extractor function that works with any type implementing SerdeParamExtractor
+/// Extracts a typed parameter struct from JSON-RPC request params.
+///
+/// Works with any type implementing [`SerdeParamExtractor`].
 pub fn extract_params<T>(params: turul_rpc::RequestParams) -> Result<T, crate::McpError>
 where
     T: Params + SerdeParamExtractor<T, Error = crate::McpError>,
@@ -57,7 +56,9 @@ where
     T::extract_serde(params)
 }
 
-/// Helper function to extract params from Option\<RequestParams\>
+/// Extracts typed params from an `Option<RequestParams>`.
+///
+/// Returns `T::default()` when `params` is `None`.
 pub fn extract_optional_params<T>(
     params: Option<turul_rpc::RequestParams>,
 ) -> Result<T, crate::McpError>

@@ -1,7 +1,6 @@
-//! Durable task state and the `TaskStore` abstraction (the upstream
-//! overview's "Task Store": reachable by `tasks/get` even if the worker or
-//! connection has died; a `CreateTaskResult` is not returned until the task
-//! is findable here).
+//! Durable task state and the `TaskStore` abstraction: a task is reachable by
+//! `tasks/get` even if the worker or connection has died, and a
+//! `CreateTaskResult` is not returned until the task is findable here.
 //!
 //! No tokio in the public API — implementations choose their own runtime.
 
@@ -17,7 +16,9 @@ use super::types::{DetailedTask, TaskFields, TaskStatus};
 /// wire `DetailedTask` for `tasks/get` and `notifications/tasks`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskState {
+    /// The status-independent task fields (identifier, timestamps, TTL, poll interval).
     pub fields: TaskFields,
+    /// The task's current status.
     pub status: TaskStatus,
     /// The authenticated principal (verified token subject) this task is
     /// bound to, or `None` when the request that created it carried no
@@ -41,6 +42,7 @@ pub struct TaskState {
 }
 
 impl TaskState {
+    /// Renders the wire [`DetailedTask`] variant for the current status, substituting empty or `null` values for a missing `input_requests`, `result` or `error`.
     pub fn to_detailed(&self) -> DetailedTask {
         let fields = self.fields.clone();
         match self.status {
@@ -65,19 +67,30 @@ impl TaskState {
 /// Errors from [`TaskStore`] operations.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum TaskStoreError {
+    /// No task with the given ID exists, or it is not visible to the caller.
     #[error("task {0:?} not found")]
     NotFound(String),
+    /// The operation is not valid for the task's current status.
     #[error("task {task_id:?} is {status:?}; {operation} is not valid in that status")]
     InvalidStatus {
+        /// Identifier of the task the operation targeted.
         task_id: String,
+        /// Wire name of the task's current status (for example `"completed"`).
         status: &'static str,
+        /// Name of the operation that was rejected.
         operation: &'static str,
     },
     /// A response for a key the task IS waiting on could not be read as an
     /// `InputResponse`. Distinct from a response for a key it is not waiting
     /// on, which is inert and ignored — see `TaskStore::provide_input`.
     #[error("input response for {key:?} is not a valid InputResponse: {detail}")]
-    InvalidInputResponse { key: String, detail: String },
+    InvalidInputResponse {
+        /// The outstanding input-request key whose response was malformed.
+        key: String,
+        /// Why the value could not be read as an `InputResponse`.
+        detail: String,
+    },
+    /// The storage backend failed; the payload describes the failure.
     #[error("storage backend error: {0}")]
     Backend(String),
 }
@@ -89,7 +102,9 @@ pub enum InputDelivery {
     /// set (plus the tool's echoed `requestState`) is ready for the worker
     /// to resume with; the task has transitioned back to `working`.
     Complete {
+        /// Responses for every outstanding input request.
         responses: InputResponses,
+        /// The `requestState` the tool attached to its input demand, if any.
         request_state: Option<String>,
     },
     /// Some outstanding requests remain unanswered; the task stays
@@ -114,11 +129,11 @@ pub enum InputDelivery {
 /// carry no owner check.
 #[async_trait::async_trait]
 pub trait TaskStore: Send + Sync {
-    /// Persist a new task (status `working`). The caller must not answer the
+    /// Persists a new task (status `working`). The caller must not answer the
     /// originating request until this returns.
     async fn create(&self, state: TaskState) -> Result<(), TaskStoreError>;
 
-    /// Fetch a task for `tasks/get`. Returns `Ok(None)` both when the task
+    /// Fetches a task for `tasks/get`. Returns `Ok(None)` both when the task
     /// does not exist and when it exists but is bound to a different
     /// `owner` — the two cases MUST be indistinguishable to the caller.
     async fn get(
@@ -133,7 +148,7 @@ pub trait TaskStore: Send + Sync {
     /// `working`/`input_required` → `failed` with a JSON-RPC error object.
     async fn fail(&self, task_id: &str, error: Value) -> Result<TaskState, TaskStoreError>;
 
-    /// Cooperative cancel for `tasks/cancel`: non-terminal → `cancelled`
+    /// Cancels cooperatively for `tasks/cancel`: non-terminal → `cancelled`
     /// (returns the new state); already-terminal returns `Ok(None)` —
     /// callers ack either way. A task bound to a different `owner` yields
     /// `Err(TaskStoreError::NotFound)`, the same error an unknown task id
@@ -152,7 +167,7 @@ pub trait TaskStore: Send + Sync {
         request_state: Option<String>,
     ) -> Result<TaskState, TaskStoreError>;
 
-    /// Record `tasks/update` responses. Partial delivery keeps the task
+    /// Records `tasks/update` responses. Partial delivery keeps the task
     /// `input_required`, full delivery transitions it back to `working` and
     /// hands the responses to the caller for worker resumption. A task bound
     /// to a different `owner` yields `Err(TaskStoreError::NotFound)`, the same
@@ -164,7 +179,7 @@ pub trait TaskStore: Send + Sync {
     ///
     /// - **A key the task is not waiting on is ignored**, and delivery still
     ///   succeeds. Such a key is inert — it cannot change task state — and
-    ///   SEP-2663's ack-only design (vendored SEP line 930) reserves errors
+    ///   SEP-2663's ack-only design reserves errors
     ///   for "clearly invalid requests — such as an unknown `taskId`". The
     ///   spec's "each key MUST correspond" binds the *client*; answering an
     ///   error gives it nothing it can act on. Implementations SHOULD log it.
@@ -179,12 +194,11 @@ pub trait TaskStore: Send + Sync {
         responses: std::collections::HashMap<String, serde_json::Value>,
     ) -> Result<InputDelivery, TaskStoreError>;
 
-    /// Apply `policy`, marking abandoned/expired tasks `failed` and deleting
+    /// Applies `policy`, marking abandoned/expired tasks `failed` and deleting
     /// old terminal ones. Returns what it did.
     ///
-    /// Deliberately **not** defaulted: a backend that quietly grew forever is
-    /// what this trait had before, and a default no-op would let the next
-    /// backend do the same without anyone noticing. `now` is a parameter so
+    /// Deliberately **not** defaulted: a default no-op would let a backend
+    /// quietly grow forever without anyone noticing. `now` is a parameter so
     /// the boundary conditions are testable without waiting.
     ///
     /// This is a maintenance operation, not a hot path — callers should run
@@ -195,7 +209,7 @@ pub trait TaskStore: Send + Sync {
         policy: &RetentionPolicy,
     ) -> Result<SweepReport, TaskStoreError>;
 
-    /// Tell the backend the retention policy in force, so one that can expire
+    /// Tells the backend the retention policy in force, so one that can expire
     /// items *itself* configures that at write time rather than relying on
     /// [`Self::sweep`].
     ///
@@ -208,7 +222,7 @@ pub trait TaskStore: Send + Sync {
     fn configure_retention(&self, _policy: &RetentionPolicy) {}
 }
 
-/// True when `state` may be accessed by `owner`: an owned task only answers
+/// Returns `true` when `state` may be accessed by `owner`: an owned task only answers
 /// to its own owner; an unowned task (created without an authenticated
 /// principal) answers to anyone, matching the deployment's own no-isolation
 /// posture rather than pretending to isolate callers it cannot identify.
@@ -373,9 +387,8 @@ pub fn apply_provide_input(
         })
     } else {
         // Partial fulfilment: drop the keys just answered so a following
-        // `tasks/get` advertises only what is STILL outstanding. Leaving them
-        // in told the client to answer questions it had already answered, with
-        // no way to tell the difference. Found by `tasks-mrtr-input`.
+        // `tasks/get` advertises only what is STILL outstanding; otherwise the
+        // client is told to answer questions it has already answered.
         if let Some(reqs) = state.input_requests.as_mut() {
             reqs.retain(|k, _| !state.collected_responses.contains_key(k));
         }
@@ -386,20 +399,18 @@ pub fn apply_provide_input(
 // ---------------------------------------------------------------------------
 // Retention.
 //
-// The in-memory store solved retention by accident: a restart lost every
-// task. A durable backend has no such luck — a table only grows — so the
-// policy has to be explicit, and it has to be the same policy everywhere.
+// A durable backend's table only grows, so retention has to be an explicit
+// policy, and it has to be the same policy everywhere.
 //
-// SEP-2663 makes all of this OPTIONAL (line 165: "The server may discard the
-// task after the TTL elapses"; line 342: "servers MAY mark a task as `failed`
-// at any point after the TTL elapses, and subsequently delete it at any
-// time"). Nothing here is required for compliance. It is required for a
-// deployment that does not want an unbounded table.
+// SEP-2663 makes all of this OPTIONAL ("The server may discard the task after
+// the TTL elapses"; "servers MAY mark a task as `failed` at any point after
+// the TTL elapses, and subsequently delete it at any time"). Nothing here is
+// required for compliance. It is required for a deployment that does not want
+// an unbounded table.
 // ---------------------------------------------------------------------------
 
 /// What a sweep may do. Every field is opt-in: `RetentionPolicy::default()`
-/// changes nothing, which keeps the previous behaviour for anyone who does
-/// not ask for retention.
+/// changes nothing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RetentionPolicy {
     /// A non-terminal task untouched for this long is presumed abandoned by
@@ -438,7 +449,7 @@ pub struct SweepReport {
     pub deleted: Vec<String>,
 }
 
-/// Decide one task's fate. Pure, so every backend agrees by construction and
+/// Decides one task's fate. Pure, so every backend agrees by construction and
 /// the parity harness can pin the boundaries rather than each backend's
 /// interpretation of them.
 ///

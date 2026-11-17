@@ -1,5 +1,5 @@
 //! Skills extension (`io.modelcontextprotocol/skills`) over Streamable HTTP —
-//! the executable contract of ADR-033 §5. Test names cite the clause proved.
+//! its executable contract. Test names state the clause proved.
 #![cfg(feature = "ext-skills")]
 
 mod common;
@@ -296,7 +296,7 @@ async fn skill_md_resource_metadata() {
     assert_eq!(md["name"], "outer");
     assert_eq!(md["description"], "Does outer.");
     // A nested SKILL.md is also a supporting file of its parent; its own entry's
-    // metadata wins (ADR-033 §5).
+    // metadata wins.
     let inner = r["result"]["resources"]
         .as_array()
         .unwrap()
@@ -330,7 +330,7 @@ async fn nested_skill_publishes_flat() {
     assert!(outer_files.contains(&"skill://acme/outer/inner/SKILL.md"));
 }
 
-/// ADR-033 §5 (Q10): a manifest URI the read policy would reject is refused at
+/// A manifest URI the read policy would reject is refused at
 /// build, and the error names the file.
 #[tokio::test]
 async fn q10_blocklisted_manifest_uri_refused_at_build() {
@@ -351,7 +351,7 @@ async fn q10_blocklisted_manifest_uri_refused_at_build() {
     }
 }
 
-/// ADR-033 §5: a URI two entries list with different bytes fails the build.
+/// A URI two entries list with different bytes fails the build.
 #[tokio::test]
 async fn one_uri_one_content_conflicting_digest_refused() {
     let stale = entry(
@@ -409,7 +409,7 @@ impl McpResource for Plain {
     }
 }
 
-/// ADR-033 §5: another resource at a skill file's URI — registered before or
+/// Another resource at a skill file's URI — registered before or
 /// after `with_ext_skills` — fails the build.
 #[tokio::test]
 async fn one_uri_one_content_foreign_resource_refused() {

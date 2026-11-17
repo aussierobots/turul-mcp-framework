@@ -1,7 +1,6 @@
-//! Middleware system for MCP servers
+//! Re-exports the middleware types implemented in `turul-http-mcp-server`.
 //!
-//! Re-exports middleware types from the HTTP transport layer.
-//! Middleware is implemented in `turul-http-mcp-server` where it's actually used.
+//! The re-exports are present only with the `http` feature.
 //!
 //! # Examples
 //!

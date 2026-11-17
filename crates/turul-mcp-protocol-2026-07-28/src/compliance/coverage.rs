@@ -315,7 +315,7 @@ pub const CASES: &[Case] = &[
     // (`{jsonrpc, id, method, params}`). Our `tools::ListToolsRequest`
     // models only the inner `{method, params?}` — binding requires
     // `JsonRpcRequest<...>` and a `_meta` that preserves the namespaced
-    // negotiation keys. Tracked for a later slice.
+    // negotiation keys.
     Case {
         dir: "ListToolsRequest",
         kind: Kind::NotModeled,
@@ -543,8 +543,8 @@ mod tests {
     #[test]
     fn cases_table_matches_upstream_fixture_count() {
         // Hard count — matches the number of example directories in the
-        // upstream tree at the pinned SHA. Bump it in the same slice that
-        // re-pins, so a fixture directory added upstream cannot land unnoticed.
+        // upstream tree at the pinned SHA. Bump it when
+        // re-pinning, so a fixture directory added upstream cannot land unnoticed.
         assert_eq!(CASES.len(), 88);
     }
 }

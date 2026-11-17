@@ -1,4 +1,4 @@
-//! Task Handlers — MCP request handlers for tasks/get, tasks/list, tasks/cancel, tasks/result.
+//! MCP request handlers for `tasks/get`, `tasks/list`, `tasks/cancel` and `tasks/result`.
 //!
 //! These handlers implement the `McpHandler` trait and delegate to `TaskRuntime`
 //! for storage + runtime coordination.
@@ -15,9 +15,9 @@ use crate::task::runtime::TaskRuntime;
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::tasks::*;
 
-/// Fetch a task and validate session ownership.
+/// Fetches a task and validates session ownership.
 ///
-/// Returns `McpError::InvalidParameters("Task not found")` if:
+/// Returns `McpError::InvalidParameters` ("Task not found: <id>") if:
 /// - The task doesn't exist, OR
 /// - The task belongs to a different session (prevents cross-session access)
 ///
@@ -288,7 +288,7 @@ impl McpHandler for TasksResultHandler {
                 // Note: The spec says "MUST block until terminal status." We impose a
                 // safety timeout to prevent indefinite resource consumption when a task
                 // is stuck without an executor (e.g., orphaned after crash). The
-                // recover_stuck_tasks() mechanism on startup should prevent this case,
+                // `recover_stuck_tasks()` mechanism on startup should prevent this case,
                 // but the timeout provides defense-in-depth.
                 let poll_interval = std::time::Duration::from_millis(500);
                 let max_wait = std::time::Duration::from_secs(300); // 5 minutes

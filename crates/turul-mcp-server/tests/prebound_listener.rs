@@ -1,4 +1,4 @@
-//! ADR-034: `McpServerBuilder::listener` serves on a socket the caller has
+//! `McpServerBuilder::listener` serves on a socket the caller has
 //! already bound, so the port is never released between choosing it and the
 //! server accepting on it.
 

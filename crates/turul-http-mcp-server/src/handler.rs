@@ -1,7 +1,6 @@
-//! SSE stream body utilities for MCP protocol
+//! SSE stream body utilities for the MCP protocol.
 //!
-//! McpHttpHandler has been removed in 0.2.0 - use SessionMcpHandler instead.
-//! This module now only contains the SseStreamBody utility for compatibility.
+//! Contains `SseStreamBody`, a hyper body over a stream of SSE-formatted strings.
 
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -10,7 +9,7 @@ use bytes::Bytes;
 use futures::Stream;
 use http_body::Body;
 
-/// SSE stream body that implements hyper's Body trait
+/// Wraps a stream of SSE-formatted strings as a hyper `Body`.
 pub struct SseStreamBody {
     stream: Pin<
         Box<
@@ -21,6 +20,7 @@ pub struct SseStreamBody {
 }
 
 impl SseStreamBody {
+    /// Wraps a stream of SSE-formatted strings as an HTTP response body; a stream error (closed or lagged broadcast) is surfaced as a body error.
     pub fn new<S>(stream: S) -> Self
     where
         S: Stream<Item = std::result::Result<String, tokio::sync::broadcast::error::RecvError>>
@@ -52,11 +52,3 @@ impl Body for SseStreamBody {
         }
     }
 }
-
-// McpHttpHandler removed in 0.2.0 - use SessionMcpHandler instead
-// All SSE functionality is now provided by SessionMcpHandler with proper streaming support
-
-// McpHttpHandler implementation removed - use SessionMcpHandler instead
-
-// Tests for McpHttpHandler removed - handler no longer exists
-// Use SessionMcpHandler tests in session_handler.rs instead

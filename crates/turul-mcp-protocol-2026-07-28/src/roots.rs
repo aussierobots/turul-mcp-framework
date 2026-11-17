@@ -46,6 +46,7 @@ pub struct Root {
 
 #[allow(deprecated)]
 impl Root {
+    /// Creates a root from its `file://` URI, with no name or metadata.
     pub fn new(uri: impl Into<String>) -> Self {
         Self {
             uri: uri.into(),
@@ -54,17 +55,21 @@ impl Root {
         }
     }
 
+    /// Sets the human-readable name for the root.
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
+    /// Sets the root's `_meta`.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Validate that the URI follows MCP requirements
+    /// Checks that the URI starts with `file://`, as the schema requires of a root URI.
+    ///
+    /// Returns an error message naming the violated rule otherwise.
     pub fn validate(&self) -> Result<(), String> {
         if !self.uri.starts_with("file://") {
             return Err("Root URI must start with 'file://'".to_string());
@@ -80,6 +85,7 @@ impl Root {
 pub struct ListRootsRequestParams {
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     #[serde(serialize_with = "crate::serde_maps::sorted_opt")]
+    /// Optional `_meta` object carrying protocol-reserved and implementation-specific metadata.
     pub meta: Option<HashMap<String, Value>>,
 }
 
@@ -130,7 +136,7 @@ impl Default for ListRootsRequest {
 
 #[allow(deprecated)]
 impl ListRootsRequest {
-    /// Construct without params (paramsless `roots/list`).
+    /// Constructs without params (paramsless `roots/list`).
     pub fn new() -> Self {
         Self {
             method: "roots/list".to_string(),
@@ -138,7 +144,7 @@ impl ListRootsRequest {
         }
     }
 
-    /// Construct with explicit per-request meta.
+    /// Constructs with explicit per-request meta.
     pub fn with_meta(meta: HashMap<String, Value>) -> Self {
         Self {
             method: "roots/list".to_string(),
@@ -146,7 +152,7 @@ impl ListRootsRequest {
         }
     }
 
-    /// Attach a fully-constructed params struct.
+    /// Attaches a fully-constructed params struct.
     pub fn with_params(mut self, params: ListRootsRequestParams) -> Self {
         self.params = Some(params);
         self
@@ -155,6 +161,7 @@ impl ListRootsRequest {
 
 #[allow(deprecated)]
 impl ListRootsResult {
+    /// Creates a result from the client's list of roots.
     pub fn new(roots: Vec<Root>) -> Self {
         Self { roots }
     }
@@ -181,13 +188,12 @@ impl HasParams for ListRootsRequest {
 
 // `ListRootsResult` does not implement `HasMeta`, `HasData`, or `RpcResult` —
 // the schema defines it as `{ roots: Root[] }` only (no `_meta`, no `extends
-// Result`), so the trait contract `RpcResult: HasMeta + HasData` doesn't fit.
+// Result`), so the trait contract `RpcResult: HasMeta + HasResultType` doesn't fit.
 
 // ===========================================
 // === Fine-Grained Roots Traits ===
 // ===========================================
 
-/// Trait for root metadata (URI, name, path info)
 #[cfg(test)]
 #[allow(deprecated)]
 mod tests {

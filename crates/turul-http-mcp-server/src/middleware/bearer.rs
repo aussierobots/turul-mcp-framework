@@ -1,24 +1,23 @@
-//! Bearer token extraction utilities (D5, D6)
+//! Bearer token extraction utilities.
 //!
 //! Provides hardened Bearer token parsing and scheme detection
 //! shared across all transports.
 
-/// Check if an Authorization header uses the Bearer scheme (case-insensitive).
+/// Returns whether an `Authorization` header uses the Bearer scheme (case-insensitive).
 ///
-/// Returns true for ANY "Bearer ..." header, even if the token value is malformed.
-/// Used for D5 metadata exclusion — Bearer NEVER enters metadata.
+/// Returns true for any "Bearer ..." header, even if the token value is malformed.
+/// Used to keep Bearer credentials out of request metadata.
 pub fn is_bearer_scheme(auth_header: &str) -> bool {
     let trimmed = auth_header.trim();
     let scheme = trimmed.split_ascii_whitespace().next().unwrap_or("");
     scheme.eq_ignore_ascii_case("bearer")
 }
 
-/// Hardened Bearer token parser (D6).
+/// Extracts a valid Bearer token from an `Authorization` header value.
 ///
-/// Extracts a valid Bearer token from an Authorization header value.
 /// Uses safe split-based parsing (no byte indexing), case-insensitive scheme
-/// matching, OWS handling, and rejects malformed values including whitespace
-/// and ASCII control characters.
+/// matching and OWS handling. Returns `None` for malformed values, including
+/// empty tokens and tokens containing whitespace or ASCII control characters.
 pub fn extract_bearer_token(auth_header: &str) -> Option<String> {
     let trimmed = auth_header.trim();
 

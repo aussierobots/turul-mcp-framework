@@ -1,6 +1,6 @@
 //! Server Card schema family `v1` (ext-server-card `schema.ts` at `526201b`).
 //!
-//! Experimental upstream. See the crate README and ADR-038.
+//! Experimental upstream. See the crate README.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -110,20 +110,31 @@ pub struct Remote {
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Input {
+    /// Human-readable explanation that clients can show the user as context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// Whether the input must be supplied for the connection to succeed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_required: Option<bool>,
+    /// Whether the input is a secret (for example a password or token) that
+    /// clients should handle securely.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_secret: Option<bool>,
+    /// Format of the input value.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<InputFormat>,
+    /// Default value; it should be a valid value for the input.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<String>,
+    /// Example or guidance shown during configuration about the expected form
+    /// of the input.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub placeholder: Option<String>,
+    /// Pre-set value that end users should not configure; `{name}` identifiers
+    /// are replaced from the enclosing `variables` map, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Allowed values; when present, the user must select one of them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub choices: Option<Vec<String>>,
 }
@@ -132,9 +143,13 @@ pub struct Input {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InputFormat {
+    /// A string.
     String,
+    /// A number, written as a decimal value when converted to a string.
     Number,
+    /// A boolean, written as `"true"` or `"false"` when converted to a string.
     Boolean,
+    /// A path to a file on the user's filesystem.
     Filepath,
 }
 
@@ -143,6 +158,7 @@ pub enum InputFormat {
 pub struct KeyValueInput {
     /// Header name.
     pub name: String,
+    /// The header's input definition, flattened into the header object.
     #[serde(flatten)]
     pub input: Input,
     /// Variables referenced as `{name}` in `value`.
@@ -166,8 +182,10 @@ impl std::fmt::Display for InvalidServerCard {
 impl std::error::Error for InvalidServerCard {}
 
 impl ServerCard {
-    /// A card with the v1 `$schema`, a name and a description. `version` starts
-    /// empty; `turul-mcp-server` fills it from the server's `Implementation`.
+    /// Creates a card with the v1 `$schema`, a name and a description.
+    ///
+    /// `version` starts empty; `turul-mcp-server` fills it from the server's
+    /// `Implementation`.
     pub fn new(name: impl Into<String>, description: impl Into<String>) -> Self {
         Self {
             schema: SCHEMA_URL.to_string(),
@@ -183,43 +201,57 @@ impl ServerCard {
         }
     }
 
+    /// Sets `version` and returns the card.
     pub fn with_version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
         self
     }
 
+    /// Sets the display `title` and returns the card.
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
+    /// Sets `websiteUrl` and returns the card.
     pub fn with_website_url(mut self, url: impl Into<String>) -> Self {
         self.website_url = Some(url.into());
         self
     }
 
+    /// Sets `repository` and returns the card.
     pub fn with_repository(mut self, repository: Repository) -> Self {
         self.repository = Some(repository);
         self
     }
 
+    /// Sets `icons` and returns the card.
     pub fn with_icons(mut self, icons: Vec<Icon>) -> Self {
         self.icons = Some(icons);
         self
     }
 
+    /// Appends a remote endpoint to `remotes` and returns the card.
     pub fn with_remote(mut self, remote: Remote) -> Self {
         self.remotes.get_or_insert_with(Vec::new).push(remote);
         self
     }
 
+    /// Sets the extension `_meta` map and returns the card.
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Check the constraints `schema.json` asserts, plus the documented
+    /// Checks the constraints `schema.json` asserts, plus the documented
     /// refusal of version ranges.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidServerCard`] when `$schema` is not [`SCHEMA_URL`], the
+    /// `name` length or pattern is wrong, `version` exceeds 255 characters or is
+    /// a range, `description` or `title` is not 1 to 100 characters, or a remote
+    /// `url` is not an `http(s)://` or `{variable}` URL without whitespace.
     pub fn validate(&self) -> Result<(), InvalidServerCard> {
         let bad = |m: String| Err(InvalidServerCard(m));
         if self.schema != SCHEMA_URL {
@@ -264,6 +296,8 @@ impl ServerCard {
 }
 
 impl Remote {
+    /// Creates a remote of the given transport at `url`, with no headers,
+    /// variables or protocol versions.
     pub fn new(remote_type: RemoteType, url: impl Into<String>) -> Self {
         Self {
             remote_type,
@@ -274,11 +308,14 @@ impl Remote {
         }
     }
 
+    /// Appends a header to `headers` and returns the remote.
     pub fn with_header(mut self, header: KeyValueInput) -> Self {
         self.headers.get_or_insert_with(Vec::new).push(header);
         self
     }
 
+    /// Inserts the variable referenced as `{name}` in `url`, replacing any
+    /// previous variable of that name, and returns the remote.
     pub fn with_variable(mut self, name: impl Into<String>, input: Input) -> Self {
         self.variables
             .get_or_insert_with(HashMap::new)
@@ -286,6 +323,7 @@ impl Remote {
         self
     }
 
+    /// Sets `supportedProtocolVersions` and returns the remote.
     pub fn with_supported_protocol_versions(mut self, versions: Vec<String>) -> Self {
         self.supported_protocol_versions = Some(versions);
         self
@@ -348,7 +386,7 @@ fn is_version_range(v: &str) -> bool {
 }
 
 /// The served form of a card: its bytes and their `ETag`. The one producer of
-/// both (ADR-038 §1).
+/// both.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerCardDocument {
     body: Vec<u8>,
@@ -356,8 +394,13 @@ pub struct ServerCardDocument {
 }
 
 impl ServerCardDocument {
-    /// Validate `card`, serialise it (map keys sorted), and derive the strong
+    /// Validates `card`, serialises it (map keys sorted), and derives the strong
     /// `ETag` `"<first 32 hex digits of sha256(body)>"`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`InvalidServerCard`] when [`ServerCard::validate`] fails or
+    /// serialisation fails.
     pub fn new(card: &ServerCard) -> Result<Self, InvalidServerCard> {
         card.validate()?;
         let body = serde_json::to_vec(card)

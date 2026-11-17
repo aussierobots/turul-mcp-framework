@@ -9,35 +9,39 @@
 use serde::{Deserialize, Serialize};
 
 /// Theme preference for an icon (light or dark mode).
+///
 /// Defined on tool/resource/prompt/implementation interfaces in the 2026-07-28 schema.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum IconTheme {
+    /// Icon is designed for light backgrounds.
     Light,
+    /// Icon is designed for dark backgrounds.
     Dark,
 }
 
 /// Icon for tools, resources, prompts, and implementations.
+///
 /// Icons are display hints — most implementations do not need icons.
 /// Defined on tool/resource/prompt/implementation interfaces in the 2026-07-28 schema.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Icon {
-    /// Icon source URL (data: URI or https:// URL)
+    /// Icon source URL (`data:` URI or `https://` URL).
     pub src: String,
-    /// MIME type of the icon (e.g., "image/png", "image/svg+xml")
+    /// MIME type of the icon (e.g., `image/png`, `image/svg+xml`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
-    /// Icon sizes (e.g., ["16x16", "32x32"])
+    /// Icon sizes (e.g., `["16x16", "32x32"]`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sizes: Option<Vec<String>>,
-    /// Theme preference for this icon
+    /// Theme preference for this icon.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub theme: Option<IconTheme>,
 }
 
 impl Icon {
-    /// Create an icon from a URL
+    /// Creates an icon from a URL.
     pub fn new(src: impl Into<String>) -> Self {
         Self {
             src: src.into(),
@@ -47,7 +51,7 @@ impl Icon {
         }
     }
 
-    /// Create an icon from a data: URI
+    /// Creates an icon from a `data:` URI.
     pub fn data_uri(mime_type: &str, base64_data: &str) -> Self {
         Self {
             src: format!("data:{};base64,{}", mime_type, base64_data),
@@ -57,16 +61,19 @@ impl Icon {
         }
     }
 
+    /// Sets the MIME type.
     pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
         self.mime_type = Some(mime_type.into());
         self
     }
 
+    /// Sets the icon sizes.
     pub fn with_sizes(mut self, sizes: Vec<String>) -> Self {
         self.sizes = Some(sizes);
         self
     }
 
+    /// Sets the theme preference.
     pub fn with_theme(mut self, theme: IconTheme) -> Self {
         self.theme = Some(theme);
         self

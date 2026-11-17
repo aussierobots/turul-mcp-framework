@@ -1,4 +1,4 @@
-//! Tokio-based task executor — default in-process execution using tokio::spawn.
+//! Default in-process task executor, built on `tokio::spawn`.
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -6,7 +6,6 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import protocol types
 use turul_mcp_protocol::elicitation::{
     BooleanSchema, ElicitResult, ElicitationSchema, EnumSchema, NumberSchema,
     PrimitiveSchemaDefinition, StringFormat, StringSchema,
@@ -15,10 +14,9 @@ use turul_mcp_protocol::elicitation::{
 #[cfg(feature = "protocol-2025-11-25")]
 use turul_mcp_protocol::elicitation::ElicitCreateRequest;
 
-// Import framework traits from local crate
 use crate::traits::{HasElicitationHandling, HasElicitationMetadata, HasElicitationSchema};
 
-/// Builder for creating elicitation requests at runtime
+/// Builder for creating elicitation requests at runtime.
 pub struct ElicitationBuilder {
     message: String,
     title: Option<String>,
@@ -27,7 +25,7 @@ pub struct ElicitationBuilder {
 }
 
 impl ElicitationBuilder {
-    /// Create a new elicitation builder with the given message
+    /// Creates a new elicitation builder with the given message.
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
@@ -37,19 +35,19 @@ impl ElicitationBuilder {
         }
     }
 
-    /// Set the title for the elicitation dialog
+    /// Sets the title for the elicitation dialog.
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Add a meta key-value pair
+    /// Adds a meta key-value pair.
     pub fn meta_value(mut self, key: impl Into<String>, value: Value) -> Self {
         if self.meta.is_none() {
             self.meta = Some(HashMap::new());
@@ -58,7 +56,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add a string field to the schema
+    /// Adds a string field to the schema.
     pub fn string_field(mut self, name: impl Into<String>, description: impl Into<String>) -> Self {
         let schema =
             PrimitiveSchemaDefinition::String(StringSchema::new().with_description(description));
@@ -66,7 +64,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add a string field with length constraints
+    /// Adds a string field with length constraints.
     pub fn string_field_with_length(
         mut self,
         name: impl Into<String>,
@@ -82,7 +80,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add a string field with format constraint
+    /// Adds a string field with format constraint.
     pub fn string_field_with_format(
         mut self,
         name: impl Into<String>,
@@ -96,7 +94,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add a number field to the schema
+    /// Adds a number field to the schema.
     pub fn number_field(mut self, name: impl Into<String>, description: impl Into<String>) -> Self {
         let schema =
             PrimitiveSchemaDefinition::Number(NumberSchema::new().with_description(description));
@@ -104,7 +102,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add a number field with range constraints
+    /// Adds a number field with range constraints.
     pub fn number_field_with_range(
         mut self,
         name: impl Into<String>,
@@ -120,7 +118,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add an integer field to the schema
+    /// Adds an integer field to the schema.
     pub fn integer_field(
         mut self,
         name: impl Into<String>,
@@ -133,7 +131,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add an integer field with range constraints
+    /// Adds an integer field with range constraints.
     pub fn integer_field_with_range(
         mut self,
         name: impl Into<String>,
@@ -149,7 +147,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add a boolean field to the schema
+    /// Adds a boolean field to the schema.
     pub fn boolean_field(
         mut self,
         name: impl Into<String>,
@@ -161,7 +159,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add a boolean field with default value
+    /// Adds a boolean field with default value.
     pub fn boolean_field_with_default(
         mut self,
         name: impl Into<String>,
@@ -175,7 +173,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add an enum field (string with predefined values)
+    /// Adds an enum field (string with predefined values).
     pub fn enum_field(
         mut self,
         name: impl Into<String>,
@@ -188,7 +186,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Add an enum field with display names
+    /// Adds an enum field with display names.
     pub fn enum_field_with_names(
         mut self,
         name: impl Into<String>,
@@ -205,7 +203,7 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Mark a field as required
+    /// Marks a field as required.
     pub fn require_field(mut self, field_name: impl Into<String>) -> Self {
         let field_name = field_name.into();
         if let Some(ref mut required) = self.schema.required {
@@ -218,13 +216,13 @@ impl ElicitationBuilder {
         self
     }
 
-    /// Set multiple fields as required
+    /// Sets multiple fields as required.
     pub fn require_fields(mut self, field_names: Vec<String>) -> Self {
         self.schema = self.schema.with_required(field_names);
         self
     }
 
-    /// Build the elicitation request
+    /// Builds the elicitation request.
     #[cfg(feature = "protocol-2025-11-25")]
     pub fn build(self) -> ElicitCreateRequest {
         let mut request = ElicitCreateRequest::new(self.message, self.schema);
@@ -234,7 +232,7 @@ impl ElicitationBuilder {
         request
     }
 
-    /// Build a dynamic elicitation that implements the definition traits
+    /// Builds a dynamic elicitation that implements the definition traits.
     pub fn build_dynamic(self) -> DynamicElicitation {
         DynamicElicitation {
             message: self.message,
@@ -245,7 +243,7 @@ impl ElicitationBuilder {
     }
 }
 
-/// Dynamic elicitation created by ElicitationBuilder
+/// Dynamic elicitation created by ElicitationBuilder.
 #[derive(Debug)]
 pub struct DynamicElicitation {
     message: String,
@@ -254,7 +252,6 @@ pub struct DynamicElicitation {
     meta: Option<HashMap<String, Value>>,
 }
 
-// Implement all fine-grained traits for DynamicElicitation
 impl HasElicitationMetadata for DynamicElicitation {
     fn message(&self) -> &str {
         &self.message
@@ -433,9 +430,9 @@ impl HasElicitationHandling for DynamicElicitation {
 
 // ElicitationDefinition is automatically implemented via blanket impl!
 
-/// Convenience methods for common elicitation patterns
+/// Convenience methods for common elicitation patterns.
 impl ElicitationBuilder {
-    /// Create a simple text input elicitation
+    /// Creates a simple text input elicitation.
     pub fn text_input(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -447,7 +444,7 @@ impl ElicitationBuilder {
             .require_field(field_name)
     }
 
-    /// Create a number input elicitation
+    /// Creates a number input elicitation.
     pub fn number_input(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -461,7 +458,7 @@ impl ElicitationBuilder {
             .require_field(field_name)
     }
 
-    /// Create an integer input elicitation
+    /// Creates an integer input elicitation.
     pub fn integer_input(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -475,14 +472,14 @@ impl ElicitationBuilder {
             .require_field(field_name)
     }
 
-    /// Create a boolean confirmation elicitation
+    /// Creates a boolean confirmation elicitation.
     pub fn confirm(message: impl Into<String>) -> Self {
         Self::new(message)
             .boolean_field("confirmed", "Confirmation")
             .require_field("confirmed")
     }
 
-    /// Create a boolean confirmation with custom field name
+    /// Creates a boolean confirmation with custom field name.
     pub fn confirm_with_field(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -494,7 +491,7 @@ impl ElicitationBuilder {
             .require_field(field_name)
     }
 
-    /// Create a choice elicitation (enum)
+    /// Creates a choice elicitation (enum).
     pub fn choice(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -507,7 +504,7 @@ impl ElicitationBuilder {
             .require_field(field_name)
     }
 
-    /// Create an email input elicitation
+    /// Creates an email input elicitation.
     pub fn email_input(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -519,7 +516,7 @@ impl ElicitationBuilder {
             .require_field(field_name)
     }
 
-    /// Create a URL input elicitation
+    /// Creates a URL input elicitation.
     pub fn url_input(
         message: impl Into<String>,
         field_name: impl Into<String>,
@@ -531,13 +528,13 @@ impl ElicitationBuilder {
             .require_field(field_name)
     }
 
-    /// Create a complex form with multiple fields
+    /// Creates a complex form with multiple fields.
     pub fn form(message: impl Into<String>) -> Self {
         Self::new(message)
     }
 }
 
-/// Convert a raw JSON value into the wire-typed elicitation result content
+/// Converts a raw JSON value into the wire-typed elicitation result content
 /// value for the active protocol version.
 ///
 /// 2026-07-28 restricts `ElicitResult.content` values to
@@ -571,11 +568,11 @@ fn to_elicit_result_value(value: Value) -> Value {
     value
 }
 
-/// Result builder for creating elicitation responses
+/// Result builder for creating elicitation responses.
 pub struct ElicitResultBuilder;
 
 impl ElicitResultBuilder {
-    /// Create an accept result with content
+    /// Creates an accept result with content.
     pub fn accept(content: HashMap<String, Value>) -> ElicitResult {
         let content = content
             .into_iter()
@@ -584,24 +581,24 @@ impl ElicitResultBuilder {
         ElicitResult::accept(content)
     }
 
-    /// Create a decline result
+    /// Creates a decline result.
     pub fn decline() -> ElicitResult {
         ElicitResult::decline()
     }
 
-    /// Create a cancel result
+    /// Creates a cancel result.
     pub fn cancel() -> ElicitResult {
         ElicitResult::cancel()
     }
 
-    /// Create an accept result with a single field
+    /// Creates an accept result with a single field.
     pub fn accept_single(field_name: impl Into<String>, value: Value) -> ElicitResult {
         let mut content = HashMap::new();
         content.insert(field_name.into(), to_elicit_result_value(value));
         ElicitResult::accept(content)
     }
 
-    /// Create an accept result with multiple fields from key-value pairs
+    /// Creates an accept result with multiple fields from key-value pairs.
     pub fn accept_fields(fields: Vec<(String, Value)>) -> ElicitResult {
         let content = fields
             .into_iter()
@@ -612,7 +609,7 @@ impl ElicitResultBuilder {
 }
 
 #[cfg(feature = "protocol-2026-07-28")]
-/// Validate elicited content against the form schema that requested it
+/// Validates elicited content against the form schema that requested it
 /// (Elicitation §Form Security: "Servers SHOULD validate received data
 /// matches the requested schema"; the same check serves clients validating
 /// before sending).

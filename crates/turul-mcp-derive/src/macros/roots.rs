@@ -1,6 +1,6 @@
-//! Roots Declarative Macro Implementation
+//! Implements the `roots!{}` declarative macro.
 //!
-//! Implements the `roots!{}` declarative macro for creating MCP root handlers
+//! The macro creates MCP root handlers
 //! with a concise syntax.
 
 use proc_macro::TokenStream;
@@ -9,14 +9,18 @@ use syn::{Ident, LitBool, LitStr, Result, Token, parse::Parse, parse::ParseStrea
 
 use crate::macros::shared::capitalize;
 
-/// Implementation function for the roots!{} declarative macro
+/// Expands `roots!{}` input into a root struct definition.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when the input does not parse as `RootsMacroInput`.
 pub fn roots_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let input = syn::parse::<RootsMacroInput>(input)?;
     let output = roots_declarative_impl_inner(input);
     Ok(output.into())
 }
 
-/// Internal implementation that works with proc_macro2::TokenStream for testing
+/// Generates the root struct tokens for parsed input as a `proc_macro2::TokenStream`, which tests can inspect.
 pub fn roots_declarative_impl_inner(input: RootsMacroInput) -> proc_macro2::TokenStream {
     let mcp_derive = crate::utils::derive_path();
     let serde_attr = crate::utils::serde_attr_path();
@@ -48,7 +52,7 @@ pub fn roots_declarative_impl_inner(input: RootsMacroInput) -> proc_macro2::Toke
     }
 }
 
-/// Parse input for the roots!{} macro
+/// Parsed input of the `roots!{}` macro.
 pub struct RootsMacroInput {
     name: String,
     uri: String,
@@ -70,7 +74,6 @@ impl Parse for RootsMacroInput {
         let mut description = None;
         let mut read_only = false;
 
-        // Parse optional parameters
         while input.peek(Token![,]) {
             input.parse::<Token![,]>()?;
 

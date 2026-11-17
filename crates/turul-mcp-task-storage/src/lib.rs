@@ -60,6 +60,7 @@
 //! - **`TaskOutcome`**: Success/Error result stored for `tasks/result` retrieval
 //! - **State machine**: Validates transitions per MCP spec lifecycle
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #[cfg(feature = "protocol-2026-07-28")]
 compile_error!(
     "turul-mcp-task-storage targets MCP 2025-11-25; in 2026-07-28 tasks moved to the turul-mcp-ext-tasks extension."
@@ -99,13 +100,13 @@ pub use postgres::{PostgresTaskConfig, PostgresTaskStorage};
 #[cfg(feature = "sqlite")]
 pub use sqlite::{SqliteTaskConfig, SqliteTaskStorage};
 
-/// Create a default in-memory task storage instance for development and testing.
+/// Creates a default in-memory task storage instance for development and testing.
 #[cfg(feature = "in-memory")]
 pub fn create_default_storage() -> InMemoryTaskStorage {
     InMemoryTaskStorage::new()
 }
 
-/// Create an in-memory task storage with custom configuration.
+/// Creates an in-memory task storage with custom configuration.
 #[cfg(feature = "in-memory")]
 pub fn create_memory_storage(config: InMemoryTaskConfig) -> InMemoryTaskStorage {
     InMemoryTaskStorage::with_config(config)

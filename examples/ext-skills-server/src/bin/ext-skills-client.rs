@@ -1,6 +1,6 @@
 //! Skills host driver for the upstream conformance harness's client scenarios
 //! (`sep-2640-client-*`), and a usable example of loading skills with
-//! verification (ADR-033 §6).
+//! verification.
 //!
 //! The harness sets `MCP_CONFORMANCE_SCENARIO` and passes the server URL as the
 //! last argument. `no-prefetch` lists and loads nothing; every other scenario

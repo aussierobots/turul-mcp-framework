@@ -4,7 +4,7 @@ use super::{DispatcherResult, McpMiddleware, MiddlewareError, RequestContext, Se
 use std::sync::Arc;
 use turul_mcp_session_storage::SessionView;
 
-/// Ordered collection of middleware with execution logic
+/// Ordered collection of middleware with execution logic.
 ///
 /// The stack executes middleware in two phases:
 ///
@@ -52,12 +52,12 @@ pub struct MiddlewareStack {
 }
 
 impl MiddlewareStack {
-    /// Create an empty middleware stack
+    /// Creates an empty middleware stack.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Add middleware to the end of the stack
+    /// Adds middleware to the end of the stack.
     ///
     /// # Parameters
     ///
@@ -71,25 +71,25 @@ impl MiddlewareStack {
         self.middleware.push(middleware);
     }
 
-    /// Get the number of middleware in the stack
+    /// Returns the number of middleware in the stack.
     pub fn len(&self) -> usize {
         self.middleware.len()
     }
 
-    /// Check if the stack is empty
+    /// Returns whether the stack is empty.
     pub fn is_empty(&self) -> bool {
         self.middleware.is_empty()
     }
 
-    /// Check if any middleware in the stack runs before session creation
+    /// Returns whether any middleware in the stack runs before session creation.
     pub fn has_pre_session_middleware(&self) -> bool {
         self.middleware.iter().any(|m| m.runs_before_session())
     }
 
-    /// Execute only pre-session middleware (those with `runs_before_session() == true`)
+    /// Executes only pre-session middleware (those with `runs_before_session() == true`).
     ///
     /// Called by the transport layer before session lookup/creation.
-    /// Session is always `None` in this phase.
+    /// The session is always `None` in this phase.
     pub async fn execute_before_session(
         &self,
         ctx: &mut RequestContext<'_>,
@@ -107,7 +107,7 @@ impl MiddlewareStack {
         Ok(())
     }
 
-    /// Execute all middleware before dispatch
+    /// Executes all post-session middleware before dispatch.
     ///
     /// # Parameters
     ///
@@ -156,7 +156,7 @@ impl MiddlewareStack {
         Ok(combined_injection)
     }
 
-    /// Execute all middleware after dispatch
+    /// Executes all middleware after dispatch, in reverse registration order.
     ///
     /// # Parameters
     ///
@@ -178,7 +178,6 @@ impl MiddlewareStack {
         ctx: &RequestContext<'_>,
         result: &mut DispatcherResult,
     ) -> Result<(), MiddlewareError> {
-        // Execute in reverse order
         for middleware in self.middleware.iter().rev() {
             middleware.after_dispatch(ctx, result).await?;
         }
@@ -314,7 +313,7 @@ mod tests {
         assert_eq!(log[0], "before_first");
     }
 
-    /// Middleware that filters tools from the response
+    /// Middleware that filters tools from the response.
     struct ToolFilteringMiddleware;
 
     #[async_trait]

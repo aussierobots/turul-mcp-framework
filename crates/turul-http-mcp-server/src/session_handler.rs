@@ -56,6 +56,7 @@ pub struct SessionSseStream {
 }
 
 impl SessionSseStream {
+    /// Wraps a stream of SSE-encoded byte chunks as an HTTP response body.
     pub fn new<S>(stream: S) -> Self
     where
         S: Stream<Item = std::result::Result<Bytes, Infallible>> + Send + 'static,
@@ -148,7 +149,7 @@ fn jsonrpc_error_to_unified_body(error: JsonRpcError) -> Result<Response<Unified
         .unwrap())
 }
 
-// ✅ CORRECTED ARCHITECTURE: Remove complex registry - use single shared StreamManager
+// A single shared StreamManager serves all sessions (no per-session registry).
 
 /// JSON-RPC 2.0 over HTTP handler with shared StreamManager
 pub struct SessionMcpHandler {
@@ -190,7 +191,7 @@ impl SessionMcpHandler {
         Self::with_storage(config, dispatcher, storage, stream_config, middleware_stack)
     }
 
-    /// Create handler with shared StreamManager instance (corrected architecture)
+    /// Creates a handler that uses a shared `StreamManager` instance.
     pub fn with_shared_stream_manager(
         config: ServerConfig,
         dispatcher: Arc<JsonRpcDispatcher<McpError>>,
@@ -211,8 +212,9 @@ impl SessionMcpHandler {
         }
     }
 
-    /// Create handler with specific session storage backend (creates own StreamManager)
-    /// Note: Use with_shared_stream_manager for correct architecture
+    /// Creates a handler with a specific session storage backend and its own `StreamManager`.
+    ///
+    /// Prefer `with_shared_stream_manager` so notifications share one `StreamManager`.
     pub fn with_storage(
         config: ServerConfig,
         dispatcher: Arc<JsonRpcDispatcher<McpError>>,
@@ -265,7 +267,7 @@ impl SessionMcpHandler {
             req.method(),
             req.uri().path()
         );
-        // DNS-rebinding protection (ADR-031): present-and-invalid Origin → 403.
+        // DNS-rebinding protection: present-and-invalid Origin → 403.
         // OPTIONS preflight is exempt; the actual request is gated.
         if *req.method() != Method::OPTIONS
             && let Err(origin) =
@@ -410,7 +412,7 @@ impl SessionMcpHandler {
             }
         };
 
-        // --- Pre-session auth phase (D4) ---
+        // --- Pre-session auth phase ---
         // Run pre-session middleware (e.g., OAuth Bearer validation) BEFORE session creation
         let pre_session_extensions = if self.middleware_stack.has_pre_session_middleware() {
             let method_name = match &message {
@@ -498,7 +500,7 @@ impl SessionMcpHandler {
                             "Handling initialize request - creating new session via session storage"
                         );
 
-                        // Let session storage create the session and generate the ID (GPS pattern)
+                        // Let session storage create the session and generate the ID
                         let capabilities = ServerCapabilities::default();
                         match self.session_storage.create_session(capabilities).await {
                             Ok(session_info) => {
@@ -507,7 +509,7 @@ impl SessionMcpHandler {
                                     session_info.session_id
                                 );
 
-                                // ✅ CORRECTED ARCHITECTURE: Create session-specific notification broadcaster from shared StreamManager
+                                // Create session-specific notification broadcaster from shared StreamManager
                                 let broadcaster: SharedNotificationBroadcaster =
                                     Arc::new(StreamManagerNotificationBroadcaster::new(
                                         Arc::clone(&self.stream_manager),
@@ -771,7 +773,7 @@ impl SessionMcpHandler {
                             )
                             .await
                     } else {
-                        // Fallback: read recent events from storage (legacy behavior)
+                        // Fallback: read recent events from storage
                         self.stream_manager
                             .create_post_sse_stream(
                                 response_session_id.clone().unwrap(),
@@ -826,7 +828,6 @@ impl SessionMcpHandler {
         }
     }
 
-    // Note: create_post_sse_response method removed as it's unused in MCP Inspector compatibility mode
     // SSE for tool calls is disabled on this legacy (≤2024-11-05) handler.
 
     /// Handle Server-Sent Events requests (SSE for streaming)
@@ -884,10 +885,9 @@ impl SessionMcpHandler {
         // Session ID is required for SSE.
         // Per MCP 2025-11-25 § Session Management: missing Mcp-Session-Id → HTTP 400 Bad Request.
         // Mirrors the streamable_http.rs POST pattern: build the JSON-RPC error body via the
-        // standard `JsonRpcError` helper, then wrap it in a 400 response. (The
-        // `jsonrpc_error_to_unified_body` helper hardcodes HTTP 200, which was non-spec here;
-        // we keep the JSON-RPC body shape but inline the response builder to set the correct
-        // status.)
+        // standard `JsonRpcError` helper, then wrap it in a 400 response. The
+        // `jsonrpc_error_to_unified_body` helper hardcodes HTTP 200, so the response is
+        // built inline to set the 400 status.
         let session_id = match session_id {
             Some(id) => id,
             None => {
@@ -942,7 +942,7 @@ impl SessionMcpHandler {
             session_id, connection_id, last_event_id
         );
 
-        // ✅ CORRECTED ARCHITECTURE: Use shared StreamManager directly (no registry needed)
+        // Use the shared StreamManager directly
         match self
             .stream_manager
             .handle_sse_connection(session_id, connection_id, last_event_id)
@@ -1110,7 +1110,7 @@ impl SessionMcpHandler {
                             }
                         }
                     } else {
-                        // Missing fingerprint (legacy session) — store current
+                        // Missing fingerprint — store current
                         info!(
                             "Session '{}' has no tool fingerprint, storing current",
                             session_id
@@ -1194,7 +1194,7 @@ impl SessionMcpHandler {
         }
 
         for (k, v) in normalized_headers {
-            // D5: Bearer scheme NEVER enters metadata
+            // The Bearer scheme never enters metadata
             if k == "authorization" && is_bearer_scheme(&v) {
                 continue;
             }
@@ -1237,7 +1237,7 @@ impl SessionMcpHandler {
             }
         }
 
-        // Thread extensions from RequestContext → JSON-RPC SessionContext (D3 canonical flow)
+        // Thread extensions from RequestContext → JSON-RPC SessionContext
         let mut session = session;
         session.extensions = ctx.extensions().clone();
 

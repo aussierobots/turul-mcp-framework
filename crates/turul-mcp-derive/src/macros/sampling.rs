@@ -1,23 +1,15 @@
-//! Declarative sampling! macro implementation
+//! Implements the `sampling!` declarative macro.
 //!
 //! This module provides the `sampling!` macro for creating MCP sampling configurations using concise syntax.
 
 use proc_macro::TokenStream;
-// use proc_macro2::TokenStream as TokenStream2; // Currently unused
 use quote::quote;
 use syn::{
-    // punctuated::Punctuated, // Currently unused
-    Expr,
-    Ident,
-    /* Lit, */ LitFloat,
-    LitInt,
-    LitStr,
-    Result,
-    Token,
+    Expr, Ident, /* Lit, */ LitFloat, LitInt, LitStr, Result, Token,
     parse::{Parse, ParseStream},
 };
 
-/// Parsed content of a sampling! macro
+/// Parsed fields of a `sampling!` macro invocation.
 pub struct SamplingMacro {
     pub name: Option<LitStr>,
     pub max_tokens: LitInt,
@@ -90,7 +82,11 @@ impl Parse for SamplingMacro {
     }
 }
 
-/// Implementation of the sampling! declarative macro
+/// Expands `sampling!` input into a block that evaluates to a sampling handler instance.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when the input does not parse as `SamplingMacro`.
 pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let async_trait = crate::utils::async_trait_path();
     let json_crate = crate::utils::serde_json_path();

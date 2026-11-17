@@ -1,11 +1,11 @@
-//! Shared utilities for declarative macros
+//! Shared utilities for the declarative macros.
 
-/// Capitalize the first character of a string
+/// Converts a snake_case string to PascalCase.
 pub fn capitalize(s: &str) -> String {
     snake_to_pascal_case(s)
 }
 
-/// Convert snake_case to PascalCase
+/// Converts snake_case to PascalCase by uppercasing the first character of each `_`-separated word.
 pub fn snake_to_pascal_case(s: &str) -> String {
     s.split('_')
         .map(|word| {
@@ -29,7 +29,6 @@ mod tests {
         assert_eq!(capitalize(""), "");
         assert_eq!(capitalize("a"), "A");
         assert_eq!(capitalize("ALREADY"), "ALREADY");
-        // Test snake_case conversion
         assert_eq!(capitalize("text_editor"), "TextEditor");
         assert_eq!(capitalize("user_details"), "UserDetails");
         assert_eq!(capitalize("resources_changed"), "ResourcesChanged");

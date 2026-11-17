@@ -11,14 +11,14 @@ use turul_mcp_protocol::{
     prompts::{GetPromptResult, PromptMessage},
 };
 
-/// High-level trait for implementing MCP prompts
+/// High-level trait for implementing MCP prompts.
 ///
 /// McpPrompt extends PromptDefinition with execution capabilities.
 /// All metadata is provided by the PromptDefinition trait, ensuring
 /// consistency between concrete Prompt structs and dynamic implementations.
 #[async_trait]
 pub trait McpPrompt: PromptDefinition + Send + Sync {
-    /// Render the prompt with the given arguments
+    /// Render the prompt with the given arguments.
     ///
     /// This method processes the arguments and returns the rendered prompt messages.
     /// The implementation should substitute arguments into templates and generate
@@ -44,7 +44,7 @@ pub trait McpPrompt: PromptDefinition + Send + Sync {
         Ok(vec![PromptMessage::text(message)])
     }
 
-    /// Optional: Check if this prompt handler can handle the given arguments
+    /// Optional: Check if this prompt handler can handle the given arguments.
     ///
     /// This allows for conditional prompt handling based on argument content,
     /// complexity, or other factors.
@@ -60,7 +60,7 @@ pub trait McpPrompt: PromptDefinition + Send + Sync {
         true
     }
 
-    /// Optional: Get prompt priority for request routing
+    /// Optional: Get prompt priority for request routing.
     ///
     /// Higher priority handlers are tried first when multiple handlers
     /// can handle the same prompt.
@@ -68,7 +68,7 @@ pub trait McpPrompt: PromptDefinition + Send + Sync {
         0
     }
 
-    /// Optional: Validate arguments before rendering
+    /// Optional: Validate arguments before rendering.
     ///
     /// This method performs argument validation beyond basic required/optional checks.
     async fn validate_args(&self, _args: &HashMap<String, Value>) -> McpResult<()> {
@@ -76,7 +76,7 @@ pub trait McpPrompt: PromptDefinition + Send + Sync {
         Ok(())
     }
 
-    /// Optional: Transform rendered messages before returning
+    /// Optional: Transform rendered messages before returning.
     ///
     /// This allows for post-processing of rendered messages, such as formatting,
     /// optimization, or additional content enhancement.
@@ -115,7 +115,7 @@ pub trait McpPrompt: PromptDefinition + Send + Sync {
     }
 }
 
-/// Convert an McpPrompt trait object to a Prompt descriptor
+/// Convert an McpPrompt trait object to a Prompt descriptor.
 ///
 /// This is a convenience function for converting prompt definitions
 /// to protocol descriptors.

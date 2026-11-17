@@ -19,7 +19,7 @@ pub mod postgres;
 #[cfg(feature = "dynamodb")]
 pub mod dynamodb;
 
-/// The behaviour contract every [`store::TaskStore`] backend must satisfy,
+/// The behaviour contract every [`TaskStore`] backend must satisfy,
 /// written once and run against all of them. Enabled by `parity-harness`
 /// (implied by every backend feature, and by `cfg(test)` in this crate) so
 /// out-of-workspace implementors can hold their own backends to it.

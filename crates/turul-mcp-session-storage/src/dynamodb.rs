@@ -1,16 +1,16 @@
-//! AWS DynamoDB Session Storage Implementation
+//! DynamoDB-backed session storage backend.
 //!
-//! This module provides a DynamoDB-backed session storage implementation for
+//! Provides a DynamoDB-backed session storage implementation for
 //! serverless and AWS-native MCP deployments.
 //!
 //! ## Table Schema
 //!
-//! New tables (v0.3.4+) use camelCase attribute names:
+//! Tables use camelCase attribute names:
 //! - **Sessions table**: PK=`sessionId`, GSI `LastActivityIndex` PK=`lastActivity`
 //! - **Events table**: PK=`sessionId`, SK=`eventId`
 //!
-//! Legacy tables (pre-v0.3.4) use snake_case and are auto-detected via
-//! `describe_table()` key schema inspection. Both conventions are fully supported.
+//! Tables whose key schema uses snake_case names are detected via
+//! `describe_table()` key schema inspection. Both conventions are supported.
 
 use std::collections::HashMap;
 use std::time::SystemTime;
@@ -30,13 +30,13 @@ use aws_sdk_dynamodb::types::{AttributeValue, TableStatus};
 
 /// Naming convention detected from an existing DynamoDB table's key schema.
 ///
-/// New tables use `CamelCase`; legacy pre-v0.3.4 tables use `SnakeCase`.
-/// Detected automatically via `describe_table()` — callers never choose.
+/// New tables use `CamelCase`; tables with snake_case key names use `SnakeCase`.
+/// Detected via `describe_table()` when `verify_tables` is set; otherwise `CamelCase` is assumed.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum NamingConvention {
-    /// Legacy pre-v0.3.4 tables with snake_case attribute names.
+    /// Tables with snake_case attribute names.
     SnakeCase,
-    /// New v0.3.4+ tables with camelCase attribute names.
+    /// Tables with camelCase attribute names.
     CamelCase,
 }
 
@@ -111,9 +111,9 @@ impl EventAttrNames {
     }
 }
 
-/// Detect whether a DynamoDB table uses snake_case or camelCase attribute names
+/// Detects whether a DynamoDB table uses snake_case or camelCase attribute names
 /// by inspecting its key schema. Any multi-word key containing an underscore
-/// indicates a legacy snake_case table.
+/// indicates a snake_case table.
 fn detect_naming_convention(table: &aws_sdk_dynamodb::types::TableDescription) -> NamingConvention {
     for element in table.key_schema() {
         let name = element.attribute_name();
@@ -124,7 +124,7 @@ fn detect_naming_convention(table: &aws_sdk_dynamodb::types::TableDescription) -
     NamingConvention::CamelCase
 }
 
-/// Read-tolerance helper: tries `primary` attribute name first, falls back to `fallback`.
+/// Looks up `primary` first, then `fallback`.
 /// Used for non-key attributes that may have been written with either naming convention.
 fn get_attr<'a>(
     item: &'a HashMap<String, AttributeValue>,
@@ -134,7 +134,7 @@ fn get_attr<'a>(
     item.get(primary).or_else(|| item.get(fallback))
 }
 
-/// Configuration for DynamoDB session storage
+/// Configuration for DynamoDB session storage.
 #[derive(Debug, Clone)]
 pub struct DynamoDbConfig {
     /// DynamoDB table name for sessions
@@ -178,20 +178,26 @@ impl Default for DynamoDbConfig {
     }
 }
 
-/// Errors that can occur with DynamoDB storage
+/// Errors that can occur with DynamoDB storage.
 #[derive(Error, Debug)]
 pub enum DynamoDbError {
     #[error("AWS SDK error: {0}")]
+    /// A DynamoDB request failed, or a table did not become active in time; the message describes the failure.
     AwsError(String),
     #[error("Serialization error: {0}")]
+    /// A value could not be serialized to or deserialized from JSON.
     SerializationError(#[from] serde_json::Error),
     #[error("Session not found: {0}")]
+    /// No session exists for the given session ID; storage operations report this as `SessionStorageError::SessionNotFound` instead.
     SessionNotFound(String),
     #[error("Invalid session data: {0}")]
+    /// A stored session item is missing attributes or holds values that cannot be decoded.
     InvalidSessionData(String),
     #[error("DynamoDB table does not exist: {0}")]
+    /// The sessions table is missing and `create_tables` is false, or its description has no status.
     TableNotFound(String),
     #[error("AWS configuration error: {0}")]
+    /// The AWS client or DynamoDB configuration is invalid; this backend does not currently return it.
     ConfigError(String),
 }
 
@@ -220,18 +226,18 @@ impl DynamoDbSessionStorage {
 }
 
 impl DynamoDbSessionStorage {
-    /// Get the event table name from environment variable or default pattern
+    /// Returns the `MCP_SESSION_EVENT_TABLE` environment variable, or `<table_name>-events` when unset.
     fn get_event_table_name(&self) -> String {
         std::env::var("MCP_SESSION_EVENT_TABLE")
             .unwrap_or_else(|_| format!("{}-events", self.config.table_name))
     }
 
-    /// Create a new DynamoDB session storage with default configuration
+    /// Creates a new DynamoDB session storage with default configuration.
     pub async fn new() -> Result<Self, DynamoDbError> {
         Self::with_config(DynamoDbConfig::default()).await
     }
 
-    /// Create a new DynamoDB session storage with custom configuration
+    /// Creates a new DynamoDB session storage with custom configuration.
     pub async fn with_config(config: DynamoDbConfig) -> Result<Self, DynamoDbError> {
         info!(
             "Initializing DynamoDB session storage with table: {} in region: {}",
@@ -273,7 +279,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Verify that the DynamoDB table exists and has the correct schema, create if it doesn't exist.
+    /// Verifies that the sessions table exists with the expected schema, creating it when missing and `create_tables` allows.
     /// Also detects and stores the table's naming convention.
     async fn verify_table_schema(&mut self) -> Result<(), DynamoDbError> {
         debug!("Verifying table schema for: {}", self.config.table_name);
@@ -367,7 +373,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Detect naming convention from the events table (best-effort, non-failing).
+    /// Detects the naming convention of the events table (best-effort, never fails).
     async fn detect_event_naming(&mut self) {
         let event_table = self.get_event_table_name();
         match self
@@ -396,7 +402,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Create the DynamoDB table with camelCase key schema and GSI.
+    /// Creates the sessions table with a camelCase key schema and the `LastActivityIndex` GSI.
     async fn create_table(&self) -> Result<(), DynamoDbError> {
         use aws_sdk_dynamodb::types::{
             AttributeDefinition, BillingMode, GlobalSecondaryIndex, KeySchemaElement, KeyType,
@@ -478,7 +484,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Enable TTL on the DynamoDB table
+    /// Enables TTL on the sessions table.
     async fn enable_ttl(&self) -> Result<(), DynamoDbError> {
         use aws_sdk_dynamodb::types::TimeToLiveSpecification;
 
@@ -518,7 +524,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Ensure TTL is enabled on the main session table
+    /// Ensures TTL is enabled on the sessions table.
     async fn ensure_ttl_enabled(&self) -> Result<(), DynamoDbError> {
         info!(
             "Checking TTL status on DynamoDB table: {}",
@@ -584,7 +590,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Enable TTL on the DynamoDB events table
+    /// Enables TTL on the events table.
     async fn enable_ttl_on_events_table(
         &self,
         event_table: &str,
@@ -624,7 +630,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Ensure TTL is enabled on the events table (idempotent — returns early if already enabled)
+    /// Ensures TTL is enabled on the events table; returns early if already enabled.
     async fn ensure_ttl_on_events_table(
         &self,
         event_table: &str,
@@ -688,7 +694,7 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Wait for the table to become active
+    /// Waits for the sessions table to become active.
     async fn wait_for_table_active(&self) -> Result<(), DynamoDbError> {
         use tokio::time::{Duration, sleep};
 
@@ -732,7 +738,7 @@ impl DynamoDbSessionStorage {
         )))
     }
 
-    /// Ensure the events table exists, create if it doesn't.
+    /// Ensures the events table exists, creating it when missing.
     /// Also detects and stores the events table's naming convention.
     async fn ensure_events_table_exists(
         &self,
@@ -835,7 +841,7 @@ impl DynamoDbSessionStorage {
         Ok(())
     }
 
-    /// Wait for the events table to become active
+    /// Waits for the events table to become active.
     async fn wait_for_events_table_active(
         &self,
         event_table: &str,
@@ -885,7 +891,7 @@ impl DynamoDbSessionStorage {
         )))
     }
 
-    /// Convert SessionInfo to DynamoDB AttributeValue format
+    /// Converts a `SessionInfo` to a DynamoDB item of `AttributeValue`s.
     fn session_to_dynamodb_item(
         &self,
         session: &SessionInfo,
@@ -948,7 +954,7 @@ impl DynamoDbSessionStorage {
         Ok(item)
     }
 
-    /// Convert DynamoDB item to SessionInfo, with read tolerance for both naming conventions.
+    /// Converts a DynamoDB item to a `SessionInfo`, accepting either naming convention.
     fn dynamodb_item_to_session(
         &self,
         item: &HashMap<String, AttributeValue>,
@@ -1034,7 +1040,7 @@ impl DynamoDbSessionStorage {
         })
     }
 
-    /// Convert SessionInfo to DynamoDB item format (legacy JSON format for tests)
+    /// Converts a `SessionInfo` to a JSON-value item map (used by tests and `maintenance`).
     fn session_to_item(
         &self,
         session: &SessionInfo,
@@ -1091,7 +1097,7 @@ impl DynamoDbSessionStorage {
         Ok(item)
     }
 
-    /// Convert DynamoDB item to SessionInfo (legacy JSON format for tests)
+    /// Converts a JSON-value item map to a `SessionInfo` (used by tests and `maintenance`).
     fn item_to_session(&self, item: &HashMap<String, Value>) -> Result<SessionInfo, DynamoDbError> {
         debug!("Converting DynamoDB legacy JSON item to SessionInfo");
         let sa = self.session_attrs();
@@ -1165,7 +1171,7 @@ impl DynamoDbSessionStorage {
         })
     }
 
-    /// Public method to create both DynamoDB tables (for setup utilities)
+    /// Creates both the sessions and events tables.
     pub async fn create_tables(&self) -> Result<(), DynamoDbError> {
         info!("Creating both DynamoDB tables: session and events");
 
@@ -1186,7 +1192,7 @@ impl DynamoDbSessionStorage {
         Ok(())
     }
 
-    /// Public method to delete both DynamoDB tables (for teardown utilities)
+    /// Deletes both the sessions and events tables.
     pub async fn delete_tables(&self) -> Result<(), DynamoDbError> {
         {
             let main_table = &self.config.table_name;
@@ -1615,7 +1621,8 @@ impl SessionStorage for DynamoDbSessionStorage {
         {
             debug!("Scanning DynamoDB table for all session IDs");
 
-            // Note: Scan is expensive for large tables - consider using pagination
+            // One Scan call without following `LastEvaluatedKey`: only the first page
+            // (up to 1 MB) of session IDs is returned.
             match self
                 .client
                 .scan()
@@ -1985,14 +1992,13 @@ impl SessionStorage for DynamoDbSessionStorage {
         before_event_id: u64,
     ) -> Result<u64, Self::Error> {
         {
-            // In a production setup, this would scan and delete events
-            // where session_id = session_id AND event_id < before_event_id
+            // Not implemented: events are removed by DynamoDB TTL, so this only logs
+            // and reports 0 deleted.
             debug!(
                 "Would delete events before {} from DynamoDB events table for session: {}",
                 before_event_id, session_id
             );
 
-            // For now, return 0 as we're not implementing the full events table
             Ok(0)
         }
     }
@@ -2004,28 +2010,20 @@ impl SessionStorage for DynamoDbSessionStorage {
                 .unwrap()
                 .as_secs();
 
-            // DynamoDB TTL handles automatic deletion, but for manual cleanup:
-            // We would scan for sessions where last_activity < timestamp
+            // Not implemented: expiry is left to DynamoDB TTL, so this only logs
+            // and returns no session IDs.
             debug!(
                 "Would scan for sessions with last_activity < {} in DynamoDB",
                 timestamp
             );
 
-            // In a real implementation, this would:
-            // 1. Scan table with FilterExpression on last_activity
-            // 2. Collect session IDs of expired sessions
-            // 3. BatchDeleteItem to remove them
-            // 4. Return the list of deleted session IDs
-
-            // For now, return empty list as DynamoDB TTL handles cleanup automatically
             Ok(vec![])
         }
     }
 
     async fn session_count(&self) -> Result<usize, Self::Error> {
         {
-            // In production, this would use scan with count-only projection
-            // or maintain a counter in a separate item
+            // Counted with a Scan using `Select::Count`.
             debug!("Would scan DynamoDB table to count sessions");
 
             match self
@@ -2054,21 +2052,19 @@ impl SessionStorage for DynamoDbSessionStorage {
 
     async fn event_count(&self) -> Result<usize, Self::Error> {
         {
-            // In production with separate events table, this would scan that table
+            // Not implemented: always returns 0 without querying the events table.
             let event_table = format!("{}-events", self.config.table_name);
             debug!("Would count events in DynamoDB table: {}", event_table);
 
-            // For now, return 0 as we're not implementing the full events table
             Ok(0)
         }
     }
 
     async fn maintenance(&self) -> Result<(), Self::Error> {
-        // DynamoDB maintenance is mostly automatic with TTL
-        // Could implement event cleanup here if needed
+        // Expiry is handled by DynamoDB TTL; there is nothing to clean up here.
         debug!("Performing DynamoDB maintenance");
 
-        // Debug: Test legacy conversion methods periodically for compatibility
+        // In debug builds, round-trips a fresh session through the JSON conversion helpers.
         if cfg!(debug_assertions) {
             let test_session = SessionInfo::new();
             if let Ok(item) = self.session_to_item(&test_session)

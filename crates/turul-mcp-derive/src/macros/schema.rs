@@ -1,13 +1,17 @@
-//! Schema Declarative Macro Implementation
+//! Implements the `schema_for!{}` declarative macro.
 //!
-//! Implements the `schema_for!{}` declarative macro for generating JSON schemas
+//! The macro generates JSON schemas
 //! from Rust types.
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Result, Type};
 
-/// Implementation function for the schema_for!{} declarative macro
+/// Expands `schema_for!{}` into a block that evaluates to a `JsonSchema` chosen by the stringified type.
+///
+/// # Errors
+///
+/// Returns a `syn::Error` when the input does not parse as a `syn::Type`.
 pub fn schema_for_impl(input: TokenStream) -> Result<TokenStream> {
     let mcp_protocol = crate::utils::protocol_path();
     let input = syn::parse::<Type>(input)?;
@@ -17,7 +21,6 @@ pub fn schema_for_impl(input: TokenStream) -> Result<TokenStream> {
             use #mcp_protocol::schema::JsonSchema;
             use std::collections::HashMap;
 
-            // Generate schema based on the type
             let schema = match stringify!(#input) {
                 "f64" | "f32" => JsonSchema::number(),
                 "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" => JsonSchema::integer(),

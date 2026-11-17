@@ -1,6 +1,6 @@
 //! Capability negotiation for `io.modelcontextprotocol/skills` (`skills.mdx`
 //! §Capability Negotiation). [`capability`] is the only producer of the value a
-//! server places under [`EXTENSION_IDENTIFIER`] (ADR-033 §1).
+//! server places under [`EXTENSION_IDENTIFIER`].
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -18,14 +18,16 @@ pub struct SkillsCapability {
     pub directory_read: bool,
 }
 
-/// The value to insert under [`EXTENSION_IDENTIFIER`] in
-/// `ServerCapabilities.extensions`. An empty object means no optional features.
+/// Returns the value to insert under [`EXTENSION_IDENTIFIER`] in
+/// `ServerCapabilities.extensions`.
+///
+/// An empty object means no optional features.
 pub fn capability(settings: SkillsCapability) -> Value {
     serde_json::to_value(settings).expect("SkillsCapability serializes")
 }
 
-/// The server's Skills settings, or `None` when it did not declare the extension
-/// (or declared a value that is not a settings object).
+/// Returns the server's Skills settings, or `None` when it did not declare the
+/// extension (or declared a value that is not a settings object).
 pub fn declared_by_server(caps: &ServerCapabilities) -> Option<SkillsCapability> {
     let value = caps.extensions.as_ref()?.get(EXTENSION_IDENTIFIER)?;
     serde_json::from_value(value.clone()).ok()
@@ -36,8 +38,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    /// ADR-033 §1 / S-G1: the capability value has one producer and matches
-    /// the spec's two shapes.
+    /// The capability value has one producer and matches the spec's two shapes.
     #[test]
     fn s_g1_capability_value_is_owned() {
         assert_eq!(capability(SkillsCapability::default()), json!({}));

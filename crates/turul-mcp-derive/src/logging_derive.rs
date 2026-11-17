@@ -1,4 +1,4 @@
-//! Implementation of #[derive(McpLogger)] macro
+//! Implements the `McpLogger` derive macro.
 
 use proc_macro2::TokenStream;
 use quote::quote;
@@ -14,14 +14,12 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
     let mcp_server = crate::utils::server_path();
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes
     let logger_name =
         extract_string_attribute(&input.attrs, "name").unwrap_or_else(|| "default".to_string());
 
     let level =
         extract_string_attribute(&input.attrs, "level").unwrap_or_else(|| "info".to_string());
 
-    // Parse the logging level
     let logging_level = match level.as_str() {
         "debug" => quote! { #mcp_protocol::logging::LoggingLevel::Debug },
         "info" => quote! { #mcp_protocol::logging::LoggingLevel::Info },

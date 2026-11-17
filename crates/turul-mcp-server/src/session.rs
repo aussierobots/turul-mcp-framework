@@ -1,4 +1,4 @@
-//! Session Management for MCP Servers
+//! Session management for MCP tools and handlers.
 //!
 //! This module provides transparent session management for MCP tools and handlers.
 //! Sessions are automatically created and managed by the framework.
@@ -26,7 +26,7 @@ use turul_mcp_session_storage::{SessionStorage, SessionStorageError, SessionView
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
-/// Session context provided automatically to tools and handlers
+/// Session context provided automatically to tools and handlers.
 ///
 /// ## Async API
 ///
@@ -45,22 +45,23 @@ type SetStateFn = Arc<dyn Fn(&str, Value) -> BoxFuture<()> + Send + Sync>;
 type RemoveStateFn = Arc<dyn Fn(&str) -> BoxFuture<Option<Value>> + Send + Sync>;
 
 #[derive(Clone)]
+/// Handle to one session: its identifier, async access to its state, and notification and event delivery.
 pub struct SessionContext {
-    /// Unique session identifier
+    /// Unique session identifier.
     pub session_id: String,
-    /// Get session state value by key (async)
+    /// Gets session state value by key (async).
     pub get_state: GetStateFn,
-    /// Set session state value by key (async)
+    /// Sets session state value by key (async).
     pub set_state: SetStateFn,
-    /// Remove session state value by key (async)
+    /// Removes session state value by key (async).
     pub remove_state: RemoveStateFn,
-    /// Check if session is initialized (async)
+    /// Checks if session is initialized (async).
     pub is_initialized: Arc<dyn Fn() -> BoxFuture<bool> + Send + Sync>,
-    /// Send notification to this session (async)
+    /// Sends notification to this session (async).
     pub send_notification: Arc<dyn Fn(SessionEvent) -> BoxFuture<()> + Send + Sync>,
-    /// NotificationBroadcaster for sending MCP-compliant notifications
+    /// NotificationBroadcaster for sending MCP-compliant notifications.
     pub broadcaster: Option<Arc<dyn std::any::Any + Send + Sync>>,
-    /// Request-scoped extensions (auth claims, middleware data)
+    /// Request-scoped extensions (auth claims, middleware data).
     ///
     /// Populated by transport from `RequestContext.extensions` via JSON-RPC `SessionContext`.
     /// Never persisted to session storage — exists only for the duration of one request.
@@ -68,7 +69,7 @@ pub struct SessionContext {
 }
 
 impl SessionContext {
-    /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration
+    /// Creates from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration.
     pub(crate) fn from_json_rpc_with_broadcaster(
         json_rpc_ctx: turul_rpc::SessionContext,
         storage: Arc<dyn SessionStorage<Error = SessionStorageError>>,
@@ -226,29 +227,29 @@ impl SessionContext {
         }
     }
 
-    /// Check if this context has a broadcaster available
+    /// Checks if this context has a broadcaster available.
     pub fn has_broadcaster(&self) -> bool {
         self.broadcaster.is_some()
     }
 
-    /// Get the raw broadcaster (as Any) - for use by framework internals
+    /// Gets the raw broadcaster (as Any) - for use by framework internals.
     pub fn get_raw_broadcaster(&self) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
         self.broadcaster.clone()
     }
 
-    /// Get a request-scoped extension value by key
+    /// Gets a request-scoped extension value by key.
     pub fn get_extension(&self, key: &str) -> Option<&Value> {
         self.extensions.get(key)
     }
 
-    /// Get a typed request-scoped extension value by key
+    /// Gets a typed request-scoped extension value by key.
     pub fn get_typed_extension<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
         self.extensions
             .get(key)
             .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 
-    /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration (test helper)
+    /// Creates from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration (test helper).
     #[cfg(feature = "test-utils")]
     pub fn from_json_rpc_with_broadcaster_for_tests(
         json_rpc_ctx: turul_rpc::SessionContext,
@@ -257,7 +258,7 @@ impl SessionContext {
         Self::from_json_rpc_with_broadcaster(json_rpc_ctx, storage)
     }
 
-    /// Convenience method to get typed session state (async)
+    /// Convenience method to get typed session state (async).
     pub async fn get_typed_state<T>(&self, key: &str) -> Option<T>
     where
         T: serde::de::DeserializeOwned,
@@ -267,7 +268,7 @@ impl SessionContext {
             .and_then(|v| serde_json::from_value(v).ok())
     }
 
-    /// Convenience method to set typed session state (async)
+    /// Convenience method to set typed session state (async).
     pub async fn set_typed_state<T>(&self, key: &str, value: T) -> Result<(), String>
     where
         T: serde::Serialize,
@@ -281,7 +282,7 @@ impl SessionContext {
         }
     }
 
-    /// Create a test session context (for unit tests)
+    /// Creates a test session context (for unit tests).
     #[cfg(test)]
     pub fn new_test() -> Self {
         use std::collections::HashMap;
@@ -394,7 +395,7 @@ impl SessionContext {
             .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 
-    /// Emit a request-scoped `notifications/progress` referencing the
+    /// Emits a request-scoped `notifications/progress` referencing the
     /// REQUEST's `_meta.progressToken`, preserving its JSON type (string or
     /// number). No-op (returns `false`) when the request declared no token —
     /// "Progress notifications MUST only reference tokens that were provided
@@ -420,7 +421,7 @@ impl SessionContext {
         true
     }
 
-    /// Send a request-scoped progress notification carrying an optional
+    /// Sends a request-scoped progress notification carrying an optional
     /// human-readable status message (Progress §Behavior: `message` is the
     /// optional progress text). No-op without a request token — see
     /// [`notify_request_progress`](Self::notify_request_progress).
@@ -451,7 +452,7 @@ impl SessionContext {
         true
     }
 
-    /// Send a custom notification to this session (async)
+    /// Sends a custom notification to this session (async).
     pub async fn notify(&self, event: SessionEvent) {
         debug!(
             "📨 SessionContext.notify() called for session {}: {:?}",
@@ -461,7 +462,7 @@ impl SessionContext {
         debug!("🚀 SessionContext.notify() send_notification closure completed");
     }
 
-    /// Send a logging message notification (with session-aware level filtering)
+    /// Sends a logging message notification (with session-aware level filtering).
     // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
     // remains a valid feature the framework supports.
     #[allow(deprecated)]
@@ -478,7 +479,7 @@ impl SessionContext {
         // 2026-07-28: notifications/message is opt-in PER REQUEST — the server
         // MUST NOT emit it for a request whose _meta lacks
         // io.modelcontextprotocol/logLevel. The declared level is the threshold
-        // (replaces the removed logging/setLevel session threshold).
+        // (`logging/setLevel` and its session threshold do not exist on this lane).
         #[cfg(feature = "protocol-2026-07-28")]
         {
             let request_threshold = self.extensions.get("mcp:logLevel").and_then(|v| {
@@ -547,14 +548,14 @@ impl SessionContext {
             );
         }
 
-        // Legacy implementation (fallback) - use the same notification
+        // No broadcaster is attached: deliver through the session's own notify path.
         self.notify(SessionEvent::Notification(
             serde_json::to_value(notification).unwrap(),
         ))
         .await;
     }
 
-    /// Send a resource list changed notification
+    /// Sends a resource list changed notification.
     pub async fn notify_resources_changed(&self) {
         let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/resources/list_changed".to_string(),
@@ -565,7 +566,7 @@ impl SessionContext {
         .await;
     }
 
-    /// Send a resource updated notification
+    /// Sends a resource updated notification.
     pub async fn notify_resource_updated(&self, uri: impl Into<String>) {
         let mut other = std::collections::HashMap::new();
         other.insert("uri".to_string(), serde_json::json!(uri.into()));
@@ -580,7 +581,7 @@ impl SessionContext {
         .await;
     }
 
-    /// Send a tools list changed notification
+    /// Sends a tools list changed notification.
     pub async fn notify_tools_changed(&self) {
         let notification = turul_rpc::JsonRpcNotification::new_no_params(
             "notifications/tools/list_changed".to_string(),
@@ -595,7 +596,7 @@ impl SessionContext {
     // === Session-Aware Logging Level Methods ===
     // ============================================================================
 
-    /// Get the current logging level for this session (async)
+    /// Gets the current logging level for this session (async).
     #[allow(deprecated)] // SEP-2577 migration window
     pub async fn get_logging_level(&self) -> turul_mcp_protocol::logging::LoggingLevel {
         use turul_mcp_protocol::logging::LoggingLevel;
@@ -622,7 +623,7 @@ impl SessionContext {
         }
     }
 
-    /// Set the logging level for this session (async)
+    /// Sets the logging level for this session (async).
     #[allow(deprecated)] // SEP-2577 migration window
     pub async fn set_logging_level(&self, level: turul_mcp_protocol::logging::LoggingLevel) {
         use turul_mcp_protocol::logging::LoggingLevel;
@@ -645,7 +646,7 @@ impl SessionContext {
         );
     }
 
-    /// Check if a log message at the given level should be sent to this session (async)
+    /// Checks if a log message at the given level should be sent to this session (async).
     #[allow(deprecated)] // SEP-2577 migration window
     pub async fn should_log(
         &self,
@@ -655,7 +656,7 @@ impl SessionContext {
         message_level.should_log(session_threshold)
     }
 
-    /// Synchronous version of should_log for trait compatibility
+    /// Synchronous version of should_log for trait compatibility.
     #[allow(deprecated)] // SEP-2577 migration window
     pub fn should_log_sync(
         &self,
@@ -671,10 +672,9 @@ impl SessionContext {
 // === SessionView Implementation ===
 // ============================================================================
 
-/// Implement SessionView trait for SessionContext
-/// (trait is defined in turul-mcp-session-storage)
+/// Implements `SessionView` (defined in `turul-mcp-session-storage`) for `SessionContext`.
 ///
-/// This allows SessionContext to be used with middleware. Metadata is stored using a
+/// This allows `SessionContext` to be used with middleware. Metadata is stored using a
 /// special prefix ("__meta__:") to distinguish it from regular state.
 #[async_trait]
 impl SessionView for SessionContext {
@@ -709,7 +709,7 @@ impl SessionView for SessionContext {
 // === LoggingTarget Trait Implementation ===
 // ============================================================================
 
-/// Implement LoggingTarget trait from turul-mcp-builders to enable session-aware logging
+/// Implements LoggingTarget trait from turul-mcp-builders to enable session-aware logging.
 #[cfg(feature = "protocol-2025-11-25")]
 impl turul_mcp_builders::logging::LoggingTarget for SessionContext {
     fn should_log(&self, level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
@@ -731,7 +731,7 @@ impl turul_mcp_builders::logging::LoggingTarget for SessionContext {
     }
 }
 
-/// Parse notification JSON and send via actual NotificationBroadcaster to StreamManager using proper notification structs
+/// Parses notification JSON and sends it via actual NotificationBroadcaster to StreamManager using proper notification structs.
 // `LoggingMessageNotification` is deprecated-but-present in 2026-07-28 (SEP-2577); logging
 // remains a valid feature the framework supports.
 #[allow(deprecated)]
@@ -942,7 +942,7 @@ async fn parse_and_send_notification_with_broadcaster(
 /// request path, ensuring persistence completes before the request returns.
 #[async_trait]
 pub trait SessionEventDispatcher: Send + Sync {
-    /// Persist and deliver an event to a specific session.
+    /// Persists and delivers an event to a specific session.
     /// MUST complete persistence before returning.
     async fn dispatch_to_session(
         &self,
@@ -952,46 +952,51 @@ pub trait SessionEventDispatcher: Send + Sync {
     ) -> Result<(), String>;
 }
 
-/// Events that can be sent to a session
+/// Events that can be sent to a session.
 #[derive(Debug, Clone)]
 pub enum SessionEvent {
-    /// Notification to be sent to client
+    /// Notification to be sent to client.
     Notification(Value),
-    /// Keep-alive ping
+    /// Keep-alive ping.
     KeepAlive,
-    /// Session termination
+    /// Session termination.
     Disconnect,
-    /// Custom event with type and data
-    Custom { event_type: String, data: Value },
+    /// Custom event with type and data.
+    Custom {
+        /// Application-defined event type name.
+        event_type: String,
+        /// Event payload.
+        data: Value,
+    },
 }
 
-/// Individual MCP session state
+/// Individual MCP session state.
 #[derive(Debug)]
 pub struct McpSession {
-    /// Unique session identifier
+    /// Unique session identifier.
     pub id: String,
-    /// When the session was created
+    /// When the session was created.
     pub created: Instant,
-    /// Last activity timestamp (for expiry)
+    /// Last activity timestamp (for expiry).
     pub last_accessed: Instant,
-    /// MCP protocol version for this session
+    /// MCP protocol version for this session.
     pub mcp_version: McpVersion,
-    /// Client capabilities negotiated during initialization
+    /// Client capabilities negotiated during initialization.
     pub client_capabilities: Option<ClientCapabilities>,
-    /// Server capabilities sent to client
+    /// Server capabilities sent to client.
     pub server_capabilities: ServerCapabilities,
-    /// Client implementation info
+    /// Client implementation info.
     pub client_info: Option<Implementation>,
-    /// Per-session state storage for tools/handlers
+    /// Per-session state storage for tools/handlers.
     pub state: HashMap<String, Value>,
-    /// Broadcast sender for SSE notifications
+    /// Broadcast sender for SSE notifications.
     pub event_sender: broadcast::Sender<SessionEvent>,
-    /// Session initialization status
+    /// Session initialization status.
     pub initialized: bool,
 }
 
 impl McpSession {
-    /// Create a new session
+    /// Creates a new session.
     pub fn new(server_capabilities: ServerCapabilities) -> Self {
         let session_id = Uuid::now_v7().as_simple().to_string();
         let (event_sender, _) = broadcast::channel(128);
@@ -1010,17 +1015,17 @@ impl McpSession {
         }
     }
 
-    /// Update last accessed time
+    /// Updates last accessed time.
     pub fn touch(&mut self) {
         self.last_accessed = Instant::now();
     }
 
-    /// Check if session has expired
+    /// Checks if session has expired.
     pub fn is_expired(&self, timeout: Duration) -> bool {
         self.last_accessed.elapsed() > timeout
     }
 
-    /// Initialize session with client information
+    /// Initializes session with client information.
     pub fn initialize(
         &mut self,
         client_info: Implementation,
@@ -1032,7 +1037,7 @@ impl McpSession {
         self.touch();
     }
 
-    /// Initialize session with client information and negotiated protocol version
+    /// Initializes session with client information and negotiated protocol version.
     pub fn initialize_with_version(
         &mut self,
         client_info: Implementation,
@@ -1046,18 +1051,18 @@ impl McpSession {
         self.touch();
     }
 
-    /// Get state value
+    /// Gets state value.
     pub fn get_state(&self, key: &str) -> Option<Value> {
         self.state.get(key).cloned()
     }
 
-    /// Set state value
+    /// Sets state value.
     pub fn set_state(&mut self, key: &str, value: Value) {
         self.state.insert(key.to_string(), value);
         self.touch();
     }
 
-    /// Remove state value
+    /// Removes state value.
     pub fn remove_state(&mut self, key: &str) -> Option<Value> {
         let result = self.state.remove(key);
         if result.is_some() {
@@ -1066,7 +1071,7 @@ impl McpSession {
         result
     }
 
-    /// Send event to this session
+    /// Sends event to this session.
     pub fn send_event(&self, event: SessionEvent) -> Result<(), String> {
         self.event_sender
             .send(event)
@@ -1074,40 +1079,45 @@ impl McpSession {
         Ok(())
     }
 
-    /// Subscribe to session events (for SSE)
+    /// Subscribes to session events (for SSE).
     pub fn subscribe_events(&self) -> broadcast::Receiver<SessionEvent> {
         self.event_sender.subscribe()
     }
 }
 
-/// Session management errors
+/// Session management errors.
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
+    /// No session exists with the given ID.
     #[error("Session not found: {0}")]
     NotFound(String),
+    /// The session exists but has expired.
     #[error("Session expired: {0}")]
     Expired(String),
+    /// The session has not completed initialization.
     #[error("Session not initialized: {0}")]
     NotInitialized(String),
+    /// The supplied session data is invalid.
     #[error("Invalid session data: {0}")]
     InvalidData(String),
+    /// The session storage backend failed.
     #[error("Storage error: {0}")]
     StorageError(String),
 }
 
-/// Global session manager for MCP servers
+/// Global session manager for MCP servers.
 pub struct SessionManager {
-    /// Session storage backend
+    /// Session storage backend.
     storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
-    /// Active sessions (cache for performance)
+    /// Active sessions (cache for performance).
     sessions: RwLock<HashMap<String, McpSession>>,
-    /// Default session expiry time
+    /// Default session expiry time.
     session_timeout: Duration,
-    /// Cleanup interval
+    /// Cleanup interval.
     cleanup_interval: Duration,
-    /// Default server capabilities for new sessions
+    /// Default server capabilities for new sessions.
     default_capabilities: ServerCapabilities,
-    /// Global event broadcaster for all session events
+    /// Global event broadcaster for all session events.
     global_event_sender: broadcast::Sender<(String, SessionEvent)>,
     /// Awaited event dispatcher for guaranteed persistence + live delivery.
     /// Installed by the runtime (HTTP server, Lambda). When set, Custom events
@@ -1116,7 +1126,7 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
-    /// Create a new session manager with InMemory storage
+    /// Creates a new session manager with InMemory storage.
     pub fn new(default_capabilities: ServerCapabilities) -> Self {
         let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
             Arc::new(turul_mcp_session_storage::InMemorySessionStorage::new());
@@ -1128,7 +1138,7 @@ impl SessionManager {
         )
     }
 
-    /// Create a new session manager with custom timeouts and InMemory storage
+    /// Creates a new session manager with custom timeouts and InMemory storage.
     pub fn with_timeouts(
         default_capabilities: ServerCapabilities,
         session_timeout: Duration,
@@ -1144,7 +1154,7 @@ impl SessionManager {
         )
     }
 
-    /// Create a new session manager with specific storage backend
+    /// Creates a new session manager with specific storage backend.
     pub fn with_storage(
         storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         default_capabilities: ServerCapabilities,
@@ -1157,7 +1167,7 @@ impl SessionManager {
         )
     }
 
-    /// Create a new session manager with custom storage and timeouts
+    /// Creates a new session manager with custom storage and timeouts.
     pub fn with_storage_and_timeouts(
         storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         default_capabilities: ServerCapabilities,
@@ -1177,7 +1187,7 @@ impl SessionManager {
         }
     }
 
-    /// Install an event dispatcher for guaranteed persistence and live delivery.
+    /// Installs an event dispatcher for guaranteed persistence and live delivery.
     /// Called by the runtime (HTTP server, Lambda) after construction.
     /// Once set, `broadcast_event()` awaits the dispatcher for `SessionEvent::Custom`
     /// events before returning, ensuring persistence on the request path.
@@ -1185,7 +1195,7 @@ impl SessionManager {
         *self.event_dispatcher.write().await = Some(dispatcher);
     }
 
-    /// Create a new session and return its ID
+    /// Creates a new session and returns its ID.
     pub async fn create_session(&self) -> String {
         let session = McpSession::new(self.default_capabilities.clone());
         let session_id = session.id.clone();
@@ -1210,7 +1220,7 @@ impl SessionManager {
         session_id
     }
 
-    /// Create a new session with a specific ID (for testing only - see trait documentation)
+    /// Creates a new session with a specific ID (for testing only).
     pub async fn create_session_with_id(&self, session_id: String) -> String {
         let mut session = McpSession::new(self.default_capabilities.clone());
         session.id = session_id.clone();
@@ -1235,8 +1245,9 @@ impl SessionManager {
         session_id
     }
 
-    /// Add an externally created session to the cache
-    /// Used when session_handler creates a session directly in storage
+    /// Adds an externally created session to the cache.
+    ///
+    /// Used when `session_handler` creates a session directly in storage.
     pub async fn add_session_to_cache(
         &self,
         session_id: String,
@@ -1249,8 +1260,8 @@ impl SessionManager {
         self.sessions.write().await.insert(session_id, session);
     }
 
-    /// Load session from storage into cache with its actual capabilities
-    /// This preserves the negotiated capabilities and session state from persistent storage
+    /// Loads a session from storage into the cache with its actual capabilities.
+    /// Preserves the negotiated capabilities and session state from persistent storage.
     pub async fn load_session_from_storage(&self, session_id: &str) -> Result<bool, SessionError> {
         match self.storage.get_session(session_id).await {
             Ok(Some(session_info)) => {
@@ -1321,7 +1332,7 @@ impl SessionManager {
         }
     }
 
-    /// Get session and update last accessed time
+    /// Gets a session and updates its last accessed time.
     pub async fn touch_session(&self, session_id: &str) -> Result<(), SessionError> {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(session_id) {
@@ -1336,7 +1347,7 @@ impl SessionManager {
         }
     }
 
-    /// Initialize a session with client information
+    /// Initializes a session with client information.
     pub async fn initialize_session(
         &self,
         session_id: &str,
@@ -1365,7 +1376,7 @@ impl SessionManager {
         }
     }
 
-    /// Initialize a session with client information and negotiated protocol version
+    /// Initializes a session with client information and negotiated protocol version.
     pub async fn initialize_session_with_version(
         &self,
         session_id: &str,
@@ -1422,7 +1433,7 @@ impl SessionManager {
         }
     }
 
-    /// Check if session exists and is valid
+    /// Checks if session exists and is valid.
     pub async fn session_exists(&self, session_id: &str) -> bool {
         // Check storage backend first for authoritative answer
         match self.storage.get_session(session_id).await {
@@ -1444,7 +1455,7 @@ impl SessionManager {
         }
     }
 
-    /// Get session state value
+    /// Gets session state value.
     pub async fn get_session_state(&self, session_id: &str, key: &str) -> Option<Value> {
         // Try storage backend first for consistency
         match self.storage.get_session_state(session_id, key).await {
@@ -1458,7 +1469,7 @@ impl SessionManager {
         }
     }
 
-    /// Set session state value
+    /// Sets session state value.
     pub async fn set_session_state(&self, session_id: &str, key: &str, value: Value) {
         // Update storage backend first
         if let Err(e) = self
@@ -1476,7 +1487,7 @@ impl SessionManager {
         }
     }
 
-    /// Remove session state value
+    /// Removes session state value.
     pub async fn remove_session_state(&self, session_id: &str, key: &str) -> Option<Value> {
         // Remove from storage backend first
         let storage_result = match self.storage.remove_session_state(session_id, key).await {
@@ -1495,7 +1506,7 @@ impl SessionManager {
         storage_result.or(memory_result)
     }
 
-    /// Check if session is initialized
+    /// Checks if session is initialized.
     pub async fn is_session_initialized(&self, session_id: &str) -> bool {
         // Check storage backend first for authoritative answer (cache might be stale)
         match self.storage.get_session(session_id).await {
@@ -1525,7 +1536,7 @@ impl SessionManager {
         }
     }
 
-    /// Remove a session
+    /// Removes a session.
     pub async fn remove_session(&self, session_id: &str) -> bool {
         // Remove from storage backend first
         let storage_removed = match self.storage.delete_session(session_id).await {
@@ -1559,7 +1570,7 @@ impl SessionManager {
         storage_removed || memory_removed
     }
 
-    /// Cleanup expired sessions
+    /// Cleans up expired sessions.
     pub async fn cleanup_expired(&self) -> usize {
         let timeout_duration = self.session_timeout;
         let cutoff = std::time::SystemTime::now() - timeout_duration;
@@ -1603,7 +1614,7 @@ impl SessionManager {
         std::cmp::max(storage_removed, memory_removed)
     }
 
-    /// Send event to a specific session with guaranteed persistence for Custom events.
+    /// Sends event to a specific session with guaranteed persistence for Custom events.
     ///
     /// Returns `Err` if the session does not exist or if dispatcher persistence fails
     /// for Custom events. Non-custom events are best-effort after the existence check.
@@ -1647,7 +1658,7 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Dispatch a Custom event to a specific session via the installed dispatcher.
+    /// Dispatches a Custom event to a specific session via the installed dispatcher.
     /// Storage-backed — does NOT require the session to be in the in-memory cache.
     /// The caller is responsible for verifying the session exists in storage
     /// (e.g., via `validate_session_exists()`).
@@ -1681,8 +1692,7 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Broadcast event to all sessions.
-    /// Broadcast event to all sessions.
+    /// Broadcasts an event to all sessions.
     ///
     /// For `SessionEvent::Custom`: uses `storage.list_sessions()` to enumerate targets
     /// from the storage backend (not the in-memory cache). Filters terminated sessions.
@@ -1755,7 +1765,7 @@ impl SessionManager {
         }
     }
 
-    /// Get active session count
+    /// Gets active session count.
     pub async fn session_count(&self) -> usize {
         // Get count from storage backend for authoritative answer
         match self.storage.session_count().await {
@@ -1768,7 +1778,7 @@ impl SessionManager {
         }
     }
 
-    /// Create session context for a session
+    /// Creates session context for a session.
     pub fn create_session_context(self: &Arc<Self>, session_id: &str) -> Option<SessionContext> {
         let session_id = session_id.to_string();
         let session_manager = Arc::clone(self);
@@ -1846,12 +1856,12 @@ impl SessionManager {
             remove_state,
             is_initialized,
             send_notification,
-            broadcaster: None, // Old SessionManager doesn't have broadcaster
+            broadcaster: None, // SessionManager-created contexts carry no broadcaster
             extensions: HashMap::new(),
         })
     }
 
-    /// Start automatic cleanup task
+    /// Starts automatic cleanup task.
     pub fn start_cleanup_task(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         let manager = Arc::clone(&self);
         tokio::spawn(async move {
@@ -1866,7 +1876,7 @@ impl SessionManager {
         })
     }
 
-    /// Get a session's event receiver for SSE streaming
+    /// Gets a session's event receiver for SSE streaming.
     pub async fn get_session_event_receiver(
         &self,
         session_id: &str,
@@ -1875,33 +1885,33 @@ impl SessionManager {
         Some(sessions.get(session_id)?.subscribe_events())
     }
 
-    /// Subscribe to events from all sessions
-    /// Returns a receiver that gets (session_id, event) tuples for all session events
+    /// Subscribes to events from all sessions.
+    /// Returns a receiver that gets (session_id, event) tuples for all session events.
     pub fn subscribe_all_session_events(&self) -> broadcast::Receiver<(String, SessionEvent)> {
         self.global_event_sender.subscribe()
     }
 
-    /// Get the storage backend for use by other components (e.g., HTTP server)
-    /// This ensures all components use the same storage backend
+    /// Gets the storage backend for use by other components (e.g., HTTP server).
+    /// This ensures all components use the same storage backend.
     pub fn get_storage(&self) -> Arc<turul_mcp_session_storage::BoxedSessionStorage> {
         Arc::clone(&self.storage)
     }
 
-    /// Get the default capabilities for use by other components
+    /// Gets the default capabilities for use by other components.
     pub fn get_default_capabilities(&self) -> ServerCapabilities {
         self.default_capabilities.clone()
     }
 
-    /// Check if session exists in the in-memory cache only (not storage)
+    /// Checks if session exists in the in-memory cache only (not storage).
     pub async fn session_exists_in_cache(&self, session_id: &str) -> bool {
         self.sessions.read().await.contains_key(session_id)
     }
 }
 
-/// Trait for session-aware components
+/// Trait for session-aware components.
 #[async_trait]
 pub trait SessionAware {
-    /// Handle request with session context
+    /// Handles request with session context.
     async fn handle_with_session(
         &self,
         params: Option<Value>,
@@ -1999,7 +2009,7 @@ mod tests {
         assert!(matches!(result, Err(SessionError::Expired(_))));
     }
 
-    // T17: Extensions are not persisted to session storage
+    // Extensions are not persisted to session storage
     #[tokio::test]
     async fn test_extensions_not_persisted_to_session_storage() {
         let ctx = SessionContext::new_test();
@@ -2013,7 +2023,7 @@ mod tests {
         assert!(ctx.extensions.is_empty());
     }
 
-    // T18: Extensions empty when no middleware
+    // Extensions empty when no middleware
     #[tokio::test]
     async fn test_extensions_empty_when_no_middleware() {
         let ctx = SessionContext::new_test();
@@ -2021,7 +2031,7 @@ mod tests {
         assert!(ctx.get_extension("anything").is_none());
     }
 
-    // T19: get_typed_extension deserialization
+    // get_typed_extension deserialization
     #[tokio::test]
     async fn test_get_typed_extension_deserialization() {
         #[derive(Debug, serde::Deserialize, PartialEq)]
@@ -2055,7 +2065,7 @@ mod tests {
         assert!(wrong.is_none());
     }
 
-    // T16: Extensions thread from middleware to framework SessionContext
+    // Extensions thread from middleware to framework SessionContext
     #[tokio::test]
     async fn test_extensions_thread_from_json_rpc_to_framework() {
         use turul_mcp_session_storage::InMemorySessionStorage;

@@ -90,6 +90,7 @@
 //! - [`turul-mcp-client`](https://docs.rs/turul-mcp-client) to call MCP servers
 //! - [Examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 extern crate self as turul_mcp_server;
 
 pub mod builder;
@@ -119,6 +120,7 @@ pub use turul_mcp_session_storage as session_storage;
 // Re-export task storage from separate crate
 #[cfg(feature = "protocol-2025-11-25")]
 pub use turul_mcp_task_storage as task_storage;
+/// Request dispatch pipeline: middleware, handlers and the context they share.
 pub mod dispatch;
 #[cfg(feature = "ext-server-card")]
 mod ext_server_card;
@@ -148,7 +150,6 @@ pub mod __private {
 #[cfg(test)]
 mod tests;
 
-// Re-export main types
 /// Builder for creating MCP servers with fluent API
 pub use builder::McpServerBuilder;
 /// Cancellation handle for cooperative task cancellation
@@ -183,10 +184,10 @@ pub use security::{
 /// Handler for the 2026-07-28 `server/discover` method
 #[cfg(feature = "protocol-2026-07-28")]
 pub use server::DiscoverHandler;
-/// Core MCP server and session-aware handlers
+/// Session-aware handler for the 2025-11-25 `initialize` method
 #[cfg(feature = "protocol-2025-11-25")]
 pub use server::SessionAwareInitializeHandler;
-/// What a transport needs to serve an [`McpServer`] (ADR-035)
+/// What a transport needs to serve an [`McpServer`]
 #[cfg(feature = "http")]
 pub use server::TransportParts;
 /// Core MCP server and session-aware handlers
@@ -213,7 +214,7 @@ pub use task::tokio_executor::TokioTaskExecutor;
 pub use tool::McpTool;
 /// Stable fingerprint of the registered tool set for session versioning
 pub use tool::compute_tool_fingerprint;
-/// Runtime tool activation mode — controls fingerprint vs live notification behavior
+/// Registry for activating and deactivating tools at runtime
 #[cfg(feature = "dynamic-tools")]
 pub use tool_registry::ToolRegistry;
 
@@ -243,20 +244,17 @@ pub enum ToolChangeMode {
     Dynamic,
 }
 
-/// SessionView trait for middleware - re-exported from turul-mcp-session-storage
+/// `SessionView` trait for middleware, re-exported from `turul_mcp_session_storage`.
 pub use turul_mcp_session_storage::SessionView;
 
-// Re-export foundational types
 /// Core MCP protocol types, errors, and specification compliance
 pub use turul_mcp_protocol::*;
 /// JSON-RPC 2.0 request dispatcher and handler trait for protocol operations
 pub use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler};
 
-// Re-export builder pattern for Level 3 tool creation
 /// Dynamic tool creation with runtime configuration and type-safe builders
 pub use turul_mcp_builders::tool::{DynamicTool, DynamicToolFn, ToolBuilder};
 
-// Explicitly re-export error types for convenience
 /// Domain error type for MCP operations with protocol conversion support
 pub use turul_mcp_protocol::{McpError, McpResult as ProtocolMcpResult};
 
@@ -271,10 +269,10 @@ pub use turul_http_mcp_server;
 /// implementations to ensure consistent error reporting to MCP clients.
 pub type McpResult<T> = turul_mcp_protocol::McpResult<T>;
 
-/// Convenience alias for McpResult
+/// Convenience alias for [`McpResult`].
 pub type Result<T> = McpResult<T>;
 
-/// Implements McpTool for DynamicTool to enable Level 3 builder pattern tool creation
+/// Implements `McpTool` for `DynamicTool` to enable builder-pattern tool creation.
 ///
 /// This implementation bridges DynamicTool's builder pattern with the framework's
 /// session-aware execution model, enabling runtime tool construction with type safety.

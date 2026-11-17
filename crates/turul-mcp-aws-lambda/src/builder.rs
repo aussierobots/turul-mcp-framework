@@ -1,7 +1,7 @@
 //! High-level builder API for Lambda MCP servers
 //!
 //! `LambdaMcpServerBuilder` is a thin wrapper over
-//! [`turul_mcp_server::McpServerBuilder`] (ADR-035): every registration and
+//! [`turul_mcp_server::McpServerBuilder`]: every registration and
 //! capability method delegates to it, so a Lambda server serves exactly what an
 //! HTTP `McpServer` built from the same configuration would. This crate adds only
 //! Lambda transport: session storage defaults, the Lambda `ServerConfig` and
@@ -58,7 +58,7 @@ pub struct LambdaMcpServerBuilder {
     enable_sse: bool,
     /// Streaming configuration.
     stream_config: StreamConfig,
-    /// Explicit Origin policy; otherwise derived from CORS at build (ADR-031).
+    /// Explicit Origin policy; otherwise derived from CORS at build.
     origin_policy: Option<turul_http_mcp_server::OriginPolicy>,
     /// CORS configuration.
     #[cfg(feature = "cors")]
@@ -70,7 +70,7 @@ impl LambdaMcpServerBuilder {
     pub fn new() -> Self {
         let inner = McpServer::builder();
         // Buffered Lambda has no long-lived `subscriptions/listen` stream, so it
-        // does not advertise resource subscriptions (ADR-035 §3).
+        // does not advertise resource subscriptions.
         #[cfg(feature = "protocol-2026-07-28")]
         let inner = inner.resource_subscriptions(false);
         let mut server_config = ServerConfig::default();
@@ -104,8 +104,8 @@ impl LambdaMcpServerBuilder {
         self
     }
 
-    /// Serve the Skills extension; see [`McpServerBuilder::with_ext_skills`]
-    /// (ADR-033). Build the catalog once per container (at cold start).
+    /// Serves the Skills extension; see [`McpServerBuilder::with_ext_skills`].
+    /// Build the catalog once per container (at cold start).
     #[cfg(feature = "ext-skills")]
     pub fn with_ext_skills(mut self, catalog: turul_mcp_server::ext_skills::SkillCatalog) -> Self {
         self.inner = self.inner.with_ext_skills(catalog);
@@ -113,7 +113,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Serve a Server Card (**experimental**); see
-    /// [`McpServerBuilder::with_server_card`] (ADR-038).
+    /// [`McpServerBuilder::with_server_card`].
     #[cfg(feature = "ext-server-card")]
     pub fn with_server_card(mut self, card: turul_mcp_ext_server_card::v1::ServerCard) -> Self {
         self.inner = self.inner.with_server_card(card);
@@ -606,10 +606,9 @@ impl LambdaMcpServerBuilder {
         self
     }
 
-    /// Configure server settings
     /// Set the Origin-header validation policy explicitly (DNS-rebinding
     /// protection). When not set, the policy is derived from the CORS
-    /// configuration at build time (ADR-031): `cors_allow_all_origins()` →
+    /// configuration at build time: `cors_allow_all_origins()` →
     /// `Disabled`, an explicit origin list → `AllowList`, no CORS config →
     /// the `SameOriginOrLoopback` default.
     pub fn origin_policy(mut self, policy: turul_http_mcp_server::OriginPolicy) -> Self {
@@ -617,6 +616,7 @@ impl LambdaMcpServerBuilder {
         self
     }
 
+    /// Replaces the Lambda HTTP-layer `ServerConfig`.
     pub fn server_config(mut self, config: ServerConfig) -> Self {
         self.server_config = config;
         self
@@ -695,7 +695,7 @@ impl LambdaMcpServerBuilder {
     pub async fn build(mut self) -> Result<LambdaMcpServer> {
         use turul_mcp_session_storage::InMemorySessionStorage;
 
-        // Origin validation policy (ADR-031): an explicit `.origin_policy()`
+        // Origin validation policy: an explicit `.origin_policy()`
         // wins; otherwise an explicit CORS configuration is the operator's
         // declaration of allowed origins and the policy follows it. With no
         // CORS config, the `SameOriginOrLoopback` default stands.
@@ -740,6 +740,7 @@ impl Default for LambdaMcpServerBuilder {
 }
 
 // Extension trait for cleaner chaining
+/// Chaining helpers for registering several items on a `LambdaMcpServerBuilder` in one call.
 pub trait LambdaMcpServerBuilderExt {
     /// Add multiple tools at once
     fn tools<I, T>(self, tools: I) -> Self
@@ -1124,7 +1125,7 @@ mod tests {
         }
 
         /// CORS origin list derives the origin-validation AllowList
-        /// (ADR-031): the listed origin reaches dispatch; an unlisted
+        /// at build: the listed origin reaches dispatch; an unlisted
         /// cross-origin request is rejected 403 before anything else runs.
         #[tokio::test]
         async fn cors_origin_list_derives_origin_allowlist() {
@@ -1714,7 +1715,7 @@ mod tests {
     }
 
     /// Call one method on the built Lambda handler over the 2026-07-28 wire
-    /// (ADR-035: resource handling is the owner's, so tests go through it).
+    /// (resource handling belongs to `McpServerBuilder`, so tests go through it).
     #[cfg(feature = "protocol-2026-07-28")]
     async fn wire_2026(builder: LambdaMcpServerBuilder, method: &str) -> serde_json::Value {
         use http_body_util::BodyExt;

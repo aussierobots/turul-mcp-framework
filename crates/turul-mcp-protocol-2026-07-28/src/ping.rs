@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// `EmptyResult` — the `Result` shape with no extra fields.
+/// Result shape with no fields beyond `resultType` and `_meta`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EmptyResult {
@@ -17,7 +17,7 @@ pub struct EmptyResult {
     #[serde(default)]
     pub result_type: crate::result_type::ResultType,
 
-    /// Loose `_meta` per the `MetaObject` rules.
+    /// Optional `_meta` carrier for the result.
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
@@ -28,6 +28,7 @@ pub struct EmptyResult {
 }
 
 impl EmptyResult {
+    /// Creates a result with `resultType` of `complete` and no `_meta`.
     pub fn new() -> Self {
         Self {
             result_type: crate::result_type::ResultType::Complete,
@@ -35,6 +36,7 @@ impl EmptyResult {
         }
     }
 
+    /// Sets the result's `_meta`.
     pub fn with_meta(mut self, meta: impl Into<crate::meta::ResultMetaObject>) -> Self {
         self.meta = Some(meta.into());
         self
@@ -47,7 +49,6 @@ impl Default for EmptyResult {
     }
 }
 
-// Trait implementations for EmptyResult
 use crate::traits::{HasData, HasMeta, HasResultType, RpcResult};
 
 impl HasData for EmptyResult {
@@ -70,16 +71,13 @@ impl HasResultType for EmptyResult {
 
 impl RpcResult for EmptyResult {}
 
-// Trait implementations for protocol compliance
 use crate::traits::Params;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+/// Empty params for requests whose params carry no fields.
 pub struct EmptyParams;
 
 impl Params for EmptyParams {}
-
-// Note: PingRequest contains method field which is handled at the request level
-// The actual ping params would be EmptyParams in the params field
 
 #[cfg(test)]
 mod tests {

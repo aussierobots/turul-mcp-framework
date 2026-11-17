@@ -1,7 +1,7 @@
-//! Lambda MCP handler that delegates to SessionMcpHandler
+//! Lambda MCP handler that delegates to the framework's HTTP handlers.
 //!
-//! This module provides the LambdaMcpHandler that processes Lambda HTTP
-//! requests by delegating to SessionMcpHandler, eliminating code duplication.
+//! Provides [`LambdaMcpHandler`], which processes Lambda HTTP requests by
+//! delegating to `SessionMcpHandler` or `StreamableHttpHandler`.
 
 use std::sync::Arc;
 
@@ -20,10 +20,9 @@ use crate::error::Result;
 #[cfg(feature = "cors")]
 use crate::cors::{CorsConfig, create_preflight_response, inject_cors_headers};
 
-/// Main handler for Lambda MCP requests
+/// Main handler for Lambda MCP requests.
 ///
-/// This handler processes MCP requests in Lambda by delegating to SessionMcpHandler,
-/// eliminating 600+ lines of duplicate business logic code.
+/// Processes MCP requests in Lambda by delegating to the framework's HTTP handlers.
 ///
 /// Features:
 /// 1. Type conversion between lambda_http and hyper
@@ -35,7 +34,7 @@ pub struct LambdaMcpHandler {
     /// SessionMcpHandler for legacy protocol support
     session_handler: SessionMcpHandler,
 
-    /// StreamableHttpHandler for MCP 2025-11-25 with proper headers
+    /// StreamableHttpHandler for the streamable HTTP transport
     streamable_handler: StreamableHttpHandler,
 
     /// Whether SSE is enabled. Only read by in-crate tests.
@@ -60,7 +59,7 @@ pub struct LambdaMcpHandler {
 }
 
 impl LambdaMcpHandler {
-    /// Set the identity reported in each 2026-07-28 result's `_meta.serverInfo`.
+    /// Sets the identity reported in each 2026-07-28 result's `_meta.serverInfo`.
     ///
     /// Needed as a setter because the production path builds through
     /// `with_middleware_and_fingerprint`, which takes no `Implementation`.
@@ -69,7 +68,7 @@ impl LambdaMcpHandler {
         self
     }
 
-    /// Create a new Lambda MCP handler with the framework components
+    /// Creates a new Lambda MCP handler from the framework components.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         dispatcher: JsonRpcDispatcher<McpError>,
@@ -84,10 +83,9 @@ impl LambdaMcpHandler {
     ) -> Self {
         let dispatcher = Arc::new(dispatcher);
 
-        // Create empty middleware stack (shared by both handlers)
+        // Empty middleware stack, shared by both handlers.
         let middleware_stack = Arc::new(turul_http_mcp_server::middleware::MiddlewareStack::new());
 
-        // Create SessionMcpHandler for legacy protocol support
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
             config.clone(),
             dispatcher.clone(),
@@ -97,7 +95,6 @@ impl LambdaMcpHandler {
             middleware_stack.clone(),
         );
 
-        // Create StreamableHttpHandler for MCP 2025-11-25 support
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config.clone()),
             dispatcher.clone(),
@@ -105,7 +102,7 @@ impl LambdaMcpHandler {
             stream_manager.clone(),
             capabilities.clone(),
             middleware_stack,
-            None, // No fingerprint in legacy constructor
+            None, // no tool fingerprint
         )
         .with_server_info(implementation)
         .without_subscriptions_listen();
@@ -123,7 +120,7 @@ impl LambdaMcpHandler {
         }
     }
 
-    /// Create with shared stream manager (for advanced use cases)
+    /// Creates a handler that shares the given stream manager (for advanced use cases).
     #[allow(clippy::too_many_arguments)]
     pub fn with_shared_stream_manager(
         config: ServerConfig,
@@ -150,7 +147,6 @@ impl LambdaMcpHandler {
 
         let dispatcher_for_introspection = dispatcher.clone();
 
-        // Create StreamableHttpHandler for MCP 2025-11-25 support
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config),
             dispatcher,
@@ -158,7 +154,7 @@ impl LambdaMcpHandler {
             stream_manager,
             capabilities,
             middleware_stack,
-            None, // No fingerprint in legacy constructor
+            None, // no tool fingerprint
         )
         .with_server_info(implementation)
         .without_subscriptions_listen();
@@ -176,7 +172,7 @@ impl LambdaMcpHandler {
         }
     }
 
-    /// Create with custom middleware stack (for testing and examples)
+    /// Creates a handler with a custom middleware stack (for testing and examples).
     #[allow(clippy::too_many_arguments)]
     pub fn with_middleware(
         config: ServerConfig,
@@ -203,7 +199,7 @@ impl LambdaMcpHandler {
         )
     }
 
-    /// Create with custom middleware stack and tool fingerprint for session versioning
+    /// Creates a handler with a custom middleware stack and a tool fingerprint for session versioning.
     #[allow(clippy::too_many_arguments)]
     pub fn with_middleware_and_fingerprint(
         config: ServerConfig,
@@ -255,7 +251,7 @@ impl LambdaMcpHandler {
         }
     }
 
-    /// Set the tool change notifier for restart/redeploy fingerprint mismatch notifications.
+    /// Sets the tool change notifier for restart/redeploy fingerprint mismatch notifications.
     pub fn with_tool_notifier(
         mut self,
         notifier: Arc<dyn turul_http_mcp_server::ToolChangeNotifier>,
@@ -267,28 +263,29 @@ impl LambdaMcpHandler {
         self
     }
 
-    /// Set a dynamic tool registry for request-time change detection.
+    /// Sets a dynamic tool registry for request-time change detection.
     #[cfg(feature = "dynamic-tools")]
     pub fn with_tool_registry(mut self, registry: Arc<turul_mcp_server::ToolRegistry>) -> Self {
         self.tool_registry = Some(registry);
         self
     }
 
-    /// Set CORS configuration
+    /// Sets the CORS configuration.
     #[cfg(feature = "cors")]
     pub fn with_cors(mut self, cors_config: CorsConfig) -> Self {
         self.cors_config = Some(cors_config);
         self
     }
 
-    /// JSON-RPC method names registered on this handler's dispatcher. Mirrors
-    /// `McpServer::registered_methods` so a cross-builder parity test can assert
-    /// the Lambda and local builders register an identical set per protocol lane.
+    /// Returns the JSON-RPC method names registered on this handler's dispatcher.
+    ///
+    /// Mirrors `McpServer::registered_methods` so a cross-builder parity test can
+    /// assert the Lambda and local builders register an identical set per protocol lane.
     pub fn registered_methods(&self) -> Vec<String> {
         self.dispatcher.registered_methods()
     }
 
-    /// Get access to the underlying stream manager for notifications
+    /// Returns the underlying stream manager used for notifications.
     pub fn get_stream_manager(&self) -> &Arc<StreamManager> {
         self.session_handler.get_stream_manager()
     }
@@ -303,7 +300,7 @@ impl LambdaMcpHandler {
     /// with run_with_streaming_response().
     /// The custom route for `path`: an exact match, or — when lambda_http
     /// prefixed an API Gateway `stage` onto the path — an exact match with that
-    /// one prefix removed (ADR-038 §6). The registry itself stays exact-match.
+    /// one prefix removed. The registry itself stays exact-match.
     fn match_route(
         &self,
         path: &str,
@@ -337,6 +334,9 @@ impl LambdaMcpHandler {
         }
     }
 
+    /// Handles one Lambda HTTP request and returns the response to send back.
+    ///
+    /// Answers CORS preflights and custom routes itself; every other request is delegated to the MCP HTTP handler.
     pub async fn handle(&self, req: LambdaRequest) -> Result<LambdaResponse<LambdaBody>> {
         let method = req.method().clone();
         let uri = req.uri().clone();
@@ -359,7 +359,7 @@ impl LambdaMcpHandler {
         #[cfg(feature = "cors")]
         if method == http::Method::OPTIONS
             && let Some(ref cors_config) = self.cors_config
-            // A custom route answers its own preflight (ADR-038 §4).
+            // A custom route answers its own preflight.
             && !matches!(self.match_route(req.uri().path(), stage.as_deref()), Ok(Some(_)))
         {
             debug!("Handling CORS preflight request");
@@ -415,7 +415,7 @@ impl LambdaMcpHandler {
         }
 
         // Check for remote tool changes (Dynamic mode with coordination). Only
-        // requests bound for MCP pay for it; a custom route never does (ADR-038 §6).
+        // requests bound for MCP pay for it; a custom route never does.
         #[cfg(feature = "dynamic-tools")]
         self.refresh_dynamic_tools().await;
 
@@ -484,7 +484,7 @@ impl LambdaMcpHandler {
         #[cfg(feature = "cors")]
         if method == http::Method::OPTIONS
             && let Some(ref cors_config) = self.cors_config
-            // A custom route answers its own preflight (ADR-038 §4).
+            // A custom route answers its own preflight.
             && !matches!(self.match_route(req.uri().path(), stage.as_deref()), Ok(Some(_)))
         {
             debug!("Handling CORS preflight request (streaming)");
@@ -540,7 +540,7 @@ impl LambdaMcpHandler {
         }
 
         // Check for remote tool changes (Dynamic mode with coordination). Only
-        // requests bound for MCP pay for it; a custom route never does (ADR-038 §6).
+        // requests bound for MCP pay for it; a custom route never does.
         #[cfg(feature = "dynamic-tools")]
         self.refresh_dynamic_tools().await;
 
@@ -1179,7 +1179,7 @@ mod tests {
             .unwrap_or_else(|e| panic!("Failed to parse JSON from body: {e}\nBody: {body}"))
     }
 
-    /// P0: Full strict lifecycle handshake succeeds on handle_streaming()
+    /// Full strict lifecycle handshake succeeds on handle_streaming()
     // The initialize/initialized handshake and strict lifecycle exist only in
     // 2025-11-25; the 2026-07-28 stateless core has neither.
     #[cfg(feature = "protocol-2025-11-25")]
@@ -1267,7 +1267,7 @@ mod tests {
         );
     }
 
-    /// P0: Strict lifecycle rejects both tools/list and tools/call before notifications/initialized
+    /// Strict lifecycle rejects both tools/list and tools/call before notifications/initialized
     #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_strict_rejects_before_initialized() {
@@ -1350,7 +1350,7 @@ mod tests {
         );
     }
 
-    /// P0: tools/list succeeds immediately after notifications/initialized (race fix proof)
+    /// tools/list succeeds immediately after notifications/initialized (race fix proof)
     // The initialize/initialized handshake is 2025-11-25 only; the 2026-07-28 stateless
     // core has no handshake and requires a per-request _meta on tools/list.
     #[cfg(feature = "protocol-2025-11-25")]
@@ -1410,7 +1410,7 @@ mod tests {
         );
     }
 
-    /// P1: Lenient mode allows operations without notifications/initialized
+    /// Lenient mode allows operations without notifications/initialized
     #[cfg(feature = "protocol-2025-11-25")]
     #[tokio::test]
     async fn test_lambda_streaming_lenient_mode_allows_without_initialized() {
@@ -1546,7 +1546,7 @@ mod tests {
         }
 
         /// A route that owns its CORS and answers its own preflight, as a Server
-        /// Card does (ADR-038 §4).
+        /// Card does.
         struct CorsOwningRoute;
 
         #[async_trait]
@@ -1763,7 +1763,7 @@ mod tests {
             }
         }
 
-        /// ADR-038 §6: a custom-route request never reads shared tool state;
+        /// A custom-route request never reads shared tool state;
         /// a request bound for MCP still does.
         #[cfg(feature = "dynamic-tools")]
         #[tokio::test]
@@ -1985,7 +1985,7 @@ mod tests {
             let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
             let dispatcher = Arc::new(JsonRpcDispatcher::new());
             // Direct construction bypasses the builder's CORS→origin-policy
-            // derivation (ADR-031); allow-all CORS pairs with Disabled.
+            // derivation; allow-all CORS pairs with Disabled.
             let config = ServerConfig {
                 origin_policy: turul_http_mcp_server::OriginPolicy::Disabled,
                 ..Default::default()

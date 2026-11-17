@@ -3,8 +3,8 @@
 //!
 //! Every instance pointed at the same database sees the same tasks: any of
 //! them can serve `tasks/get`, record a `tasks/update`, or flip a
-//! `tasks/cancel`. That is the deployment shape the superseded 2025 store was
-//! built for and the one this extension needs.
+//! `tasks/cancel`. That is the multi-instance deployment shape this extension
+//! needs.
 //!
 //! Schema and division of labour are identical to [`super::sqlite`]: one JSON
 //! document per task keyed by `task_id` (SEP-2663 removed `tasks/list`, so
@@ -39,14 +39,14 @@ pub struct PostgresTaskStore {
 }
 
 impl PostgresTaskStore {
-    /// Connect with a libpq-style URL (`postgres://…`, or
+    /// Connects with a libpq-style URL (`postgres://…`, or
     /// `postgres:///db?host=/var/run/postgresql` for a unix socket).
     pub async fn connect(url: &str) -> Result<Self, TaskStoreError> {
         let pool = PgPool::connect(url).await.map_err(backend)?;
         Self::from_pool(pool).await
     }
 
-    /// Adopt an existing pool (shared with the rest of an application).
+    /// Adopts an existing pool (shared with the rest of an application).
     pub async fn from_pool(pool: PgPool) -> Result<Self, TaskStoreError> {
         let store = Self { pool };
         store.migrate().await?;
@@ -151,7 +151,7 @@ async fn write_state(
 #[async_trait::async_trait]
 impl TaskStore for PostgresTaskStore {
     async fn create(&self, state: TaskState) -> Result<(), TaskStoreError> {
-        // Committed before this returns: SEP-2663 line 302 requires a
+        // Committed before this returns: SEP-2663 requires a
         // `tasks/get` to resolve the instant `CreateTaskResult` is answered —
         // including a `tasks/get` served by a different instance.
         let mut tx = self.pool.begin().await.map_err(backend)?;
@@ -327,11 +327,9 @@ mod conformance {
     /// Base URL with NO database path — the scratch database name is
     /// appended. Default targets the local unix socket with an explicit role,
     /// because the role cannot be inferred: sqlx falls back to "anonymous"
-    /// when `$USER` is absent, which is exactly how these tests silently
-    /// skipped the first time they were run.
-    /// No fallback on purpose. The previous default hardcoded one developer's
-    /// unix username, so it connected on exactly one machine and failed
-    /// everywhere else, CI included. The URL is derived once, by
+    /// when `$USER` is absent.
+    /// No fallback on purpose: a hardcoded default connects on one machine and
+    /// fails everywhere else. The URL is derived once, by
     /// `scripts/ext-tasks-backends.sh`, which is also what starts the server —
     /// deriving it a second time here is how the two drift apart.
     fn base_url() -> String {
@@ -351,10 +349,9 @@ mod conformance {
 
     /// Connect to the admin database, or explain why the test cannot run.
     ///
-    /// **Unreachable Postgres FAILS the test.** It does not skip. An earlier
-    /// version returned early with a printed SKIP and the suite reported
-    /// green with Postgres never contacted — the precise failure mode this
-    /// crate's whole parity effort exists to prevent. Opt out deliberately
+    /// **Unreachable Postgres FAILS the test.** It does not skip, because a
+    /// skipped suite reports green with Postgres never contacted — the failure
+    /// mode this crate's parity effort exists to prevent. Opt out deliberately
     /// with `TURUL_SKIP_PG_TESTS=1` if a machine genuinely has no server.
     async fn admin_pool() -> Option<PgPool> {
         if std::env::var("TURUL_SKIP_PG_TESTS").is_ok() {

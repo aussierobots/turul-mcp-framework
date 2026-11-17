@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-aws-lambda"
-version = "0.4.12"
+version = "0.4.13"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,6 +12,12 @@ autoexamples = false                                                   # Disable
 documentation = "https://docs.rs/turul-mcp-aws-lambda"
 keywords.workspace = true
 categories = ["network-programming"]
+
+
+[package.metadata.docs.rs]
+# Build the opt-in features too, so their API appears on docs.rs.
+features = ["streaming", "sqlite", "postgres", "dynamodb", "dynamic-tools", "ext-skills", "ext-server-card"]
+rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["cors", "sse", "protocol-2026-07-28"]
@@ -32,15 +38,15 @@ ext-server-card = ["turul-mcp-server/ext-server-card", "dep:turul-mcp-ext-server
 
 [dependencies]
 # Core MCP framework
-turul-mcp-server = { path = "../turul-mcp-server", version = "0.4.20", default-features = false }
-turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.13", default-features = false }
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.4.21", default-features = false }
+turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.14", default-features = false }
 turul-rpc = { workspace = true, features = ["async"] }
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.3", default-features = false }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.4.4", default-features = false }
 turul-mcp-ext-skills = { workspace = true, optional = true }
 turul-mcp-ext-server-card = { workspace = true, optional = true }
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.5", default-features = false }
-turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.3", default-features = false }
-turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4.10", default-features = false }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.6", default-features = false }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.4", default-features = false }
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.4.11", default-features = false }
 turul-mcp-server-state-storage = { workspace = true, optional = true }
 
 # AWS Lambda runtime

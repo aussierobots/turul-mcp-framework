@@ -1,5 +1,5 @@
 //! Server-side runtime for the Skills extension (`io.modelcontextprotocol/skills`)
-//! on the 2026-07-28 lane (ADR-033 §5, §7, §8).
+//! on the 2026-07-28 lane.
 //!
 //! A [`SkillCatalog`] holds built [`SkillEntry`] values and [`DynamicSkill`]
 //! generators; entries, manifests, digests, frontmatter and URIs all come from
@@ -31,8 +31,9 @@ use crate::security::SecurityMiddleware;
 /// Entries per `skills/list` and `resources/directory/read` page.
 const PAGE_SIZE: usize = 50;
 
-/// A skill whose files are generated on demand (`resources: "dynamic"`,
-/// ADR-033 §8). The path is fixed; `files()` returns the skill's current
+/// A skill whose files are generated on demand (`resources: "dynamic"`).
+///
+/// The path is fixed; `files()` returns the skill's current
 /// files and is called for every operation that needs them.
 #[async_trait]
 pub trait DynamicSkill: Send + Sync {
@@ -59,11 +60,16 @@ impl std::fmt::Debug for SkillCatalog {
 }
 
 impl SkillCatalog {
+    /// Creates an empty catalog.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Add a skill. Two skills at the same path are a configuration error.
+    /// Adds a skill.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::configuration` when a skill is already added at the same `SKILL.md` URI.
     pub fn add(&mut self, entry: SkillEntry) -> McpResult<()> {
         let uri = entry.uri();
         self.ensure_new(&uri)?;
@@ -71,7 +77,11 @@ impl SkillCatalog {
         Ok(())
     }
 
-    /// Add a generated skill (ADR-033 §8).
+    /// Adds a generated skill.
+    ///
+    /// # Errors
+    ///
+    /// Returns `McpError::configuration` when a skill is already added at the same `SKILL.md` URI.
     pub fn add_dynamic(&mut self, skill: Arc<dyn DynamicSkill>) -> McpResult<()> {
         let path = skill.path();
         let uri = path.skill_md_uri();
@@ -89,10 +99,12 @@ impl SkillCatalog {
         Ok(())
     }
 
+    /// Iterates the static skill entries in URI order.
     pub fn entries(&self) -> impl Iterator<Item = &SkillEntry> {
         self.entries.values()
     }
 
+    /// Returns whether the catalog holds no static or dynamic skills.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty() && self.dynamic.is_empty()
     }
@@ -104,8 +116,8 @@ impl SkillCatalog {
         self.dynamic.values()
     }
 
-    /// A dynamic skill may not share or nest with another skill's directory
-    /// (ADR-033 §8): its template would answer for the other skill's files.
+    /// Returns an error message for each dynamic skill directory that shares or nests
+    /// with another skill's directory: its template would answer for the other skill's files.
     pub(crate) fn overlap_errors(&self) -> Vec<String> {
         let roots: Vec<(String, bool)> = self
             .entries
@@ -118,9 +130,7 @@ impl SkillCatalog {
         for (i, (a, a_dyn)) in roots.iter().enumerate() {
             for (b, b_dyn) in roots.iter().skip(i + 1) {
                 if (*a_dyn || *b_dyn) && (inside(a, b) || inside(b, a)) {
-                    errors.push(format!(
-                        "dynamic skill directory {a} overlaps {b} (ADR-033 §8)"
-                    ));
+                    errors.push(format!("dynamic skill directory {a} overlaps {b}"));
                 }
             }
         }
@@ -128,10 +138,10 @@ impl SkillCatalog {
     }
 }
 
-/// Directory children: child URI → its `Resource` metadata (ADR-033 §7).
+/// Directory children: child URI → its `Resource` metadata.
 pub(crate) type DirectoryIndex = BTreeMap<String, BTreeMap<String, Resource>>;
 
-/// Index every directory of `files` under its skill roots. File children carry
+/// Indexes every directory of `files` under its skill roots. File children carry
 /// the metadata `resources/list` reports (`resource_to_descriptor`), so the two
 /// cannot disagree.
 pub(crate) fn directory_index<'a>(
@@ -176,15 +186,15 @@ pub(crate) fn directory_index<'a>(
 /// Everything the Skills handlers share.
 pub(crate) struct SkillsRuntime {
     pub(crate) catalog: SkillCatalog,
-    /// Static directory index (ADR-033 §7).
+    /// Static directory index.
     pub(crate) directories: DirectoryIndex,
     /// The `resources/read` policy: a generated file it would refuse is never
-    /// served (ADR-033 §5 Q10, §8).
+    /// served.
     pub(crate) policy: Arc<SecurityMiddleware>,
 }
 
 impl SkillsRuntime {
-    /// Generate a dynamic skill's current entry, through the same owners as a
+    /// Generates a dynamic skill's current entry, through the same owners as a
     /// static one; a generated URI the read policy refuses is an error.
     async fn generate(
         &self,
@@ -207,7 +217,7 @@ impl SkillsRuntime {
         Ok(entry)
     }
 
-    /// Every served skill's `SKILL.md` URI, in order.
+    /// Returns every served skill's `SKILL.md` URI, in order.
     fn uris(&self) -> Vec<&String> {
         let mut uris: Vec<&String> = self
             .catalog
@@ -232,7 +242,7 @@ impl SkillsRuntime {
         Ok(Some(wire))
     }
 
-    /// A directory's children, or `None` if `uri` is not a directory resource.
+    /// Returns a directory's children, or `None` if `uri` is not a directory resource.
     async fn children(&self, uri: &str) -> McpResult<Option<BTreeMap<String, Resource>>> {
         if let Some(children) = self.directories.get(uri) {
             return Ok(Some(children.clone()));
@@ -262,7 +272,7 @@ pub(crate) struct SkillFileResource {
 }
 
 impl SkillFileResource {
-    /// One resource per manifest file of `entry`. `SKILL.md` carries the skill's
+    /// Returns one resource per manifest file of `entry`. `SKILL.md` carries the skill's
     /// name and description (`skills.mdx` §Resource Metadata).
     pub(crate) fn for_entry(entry: &SkillEntry) -> Vec<Self> {
         let skill_md = entry.uri();
@@ -360,7 +370,7 @@ fn params<T: serde::de::DeserializeOwned>(params: Option<Value>, what: &str) -> 
         .map_err(|e| McpError::InvalidParameters(format!("invalid {what}: {e}")))
 }
 
-/// Exactly the given bytes: UTF-8 as text, else blob.
+/// Returns exactly the given bytes: UTF-8 as text, else blob.
 fn content_of(uri: &str, bytes: &[u8], mime_type: &str) -> ResourceContent {
     let content = match std::str::from_utf8(bytes) {
         Ok(text) => ResourceContent::text(uri, text),
@@ -373,7 +383,7 @@ fn content_of(uri: &str, bytes: &[u8], mime_type: &str) -> ResourceContent {
     content.with_mime_type(mime_type)
 }
 
-/// Page `items` after `cursor`, which must be an item a previous page ended on.
+/// Pages `items` after `cursor`, which must be an item a previous page ended on.
 fn page<'a, T>(
     items: impl Iterator<Item = (&'a String, T)>,
     cursor: Option<&Cursor>,
@@ -452,7 +462,7 @@ impl McpHandler for SkillsGetHandler {
     }
 }
 
-/// `resources/directory/read` (ADR-033 §7): a directory's direct children.
+/// `resources/directory/read`: a directory's direct children.
 pub(crate) struct DirectoryReadHandler(pub(crate) Arc<SkillsRuntime>);
 
 #[async_trait]
@@ -483,7 +493,7 @@ impl McpHandler for DirectoryReadHandler {
 /// resources are registered before the read policy that covers them exists.
 pub(crate) type RuntimeSlot = Arc<std::sync::OnceLock<Arc<SkillsRuntime>>>;
 
-/// The `<root>/{+file}` template resource of one dynamic skill (ADR-033 §8):
+/// The `<root>/{+file}` template resource of one dynamic skill:
 /// each read regenerates the skill and serves the file at the requested URI.
 pub(crate) struct DynamicSkillResource {
     template: String,

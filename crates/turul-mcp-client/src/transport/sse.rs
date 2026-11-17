@@ -1,4 +1,4 @@
-//! SSE (Server-Sent Events) transport implementation for MCP client
+//! HTTP+SSE transport (protocol 2024-11-05) for the MCP client.
 
 use async_trait::async_trait;
 use futures::stream::StreamExt;
@@ -52,12 +52,16 @@ pub struct SseTransport {
 
 #[allow(deprecated)]
 impl SseTransport {
-    /// Create a new SSE transport
+    /// Creates an SSE transport whose event stream is at `<endpoint path>/sse`.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError::ConnectionFailed`] if the URL does not parse or its scheme is not
+    /// `http`/`https`, and [`TransportError::Sse`] if the HTTP client cannot be built.
     pub fn new(endpoint: &str) -> McpClientResult<Self> {
         let url = Url::parse(endpoint)
             .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
 
-        // Validate URL scheme
         if !matches!(url.scheme(), "http" | "https") {
             return Err(TransportError::ConnectionFailed(format!(
                 "Invalid scheme for SSE transport: {}",
@@ -90,7 +94,12 @@ impl SseTransport {
         })
     }
 
-    /// Create SSE transport with custom endpoints
+    /// Creates an SSE transport with explicit request and event-stream endpoints.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError::ConnectionFailed`] if either URL does not parse, and
+    /// [`TransportError::Sse`] if the HTTP client cannot be built.
     pub fn with_endpoints(endpoint: &str, sse_endpoint: &str) -> McpClientResult<Self> {
         let url = Url::parse(endpoint)
             .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
@@ -117,13 +126,13 @@ impl SseTransport {
         })
     }
 
-    /// Generate unique request ID
+    /// Generates a unique request ID.
     fn next_request_id(&self) -> String {
         let counter = self.request_counter.fetch_add(1, Ordering::SeqCst);
         format!("req_{}", counter)
     }
 
-    /// Update statistics
+    /// Updates statistics.
     fn update_stats<F>(&self, update_fn: F)
     where
         F: FnOnce(&mut TransportStatistics),
@@ -132,7 +141,7 @@ impl SseTransport {
         update_fn(&mut stats);
     }
 
-    /// Handle HTTP response
+    /// Handles an HTTP response, returning its JSON body.
     async fn handle_response(&self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
 
@@ -165,7 +174,7 @@ impl SseTransport {
         Ok(response_json)
     }
 
-    /// Start SSE event stream
+    /// Spawns the task that reads the SSE event stream and reconnects after failures.
     async fn start_sse_stream(
         &self,
         sender: mpsc::UnboundedSender<ServerEvent>,
@@ -257,7 +266,7 @@ impl SseTransport {
         Ok(())
     }
 
-    /// Parse SSE event from text
+    /// Parses one SSE event block into a [`ServerEvent`], or `None` if it carries no usable data.
     fn parse_sse_event(event_text: &str) -> Option<ServerEvent> {
         let mut event_type = None;
         let mut data = String::new();
@@ -333,7 +342,7 @@ impl Transport for SseTransport {
         );
 
         // SSE is HTTP-based — no persistent connection to establish here.
-        // The actual SSE subscription is set up during message exchange.
+        // The SSE stream is opened by `start_event_listener`.
         // Real connectivity is validated by the initialize request that
         // immediately follows in McpClient::connect().
         self.connected.store(true, Ordering::SeqCst);
@@ -345,12 +354,10 @@ impl Transport for SseTransport {
         debug!("Disconnecting SSE transport");
         self.connected.store(false, Ordering::SeqCst);
 
-        // Stop SSE stream
         if let Some(handle) = self.sse_handle.lock().take() {
             handle.abort();
         }
 
-        // Close event sender
         if let Some(sender) = self.event_sender.lock().take() {
             sender.send(ServerEvent::ConnectionLost).ok();
         }
@@ -370,7 +377,6 @@ impl Transport for SseTransport {
 
         let start_time = Instant::now();
 
-        // Ensure request has an ID
         let mut request = request;
         if request.get("id").is_none() {
             request["id"] = Value::String(self.next_request_id());
@@ -391,7 +397,6 @@ impl Transport for SseTransport {
             .header("Accept", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25");
 
-        // Add session ID header if available
         if let Some(ref session_id) = *self.session_id.lock() {
             request_builder = request_builder.header("Mcp-Session-Id", session_id);
         }
@@ -425,8 +430,7 @@ impl Transport for SseTransport {
         &self,
         request: Value,
     ) -> McpClientResult<crate::transport::TransportResponse> {
-        // For SSE transport, we can delegate to the HTTP-style request but with header extraction
-        // This is used primarily for the initial initialize request
+        // Posts like `send_request` but also returns the response headers; used for the initial initialize request.
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
         }
@@ -443,7 +447,6 @@ impl Transport for SseTransport {
             .header("Accept", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25");
 
-        // Add session ID header if available
         if let Some(ref session_id) = *self.session_id.lock() {
             request_builder = request_builder.header("Mcp-Session-Id", session_id);
         }
@@ -454,7 +457,6 @@ impl Transport for SseTransport {
             .await
             .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
 
-        // Extract headers
         let mut headers = std::collections::HashMap::new();
         for (name, value) in response.headers() {
             if let Ok(value_str) = value.to_str() {
@@ -491,7 +493,6 @@ impl Transport for SseTransport {
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25");
 
-        // Add session ID header if available
         if let Some(ref session_id) = *self.session_id.lock() {
             request_builder = request_builder.header("Mcp-Session-Id", session_id);
         }
@@ -546,7 +547,6 @@ impl Transport for SseTransport {
         let elapsed = start_time.elapsed();
         self.update_stats(|stats| {
             stats.responses_received += 1;
-            // Update average response time
             let elapsed_ms = elapsed.as_millis() as f64;
             if stats.responses_received == 1 {
                 stats.avg_response_time_ms = elapsed_ms;
@@ -558,7 +558,6 @@ impl Transport for SseTransport {
             }
         });
 
-        // DELETE should return 2xx success status
         if response.status().is_success() {
             info!(
                 session_id = session_id,
@@ -582,7 +581,6 @@ impl Transport for SseTransport {
     async fn start_event_listener(&self) -> McpClientResult<EventReceiver> {
         let (sender, receiver) = mpsc::unbounded_channel();
 
-        // Start SSE stream
         self.start_sse_stream(sender.clone()).await?;
         *self.event_sender.lock() = Some(sender);
 
@@ -634,8 +632,8 @@ impl Drop for SseTransport {
     }
 }
 
-// The tests exercise the deprecated type on purpose: it stays supported for
-// <= 2024-11-05 servers until the spec removes the transport.
+// The tests exercise the deprecated type on purpose: it still serves
+// <= 2024-11-05 servers.
 #[cfg(test)]
 #[allow(deprecated)]
 mod tests {

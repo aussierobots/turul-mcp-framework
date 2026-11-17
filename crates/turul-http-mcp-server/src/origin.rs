@@ -3,7 +3,7 @@
 //! Streamable HTTP §Security: "Servers MUST validate the `Origin` header on
 //! all incoming connections to prevent DNS rebinding attacks. If the
 //! `Origin` header is present and invalid, servers MUST respond with
-//! HTTP 403 Forbidden." Policy semantics are recorded in ADR-031.
+//! HTTP 403 Forbidden."
 
 use hyper::HeaderMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -18,7 +18,7 @@ pub enum OriginPolicy {
     /// The request's `Host` header is **not** consulted: it is
     /// attacker-controlled, and a rebinding attacker sets it to agree with
     /// `Origin`. To serve a browser app from a non-loopback origin, name that
-    /// origin with [`OriginPolicy::AllowList`]. See ADR-031 (2026-08-15).
+    /// origin with [`OriginPolicy::AllowList`].
     #[default]
     SameOriginOrLoopback,
     /// [`OriginPolicy::SameOriginOrLoopback`] semantics plus an explicit
@@ -42,7 +42,7 @@ fn default_port(scheme: &str) -> Option<u16> {
     }
 }
 
-/// Parse `scheme://host[:port]` into a normalized authority.
+/// Parses `scheme://host[:port]` into a normalized authority.
 fn parse_origin(origin: &str) -> Option<OriginAuthority> {
     let (scheme, rest) = origin.split_once("://")?;
     let scheme = scheme.to_ascii_lowercase();
@@ -59,7 +59,7 @@ fn parse_origin(origin: &str) -> Option<OriginAuthority> {
     Some((host, port))
 }
 
-/// Split `host[:port]` handling bracketed IPv6 (`[::1]:8080`).
+/// Splits `host[:port]`, handling bracketed IPv6 (`[::1]:8080`).
 fn split_host_port(authority: &str) -> Option<(String, Option<u16>)> {
     if let Some(rest) = authority.strip_prefix('[') {
         let (host, after) = rest.split_once(']')?;
@@ -92,7 +92,7 @@ fn is_loopback_host(host: &str) -> bool {
     false
 }
 
-/// Validate the request's `Origin` header against `policy`.
+/// Validates the request's `Origin` header against `policy`.
 ///
 /// `Ok(())` admits the request; `Err(origin_value)` means the caller MUST
 /// respond 403 Forbidden.
@@ -133,7 +133,6 @@ pub(crate) fn validate_origin(headers: &HeaderMap, policy: &OriginPolicy) -> Res
     // same-origin deployment and a rebinding attack are indistinguishable from
     // these two headers alone, so only server-side knowledge of the expected
     // origin can decide: operators declare it with `OriginPolicy::AllowList`.
-    // See ADR-031 revision 2026-08-15.
     Err(origin.to_string())
 }
 
@@ -181,9 +180,8 @@ mod tests {
     ///
     /// This is the DNS-rebinding case itself: the attacker controls both
     /// headers and sets them consistently, so any rule that trusts their
-    /// agreement admits the attack. Before 2026-08-15 every case here
-    /// returned `Ok` — the conformance suite's `dns-rebinding-protection`
-    /// scenario caught it (`Host` + `Origin` both `evil.example.com` -> 200).
+    /// agreement admits the attack (`Host` + `Origin` both `evil.example.com`
+    /// must not yield 200).
     #[test]
     fn matching_host_header_does_not_admit_a_foreign_origin() {
         let p = OriginPolicy::SameOriginOrLoopback;

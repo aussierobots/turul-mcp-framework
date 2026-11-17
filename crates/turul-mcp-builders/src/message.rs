@@ -6,13 +6,12 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import from protocol via alias
 use turul_mcp_protocol::prompts::ContentBlock;
 use turul_mcp_protocol::sampling::{
     CreateMessageParams, CreateMessageRequest, ModelHint, ModelPreferences, Role, SamplingMessage,
 };
 
-/// Builder for creating sampling messages and requests at runtime
+/// Builder for creating sampling messages and requests at runtime.
 pub struct MessageBuilder {
     messages: Vec<SamplingMessage>,
     model_preferences: Option<ModelPreferences>,
@@ -26,7 +25,7 @@ pub struct MessageBuilder {
 }
 
 impl MessageBuilder {
-    /// Create a new message builder with default max_tokens
+    /// Creates a new message builder with default max_tokens.
     pub fn new() -> Self {
         Self {
             messages: Vec::new(),
@@ -41,24 +40,24 @@ impl MessageBuilder {
         }
     }
 
-    /// Set maximum tokens for response generation
+    /// Sets maximum tokens for response generation.
     pub fn max_tokens(mut self, max_tokens: u32) -> Self {
         self.max_tokens = max_tokens;
         self
     }
 
-    /// Add a message to the conversation
+    /// Adds a message to the conversation.
     pub fn message(mut self, message: SamplingMessage) -> Self {
         self.messages.push(message);
         self
     }
 
-    /// Set system prompt (MCP 2025-11-25 uses system_prompt field, not Role::System)
+    /// Sets system prompt (MCP 2025-11-25 uses system_prompt field, not Role::System).
     pub fn system(self, content: impl Into<String>) -> Self {
         self.system_prompt(content)
     }
 
-    /// Add a user message with text content
+    /// Adds a user message with text content.
     pub fn user_text(mut self, content: impl Into<String>) -> Self {
         self.messages.push(SamplingMessage {
             role: Role::User,
@@ -67,7 +66,7 @@ impl MessageBuilder {
         self
     }
 
-    /// Add a user message with image content
+    /// Adds a user message with image content.
     pub fn user_image(mut self, data: impl Into<String>, mime_type: impl Into<String>) -> Self {
         self.messages.push(SamplingMessage {
             role: Role::User,
@@ -76,7 +75,7 @@ impl MessageBuilder {
         self
     }
 
-    /// Add an assistant message with text content
+    /// Adds an assistant message with text content.
     pub fn assistant_text(mut self, content: impl Into<String>) -> Self {
         self.messages.push(SamplingMessage {
             role: Role::Assistant,
@@ -85,13 +84,13 @@ impl MessageBuilder {
         self
     }
 
-    /// Set model preferences
+    /// Sets model preferences.
     pub fn model_preferences(mut self, preferences: ModelPreferences) -> Self {
         self.model_preferences = Some(preferences);
         self
     }
 
-    /// Create and set model preferences with builder pattern
+    /// Creates and sets model preferences with builder pattern.
     pub fn with_model_preferences<F>(mut self, f: F) -> Self
     where
         F: FnOnce(ModelPreferencesBuilder) -> ModelPreferencesBuilder,
@@ -102,31 +101,31 @@ impl MessageBuilder {
         self
     }
 
-    /// Set system prompt
+    /// Sets system prompt.
     pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
         self.system_prompt = Some(prompt.into());
         self
     }
 
-    /// Set include context
+    /// Sets include context.
     pub fn include_context(mut self, context: impl Into<String>) -> Self {
         self.include_context = Some(context.into());
         self
     }
 
-    /// Set temperature for sampling (0.0-1.0)
+    /// Sets temperature for sampling (0.0-1.0).
     pub fn temperature(mut self, temperature: f64) -> Self {
         self.temperature = Some(temperature.clamp(0.0, 2.0));
         self
     }
 
-    /// Set stop sequences
+    /// Sets stop sequences.
     pub fn stop_sequences(mut self, sequences: Vec<String>) -> Self {
         self.stop_sequences = Some(sequences);
         self
     }
 
-    /// Add a stop sequence
+    /// Adds a stop sequence.
     pub fn stop_sequence(mut self, sequence: impl Into<String>) -> Self {
         if let Some(ref mut sequences) = self.stop_sequences {
             sequences.push(sequence.into());
@@ -136,19 +135,19 @@ impl MessageBuilder {
         self
     }
 
-    /// Set metadata
+    /// Sets metadata.
     pub fn metadata(mut self, metadata: Value) -> Self {
         self.metadata = Some(metadata);
         self
     }
 
-    /// Set meta information
+    /// Sets meta information.
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 
-    /// Build a CreateMessageParams
+    /// Builds a CreateMessageParams.
     pub fn build_params(self) -> CreateMessageParams {
         let mut params = CreateMessageParams::new(self.messages, self.max_tokens);
 
@@ -175,7 +174,7 @@ impl MessageBuilder {
         params
     }
 
-    /// Build a complete CreateMessageRequest
+    /// Builds a complete CreateMessageRequest.
     pub fn build_request(self) -> CreateMessageRequest {
         CreateMessageRequest {
             method: "sampling/createMessage".to_string(),
@@ -190,7 +189,7 @@ impl Default for MessageBuilder {
     }
 }
 
-/// Builder for ModelPreferences
+/// Builder for ModelPreferences.
 pub struct ModelPreferencesBuilder {
     hints: Vec<ModelHint>,
     cost_priority: Option<f64>,
@@ -208,63 +207,63 @@ impl ModelPreferencesBuilder {
         }
     }
 
-    /// Add a model hint
+    /// Adds a model hint.
     pub fn hint(mut self, hint: ModelHint) -> Self {
         self.hints.push(hint);
         self
     }
 
-    /// Add Claude 3.5 Sonnet as preferred model
+    /// Adds Claude 3.5 Sonnet as preferred model.
     pub fn prefer_claude_sonnet(self) -> Self {
         self.hint(ModelHint::new("claude-3-5-sonnet-20241022"))
     }
 
-    /// Add Claude 3.5 Haiku as preferred model
+    /// Adds Claude 3.5 Haiku as preferred model.
     pub fn prefer_claude_haiku(self) -> Self {
         self.hint(ModelHint::new("claude-3-5-haiku-20241022"))
     }
 
-    /// Add GPT-4o as preferred model
+    /// Adds GPT-4o as preferred model.
     pub fn prefer_gpt4o(self) -> Self {
         self.hint(ModelHint::new("gpt-4o"))
     }
 
-    /// Add GPT-4o Mini as preferred model
+    /// Adds GPT-4o Mini as preferred model.
     pub fn prefer_gpt4o_mini(self) -> Self {
         self.hint(ModelHint::new("gpt-4o-mini"))
     }
 
-    /// Prefer fast models
+    /// Prefers fast models.
     pub fn prefer_fast(self) -> Self {
         self.hint(ModelHint::new("claude-3-5-haiku-20241022"))
             .hint(ModelHint::new("gpt-4o-mini"))
     }
 
-    /// Prefer high-quality models
+    /// Prefers high-quality models.
     pub fn prefer_quality(self) -> Self {
         self.hint(ModelHint::new("claude-3-5-sonnet-20241022"))
             .hint(ModelHint::new("gpt-4o"))
     }
 
-    /// Set cost priority (0.0-1.0)
+    /// Sets cost priority (0.0-1.0).
     pub fn cost_priority(mut self, priority: f64) -> Self {
         self.cost_priority = Some(priority.clamp(0.0, 1.0));
         self
     }
 
-    /// Set speed priority (0.0-1.0)
+    /// Sets speed priority (0.0-1.0).
     pub fn speed_priority(mut self, priority: f64) -> Self {
         self.speed_priority = Some(priority.clamp(0.0, 1.0));
         self
     }
 
-    /// Set intelligence priority (0.0-1.0)
+    /// Sets intelligence priority (0.0-1.0).
     pub fn intelligence_priority(mut self, priority: f64) -> Self {
         self.intelligence_priority = Some(priority.clamp(0.0, 1.0));
         self
     }
 
-    /// Build the ModelPreferences
+    /// Builds the ModelPreferences.
     pub fn build(self) -> ModelPreferences {
         ModelPreferences {
             hints: if self.hints.is_empty() {
@@ -285,13 +284,13 @@ impl Default for ModelPreferencesBuilder {
     }
 }
 
-/// Extension trait for convenient SamplingMessage creation
+/// Extension trait for convenient SamplingMessage creation.
 pub trait SamplingMessageExt {
-    /// Create a user message with text
+    /// Creates a user message with text.
     fn user_text(content: impl Into<String>) -> SamplingMessage;
-    /// Create a user message with image
+    /// Creates a user message with image.
     fn user_image(data: impl Into<String>, mime_type: impl Into<String>) -> SamplingMessage;
-    /// Create an assistant message with text
+    /// Creates an assistant message with text.
     fn assistant_text(content: impl Into<String>) -> SamplingMessage;
 }
 

@@ -93,7 +93,7 @@ mod utils;
 #[cfg(test)]
 mod tests;
 
-/// Derive macro for automatically implementing McpTool
+/// Derives `McpTool` for a struct.
 ///
 /// This macro generates a complete McpTool implementation from a struct definition.
 ///
@@ -205,7 +205,7 @@ pub fn derive_mcp_tool(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Function attribute macro for creating MCP tools
+/// Turns an async function into an MCP tool definition.
 ///
 /// This macro converts a regular async function into an MCP tool with automatic
 /// parameter extraction and schema generation.
@@ -233,12 +233,12 @@ pub fn mcp_tool(args: TokenStream, input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Helper attribute for parameter metadata in function macros
+/// Marks parameter metadata inside a function annotated with `#[mcp_tool]`.
 ///
-/// This attribute is consumed by the #[mcp_tool] macro and has no effect when used alone.
+/// This attribute is consumed by the `#[mcp_tool]` macro and has no effect when used alone.
 /// It provides parameter descriptions and constraints for function parameters.
 ///
-/// Must be used within functions annotated with #[mcp_tool] to have any effect.
+/// Must be used within functions annotated with `#[mcp_tool]` to have any effect.
 #[proc_macro_attribute]
 pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
     // This attribute is only processed by the #[mcp_tool] macro
@@ -246,7 +246,7 @@ pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
     input
 }
 
-/// Function attribute macro for creating MCP resources
+/// Turns an async function into an MCP resource definition.
 ///
 /// This macro automatically generates an MCP resource implementation from an async function.
 /// It supports both static and template resources based on the URI pattern.
@@ -276,10 +276,11 @@ pub fn mcp_resource(args: TokenStream, input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro for automatically implementing MCP resource handlers
+/// Derives the resource metadata traits for a struct.
 ///
-/// This macro generates both the metadata traits and the session-aware McpResource trait implementation.
-/// Fields marked with `#[content]` are automatically used to generate the resource content.
+/// This macro generates the metadata traits only; it does not implement the `McpResource`
+/// trait, so the struct must implement `McpResource` (and its `read` method) by hand.
+/// The `#[content]` and `#[content_type]` field attributes are accepted but do not generate content.
 ///
 /// # Example
 ///
@@ -314,7 +315,7 @@ pub fn derive_mcp_resource(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Declarative macro for creating simple resources
+/// Creates simple resources with declarative syntax.
 ///
 /// This provides a concise syntax for resource creation.
 ///
@@ -348,7 +349,7 @@ pub fn resource(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Generate a JSON schema for a Rust type
+/// Generates a JSON schema for a Rust type.
 ///
 /// This macro generates a JSON schema definition for any Rust type that implements
 /// Serialize. It analyzes the type structure and creates appropriate schema constraints.
@@ -375,7 +376,7 @@ pub fn schema_for(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Derive macro for automatically implementing McpElicitation
+/// Derives `McpElicitation` for a struct.
 ///
 /// Elicitation is a 2025-11-25 feature; the generated code references types the
 /// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
@@ -401,7 +402,9 @@ pub fn derive_mcp_elicitation(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro for automatically implementing McpPrompt
+/// Derives the prompt metadata traits for a struct.
+///
+/// This macro does not implement the `McpPrompt` trait; the struct must implement it by hand.
 ///
 /// # Example
 ///
@@ -423,7 +426,7 @@ pub fn derive_mcp_prompt(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro for automatically implementing McpSampling
+/// Derives `McpSampling` for a struct.
 ///
 /// Sampling is a 2025-11-25 feature; the generated code references types the
 /// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
@@ -450,7 +453,7 @@ pub fn derive_mcp_sampling(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro for automatically implementing McpCompletion
+/// Derives `McpCompletion` for a struct.
 ///
 /// # Example
 ///
@@ -473,7 +476,7 @@ pub fn derive_mcp_completion(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro for automatically implementing McpLogger
+/// Derives `McpLogger` for a struct.
 ///
 /// Logging is a 2025-11-25 feature; the generated code references types the
 /// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
@@ -500,7 +503,7 @@ pub fn derive_mcp_logger(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro for automatically implementing McpRoot
+/// Derives `McpRoot` for a struct.
 ///
 /// # Example
 ///
@@ -520,7 +523,7 @@ pub fn derive_mcp_root(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Derive macro for automatically implementing McpNotification
+/// Derives `McpNotification` for a struct.
 ///
 /// ZERO CONFIGURATION - Framework auto-determines method from struct name for MCP spec notifications:
 /// - `ProgressNotification` → `"notifications/progress"`
@@ -550,7 +553,7 @@ pub fn derive_mcp_notification(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Declarative macro for creating simple tools
+/// Creates simple tools with declarative syntax.
 ///
 /// This provides the most concise syntax for tool creation.
 ///
@@ -588,7 +591,7 @@ pub fn tool(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Declarative macro for creating simple prompts
+/// Creates simple prompts with declarative syntax.
 ///
 /// This provides a concise syntax for prompt creation.
 ///
@@ -628,7 +631,7 @@ pub fn prompt(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Declarative macro for creating sampling configurations
+/// Creates sampling configurations with declarative syntax.
 ///
 /// This provides a concise syntax for sampling configuration.
 ///
@@ -669,7 +672,7 @@ pub fn sampling(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Declarative macro for creating MCP notifications with concise syntax.
+/// Creates MCP notifications with concise syntax.
 ///
 /// Supports zero-configuration method generation based on struct name.
 ///
@@ -693,7 +696,7 @@ pub fn notification(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Declarative macro for creating MCP completion handlers with concise syntax.
+/// Creates MCP completion handlers with concise syntax.
 ///
 /// # Example
 ///
@@ -716,7 +719,7 @@ pub fn completion(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Declarative macro for creating MCP elicitation handlers with concise syntax.
+/// Creates MCP elicitation handlers with concise syntax.
 ///
 /// Elicitation is a 2025-11-25 feature; the generated code references types the
 /// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.
@@ -742,7 +745,7 @@ pub fn elicitation(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Declarative macro for creating MCP root handlers with concise syntax.
+/// Creates MCP root handlers with concise syntax.
 ///
 /// # Example
 ///
@@ -762,7 +765,7 @@ pub fn roots(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Declarative macro for creating MCP logging handlers with concise syntax.
+/// Creates MCP logging handlers with concise syntax.
 ///
 /// Logging is a 2025-11-25 feature; the generated code references types the
 /// stateless 2026-07-28 core removes, so the example only compiles under 2025-11-25.

@@ -1,4 +1,4 @@
-//! Streaming support for MCP client
+//! Dispatches server-initiated events to client callbacks and tracks long-running operation progress.
 
 use serde_json::Value;
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 use crate::error::{McpClientError, McpClientResult};
 use crate::transport::ServerEvent;
 
-/// Stream handler for processing server events
+/// Dispatches server events received from a transport to registered callbacks.
 #[derive(Debug)]
 pub struct StreamHandler {
     /// Event receiver from transport
@@ -22,7 +22,7 @@ pub struct StreamHandler {
 /// Type alias for request handler callback
 type RequestHandler = Box<dyn Fn(Value) -> Result<Value, String> + Send + Sync>;
 
-/// Callbacks for different types of server events
+/// Callbacks for the different kinds of server events.
 #[derive(Default)]
 pub struct StreamCallbacks {
     /// Notification callback
@@ -56,7 +56,7 @@ impl std::fmt::Debug for StreamCallbacks {
 }
 
 impl StreamHandler {
-    /// Create a new stream handler
+    /// Creates a stream handler with no receiver and no callbacks.
     pub fn new() -> Self {
         Self {
             event_receiver: None,
@@ -65,17 +65,17 @@ impl StreamHandler {
         }
     }
 
-    /// Set event receiver from transport
+    /// Sets the event receiver taken from the transport.
     pub fn set_receiver(&mut self, receiver: mpsc::UnboundedReceiver<ServerEvent>) {
         self.event_receiver = Some(receiver);
     }
 
-    /// Set channel for sending JSON-RPC responses back to the server
+    /// Sets the channel for sending JSON-RPC responses back to the server.
     pub fn set_response_sender(&mut self, sender: mpsc::UnboundedSender<Value>) {
         self.response_sender = Some(sender);
     }
 
-    /// Set notification callback
+    /// Sets the notification callback.
     pub fn on_notification<F>(&self, callback: F)
     where
         F: Fn(Value) + Send + Sync + 'static,
@@ -83,7 +83,7 @@ impl StreamHandler {
         self.callbacks.lock().notification = Some(Box::new(callback));
     }
 
-    /// Set request callback
+    /// Sets the request callback.
     pub fn on_request<F>(&self, callback: F)
     where
         F: Fn(Value) -> Result<Value, String> + Send + Sync + 'static,
@@ -91,7 +91,7 @@ impl StreamHandler {
         self.callbacks.lock().request = Some(Box::new(callback));
     }
 
-    /// Set connection lost callback
+    /// Sets the connection-lost callback.
     pub fn on_connection_lost<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
@@ -99,7 +99,7 @@ impl StreamHandler {
         self.callbacks.lock().connection_lost = Some(Box::new(callback));
     }
 
-    /// Set error callback
+    /// Sets the error callback.
     pub fn on_error<F>(&self, callback: F)
     where
         F: Fn(String) + Send + Sync + 'static,
@@ -107,7 +107,7 @@ impl StreamHandler {
         self.callbacks.lock().error = Some(Box::new(callback));
     }
 
-    /// Set heartbeat callback
+    /// Sets the heartbeat callback.
     pub fn on_heartbeat<F>(&self, callback: F)
     where
         F: Fn() + Send + Sync + 'static,
@@ -115,7 +115,11 @@ impl StreamHandler {
         self.callbacks.lock().heartbeat = Some(Box::new(callback));
     }
 
-    /// Start processing events
+    /// Spawns a task that dispatches received events to the callbacks.
+    ///
+    /// # Errors
+    ///
+    /// Returns a generic [`McpClientError`] if no event receiver was set with `set_receiver`.
     pub async fn start(&mut self) -> McpClientResult<()> {
         let mut receiver = self
             .event_receiver
@@ -235,7 +239,7 @@ impl StreamHandler {
         Ok(())
     }
 
-    /// Check if handler is active
+    /// Returns whether an event receiver is still waiting to be started.
     pub fn is_active(&self) -> bool {
         self.event_receiver.is_some()
     }
@@ -247,7 +251,7 @@ impl Default for StreamHandler {
     }
 }
 
-/// Progress tracker for long-running operations
+/// Progress tracker for long-running operations.
 #[derive(Debug, Clone)]
 pub struct ProgressTracker {
     /// Operation ID
@@ -263,7 +267,7 @@ pub struct ProgressTracker {
 }
 
 impl ProgressTracker {
-    /// Create a new progress tracker
+    /// Creates a progress tracker with no total and zero completed steps.
     pub fn new(operation_id: String) -> Self {
         Self {
             operation_id,
@@ -274,18 +278,18 @@ impl ProgressTracker {
         }
     }
 
-    /// Update progress
+    /// Updates the completed step count and message.
     pub fn update(&mut self, completed: u64, message: Option<String>) {
         self.completed = completed;
         self.message = message;
     }
 
-    /// Set total steps
+    /// Sets the total step count.
     pub fn set_total(&mut self, total: u64) {
         self.total = Some(total);
     }
 
-    /// Get progress percentage (0.0 to 1.0)
+    /// Returns the progress fraction (0.0 to 1.0), or `None` when the total is unknown.
     pub fn percentage(&self) -> Option<f64> {
         self.total.map(|total| {
             if total == 0 {
@@ -296,7 +300,7 @@ impl ProgressTracker {
         })
     }
 
-    /// Check if operation is complete
+    /// Returns whether the completed count has reached a known total.
     pub fn is_complete(&self) -> bool {
         if let Some(total) = self.total {
             self.completed >= total
@@ -305,7 +309,7 @@ impl ProgressTracker {
         }
     }
 
-    /// Get status summary
+    /// Returns a human-readable status summary.
     pub fn status(&self) -> String {
         match (self.total, &self.message) {
             (Some(total), Some(msg)) => {

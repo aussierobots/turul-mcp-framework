@@ -18,8 +18,9 @@ use turul_mcp_protocol_2026_07_28::result_type::ResultType;
 /// a request asynchronously — see `CreateTaskResult` in the extension schema.
 pub const RESULT_TYPE_TASK: &str = "task";
 
-/// A REQUIRED-but-nullable wire field (`T | null`). Unlike a plain
-/// `Option<T>` struct field — which serde silently defaults to `None` when
+/// A required but nullable wire field (`T | null`).
+///
+/// Unlike a plain `Option<T>` struct field — which serde silently defaults to `None` when
 /// the key is absent — a missing key is a parse error here, matching the
 /// schema's `required` list. (The manual `Deserialize` exists because any
 /// type that answers serde's `deserialize_option` probe gets the implicit
@@ -41,9 +42,11 @@ impl<'de, T: serde::de::DeserializeOwned> Deserialize<'de> for Nullable<T> {
 }
 
 impl<T> Nullable<T> {
+    /// Returns the explicit-`null` value (`Nullable(None)`).
     pub fn null() -> Self {
         Self(None)
     }
+    /// Returns a reference to the contained value, or `None` when the value is `null`.
     pub fn as_option(&self) -> Option<&T> {
         self.0.as_ref()
     }
@@ -78,7 +81,7 @@ pub enum TaskStatus {
 }
 
 impl TaskStatus {
-    /// Terminal statuses can never change again.
+    /// Returns `true` for statuses that can never change again.
     pub fn is_terminal(&self) -> bool {
         matches!(
             self,
@@ -126,6 +129,7 @@ pub struct TaskFields {
 pub struct Task {
     /// Current task status.
     pub status: TaskStatus,
+    /// The task identifier, timestamps and other status-independent fields, flattened into the task.
     #[serde(flatten)]
     pub fields: TaskFields,
 }
@@ -137,11 +141,13 @@ pub struct Task {
 pub enum DetailedTask {
     /// `WorkingTask` — a task in a normal working state.
     Working {
+        /// The status-independent task fields.
         #[serde(flatten)]
         fields: TaskFields,
     },
     /// `InputRequiredTask` — waiting for client input (MRTR over tasks).
     InputRequired {
+        /// The status-independent task fields.
         #[serde(flatten)]
         fields: TaskFields,
         /// Outstanding server-to-client requests; keys are arbitrary
@@ -151,6 +157,7 @@ pub enum DetailedTask {
     },
     /// `CompletedTask` — the final result is available.
     Completed {
+        /// The status-independent task fields.
         #[serde(flatten)]
         fields: TaskFields,
         /// The final result; its structure matches the result type of the
@@ -159,6 +166,7 @@ pub enum DetailedTask {
     },
     /// `FailedTask` — a JSON-RPC error occurred during execution.
     Failed {
+        /// The status-independent task fields.
         #[serde(flatten)]
         fields: TaskFields,
         /// The JSON-RPC error that caused the task to fail.
@@ -166,12 +174,14 @@ pub enum DetailedTask {
     },
     /// `CancelledTask` — cancelled before completion.
     Cancelled {
+        /// The status-independent task fields.
         #[serde(flatten)]
         fields: TaskFields,
     },
 }
 
 impl DetailedTask {
+    /// Returns the [`TaskStatus`] matching this variant.
     pub fn status(&self) -> TaskStatus {
         match self {
             DetailedTask::Working { .. } => TaskStatus::Working,
@@ -182,6 +192,7 @@ impl DetailedTask {
         }
     }
 
+    /// Returns the status-independent fields shared by every variant.
     pub fn fields(&self) -> &TaskFields {
         match self {
             DetailedTask::Working { fields }
@@ -202,14 +213,17 @@ pub struct CreateTaskResult {
     #[serde(rename = "resultType")]
     pub result_type: ResultType,
 
+    /// Protocol-reserved metadata attached to the message (`_meta`); omitted when `None`.
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<MetaObject>,
 
+    /// The created task's data, flattened into the result.
     #[serde(flatten)]
     pub task: Task,
 }
 
 impl CreateTaskResult {
+    /// Creates a result with `resultType` `"task"`, no `_meta`, and the given task.
     pub fn new(task: Task) -> Self {
         Self {
             result_type: ResultType::Other(RESULT_TYPE_TASK.to_string()),
@@ -218,7 +232,7 @@ impl CreateTaskResult {
         }
     }
 
-    /// True when the discriminator carries the required `"task"` value.
+    /// Returns `true` when the discriminator carries the required `"task"` value.
     pub fn has_task_discriminator(&self) -> bool {
         self.result_type.as_str() == RESULT_TYPE_TASK
     }

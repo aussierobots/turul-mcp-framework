@@ -6,7 +6,7 @@
 //! The crate holds the wire types ([`v1::ServerCard`] and friends), the
 //! schema's validation rules ([`v1::ServerCard::validate`]) and the served
 //! document ([`v1::ServerCardDocument`]: bytes and `ETag`). Serving the card is
-//! `turul-mcp-server`'s `ext-server-card` feature (ADR-038).
+//! `turul-mcp-server`'s `ext-server-card` feature.
 //!
 //! ```rust
 //! use turul_mcp_ext_server_card::v1::{Remote, RemoteType, ServerCard, ServerCardDocument};
