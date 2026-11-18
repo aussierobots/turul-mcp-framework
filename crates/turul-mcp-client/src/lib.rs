@@ -90,6 +90,8 @@ pub mod config;
 pub mod error;
 #[cfg(feature = "ext-apps")]
 pub mod ext_apps;
+#[cfg(feature = "oauth-client-credentials")]
+pub mod oauth_client_credentials;
 pub mod prelude;
 pub(crate) mod protocol;
 pub mod session;

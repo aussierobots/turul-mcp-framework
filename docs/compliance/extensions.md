@@ -22,7 +22,9 @@ answer 404 for every `tasks/*` method.
 | Skills | `io.modelcontextprotocol/skills` | `turul-mcp-ext-skills`; server feature `ext-skills` (`with_ext_skills`); client feature `ext-skills` | Cargo feature |
 | Server Cards (**experimental** upstream) | none (no negotiation, SEP-2127) | `turul-mcp-ext-server-card`; server and Lambda feature `ext-server-card` (`with_server_card`) | Cargo feature |
 
-Not implemented: OAuth Client Credentials, Enterprise-Managed Authorization.
+| OAuth Client Credentials | `io.modelcontextprotocol/oauth-client-credentials` (no negotiation) | client feature `oauth-client-credentials` (`with_oauth_client_credentials`); the resource server side is `turul-mcp-oauth`, unchanged | Cargo feature |
+
+Not implemented: Enterprise-Managed Authorization.
 
 ---
 
@@ -154,6 +156,27 @@ not an accepted extension; the pin is `526201b`.
 `examples/server-card-server` was read back live with curl: `GET`, `If-None-Match`
 → 304, `OPTIONS` → 204, `POST` → 405, and the card's version, title and protocol
 versions equal its `server/discover`.
+
+## 6. OAuth Client Credentials — `io.modelcontextprotocol/oauth-client-credentials`
+
+Governing ADR: ADR-039. Upstream `ext-auth` stable, `2026-07-28` revision, pin
+`15ca394`. Client-side only: the resource server half is ADR-021. Tests are in
+`c/turul-mcp-client/tests/oauth_client_credentials.rs`.
+
+| Requirement | Level | Status | Implementation | Verified by | turul | py | ts | go |
+|---|---|---|---|---|---|---|---|---|
+| Client authenticates with a JWT assertion (RFC 7523 §2.2) or a client secret | MUST (one of) | Implemented (both) | `ClientAuth` | `client_secret_basic_full_flow`, `client_secret_post_when_basic_is_not_offered`, `private_key_jwt_assertion` | pass | — | — | — |
+| JWT request omits `client_id`; identity is the assertion's `sub` | per RFC 7523 §3 | Implemented | `fetch_token` | `private_key_jwt_assertion` | pass | — | — | — |
+| Method chosen from `token_endpoint_auth_methods_supported` and signing algs | MUST (AS) | Implemented (client honours the list) | `choose_method` | `private_key_jwt_refused_when_alg_is_not_accepted`, `client_secret_post_when_basic_is_not_offered` | pass | — | — | — |
+| Discovery: 401 `resource_metadata` → PRM → AS metadata (RFC 8414, then OIDC) | MUST | Implemented | `TokenSource::discover` | `client_secret_basic_full_flow`, `challenge_scope_and_well_known_fallback`, `openid_configuration_is_the_fallback`, unit `well_known_locations` | pass | — | — | — |
+| `resource` parameter (RFC 8707) | MUST | Implemented | `fetch_token` | `client_secret_basic_full_flow` | pass | — | — | — |
+| Persisted credentials bound to their issuer (SEP-2352) | MUST | Implemented | `discover`, `authorization_server_metadata` | `credentials_go_only_to_their_own_issuer` (no token request reaches any other AS) | pass | — | — | — |
+| PRM `resource` equals the endpoint (RFC 9728 §3.3) | MUST | Implemented | `discover` | `prm_for_another_resource_is_refused` | pass | — | — | — |
+| Communication security; credential protection | MUST | Implemented | `require_secure` (https except loopback), no redirects, `Debug` redacts secrets | unit `requires_https_except_on_loopback`, `debug_redacts_secrets` | pass | — | — | — |
+| End to end against this framework's resource server | — | Implemented | `turul-mcp-oauth` validating RS256 tokens a mock AS issues | `e2e::list_tools_through_the_full_flow_on_a_real_resource_server` | pass | — | — | — |
+
+No third-party authorization server has been exercised; the AS in every test is
+a wiremock double.
 
 ## Gap register
 
