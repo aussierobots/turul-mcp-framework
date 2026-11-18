@@ -57,6 +57,9 @@ const REFRESH_SKEW: Duration = Duration::from_secs(30);
 /// and token endpoints.
 const AS_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Largest metadata or token response read.
+const MAX_BODY: usize = 64 * 1024;
+
 const CLIENT_ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
 /// Pre-registered client credentials, bound to one authorization server.
@@ -596,9 +599,19 @@ impl TokenSource {
         challenge: &Challenge,
     ) -> McpClientResult<(Url, ProtectedResourceMetadata)> {
         let candidates: Vec<Url> = match &challenge.resource_metadata {
-            Some(u) => vec![
-                Url::parse(u).map_err(|e| auth_error(format!("resource_metadata {u:?}: {e}")))?,
-            ],
+            Some(u) => {
+                let url = Url::parse(u)
+                    .map_err(|e| auth_error(format!("resource_metadata {u:?}: {e}")))?;
+                // The challenge is the resource server's word: fetch only from
+                // its own origin, so it cannot point the client at arbitrary hosts.
+                if url.origin() != self.endpoint.origin() {
+                    return Err(auth_error(format!(
+                        "resource_metadata {url} is not on the endpoint's origin {}",
+                        self.endpoint.origin().ascii_serialization()
+                    )));
+                }
+                vec![url]
+            }
             None => well_known_prm(&self.endpoint),
         };
         let mut last = String::new();
@@ -662,8 +675,10 @@ impl TokenSource {
         if !status.is_success() {
             return Err(auth_error(format!("GET {url}: HTTP {status}")));
         }
-        resp.json::<T>()
+        let body = read_capped(resp)
             .await
+            .map_err(|e| auth_error(format!("GET {url}: {e}")))?;
+        serde_json::from_slice::<T>(&body)
             .map(Some)
             .map_err(|e| auth_error(format!("GET {url}: {e}")))
     }
@@ -717,8 +732,7 @@ impl TokenSource {
             .await
             .map_err(|e| auth_error(format!("token request to {}: {e}", d.token_endpoint)))?;
         let status = resp.status();
-        let body = resp
-            .bytes()
+        let body = read_capped(resp)
             .await
             .map_err(|e| auth_error(format!("token response: {e}")))?;
         if status != StatusCode::OK {
@@ -755,6 +769,18 @@ impl TokenSource {
 /// Within the refresh window: [`REFRESH_SKEW`], or half the lifetime for a
 /// token issued for less than twice that, so a short-lived token is not
 /// re-fetched on every request.
+/// Reads a response body of at most [`MAX_BODY`] bytes.
+async fn read_capped(mut resp: reqwest::Response) -> Result<Vec<u8>, String> {
+    let mut body = Vec::new();
+    while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+        if body.len() + chunk.len() > MAX_BODY {
+            return Err(format!("response larger than {MAX_BODY} bytes"));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
+}
+
 fn near_expiry(t: &Token) -> bool {
     let skew = t.lifetime.map_or(REFRESH_SKEW, |l| REFRESH_SKEW.min(l / 2));
     t.expires_at

@@ -80,6 +80,10 @@ elsewhere and passes it with `McpClient::set_bearer`.
      for an issuer with no path, the two root forms.
    - Every AS URL the client calls (metadata, token endpoint) must be `https`,
      except on a loopback host.
+   - A `resource_metadata` URL must be on the MCP endpoint's origin. The
+     challenge comes from the resource server, and fetching any URL it names
+     would let it aim the client at arbitrary hosts.
+   - Metadata and token responses are read up to 64 KiB.
 
 5. **Token request.** `grant_type=client_credentials`, `resource` = the PRM
    `resource`, and `scope` chosen in this order: the scope set on
@@ -152,8 +156,9 @@ elsewhere and passes it with `McpClient::set_bearer`.
   sent); a 401 with a cached token refreshes once and a second 401 is returned;
   concurrent first requests, and concurrent 401s on a stale token, each make one
   token request; an overflowing `expires_in` does not panic.
-- Isolation: `ConnectionConfig` headers never reach the AS, and a token
-  endpoint redirect is not followed.
+- Isolation: `ConnectionConfig` headers never reach the AS, a token endpoint
+  redirect is not followed, a `resource_metadata` URL on another origin is not
+  fetched, and an oversized metadata response is refused.
 - The SSE GET refreshes on 401 and keeps the session.
 - `Debug` shows neither the secret nor the key.
 - Unit: challenge parsing, the https-or-loopback check, basic-auth encoding,
@@ -182,3 +187,5 @@ All run in `ci-gates.sh default` and `ci.yml`.
   - the basic-over-post rationale is recorded;
   - tests that prove refresh-before-send, stale-token reuse, AS isolation and
     redirect refusal.
+  - after an automated security review: a `resource_metadata` URL must be on
+    the endpoint's origin, and response bodies are capped at 64 KiB.

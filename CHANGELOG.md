@@ -29,7 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     resource server lists that issuer and the metadata's `issuer` matches it exactly, so a
     resource server cannot redirect them to an authorization server it controls.
   - **URL checks:** authorization server URLs must be `https` except on loopback, and
-    redirects are not followed.
+    redirects are not followed. A challenge's `resource_metadata` URL must be on the MCP
+    endpoint's origin. Metadata and token responses are capped at 64 KiB.
   - **Tokens:** `expires_in` may be a number or a numeric string. A short-lived token is
     refreshed at half its lifetime. If an early refresh fails, the unexpired token is still
     sent.

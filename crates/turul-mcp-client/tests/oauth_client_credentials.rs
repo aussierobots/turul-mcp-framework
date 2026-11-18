@@ -799,6 +799,45 @@ fn builder_refuses_credentials_with_a_caller_built_transport() {
         .build();
 }
 
+#[tokio::test]
+async fn resource_metadata_on_another_origin_is_not_fetched() {
+    let w = World::new().await;
+    let other = MockServer::start().await;
+    Mock::given(method("GET"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(w.default_prm()))
+        .expect(0)
+        .mount(&other)
+        .await;
+    w.mcp(
+        "tok-1",
+        &format!(r#"Bearer resource_metadata="{}/prm""#, other.uri()),
+    )
+    .await;
+    let t = w.transport(w.secret()).await;
+    let err = t.send_request(ping()).await.unwrap_err();
+    assert!(
+        matches!(err, McpClientError::Auth(ref m) if m.contains("origin")),
+        "{err}"
+    );
+}
+
+#[tokio::test]
+async fn an_oversized_metadata_response_is_refused() {
+    let w = World::new().await;
+    w.mcp("tok-1", &w.challenge()).await;
+    Mock::given(method("GET"))
+        .and(path("/.well-known/oauth-protected-resource/mcp"))
+        .respond_with(ResponseTemplate::new(200).set_body_string("x".repeat(65 * 1024)))
+        .mount(&w.server)
+        .await;
+    let t = w.transport(w.secret()).await;
+    let err = t.send_request(ping()).await.unwrap_err();
+    assert!(
+        matches!(err, McpClientError::Auth(ref m) if m.contains("larger than")),
+        "{err}"
+    );
+}
+
 // ---- end to end: a real resource server ----
 
 mod e2e {
