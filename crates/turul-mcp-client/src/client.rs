@@ -2561,6 +2561,8 @@ pub struct McpClientBuilder {
     url: Option<String>,
     config: Option<ClientConfig>,
     notification_callback: Option<NotificationCallback>,
+    #[cfg(feature = "oauth-client-credentials")]
+    oauth_client_credentials: Option<crate::oauth_client_credentials::ClientCredentials>,
 }
 
 impl McpClientBuilder {
@@ -2571,7 +2573,25 @@ impl McpClientBuilder {
             url: None,
             config: None,
             notification_callback: None,
+            #[cfg(feature = "oauth-client-credentials")]
+            oauth_client_credentials: None,
         }
+    }
+
+    /// Attaches OAuth client credentials to the HTTP transport `build()` creates
+    /// from [`with_url`](Self::with_url); see
+    /// [`oauth_client_credentials`](crate::oauth_client_credentials) (ADR-039).
+    ///
+    /// A transport passed to [`with_transport`](Self::with_transport) is built by
+    /// the caller, so attach credentials to it with
+    /// [`HttpTransport::with_oauth_client_credentials`](crate::transport::http::HttpTransport::with_oauth_client_credentials).
+    #[cfg(feature = "oauth-client-credentials")]
+    pub fn with_oauth_client_credentials(
+        mut self,
+        credentials: crate::oauth_client_credentials::ClientCredentials,
+    ) -> Self {
+        self.oauth_client_credentials = Some(credentials);
+        self
     }
 
     /// Set transport directly (ConnectionConfig is NOT applied — caller owns the transport)
@@ -2627,8 +2647,30 @@ impl McpClientBuilder {
     ///
     /// If `with_url()` was used, the transport is constructed here with `ConnectionConfig` applied.
     /// If `with_transport()` was used, the provided transport is used as-is.
+    ///
+    /// # Panics
+    ///
+    /// Panics if neither `with_transport()` nor `with_url()` was called, and, with
+    /// the `oauth-client-credentials` feature, if credentials were attached but the
+    /// transport is not one `build()` creates over Streamable HTTP.
     pub fn build(self) -> McpClient {
         let config = self.config.unwrap_or_default();
+        #[cfg(feature = "oauth-client-credentials")]
+        let oauth = self.oauth_client_credentials;
+        #[cfg(feature = "oauth-client-credentials")]
+        if oauth.is_some() {
+            let http = self.url.as_deref().is_some_and(|u| {
+                matches!(
+                    crate::transport::detect_transport_type(u),
+                    Ok(crate::transport::TransportType::Http)
+                )
+            });
+            assert!(
+                http,
+                "with_oauth_client_credentials needs with_url() over Streamable HTTP; \
+                 for a caller-built transport use HttpTransport::with_oauth_client_credentials"
+            );
+        }
         let transport = if let Some(transport) = self.transport {
             transport
         } else if let Some(ref url) = self.url {
@@ -2636,13 +2678,21 @@ impl McpClientBuilder {
             let transport_type = crate::transport::detect_transport_type(url)
                 .expect("URL was validated in with_url() but detection failed");
             match transport_type {
-                crate::transport::TransportType::Http => Box::new(
-                    crate::transport::http::HttpTransport::with_config(url, &config.connection)
-                        .expect(
-                            "URL was validated in with_url() but transport construction failed",
-                        ),
-                )
-                    as crate::transport::BoxedTransport,
+                crate::transport::TransportType::Http => {
+                    let http =
+                        crate::transport::http::HttpTransport::with_config(url, &config.connection)
+                            .expect(
+                                "URL was validated in with_url() but transport construction failed",
+                            );
+                    #[cfg(feature = "oauth-client-credentials")]
+                    let http = match oauth {
+                        Some(credentials) => http
+                            .with_oauth_client_credentials(credentials)
+                            .expect("the OAuth HTTP client uses only default settings"),
+                        None => http,
+                    };
+                    Box::new(http) as crate::transport::BoxedTransport
+                }
                 crate::transport::TransportType::Sse => {
                     // SSE is a legacy transport — ConnectionConfig not wired (no with_config)
                     Box::new(

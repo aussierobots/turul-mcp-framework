@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-client"
-version = "0.4.16"
+version = "0.4.17"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -15,7 +15,7 @@ categories = ["network-programming"]
 
 [package.metadata.docs.rs]
 # Build the opt-in features too, so their API appears on docs.rs.
-features = ["ext-tasks", "ext-apps", "ext-skills"]
+features = ["ext-tasks", "ext-apps", "ext-skills", "oauth-client-credentials"]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
@@ -61,6 +61,9 @@ thiserror = { workspace = true }
 rand = { workspace = true }
 parking_lot = { workspace = true }
 
+# Client assertion signing (oauth-client-credentials); same major as turul-jwt-validator's.
+jsonwebtoken = { workspace = true, optional = true }
+
 # Logging
 tracing = { workspace = true }
 
@@ -86,6 +89,9 @@ ext-apps = ["dep:turul-mcp-ext-apps"]
 # Skills extension (io.modelcontextprotocol/skills, SEP-2640; ADR-033 §6) client surface —
 # 2026-07-28 connections only; off by default per SEP-2133.
 ext-skills = ["dep:turul-mcp-ext-skills", "dep:base64"]
+# OAuth Client Credentials extension (io.modelcontextprotocol/oauth-client-credentials;
+# ADR-039): the HTTP transport obtains machine-to-machine tokens itself. Off by default.
+oauth-client-credentials = ["dep:jsonwebtoken"]
 # Narrowing: each speaks exactly ONE wire spec. Requires --no-default-features
 # (otherwise client-bilingual is also active and the mutex fires). The frozen
 # 2025-11-25 protocol crate is always linked as the shared type vocabulary;
@@ -115,3 +121,10 @@ turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.4" }
 # The frozen 0.3.47 server, in-process, so the legacy-server probe test asserts
 # on the bytes it really sends rather than a hand-written mock.
 turul-mcp-server-legacy = { package = "turul-mcp-server", version = "=0.3.47" }
+# OAuth Client Credentials tests (ADR-039): a real resource server validating
+# tokens a wiremock authorization server signs, and the keys to sign them.
+turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4.5" }
+jsonwebtoken.workspace = true
+rsa.workspace = true
+crypto-bigint.workspace = true
+base64.workspace = true

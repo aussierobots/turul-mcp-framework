@@ -55,6 +55,10 @@ pub struct HttpTransport {
     /// per-request `_meta` protocolVersion). A 2026-07-28 (stateless) connection also
     /// stops sending the removed `Mcp-Session-Id` header.
     protocol_version: Arc<parking_lot::RwLock<String>>,
+    /// OAuth Client Credentials token source (ADR-039). When set it owns the
+    /// `Authorization` header and `auth_override` is not applied.
+    #[cfg(feature = "oauth-client-credentials")]
+    token_source: Option<Arc<crate::oauth_client_credentials::TokenSource>>,
 }
 
 impl HttpTransport {
@@ -98,6 +102,8 @@ impl HttpTransport {
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
             protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
+            #[cfg(feature = "oauth-client-credentials")]
+            token_source: None,
         })
     }
 
@@ -171,6 +177,8 @@ impl HttpTransport {
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
             protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
+            #[cfg(feature = "oauth-client-credentials")]
+            token_source: None,
         })
     }
 
@@ -194,7 +202,29 @@ impl HttpTransport {
             session_id: Arc::new(parking_lot::Mutex::new(None)),
             auth_override: Arc::new(parking_lot::RwLock::new(None)),
             protocol_version: Arc::new(parking_lot::RwLock::new("2025-11-25".to_string())),
+            #[cfg(feature = "oauth-client-credentials")]
+            token_source: None,
         })
+    }
+
+    /// Attaches OAuth client credentials: the transport obtains, caches and
+    /// refreshes access tokens itself (ADR-039). They replace any bearer set
+    /// with [`Transport::update_auth_header`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`McpClientError::Config`](crate::McpClientError::Config) if the
+    /// HTTP client for the authorization server cannot be built.
+    #[cfg(feature = "oauth-client-credentials")]
+    pub fn with_oauth_client_credentials(
+        mut self,
+        credentials: crate::oauth_client_credentials::ClientCredentials,
+    ) -> McpClientResult<Self> {
+        self.token_source = Some(Arc::new(crate::oauth_client_credentials::TokenSource::new(
+            credentials,
+            self.endpoint.clone(),
+        )?));
+        Ok(self)
     }
 
     /// Sets the session ID to use for subsequent requests.
@@ -288,11 +318,61 @@ impl HttpTransport {
     /// reqwest, so this transparently supersedes any bearer baked in via
     /// `ConnectionConfig::headers`.
     fn apply_auth_override(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        #[cfg(feature = "oauth-client-credentials")]
+        if self.token_source.is_some() {
+            return builder;
+        }
         if let Some(value) = self.auth_override.read().as_ref() {
             builder.header(reqwest::header::AUTHORIZATION, value)
         } else {
             builder
         }
+    }
+
+    /// Sends a request. With OAuth client credentials attached it carries the
+    /// current token, and a `401` gets one refresh and one retry (ADR-039 §6).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TransportError::Http`] (prefixed with `what`) when the request
+    /// cannot be sent, and [`McpClientError::Auth`](crate::McpClientError::Auth)
+    /// when a token cannot be obtained.
+    async fn dispatch(
+        &self,
+        builder: reqwest::RequestBuilder,
+        what: &str,
+    ) -> McpClientResult<Response> {
+        let send = |b: reqwest::RequestBuilder| async move {
+            b.send()
+                .await
+                .map_err(|e| TransportError::Http(format!("{what}: {e}")))
+        };
+        #[cfg(feature = "oauth-client-credentials")]
+        if let Some(source) = &self.token_source {
+            let retry = builder.try_clone();
+            let sent = source.current().await?;
+            let first = match &sent {
+                Some(token) => builder.bearer_auth(token),
+                None => builder,
+            };
+            let response = send(first).await?;
+            if response.status() != reqwest::StatusCode::UNAUTHORIZED {
+                return Ok(response);
+            }
+            let Some(retry) = retry else {
+                return Ok(response);
+            };
+            let challenge = response
+                .headers()
+                .get(reqwest::header::WWW_AUTHENTICATE)
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_owned);
+            let token = source
+                .after_unauthorized(challenge.as_deref(), sent.as_deref())
+                .await?;
+            return Ok(send(retry.bearer_auth(token)).await?);
+        }
+        Ok(send(builder).await?)
     }
 
     /// Updates statistics.
@@ -741,11 +821,9 @@ impl Transport for HttpTransport {
             warn!("HTTP request attempted without session ID - server may reject");
         }
 
-        let response = req_builder
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        let response = self
+            .dispatch(req_builder.json(&request), "Failed to send request")
+            .await?;
 
         let result = Self::rescue_400_jsonrpc_envelope(self.handle_response(response).await)?;
 
@@ -788,11 +866,9 @@ impl Transport for HttpTransport {
         req_builder = self.apply_request_metadata_headers(req_builder, &request);
         req_builder = self.apply_auth_override(req_builder);
 
-        let response = req_builder
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        let response = self
+            .dispatch(req_builder.json(&request), "Failed to send request")
+            .await?;
         if !response.status().is_success() {
             let status = response.status().as_u16();
             let message = response.text().await.unwrap_or_default();
@@ -853,11 +929,9 @@ impl Transport for HttpTransport {
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
         }
 
-        let response = req_builder
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        let response = self
+            .dispatch(req_builder.json(&request), "Failed to send request")
+            .await?;
         Self::rescue_400_jsonrpc_envelope(self.handle_response(response).await)
     }
 
@@ -901,11 +975,9 @@ impl Transport for HttpTransport {
             debug!("HTTP request without session ID (expected for initialize)");
         }
 
-        let response = req_builder
-            .json(&request)
-            .send()
-            .await
-            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        let response = self
+            .dispatch(req_builder.json(&request), "Failed to send request")
+            .await?;
 
         let result = self.handle_response_with_headers(response).await?;
 
@@ -958,11 +1030,12 @@ impl Transport for HttpTransport {
             warn!("HTTP notification attempted without session ID - server may reject");
         }
 
-        let response = req_builder
-            .json(&notification)
-            .send()
-            .await
-            .map_err(|e| TransportError::Http(format!("Failed to send notification: {}", e)))?;
+        let response = self
+            .dispatch(
+                req_builder.json(&notification),
+                "Failed to send notification",
+            )
+            .await?;
 
         // For notifications, we expect a 204 No Content or similar
         if response.status().is_success() {
@@ -1008,10 +1081,11 @@ impl Transport for HttpTransport {
         // the DELETE under the *new* bearer, not the one baked into
         // default_headers at transport construction.
         let response = self
-            .apply_auth_override(req_builder)
-            .send()
-            .await
-            .map_err(|e| TransportError::Http(format!("Failed to send DELETE request: {}", e)))?;
+            .dispatch(
+                self.apply_auth_override(req_builder),
+                "Failed to send DELETE request",
+            )
+            .await?;
 
         let elapsed = start_time.elapsed();
         self.update_stats(|stats| {
@@ -1093,10 +1167,15 @@ impl Transport for HttpTransport {
         let session_id = self.session_id.clone();
         let auth_override = self.auth_override.clone();
         let protocol_version = self.protocol_version.clone();
+        #[cfg(feature = "oauth-client-credentials")]
+        let token_source = self.token_source.clone();
 
         info!("Starting SSE event listener for GET requests at: {}", url);
 
         tokio::spawn(async move {
+            // One OAuth refresh per 401: set after a refresh, cleared on success.
+            #[cfg(feature = "oauth-client-credentials")]
+            let mut refreshed_after_401 = false;
             loop {
                 let mut request_builder = client
                     .get(url.as_str())
@@ -1106,8 +1185,27 @@ impl Transport for HttpTransport {
                 // Apply the live bearer override (if any) so token rotation
                 // also reaches the SSE GET. Per-request header overrides
                 // default_headers — see Transport::update_auth_header.
-                if let Some(value) = auth_override.read().as_ref() {
+                #[cfg(feature = "oauth-client-credentials")]
+                let oauth = token_source.is_some();
+                #[cfg(not(feature = "oauth-client-credentials"))]
+                let oauth = false;
+                if !oauth && let Some(value) = auth_override.read().as_ref() {
                     request_builder = request_builder.header(reqwest::header::AUTHORIZATION, value);
+                }
+                // The OAuth token source owns Authorization when attached; an
+                // expired token is refreshed here (ADR-039 §6).
+                #[cfg(feature = "oauth-client-credentials")]
+                let mut sent_token = None;
+                #[cfg(feature = "oauth-client-credentials")]
+                if let Some(source) = &token_source {
+                    match source.current().await {
+                        Ok(Some(token)) => {
+                            request_builder = request_builder.bearer_auth(&token);
+                            sent_token = Some(token);
+                        }
+                        Ok(None) => {}
+                        Err(e) => warn!("SSE GET: no OAuth token: {e}"),
+                    }
                 }
 
                 // Snapshot the session ID at request-build time. We need the
@@ -1126,6 +1224,10 @@ impl Transport for HttpTransport {
 
                 let response = match request_builder.send().await {
                     Ok(resp) if resp.status().is_success() => {
+                        #[cfg(feature = "oauth-client-credentials")]
+                        {
+                            refreshed_after_401 = false;
+                        }
                         debug!("SSE connection established, status: {}", resp.status());
 
                         let content_type = resp
@@ -1181,6 +1283,30 @@ impl Transport for HttpTransport {
                         // flight, leave the new value alone. Then emit the error and
                         // exit; the caller drives
                         // recovery by re-running initialize and restarting the listener.
+                        // A 401 is an authentication failure, not the end of the
+                        // session: with OAuth attached, refresh once and retry.
+                        #[cfg(feature = "oauth-client-credentials")]
+                        if status == reqwest::StatusCode::UNAUTHORIZED
+                            && !refreshed_after_401
+                            && let Some(source) = &token_source
+                        {
+                            let challenge = resp
+                                .headers()
+                                .get(reqwest::header::WWW_AUTHENTICATE)
+                                .and_then(|v| v.to_str().ok())
+                                .map(str::to_owned);
+                            match source
+                                .after_unauthorized(challenge.as_deref(), sent_token.as_deref())
+                                .await
+                            {
+                                Ok(_) => {
+                                    refreshed_after_401 = true;
+                                    continue;
+                                }
+                                Err(e) => warn!("SSE GET: OAuth refresh failed: {e}"),
+                            }
+                        }
+
                         if status.is_client_error() {
                             let mut guard = session_id.lock();
                             if *guard == sent_session_id {

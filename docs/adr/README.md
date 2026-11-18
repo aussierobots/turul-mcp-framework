@@ -69,6 +69,7 @@ Each ADR follows the standard format:
 | [036](./036-deterministic-wire-maps.md) | Wire maps serialize in sorted key order | Accepted | 2026-11-14 | Every `HashMap` field of a 2026-07-28 wire type serializes through `serde_maps::sorted`, so output bytes are stable |
 | [037](./037-macro-declared-spec-fields.md) | Macros declare every per-object spec field they can know at compile time | Accepted | 2026-11-15 | `meta =` on every tool, resource and prompt macro form, plus resource `icons`/`annotations` and prompt `title`; `resources/templates/list` serves every declared field |
 | [038](./038-server-cards-experimental.md) | Server Cards (experimental): `turul-mcp-ext-server-card` and `with_server_card` | Accepted | 2026-11-17 | Serves `GET <mcp_path>/server-card` with the spec's CORS, caching and `ETag`; card fields shared with `server/discover` are copied from it, and a contradiction fails `build()`; a route's own CORS headers survive the transport's |
+| [039](./039-oauth-client-credentials.md) | OAuth Client Credentials on the client (`oauth-client-credentials`) | Accepted | 2026-11-18 | The HTTP transport gets machine-to-machine tokens itself: 401 → PRM → AS metadata → `client_credentials` with a secret or `private_key_jwt`; credentials are bound to one issuer; cached, refreshed, one retry on 401 |
 
 ## Tasks Architecture ADRs
 

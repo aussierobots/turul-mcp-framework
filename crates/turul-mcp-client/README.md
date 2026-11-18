@@ -488,10 +488,42 @@ turul-mcp-client = { version = "0.4", features = ["sse"] }
 ```
 
 Available features:
-- `default` = `["http", "sse"]` - HTTP and SSE transport
+- `default` = `["http", "sse", "client-bilingual"]` - HTTP and SSE transport, both wire specs
 - `http` - HTTP transport support (included by default)
 - `sse` - Server-Sent Events transport (included by default)
+- `ext-tasks`, `ext-apps`, `ext-skills` - extension client surfaces (off by default)
+- `oauth-client-credentials` - OAuth Client Credentials: the HTTP transport gets
+  machine-to-machine tokens itself (off by default; see below)
 - `stdio` - *(Planned)* Standard I/O transport for executable servers
+
+## OAuth Client Credentials
+
+With the `oauth-client-credentials` feature, the HTTP transport obtains access
+tokens itself, following the MCP OAuth Client Credentials extension. On the
+first `401` it reads the server's Protected Resource Metadata and the
+authorization server's metadata, then requests a token with
+`grant_type=client_credentials`. It caches the token, refreshes it before
+expiry, and retries a `401` once.
+
+```rust
+use turul_mcp_client::McpClientBuilder;
+use turul_mcp_client::oauth_client_credentials::ClientCredentials;
+
+// Read the secret from the environment or a secrets store; never hardcode it.
+let secret = std::env::var("MCP_CLIENT_SECRET")?;
+let client = McpClientBuilder::new()
+    .with_url("https://mcp.example.com/mcp")?
+    .with_oauth_client_credentials(
+        ClientCredentials::client_secret("https://auth.example.com", "my-client", secret)
+            .with_scope("mcp:read"),
+    )
+    .build();
+```
+
+`ClientCredentials::private_key_jwt` authenticates with a signed JWT instead
+(RFC 7523). The credentials are bound to the issuer you give them. They are sent
+only when the resource server lists that issuer and its metadata names the same
+`issuer`, so a resource server cannot redirect them elsewhere.
 
 ## Error Reference
 

@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.34] - 2026-11-18
+
+`turul-mcp-client` 0.4.16 → 0.4.17.
+
+### Added
+
+- **OAuth Client Credentials on the client (ADR-039), feature `oauth-client-credentials`, off by
+  default.** This implements the `io.modelcontextprotocol/oauth-client-credentials` extension
+  (ext-auth `15ca394`): machine-to-machine tokens with no user.
+  - **Setup:** pass `ClientCredentials` to `McpClientBuilder::with_oauth_client_credentials` or
+    `HttpTransport::with_oauth_client_credentials`. It authenticates with a client secret
+    (`client_secret_basic`, else `client_secret_post`) or a signed JWT (`private_key_jwt`,
+    RFC 7523).
+  - **Token flow:** on the first `401` the transport reads the Protected Resource Metadata and
+    the authorization server metadata (RFC 8414, then OpenID Connect discovery), then requests
+    a token with `resource` and `scope`. Tokens are cached and refreshed 30 s before
+    `expires_in`, and concurrent requests share one fetch. A `401` gets one refresh and one
+    retry.
+  - **Issuer binding:** the credentials are bound to their issuer. They are sent only when the
+    resource server lists that issuer and the metadata's `issuer` matches it exactly, so a
+    resource server cannot redirect them to an authorization server it controls.
+  - **URL checks:** authorization server URLs must be `https` except on loopback, and
+    redirects are not followed.
+  - **Tokens:** `expires_in` may be a number or a numeric string. A short-lived token is
+    refreshed at half its lifetime. If an early refresh fails, the unexpired token is still
+    sent.
+  - **SSE GET (2025-11-25 lane):** a `401` gets one refresh, and the session is kept.
+- `McpClientBuilder::build()` now panics if credentials are set together with `with_transport`.
+  Attach them to that transport instead.
+
+### Fixed
+
+- The CHANGELOG comparison links for 0.4.30 to 0.4.33 were missing.
+
 ## [0.4.33] - 2026-11-18
 
 Every active crate is a patch: `turul-http-mcp-server` 0.4.14, `turul-mcp-aws-lambda` 0.4.13,
@@ -3360,7 +3394,12 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.29...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.34...HEAD
+[0.4.34]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.33...v0.4.34
+[0.4.33]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.32...v0.4.33
+[0.4.32]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.31...v0.4.32
+[0.4.31]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.30...v0.4.31
+[0.4.30]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.29...v0.4.30
 [0.4.29]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.28...v0.4.29
 [0.4.28]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.27...v0.4.28
 [0.4.27]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.26...v0.4.27
