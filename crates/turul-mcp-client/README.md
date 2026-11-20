@@ -17,6 +17,7 @@ MCP client library with multi-transport support. Bilingual by default: it negoti
 - ✅ **Streaming Support** - Real-time event streaming and progress tracking
 - ✅ **Async/Await** - Built on Tokio for high performance
 - ✅ **Error Recovery** - Comprehensive error types and retry mechanisms
+- ✅ **wasm32** - Builds for `wasm32-unknown-unknown` (browser or Node) on the 2026-07-28 HTTP lane
 
 ## Quick Start
 
@@ -96,6 +97,31 @@ let client = McpClientBuilder::new()
     .with_transport(Box::new(transport))
     .build();
 ```
+
+### WebAssembly (wasm32-unknown-unknown)
+
+The client builds for `wasm32-unknown-unknown` under wasm-bindgen (a browser page, or
+Node) and speaks the MCP 2026-07-28 stateless HTTP lane ([ADR-040](https://github.com/aussierobots/turul-mcp-framework/blob/main/docs/adr/040-client-wasm32.md)):
+
+```toml
+[dependencies]
+turul-mcp-client = { version = "0.4.18", default-features = false, features = ["http", "client-2026-07-28-only"] }
+```
+
+The API is the same as on native. Run it on wasm-bindgen's executor, for
+example with `wasm_bindgen_futures::spawn_local`. On wasm32:
+
+- futures are not `Send`. A custom `Transport` implementation uses
+  `#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]`.
+- each request has a 30 s timeout. No `User-Agent` is sent, and the host owns
+  connection pooling. `follow_redirects: false` is refused, because fetch
+  always follows redirects.
+- these fail to compile with a message: the default (bilingual) feature set,
+  the 2025-11-25 lane, `oauth-client-credentials`, and wasm32 targets other than
+  `unknown`. The SSE transport is not available.
+- a page on another origin needs the server to allow it. A turul server
+  enables CORS by default and allows the headers the client sends, except
+  `Mcp-Param-*`.
 
 ### Future Transport Support
 

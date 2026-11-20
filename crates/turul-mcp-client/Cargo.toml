@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-client"
-version = "0.4.17"
+version = "0.4.18"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -42,14 +42,12 @@ turul-rpc = { workspace = true }
 # 2026-07-28 wire path only: validates tools/list inputSchema.
 turul-mcp-schema-validation = { workspace = true, optional = true }
 
-# Async runtime
-tokio = { workspace = true, features = ["full"] }
+# Async runtime (tokio itself is per target, below)
 futures = { workspace = true }
 async-trait = { workspace = true }
 
 # HTTP client
 reqwest = { workspace = true, features = ["json", "stream", "http2"] }
-hyper = { workspace = true }
 
 # JSON handling
 serde = { workspace = true }
@@ -61,14 +59,27 @@ thiserror = { workspace = true }
 rand = { workspace = true }
 parking_lot = { workspace = true }
 
-# Client assertion signing (oauth-client-credentials); same major as turul-jwt-validator's.
-jsonwebtoken = { workspace = true, optional = true }
-
 # Logging
 tracing = { workspace = true }
 
-# Optional features for different transports
+# Native: every line as before, moved into a target table (ADR-040 §7).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["full"] }
+hyper = { workspace = true }
 tokio-util = { workspace = true, features = ["codec"], optional = true }
+# Client assertion signing (oauth-client-credentials); same major as turul-jwt-validator's.
+jsonwebtoken = { workspace = true, optional = true }
+
+# wasm32 under wasm-bindgen (ADR-040): no tokio runtime, fetch-backed reqwest.
+# tokio and tokio-util are declared here, not inherited: the workspace entries
+# enable `net`, which pulls mio, and inheritance can only add features.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+tokio = { version = "1", default-features = false, features = ["sync", "io-util"] }
+tokio-util = { version = "0.7", default-features = false, features = ["codec", "io"], optional = true }
+web-time = "1.1"
+wasm-bindgen-futures = "0.4"
+gloo-timers = { version = "0.3", features = ["futures"] }
+getrandom = { workspace = true, features = ["wasm_js"] }
 
 [features]
 default = ["http", "sse", "client-bilingual"]
@@ -99,7 +110,8 @@ oauth-client-credentials = ["dep:jsonwebtoken"]
 client-2025-11-25-only = []
 client-2026-07-28-only = ["dep:turul-mcp-protocol-2026-07-28", "dep:turul-mcp-schema-validation"]
 
-[dev-dependencies]
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+regex = { workspace = true }
 tokio-test.workspace = true
 wiremock.workspace = true
 # Real-server e2e: bilingual client against an in-process 2026 stateless server.
@@ -127,4 +139,9 @@ turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4.5" }
 jsonwebtoken.workspace = true
 rsa.workspace = true
 crypto-bigint.workspace = true
+base64.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test = "0.3"
+gloo-timers = { version = "0.3", features = ["futures"] }
 base64.workspace = true

@@ -1,9 +1,9 @@
 //! Main MCP client implementation
 
+use crate::rt::timeout;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tokio::time::timeout;
 use tracing::{debug, info, warn};
 use turul_rpc::{JsonRpcNotification, JsonRpcRequest, RequestId, RequestParams};
 
@@ -53,7 +53,7 @@ pub struct McpClient {
     /// Request ID counter
     request_counter: Arc<std::sync::atomic::AtomicU64>,
     /// Handle for the response consumer task (sends JSON-RPC responses back to server)
-    response_consumer_handle: Arc<parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    response_consumer_handle: Arc<parking_lot::Mutex<Option<crate::rt::JoinHandle<()>>>>,
     /// Cached tool list (invalidated by `notifications/tools/list_changed`)
     cached_tools: Arc<RwLock<Option<Vec<Tool>>>>,
     /// SEP-2243 `Mcp-Param-*` bindings per tool, from the raw 2026 `tools/list`
@@ -153,7 +153,7 @@ impl Drop for McpClient {
 
         // Spawn a background task to handle cleanup
         // We can't await in Drop, so we spawn a task that will complete cleanup
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             // Only send DELETE if we have a session ID
             if let Some(session_id_str) = session_id.session_id_optional().await {
                 info!(
@@ -321,7 +321,7 @@ impl McpClient {
 
                 // Spawn consumer task that drains the channel and sends responses
                 let transport_clone = Arc::clone(&self.transport);
-                let consumer_handle = tokio::spawn(async move {
+                let consumer_handle = crate::rt::spawn(async move {
                     while let Some(response) = response_rx.recv().await {
                         if let Err(e) = transport_clone.send_notification(response).await {
                             warn!("Failed to send response back to server: {}", e);
@@ -723,7 +723,7 @@ impl McpClient {
                     delay_ms = delay.as_millis(),
                     "Retrying request"
                 );
-                tokio::time::sleep(delay).await;
+                crate::rt::sleep(delay).await;
             }
 
             match self.send_request_raw(request.clone()).await {
@@ -830,7 +830,7 @@ impl McpClient {
                     delay_ms = delay.as_millis(),
                     "Retrying request with headers"
                 );
-                tokio::time::sleep(delay).await;
+                crate::rt::sleep(delay).await;
             }
 
             match self.send_request_with_headers_raw(request.clone()).await {
@@ -1140,7 +1140,7 @@ impl McpClient {
         }
         let mut renegotiated = false;
         let response = loop {
-            let sent = tokio::time::timeout(
+            let sent = crate::rt::timeout(
                 self.config.timeouts.request,
                 self.transport
                     .send_request_with_extra_headers(request.clone(), extra_headers),
@@ -1296,7 +1296,7 @@ impl McpClient {
             let mut receiver = self.transport.send_request_streaming(request).await?;
 
             // The server MUST send the acknowledgement first.
-            let ack = tokio::time::timeout(self.config.timeouts.request, receiver.recv())
+            let ack = crate::rt::timeout(self.config.timeouts.request, receiver.recv())
                 .await
                 .map_err(|_| McpClientError::Timeout)?
                 .ok_or_else(|| {
@@ -1397,10 +1397,10 @@ impl McpClient {
             let request = self.build_request("tools/call", params);
             let mut receiver = self.transport.send_request_streaming(request).await?;
 
-            let deadline = tokio::time::Instant::now() + self.config.timeouts.request;
+            let deadline = crate::rt::TimerInstant::now() + self.config.timeouts.request;
             loop {
-                let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-                let frame = tokio::time::timeout(remaining, receiver.recv())
+                let remaining = deadline.saturating_duration_since(crate::rt::TimerInstant::now());
+                let frame = crate::rt::timeout(remaining, receiver.recv())
                     .await
                     .map_err(|_| McpClientError::Timeout)?
                     .ok_or_else(|| {
@@ -1684,7 +1684,7 @@ impl McpClient {
                 .poll_interval_ms
                 .unwrap_or(500.0)
                 .clamp(50.0, 30_000.0);
-            tokio::time::sleep(std::time::Duration::from_millis(interval_ms as u64)).await;
+            crate::rt::sleep(std::time::Duration::from_millis(interval_ms as u64)).await;
         }
     }
 
@@ -2693,6 +2693,11 @@ impl McpClientBuilder {
                     };
                     Box::new(http) as crate::transport::BoxedTransport
                 }
+                #[cfg(target_arch = "wasm32")]
+                crate::transport::TransportType::Sse => {
+                    panic!("the SSE transport is not available on wasm32 (ADR-040 §3); use HTTP")
+                }
+                #[cfg(not(target_arch = "wasm32"))]
                 crate::transport::TransportType::Sse => {
                     // SSE is a legacy transport — ConnectionConfig not wired (no with_config)
                     Box::new(

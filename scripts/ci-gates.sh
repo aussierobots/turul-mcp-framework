@@ -5,7 +5,7 @@
 #   opt-in lane   = 2025-11-25 (legacy)
 #
 # Gates mirror docs/plans/2026-07-28-final-readiness-audit.md §7.
-# Usage:  scripts/ci-gates.sh [fmt|default|opt-in-2025|lambda|mutex|docs|examples|conformance|all]  (default: all)
+# Usage:  scripts/ci-gates.sh [fmt|default|opt-in-2025|lambda|mutex|docs|examples|conformance|wasm|all]  (default: all)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -274,6 +274,45 @@ gate_conformance() {
   fi
 }
 
+# wasm32-unknown-unknown (ADR-040): the client's 2026-07-28 HTTP lane under
+# wasm-bindgen. Needs the wasm32 target, Node >= 20, Firefox with geckodriver, and
+# wasm-bindgen-test-runner at the wasm-bindgen version in Cargo.lock
+# (override the binary with WASM_BINDGEN_TEST_RUNNER, the driver with GECKODRIVER).
+gate_wasm() {
+  local wasm=(--target wasm32-unknown-unknown -p turul-mcp-client --no-default-features --features http,client-2026-07-28-only)
+  local runner="${WASM_BINDGEN_TEST_RUNNER:-$(command -v wasm-bindgen-test-runner)}"
+  local locked
+  locked=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/[^0-9.]/, ""); print; exit}' Cargo.lock)
+  run "wasm-bindgen-test-runner matches Cargo.lock wasm-bindgen $locked" \
+    bash -c "[ -x '$runner' ] && '$runner' --version | grep -qx 'wasm-bindgen-test-runner $locked'"
+  run "wasm32 check (http, client-2026-07-28-only)" cargo check "${wasm[@]}"
+  run "wasm32 refuses the default feature set with ADR-040's message" bash -c \
+    "cargo check --target wasm32-unknown-unknown -p turul-mcp-client 2>&1 | grep -q 'only the 2026-07-28 lane is supported (ADR-040)'"
+  run "wasm32 refuses oauth-client-credentials with ADR-040's message" bash -c \
+    "cargo check ${wasm[*]},oauth-client-credentials 2>&1 | grep -q 'oauth-client-credentials\` is not supported on wasm32'"
+  run "wasm32 clippy (deny warnings)" env TURUL_WASM_E2E_URL=unset TURUL_WASM_E2E_DEAD_URL=unset \
+    cargo clippy "${wasm[@]}" --lib --test wasm -- -D warnings
+
+  # Fixture on a free port; a second free port, checked closed, is the dead URL.
+  local ports port dead fixture_pid
+  ports=$(python3 -c 'import socket
+s=[socket.socket() for _ in range(2)]
+[x.bind(("127.0.0.1",0)) for x in s]
+print(" ".join(str(x.getsockname()[1]) for x in s))')
+  read -r port dead <<<"$ports"
+  run "build wasm_e2e_fixture" cargo build -p turul-mcp-client --example wasm_e2e_fixture
+  cargo run -q -p turul-mcp-client --example wasm_e2e_fixture -- --port "$port" &
+  fixture_pid=$!
+  for _ in $(seq 1 100); do curl -s -o /dev/null "http://127.0.0.1:$port/mcp" && break; sleep 0.1; done
+  run "dead port $dead is closed" bash -c "! curl -s -o /dev/null http://127.0.0.1:$dead/mcp"
+  local env=(env TURUL_WASM_E2E_URL="http://127.0.0.1:$port/mcp" TURUL_WASM_E2E_DEAD_URL="http://127.0.0.1:$dead/mcp"
+             CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUNNER="$runner")
+  run "wasm32 tests under Node" "${env[@]}" cargo test "${wasm[@]}" --test wasm
+  run "wasm32 tests in headless Firefox (cross-origin)" "${env[@]}" WASM_BINDGEN_USE_BROWSER=1 \
+    GECKODRIVER="${GECKODRIVER:-$(command -v geckodriver)}" cargo test "${wasm[@]}" --test wasm
+  kill "$fixture_pid" 2>/dev/null; wait "$fixture_pid" 2>/dev/null
+}
+
 case "${1:-all}" in
   fmt)          gate_fmt ;;
   default)      gate_default ;;
@@ -283,8 +322,9 @@ case "${1:-all}" in
   docs)         gate_docs ;;
   examples)     gate_examples ;;
   conformance)  gate_conformance ;;
-  all)          gate_fmt; gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs; gate_examples; gate_conformance ;;
-  *) echo "usage: $0 [fmt|default|opt-in-2025|lambda|mutex|docs|examples|conformance|all]"; exit 2 ;;
+  wasm)         gate_wasm ;;
+  all)          gate_fmt; gate_default; gate_opt_in_2025; gate_lambda; gate_mutex; gate_docs; gate_examples; gate_conformance; gate_wasm ;;
+  *) echo "usage: $0 [fmt|default|opt-in-2025|lambda|mutex|docs|examples|conformance|wasm|all]"; exit 2 ;;
 esac
 
 echo; [ "$fail" = "0" ] && echo "ALL GATES PASSED" || echo "ONE OR MORE GATES FAILED"

@@ -13,6 +13,7 @@ name: CI
 #   default-2026 30 -> 30  parity
 #   opt-in-2025  36 -> 36  parity
 #   mutex/docs         parity
+#   wasm         9  -> 9   parity (ADR-040; Node and headless Firefox)
 #   lambda       3  -> 0   no hosted job: needs the cargo-lambda + Zig
 #                          cross-compilation toolchain
 #   examples     5  -> 0   no hosted job: boots real servers over six phases
@@ -275,6 +276,29 @@ jobs:
           # They were themselves absent from CI until 2026-08-02.
           cargo test -p turul-mcp-framework-integration-tests --test examples_guard
           cargo test -p turul-mcp-framework-integration-tests --test reachability_guard
+
+  # Mirrors `scripts/ci-gates.sh wasm` (ADR-040): the client on
+  # wasm32-unknown-unknown under Node and headless Firefox, against a native
+  # 2026-07-28 fixture. ubuntu-latest ships Node, Firefox and geckodriver.
+  wasm:
+    name: wasm32 client (ADR-040)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: wasm-bindgen-test-runner at the Cargo.lock wasm-bindgen version
+        run: |
+          version=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/[^0-9.]/, ""); print; exit}' Cargo.lock)
+          cargo install --locked wasm-bindgen-cli --version "$version"
+      - name: wasm gate
+        run: GECKODRIVER="${GECKOWEBDRIVER:+$GECKOWEBDRIVER/geckodriver}" ./scripts/ci-gates.sh wasm
 
   spec-mutex:
     name: Spec mutex (both features must not compile)
