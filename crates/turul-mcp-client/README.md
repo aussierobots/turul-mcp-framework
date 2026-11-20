@@ -105,7 +105,7 @@ Node) and speaks the MCP 2026-07-28 stateless HTTP lane ([ADR-040](https://githu
 
 ```toml
 [dependencies]
-turul-mcp-client = { version = "0.4.18", default-features = false, features = ["http", "client-2026-07-28-only"] }
+turul-mcp-client = { version = "0.4.19", default-features = false, features = ["http", "client-2026-07-28-only"] }
 ```
 
 The API is the same as on native. Run it on wasm-bindgen's executor, for

@@ -52,8 +52,13 @@ pub(crate) enum DiscoverProbe {
     /// `Mcp-Session-Id` (JSON-RPC `-32001`). Built only by
     /// [`probe_from_jsonrpc_error`].
     MissingSessionId,
-    /// The HTTP request itself failed with this non-2xx status.
-    HttpStatus(u16),
+    /// The HTTP request itself failed with this non-2xx status and body.
+    HttpStatus {
+        /// The HTTP status code.
+        status: u16,
+        /// The response body, kept so the caller sees why.
+        message: String,
+    },
 }
 
 /// What to do next, given a probe outcome.
@@ -66,6 +71,15 @@ pub(crate) enum ProbeDecision {
     FallbackTo2025,
     /// Abort negotiation — do NOT downgrade. Carries a human-readable reason.
     Abort(String),
+    /// Abort with the probe's HTTP failure, reported to the caller as that
+    /// status and body: a transport or authorization failure, not a version
+    /// signal (ADR-030).
+    HttpFailure {
+        /// The HTTP status code.
+        status: u16,
+        /// The response body.
+        message: String,
+    },
 }
 
 /// JSON-RPC "Method not found" — signals a pre-2026 server (one that lacks the
@@ -191,7 +205,7 @@ pub(crate) fn classify_probe(
         )),
 
         // Opt-in escape hatch for gateways that 404/405 unknown methods.
-        DiscoverProbe::HttpStatus(status)
+        DiscoverProbe::HttpStatus { status, .. }
             if allow_legacy_gateway_fallback && (status == 404 || status == 405) =>
         {
             ProbeDecision::FallbackTo2025
@@ -200,16 +214,22 @@ pub(crate) fn classify_probe(
         // All other HTTP failures are transport/authorization problems, NOT a
         // version signal. Aborting (rather than downgrading) preserves the
         // protocol the caller asked for.
-        DiscoverProbe::HttpStatus(status) => ProbeDecision::Abort(format!(
-            "server/discover failed with HTTP {status}; transport or authorization \
-             failure, not a version signal (no silent downgrade)"
-        )),
+        DiscoverProbe::HttpStatus { status, message } => {
+            ProbeDecision::HttpFailure { status, message }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn http(status: u16) -> DiscoverProbe {
+        DiscoverProbe::HttpStatus {
+            status,
+            message: format!("body {status}"),
+        }
+    }
 
     #[test]
     fn version_wire_strings() {
@@ -355,11 +375,12 @@ mod tests {
         // method-not-found (-32601) path instead — see
         // `legacy_error_codes_fall_back_to_2025`.
         for status in [400, 401, 403, 404, 405, 429] {
-            assert!(
-                matches!(
-                    classify_probe(DiscoverProbe::HttpStatus(status), false),
-                    ProbeDecision::Abort(_)
-                ),
+            assert_eq!(
+                classify_probe(http(status), false),
+                ProbeDecision::HttpFailure {
+                    status,
+                    message: format!("body {status}")
+                },
                 "HTTP {status} must abort by default (no silent downgrade)"
             );
         }
@@ -368,19 +389,19 @@ mod tests {
     #[test]
     fn legacy_gateway_hatch_allows_only_404_405_fallback() {
         assert_eq!(
-            classify_probe(DiscoverProbe::HttpStatus(404), true),
+            classify_probe(http(404), true),
             ProbeDecision::FallbackTo2025
         );
         assert_eq!(
-            classify_probe(DiscoverProbe::HttpStatus(405), true),
+            classify_probe(http(405), true),
             ProbeDecision::FallbackTo2025
         );
         // Auth/server failures still abort even with the hatch enabled.
         for status in [400, 401, 403, 500] {
             assert!(
                 matches!(
-                    classify_probe(DiscoverProbe::HttpStatus(status), true),
-                    ProbeDecision::Abort(_)
+                    classify_probe(http(status), true),
+                    ProbeDecision::HttpFailure { status: s, .. } if s == status
                 ),
                 "HTTP {status} must abort even with the legacy-gateway hatch on"
             );
