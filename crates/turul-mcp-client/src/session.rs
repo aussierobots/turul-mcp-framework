@@ -8,9 +8,10 @@
 //! The wire string for that lane has one owner, [`McpVersion::V2025_11_25`];
 //! this module consumes it rather than redeclaring it.
 
+use crate::rt::Instant;
 use serde_json::Value;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 

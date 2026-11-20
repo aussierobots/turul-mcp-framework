@@ -1,6 +1,5 @@
 //! Transport layer for the MCP client: the [`Transport`] trait and its HTTP and SSE implementations.
 
-use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
 use url::Url;
@@ -8,9 +7,11 @@ use url::Url;
 use crate::error::{McpClientResult, TransportError};
 
 pub mod http;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod sse;
 
 pub use http::HttpTransport;
+#[cfg(not(target_arch = "wasm32"))]
 #[allow(deprecated)] // re-exported for unmigrated ≤2024-11-05 servers (SEP-2596)
 pub use sse::SseTransport;
 
@@ -87,7 +88,11 @@ impl TransportResponse {
 }
 
 /// Interface implemented by every MCP client transport.
-#[async_trait]
+///
+/// On wasm32 the futures are not `Send` (ADR-040 §5): an implementation that
+/// targets wasm32 uses `#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]`.
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 pub trait Transport: Send + Sync {
     /// Returns the transport type.
     fn transport_type(&self) -> TransportType;
@@ -335,8 +340,11 @@ impl TransportFactory {
 
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(url)?)),
+            #[cfg(not(target_arch = "wasm32"))]
             #[allow(deprecated)] // factory keeps serving ≤2024-11-05 servers (SEP-2596)
             TransportType::Sse => Ok(Box::new(SseTransport::new(url)?)),
+            #[cfg(target_arch = "wasm32")]
+            TransportType::Sse => Err(sse_unsupported()),
         }
     }
 
@@ -351,15 +359,30 @@ impl TransportFactory {
     ) -> McpClientResult<BoxedTransport> {
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(endpoint)?)),
+            #[cfg(not(target_arch = "wasm32"))]
             #[allow(deprecated)] // factory keeps serving ≤2024-11-05 servers (SEP-2596)
             TransportType::Sse => Ok(Box::new(SseTransport::new(endpoint)?)),
+            #[cfg(target_arch = "wasm32")]
+            TransportType::Sse => Err(sse_unsupported()),
         }
     }
 
-    /// Lists the available transport types.
+    /// Lists the available transport types. On wasm32 that is HTTP only.
     pub fn available_transports() -> Vec<TransportType> {
-        vec![TransportType::Http, TransportType::Sse]
+        #[cfg(not(target_arch = "wasm32"))]
+        return vec![TransportType::Http, TransportType::Sse];
+        #[cfg(target_arch = "wasm32")]
+        return vec![TransportType::Http];
     }
+}
+
+/// The error for an SSE transport on wasm32, where `SseTransport` is not compiled (ADR-040 §3).
+#[cfg(target_arch = "wasm32")]
+fn sse_unsupported() -> crate::error::McpClientError {
+    TransportError::ConnectionFailed(
+        "the SSE transport is not available on wasm32; use HTTP".to_string(),
+    )
+    .into()
 }
 
 #[cfg(test)]

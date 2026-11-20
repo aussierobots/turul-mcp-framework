@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.35] - 2026-11-20
+
+`turul-mcp-client` 0.4.17 → 0.4.18.
+
+### Added
+
+- **`turul-mcp-client` builds for `wasm32-unknown-unknown` (ADR-040).** Browser pages and Node
+  apps compiled with wasm-bindgen get the same `McpClient` and wire code as native callers, on
+  the 2026-07-28 stateless HTTP lane. Use
+  `default-features = false, features = ["http", "client-2026-07-28-only"]`.
+  - **Runtime:** spawning, timers and the clock go through one crate-private module. On native it
+    is tokio and `std::time`, as before. On wasm32 it uses wasm-bindgen's executor, JavaScript
+    timers and `web-time`.
+  - **`Send`:** `Transport` futures are not `Send` on wasm32 (`async_trait(?Send)`). Native
+    bounds are unchanged.
+  - **HTTP:** on wasm32 the fetch backend gets a 30 s timeout on each request, with streaming
+    responses exempt. No `User-Agent` is sent, so a browser's CORS preflight passes.
+    `follow_redirects: false` is refused, because fetch always follows redirects.
+  - **Refused on wasm32 with a message:** the default (bilingual) and 2025-11-25 feature sets,
+    `oauth-client-credentials`, and non-`unknown` wasm32 targets. The SSE transport is not
+    compiled.
+  - **Tests:** `tests/wasm.rs` runs under Node and in headless Firefox, cross-origin, against a
+    native 2026-07-28 fixture (`examples/wasm_e2e_fixture.rs`). A native test checks that
+    wasm-compiled code reads the clock only through the runtime module.
+  - **Gates:** new `scripts/ci-gates.sh wasm` lane and `wasm` CI job.
+
+### Changed
+
+- **Native builds are unchanged.** The client's native dependency lines move into a
+  `cfg(not(target_arch = "wasm32"))` table. `cargo tree -e features` on the host is identical
+  before and after for the default, the `http,client-2026-07-28-only` and the
+  `oauth-client-credentials` feature sets. The unused `hyper` dependency stays, on native only.
+
 ## [0.4.34] - 2026-11-18
 
 `turul-mcp-client` 0.4.16 → 0.4.17.
@@ -3395,7 +3428,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.34...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.35...HEAD
+[0.4.35]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.34...v0.4.35
 [0.4.34]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.33...v0.4.34
 [0.4.33]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.32...v0.4.33
 [0.4.32]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.31...v0.4.32

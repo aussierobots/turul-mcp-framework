@@ -1,12 +1,12 @@
 //! Streamable HTTP transport for the MCP client.
 
-use async_trait::async_trait;
+use crate::rt::Instant;
 use futures::Stream;
 use reqwest::{Client, Response};
 use serde_json::{Deserializer, Value};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 use url::Url;
@@ -19,6 +19,11 @@ use crate::transport::{
 
 /// Accept header for MCP POST requests; the spec requires both media types.
 const MCP_POST_ACCEPT: &str = "application/json, text/event-stream";
+
+/// The per-request timeout on wasm32, where fetch has no client-level one;
+/// native clients set the same 30 s on the client.
+#[cfg(target_arch = "wasm32")]
+const WASM_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// HTTP transport for the MCP client (Streamable HTTP).
 #[derive(Debug)]
@@ -80,14 +85,20 @@ impl HttpTransport {
             .into());
         }
 
-        let client = Client::builder()
+        #[cfg(not(target_arch = "wasm32"))]
+        let builder = Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent("mcp-client/0.1.0")
             // HTTP/2 keepalives: proactively PING so silent server/intermediary drops
             // surface immediately instead of on the next real request. No-op on h1.
             .http2_keep_alive_interval(Duration::from_secs(30))
             .http2_keep_alive_timeout(Duration::from_secs(10))
-            .http2_keep_alive_while_idle(true)
+            .http2_keep_alive_while_idle(true);
+        // fetch has none of those options; the timeout is set per request in
+        // `dispatch`, and no User-Agent is set (ADR-040 §6).
+        #[cfg(target_arch = "wasm32")]
+        let builder = Client::builder();
+        let client = builder
             .build()
             .map_err(|e| TransportError::Http(format!("Failed to create HTTP client: {}", e)))?;
 
@@ -128,8 +139,23 @@ impl HttpTransport {
             .into());
         }
 
+        #[cfg(target_arch = "wasm32")]
+        if !config.follow_redirects {
+            return Err(TransportError::ConnectionFailed(
+                "follow_redirects = false is not supported on wasm32: fetch always follows redirects"
+                    .to_string(),
+            )
+            .into());
+        }
+        // fetch has no client timeout, pool, HTTP/2 or redirect options; the
+        // timeout is set per request in `dispatch`, and no User-Agent is set (ADR-040 §6).
+        #[cfg(target_arch = "wasm32")]
+        let mut builder = Client::builder();
+
+        #[cfg(not(target_arch = "wasm32"))]
         let user_agent = config.user_agent.as_deref().unwrap_or("mcp-client/0.1.0");
 
+        #[cfg(not(target_arch = "wasm32"))]
         let mut builder = Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent(user_agent)
@@ -141,13 +167,16 @@ impl HttpTransport {
             .http2_keep_alive_timeout(Duration::from_secs(10))
             .http2_keep_alive_while_idle(true);
 
-        builder = if config.follow_redirects {
-            builder.redirect(reqwest::redirect::Policy::limited(
-                config.max_redirects as usize,
-            ))
-        } else {
-            builder.redirect(reqwest::redirect::Policy::none())
-        };
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            builder = if config.follow_redirects {
+                builder.redirect(reqwest::redirect::Policy::limited(
+                    config.max_redirects as usize,
+                ))
+            } else {
+                builder.redirect(reqwest::redirect::Policy::none())
+            };
+        }
 
         if let Some(ref headers) = config.headers {
             let mut header_map = reqwest::header::HeaderMap::new();
@@ -338,6 +367,19 @@ impl HttpTransport {
     /// cannot be sent, and [`McpClientError::Auth`](crate::McpClientError::Auth)
     /// when a token cannot be obtained.
     async fn dispatch(
+        &self,
+        builder: reqwest::RequestBuilder,
+        what: &str,
+    ) -> McpClientResult<Response> {
+        // fetch has no client-level timeout; this one aborts the whole response (ADR-040 §6).
+        #[cfg(target_arch = "wasm32")]
+        let builder = builder.timeout(WASM_REQUEST_TIMEOUT);
+        self.dispatch_untimed(builder, what).await
+    }
+
+    /// [`Self::dispatch`] without the wasm32 per-request timeout, for a
+    /// response stream that stays open (`send_request_streaming`).
+    async fn dispatch_untimed(
         &self,
         builder: reqwest::RequestBuilder,
         what: &str,
@@ -741,7 +783,8 @@ impl HttpTransport {
     }
 }
 
-#[async_trait]
+#[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
+#[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
 impl Transport for HttpTransport {
     fn transport_type(&self) -> TransportType {
         TransportType::Http
@@ -867,7 +910,7 @@ impl Transport for HttpTransport {
         req_builder = self.apply_auth_override(req_builder);
 
         let response = self
-            .dispatch(req_builder.json(&request), "Failed to send request")
+            .dispatch_untimed(req_builder.json(&request), "Failed to send request")
             .await?;
         if !response.status().is_success() {
             let status = response.status().as_u16();
@@ -876,7 +919,7 @@ impl Transport for HttpTransport {
         }
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             use futures::StreamExt;
             let mut stream = response.bytes_stream();
             let mut buffer = String::new();
@@ -1122,6 +1165,7 @@ impl Transport for HttpTransport {
     }
 
     async fn start_event_listener(&self) -> McpClientResult<EventReceiver> {
+        #[cfg(not(target_arch = "wasm32"))]
         use futures::StreamExt;
 
         let (tx, rx) = mpsc::unbounded_channel();
@@ -1162,292 +1206,305 @@ impl Transport for HttpTransport {
             return Ok(rx);
         }
 
-        let client = self.client.clone();
-        let url = self.endpoint.clone();
-        let session_id = self.session_id.clone();
-        let auth_override = self.auth_override.clone();
-        let protocol_version = self.protocol_version.clone();
-        #[cfg(feature = "oauth-client-credentials")]
-        let token_source = self.token_source.clone();
-
-        info!("Starting SSE event listener for GET requests at: {}", url);
-
-        tokio::spawn(async move {
-            // One OAuth refresh per 401: set after a refresh, cleared on success.
+        // The listener serves 2025-11-25 only, which wasm32 does not build (ADR-040 §3).
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let client = self.client.clone();
+            let url = self.endpoint.clone();
+            let session_id = self.session_id.clone();
+            let auth_override = self.auth_override.clone();
+            let protocol_version = self.protocol_version.clone();
             #[cfg(feature = "oauth-client-credentials")]
-            let mut refreshed_after_401 = false;
-            loop {
-                let mut request_builder = client
-                    .get(url.as_str())
-                    .header("Accept", "text/event-stream")
-                    .header("MCP-Protocol-Version", protocol_version.read().clone());
+            let token_source = self.token_source.clone();
 
-                // Apply the live bearer override (if any) so token rotation
-                // also reaches the SSE GET. Per-request header overrides
-                // default_headers — see Transport::update_auth_header.
+            info!("Starting SSE event listener for GET requests at: {}", url);
+
+            crate::rt::spawn(async move {
+                // One OAuth refresh per 401: set after a refresh, cleared on success.
                 #[cfg(feature = "oauth-client-credentials")]
-                let oauth = token_source.is_some();
-                #[cfg(not(feature = "oauth-client-credentials"))]
-                let oauth = false;
-                if !oauth && let Some(value) = auth_override.read().as_ref() {
-                    request_builder = request_builder.header(reqwest::header::AUTHORIZATION, value);
-                }
-                // The OAuth token source owns Authorization when attached; an
-                // expired token is refreshed here (ADR-039 §6).
-                #[cfg(feature = "oauth-client-credentials")]
-                let mut sent_token = None;
-                #[cfg(feature = "oauth-client-credentials")]
-                if let Some(source) = &token_source {
-                    match source.current().await {
-                        Ok(Some(token)) => {
-                            request_builder = request_builder.bearer_auth(&token);
-                            sent_token = Some(token);
-                        }
-                        Ok(None) => {}
-                        Err(e) => warn!("SSE GET: no OAuth token: {e}"),
+                let mut refreshed_after_401 = false;
+                loop {
+                    let mut request_builder = client
+                        .get(url.as_str())
+                        .header("Accept", "text/event-stream")
+                        .header("MCP-Protocol-Version", protocol_version.read().clone());
+
+                    // Apply the live bearer override (if any) so token rotation
+                    // also reaches the SSE GET. Per-request header overrides
+                    // default_headers — see Transport::update_auth_header.
+                    #[cfg(feature = "oauth-client-credentials")]
+                    let oauth = token_source.is_some();
+                    #[cfg(not(feature = "oauth-client-credentials"))]
+                    let oauth = false;
+                    if !oauth && let Some(value) = auth_override.read().as_ref() {
+                        request_builder =
+                            request_builder.header(reqwest::header::AUTHORIZATION, value);
                     }
-                }
-
-                // Snapshot the session ID at request-build time. We need the
-                // snapshot (not just the cached value at response time) so the
-                // 4xx terminal handler below can compare-and-swap: only clear
-                // the cache if it still matches what we sent. A re-initialize
-                // running concurrently with an in-flight GET must not have its
-                // fresher session ID clobbered.
-                let sent_session_id: Option<String> = session_id.lock().clone();
-                if let Some(ref current_session_id) = sent_session_id {
-                    debug!("SSE request using session ID: {}", current_session_id);
-                    request_builder = request_builder.header("Mcp-Session-Id", current_session_id);
-                } else {
-                    warn!("SSE request attempted without session ID - server may reject");
-                }
-
-                let response = match request_builder.send().await {
-                    Ok(resp) if resp.status().is_success() => {
-                        #[cfg(feature = "oauth-client-credentials")]
-                        {
-                            refreshed_after_401 = false;
+                    // The OAuth token source owns Authorization when attached; an
+                    // expired token is refreshed here (ADR-039 §6).
+                    #[cfg(feature = "oauth-client-credentials")]
+                    let mut sent_token = None;
+                    #[cfg(feature = "oauth-client-credentials")]
+                    if let Some(source) = &token_source {
+                        match source.current().await {
+                            Ok(Some(token)) => {
+                                request_builder = request_builder.bearer_auth(&token);
+                                sent_token = Some(token);
+                            }
+                            Ok(None) => {}
+                            Err(e) => warn!("SSE GET: no OAuth token: {e}"),
                         }
-                        debug!("SSE connection established, status: {}", resp.status());
-
-                        let content_type = resp
-                            .headers()
-                            .get("content-type")
-                            .and_then(|v| v.to_str().ok())
-                            .unwrap_or("");
-
-                        if !content_type.contains("text/event-stream") {
-                            warn!(
-                                "Server returned content-type '{}' instead of 'text/event-stream'",
-                                content_type
-                            );
-                        }
-
-                        resp
                     }
-                    Ok(resp) => {
-                        let status = resp.status();
 
-                        // 405 is the spec's answer for "this endpoint offers no SSE
-                        // stream" (Streamable HTTP: the server MUST return the stream
-                        // or 405). It says nothing about the session, so keep the
-                        // session id and stop listening.
-                        if status.as_u16() == 405 {
-                            debug!("Server offers no GET SSE stream (405); listener exiting");
-                            return;
-                        }
+                    // Snapshot the session ID at request-build time. We need the
+                    // snapshot (not just the cached value at response time) so the
+                    // 4xx terminal handler below can compare-and-swap: only clear
+                    // the cache if it still matches what we sent. A re-initialize
+                    // running concurrently with an in-flight GET must not have its
+                    // fresher session ID clobbered.
+                    let sent_session_id: Option<String> = session_id.lock().clone();
+                    if let Some(ref current_session_id) = sent_session_id {
+                        debug!("SSE request using session ID: {}", current_session_id);
+                        request_builder =
+                            request_builder.header("Mcp-Session-Id", current_session_id);
+                    } else {
+                        warn!("SSE request attempted without session ID - server may reject");
+                    }
 
-                        // 404 means the server terminated the session. The spec's
-                        // recovery is a new InitializeRequest, which the request
-                        // path already performs when its own request gets a 404.
-                        // Keep the id so that next request hits that path, instead
-                        // of sending sessionless and failing -32001 with nothing
-                        // to trigger recovery.
-                        if status.as_u16() == 404 {
-                            warn!("SSE GET got 404: session terminated; listener exiting");
-                            let _ = tx.send(ServerEvent::Error(
-                                "SSE GET rejected with HTTP 404 — listener exiting".to_string(),
-                            ));
-                            return;
-                        }
-
-                        warn!("SSE connection failed with status: {}", status);
-
-                        // 4xx is structurally fatal for the SSE GET listener: retrying
-                        // the same request unchanged will never succeed. Clear the cached
-                        // session header — but only if it still matches what we sent —
-                        // so the caller's next initialize POST is sent without a stale
-                        // Mcp-Session-Id (mirrors the POST 404 recovery path in
-                        // McpClient::send_request_raw). If a re-initialize wrote a
-                        // fresher session ID into the cache while our GET was in
-                        // flight, leave the new value alone. Then emit the error and
-                        // exit; the caller drives
-                        // recovery by re-running initialize and restarting the listener.
-                        // A 401 is an authentication failure, not the end of the
-                        // session: with OAuth attached, refresh once and retry.
-                        #[cfg(feature = "oauth-client-credentials")]
-                        if status == reqwest::StatusCode::UNAUTHORIZED
-                            && !refreshed_after_401
-                            && let Some(source) = &token_source
-                        {
-                            let challenge = resp
-                                .headers()
-                                .get(reqwest::header::WWW_AUTHENTICATE)
-                                .and_then(|v| v.to_str().ok())
-                                .map(str::to_owned);
-                            match source
-                                .after_unauthorized(challenge.as_deref(), sent_token.as_deref())
-                                .await
+                    let response = match request_builder.send().await {
+                        Ok(resp) if resp.status().is_success() => {
+                            #[cfg(feature = "oauth-client-credentials")]
                             {
-                                Ok(_) => {
-                                    refreshed_after_401 = true;
-                                    continue;
-                                }
-                                Err(e) => warn!("SSE GET: OAuth refresh failed: {e}"),
+                                refreshed_after_401 = false;
                             }
-                        }
+                            debug!("SSE connection established, status: {}", resp.status());
 
-                        if status.is_client_error() {
-                            let mut guard = session_id.lock();
-                            if *guard == sent_session_id {
-                                *guard = None;
+                            let content_type = resp
+                                .headers()
+                                .get("content-type")
+                                .and_then(|v| v.to_str().ok())
+                                .unwrap_or("");
+
+                            if !content_type.contains("text/event-stream") {
+                                warn!(
+                                    "Server returned content-type '{}' instead of 'text/event-stream'",
+                                    content_type
+                                );
                             }
-                            drop(guard);
-                            let _ = tx.send(ServerEvent::Error(format!(
-                                "SSE GET rejected with HTTP {} — listener exiting",
-                                status
-                            )));
-                            return;
+
+                            resp
                         }
+                        Ok(resp) => {
+                            let status = resp.status();
 
-                        // 5xx and other non-2xx: treat as transient, retry with the
-                        // existing static backoff.
-                        if tx
-                            .send(ServerEvent::Error(format!("HTTP {}", status)))
-                            .is_err()
-                        {
-                            debug!("Event channel closed, stopping SSE listener");
-                            return;
-                        }
-                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                        continue;
-                    }
-                    Err(e) => {
-                        warn!("SSE connection error: {}", e);
-                        if tx.send(ServerEvent::Error(e.to_string())).is_err() {
-                            debug!("Event channel closed, stopping SSE listener");
-                            return;
-                        }
-                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                        continue;
-                    }
-                };
+                            // 405 is the spec's answer for "this endpoint offers no SSE
+                            // stream" (Streamable HTTP: the server MUST return the stream
+                            // or 405). It says nothing about the session, so keep the
+                            // session id and stop listening.
+                            if status.as_u16() == 405 {
+                                debug!("Server offers no GET SSE stream (405); listener exiting");
+                                return;
+                            }
 
-                let mut stream = response.bytes_stream();
-                let mut buffer = String::new();
+                            // 404 means the server terminated the session. The spec's
+                            // recovery is a new InitializeRequest, which the request
+                            // path already performs when its own request gets a 404.
+                            // Keep the id so that next request hits that path, instead
+                            // of sending sessionless and failing -32001 with nothing
+                            // to trigger recovery.
+                            if status.as_u16() == 404 {
+                                warn!("SSE GET got 404: session terminated; listener exiting");
+                                let _ = tx.send(ServerEvent::Error(
+                                    "SSE GET rejected with HTTP 404 — listener exiting".to_string(),
+                                ));
+                                return;
+                            }
 
-                while let Some(chunk) = stream.next().await {
-                    if tx.is_closed() {
-                        debug!("Event receiver dropped, stopping SSE listener");
-                        return; // Receiver dropped, exit cleanly
-                    }
+                            warn!("SSE connection failed with status: {}", status);
 
-                    match chunk {
-                        Ok(bytes) => {
-                            buffer.push_str(&String::from_utf8_lossy(&bytes));
-
-                            // Parse SSE events (data: {json}\n\n)
-                            while let Some(end) = buffer.find("\n\n") {
-                                let event_text = buffer[..end].to_string();
-                                buffer.drain(..end + 2);
-
-                                let mut event_type = None;
-                                let mut data = String::new();
-                                let mut id = None;
-
-                                for line in event_text.lines() {
-                                    if let Some(event_value) = line.strip_prefix("event: ") {
-                                        event_type = Some(event_value.to_string());
-                                    } else if let Some(data_value) = line.strip_prefix("data: ") {
-                                        if !data.is_empty() {
-                                            data.push('\n');
-                                        }
-                                        data.push_str(data_value);
-                                    } else if let Some(id_value) = line.strip_prefix("id: ") {
-                                        id = Some(id_value.to_string());
+                            // 4xx is structurally fatal for the SSE GET listener: retrying
+                            // the same request unchanged will never succeed. Clear the cached
+                            // session header — but only if it still matches what we sent —
+                            // so the caller's next initialize POST is sent without a stale
+                            // Mcp-Session-Id (mirrors the POST 404 recovery path in
+                            // McpClient::send_request_raw). If a re-initialize wrote a
+                            // fresher session ID into the cache while our GET was in
+                            // flight, leave the new value alone. Then emit the error and
+                            // exit; the caller drives
+                            // recovery by re-running initialize and restarting the listener.
+                            // A 401 is an authentication failure, not the end of the
+                            // session: with OAuth attached, refresh once and retry.
+                            #[cfg(feature = "oauth-client-credentials")]
+                            if status == reqwest::StatusCode::UNAUTHORIZED
+                                && !refreshed_after_401
+                                && let Some(source) = &token_source
+                            {
+                                let challenge = resp
+                                    .headers()
+                                    .get(reqwest::header::WWW_AUTHENTICATE)
+                                    .and_then(|v| v.to_str().ok())
+                                    .map(str::to_owned);
+                                match source
+                                    .after_unauthorized(challenge.as_deref(), sent_token.as_deref())
+                                    .await
+                                {
+                                    Ok(_) => {
+                                        refreshed_after_401 = true;
+                                        continue;
                                     }
-                                }
-
-                                if !data.is_empty() {
-                                    match serde_json::from_str::<Value>(&data) {
-                                        Ok(json) => {
-                                            debug!(
-                                                "Received SSE event: type={:?}, id={:?}, data={}",
-                                                event_type, id, data
-                                            );
-
-                                            // Determine event type based on JSON content
-                                            // Check method+id first: server-initiated requests
-                                            // have both (e.g. sampling/createMessage)
-                                            if json.get("method").is_some()
-                                                && json.get("id").is_some()
-                                            {
-                                                // Server-initiated request needing response
-                                                if tx.send(ServerEvent::Request(json)).is_err() {
-                                                    debug!("Event channel closed during send");
-                                                    return;
-                                                }
-                                            } else if json.get("method").is_some() {
-                                                // Notification (method only, no id)
-                                                if tx.send(ServerEvent::Notification(json)).is_err()
-                                                {
-                                                    debug!("Event channel closed during send");
-                                                    return;
-                                                }
-                                            } else if json.get("id").is_some() {
-                                                // Response to a pending client request (no method)
-                                                if tx.send(ServerEvent::Response(json)).is_err() {
-                                                    debug!("Event channel closed during send");
-                                                    return;
-                                                }
-                                            } else {
-                                                // Other data
-                                                if tx.send(ServerEvent::Notification(json)).is_err()
-                                                {
-                                                    debug!("Event channel closed during send");
-                                                    return;
-                                                }
-                                            }
-                                        }
-                                        Err(e) => {
-                                            warn!(
-                                                "Failed to parse SSE data as JSON: {} - data: {}",
-                                                e, data
-                                            );
-                                        }
-                                    }
+                                    Err(e) => warn!("SSE GET: OAuth refresh failed: {e}"),
                                 }
                             }
+
+                            if status.is_client_error() {
+                                let mut guard = session_id.lock();
+                                if *guard == sent_session_id {
+                                    *guard = None;
+                                }
+                                drop(guard);
+                                let _ = tx.send(ServerEvent::Error(format!(
+                                    "SSE GET rejected with HTTP {} — listener exiting",
+                                    status
+                                )));
+                                return;
+                            }
+
+                            // 5xx and other non-2xx: treat as transient, retry with the
+                            // existing static backoff.
+                            if tx
+                                .send(ServerEvent::Error(format!("HTTP {}", status)))
+                                .is_err()
+                            {
+                                debug!("Event channel closed, stopping SSE listener");
+                                return;
+                            }
+                            crate::rt::sleep(std::time::Duration::from_secs(5)).await;
+                            continue;
                         }
                         Err(e) => {
-                            warn!("SSE stream error: {}", e);
-                            break;
+                            warn!("SSE connection error: {}", e);
+                            if tx.send(ServerEvent::Error(e.to_string())).is_err() {
+                                debug!("Event channel closed, stopping SSE listener");
+                                return;
+                            }
+                            crate::rt::sleep(std::time::Duration::from_secs(5)).await;
+                            continue;
+                        }
+                    };
+
+                    let mut stream = response.bytes_stream();
+                    let mut buffer = String::new();
+
+                    while let Some(chunk) = stream.next().await {
+                        if tx.is_closed() {
+                            debug!("Event receiver dropped, stopping SSE listener");
+                            return; // Receiver dropped, exit cleanly
+                        }
+
+                        match chunk {
+                            Ok(bytes) => {
+                                buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+                                // Parse SSE events (data: {json}\n\n)
+                                while let Some(end) = buffer.find("\n\n") {
+                                    let event_text = buffer[..end].to_string();
+                                    buffer.drain(..end + 2);
+
+                                    let mut event_type = None;
+                                    let mut data = String::new();
+                                    let mut id = None;
+
+                                    for line in event_text.lines() {
+                                        if let Some(event_value) = line.strip_prefix("event: ") {
+                                            event_type = Some(event_value.to_string());
+                                        } else if let Some(data_value) = line.strip_prefix("data: ")
+                                        {
+                                            if !data.is_empty() {
+                                                data.push('\n');
+                                            }
+                                            data.push_str(data_value);
+                                        } else if let Some(id_value) = line.strip_prefix("id: ") {
+                                            id = Some(id_value.to_string());
+                                        }
+                                    }
+
+                                    if !data.is_empty() {
+                                        match serde_json::from_str::<Value>(&data) {
+                                            Ok(json) => {
+                                                debug!(
+                                                    "Received SSE event: type={:?}, id={:?}, data={}",
+                                                    event_type, id, data
+                                                );
+
+                                                // Determine event type based on JSON content
+                                                // Check method+id first: server-initiated requests
+                                                // have both (e.g. sampling/createMessage)
+                                                if json.get("method").is_some()
+                                                    && json.get("id").is_some()
+                                                {
+                                                    // Server-initiated request needing response
+                                                    if tx.send(ServerEvent::Request(json)).is_err()
+                                                    {
+                                                        debug!("Event channel closed during send");
+                                                        return;
+                                                    }
+                                                } else if json.get("method").is_some() {
+                                                    // Notification (method only, no id)
+                                                    if tx
+                                                        .send(ServerEvent::Notification(json))
+                                                        .is_err()
+                                                    {
+                                                        debug!("Event channel closed during send");
+                                                        return;
+                                                    }
+                                                } else if json.get("id").is_some() {
+                                                    // Response to a pending client request (no method)
+                                                    if tx.send(ServerEvent::Response(json)).is_err()
+                                                    {
+                                                        debug!("Event channel closed during send");
+                                                        return;
+                                                    }
+                                                } else {
+                                                    // Other data
+                                                    if tx
+                                                        .send(ServerEvent::Notification(json))
+                                                        .is_err()
+                                                    {
+                                                        debug!("Event channel closed during send");
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                            Err(e) => {
+                                                warn!(
+                                                    "Failed to parse SSE data as JSON: {} - data: {}",
+                                                    e, data
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                warn!("SSE stream error: {}", e);
+                                break;
+                            }
                         }
                     }
+
+                    // Connection lost, send event and retry
+                    info!("SSE connection lost, attempting to reconnect...");
+                    if tx.send(ServerEvent::ConnectionLost).is_err() {
+                        debug!("Event channel closed, stopping SSE listener");
+                        return;
+                    }
+
+                    crate::rt::sleep(std::time::Duration::from_secs(2)).await;
                 }
+            });
 
-                // Connection lost, send event and retry
-                info!("SSE connection lost, attempting to reconnect...");
-                if tx.send(ServerEvent::ConnectionLost).is_err() {
-                    debug!("Event channel closed, stopping SSE listener");
-                    return;
-                }
-
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-            }
-        });
-
-        info!("SSE event listener started successfully");
+            info!("SSE event listener started successfully");
+        }
         Ok(rx)
     }
 

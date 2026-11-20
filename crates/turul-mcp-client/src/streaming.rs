@@ -129,7 +129,7 @@ impl StreamHandler {
         let callbacks = Arc::clone(&self.callbacks);
         let response_sender = self.response_sender.clone();
 
-        tokio::spawn(async move {
+        crate::rt::spawn(async move {
             info!("Stream handler started");
 
             while let Some(event) = receiver.recv().await {
