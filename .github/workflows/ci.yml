@@ -13,7 +13,7 @@ name: CI
 #   default-2026 30 -> 30  parity
 #   opt-in-2025  36 -> 36  parity
 #   mutex/docs         parity
-#   wasm         9  -> 9   parity (ADR-040; Node and headless Firefox)
+#   wasm         9  -> 9   parity (Node and headless Firefox)
 #   lambda       3  -> 0   no hosted job: needs the cargo-lambda + Zig
 #                          cross-compilation toolchain
 #   examples     5  -> 0   no hosted job: boots real servers over six phases
@@ -145,7 +145,7 @@ jobs:
         run: cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-skills --test ext_skills_2026
       - name: Skills extension client (SEP-2640, opt-in feature)
         run: cargo test -p turul-mcp-client --features ext-skills --test ext_skills_client_2026
-      - name: OAuth Client Credentials client (ADR-039, opt-in feature)
+      - name: OAuth Client Credentials client (opt-in feature)
         run: cargo test -p turul-mcp-client --features oauth-client-credentials --lib --test oauth_client_credentials
       - name: OAuth Client Credentials clippy
         run: cargo clippy -p turul-mcp-client --features oauth-client-credentials --all-targets -- -D warnings
@@ -277,11 +277,11 @@ jobs:
           cargo test -p turul-mcp-framework-integration-tests --test examples_guard
           cargo test -p turul-mcp-framework-integration-tests --test reachability_guard
 
-  # Mirrors `scripts/ci-gates.sh wasm` (ADR-040): the client on
+  # Mirrors `scripts/ci-gates.sh wasm`: the client on
   # wasm32-unknown-unknown under Node and headless Firefox, against a native
   # 2026-07-28 fixture. ubuntu-latest ships Node, Firefox and geckodriver.
   wasm:
-    name: wasm32 client (ADR-040)
+    name: wasm32 client
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -290,7 +290,7 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
       - name: wasm-bindgen-test-runner at the Cargo.lock wasm-bindgen version

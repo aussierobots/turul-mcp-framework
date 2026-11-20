@@ -89,7 +89,7 @@ impl TransportResponse {
 
 /// Interface implemented by every MCP client transport.
 ///
-/// On wasm32 the futures are not `Send` (ADR-040 §5): an implementation that
+/// On wasm32 the futures are not `Send`: an implementation that
 /// targets wasm32 uses `#[cfg_attr(target_arch = "wasm32", async_trait(?Send))]`.
 #[cfg_attr(not(target_arch = "wasm32"), async_trait::async_trait)]
 #[cfg_attr(target_arch = "wasm32", async_trait::async_trait(?Send))]
@@ -376,7 +376,7 @@ impl TransportFactory {
     }
 }
 
-/// The error for an SSE transport on wasm32, where `SseTransport` is not compiled (ADR-040 §3).
+/// The error for an SSE transport on wasm32, where `SseTransport` is not compiled.
 #[cfg(target_arch = "wasm32")]
 fn sse_unsupported() -> crate::error::McpClientError {
     TransportError::ConnectionFailed(

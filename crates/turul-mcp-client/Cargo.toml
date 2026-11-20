@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-client"
-version = "0.4.19"
+version = "0.4.20"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -62,7 +62,7 @@ parking_lot = { workspace = true }
 # Logging
 tracing = { workspace = true }
 
-# Native: every line as before, moved into a target table (ADR-040 §7).
+# Native: every line as before, moved into a target table.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["full"] }
 hyper = { workspace = true }
@@ -70,7 +70,7 @@ tokio-util = { workspace = true, features = ["codec"], optional = true }
 # Client assertion signing (oauth-client-credentials); same major as turul-jwt-validator's.
 jsonwebtoken = { workspace = true, optional = true }
 
-# wasm32 under wasm-bindgen (ADR-040): no tokio runtime, fetch-backed reqwest.
+# wasm32 under wasm-bindgen: no tokio runtime, fetch-backed reqwest.
 # tokio and tokio-util are declared here, not inherited: the workspace entries
 # enable `net`, which pulls mio, and inheritance can only add features.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
@@ -100,8 +100,7 @@ ext-apps = ["dep:turul-mcp-ext-apps"]
 # Skills extension (io.modelcontextprotocol/skills, SEP-2640; ADR-033 §6) client surface —
 # 2026-07-28 connections only; off by default per SEP-2133.
 ext-skills = ["dep:turul-mcp-ext-skills", "dep:base64"]
-# OAuth Client Credentials extension (io.modelcontextprotocol/oauth-client-credentials;
-# ADR-039): the HTTP transport obtains machine-to-machine tokens itself. Off by default.
+# OAuth Client Credentials extension (io.modelcontextprotocol/oauth-client-credentials): the HTTP transport obtains machine-to-machine tokens itself. Off by default.
 oauth-client-credentials = ["dep:jsonwebtoken"]
 # Narrowing: each speaks exactly ONE wire spec. Requires --no-default-features
 # (otherwise client-bilingual is also active and the mutex fires). The frozen
@@ -133,7 +132,7 @@ turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.4.4" }
 # The frozen 0.3.47 server, in-process, so the legacy-server probe test asserts
 # on the bytes it really sends rather than a hand-written mock.
 turul-mcp-server-legacy = { package = "turul-mcp-server", version = "=0.3.47" }
-# OAuth Client Credentials tests (ADR-039): a real resource server validating
+# OAuth Client Credentials tests: a real resource server validating
 # tokens a wiremock authorization server signs, and the keys to sign them.
 turul-mcp-oauth = { path = "../turul-mcp-oauth", version = "0.4.5" }
 jsonwebtoken.workspace = true

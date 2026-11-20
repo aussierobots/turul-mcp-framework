@@ -1,4 +1,4 @@
-//! The client on wasm32 under wasm-bindgen (ADR-040), run in Node and in
+//! The client on wasm32 under wasm-bindgen, run in Node and in
 //! headless Firefox against `examples/wasm_e2e_fixture.rs`. Two URLs are fixed
 //! at compile time: `TURUL_WASM_E2E_URL` (the running fixture) and
 //! `TURUL_WASM_E2E_DEAD_URL` (a port with nothing listening).
@@ -119,7 +119,9 @@ async fn unknown_resource_is_a_structured_server_error() {
 #[wasm_bindgen_test]
 async fn request_timeout_fires() {
     let mut config = ClientConfig::default();
-    config.timeouts.request = Duration::from_millis(100);
+    // `connect` is bounded by this too, so leave it room on a slow host; the
+    // fixture's slow resource takes 2 s.
+    config.timeouts.request = Duration::from_secs(1);
     config.retry.max_attempts = 1;
     let client = connected(config).await;
     let err = client
@@ -214,7 +216,7 @@ fn retry_jitter_stays_in_range() {
     );
 }
 
-/// `SseTransport` is not compiled on wasm32; the factory offers HTTP only (ADR-040 §3).
+/// `SseTransport` is not compiled on wasm32; the factory offers HTTP only.
 #[wasm_bindgen_test]
 fn transport_factory_offers_http_only() {
     assert_eq!(

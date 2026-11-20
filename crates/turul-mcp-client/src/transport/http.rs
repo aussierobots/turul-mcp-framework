@@ -60,7 +60,7 @@ pub struct HttpTransport {
     /// per-request `_meta` protocolVersion). A 2026-07-28 (stateless) connection also
     /// stops sending the removed `Mcp-Session-Id` header.
     protocol_version: Arc<parking_lot::RwLock<String>>,
-    /// OAuth Client Credentials token source (ADR-039). When set it owns the
+    /// OAuth Client Credentials token source. When set it owns the
     /// `Authorization` header and `auth_override` is not applied.
     #[cfg(feature = "oauth-client-credentials")]
     token_source: Option<Arc<crate::oauth_client_credentials::TokenSource>>,
@@ -95,7 +95,7 @@ impl HttpTransport {
             .http2_keep_alive_timeout(Duration::from_secs(10))
             .http2_keep_alive_while_idle(true);
         // fetch has none of those options; the timeout is set per request in
-        // `dispatch`, and no User-Agent is set (ADR-040 §6).
+        // `dispatch`, and no User-Agent is set.
         #[cfg(target_arch = "wasm32")]
         let builder = Client::builder();
         let client = builder
@@ -148,7 +148,7 @@ impl HttpTransport {
             .into());
         }
         // fetch has no client timeout, pool, HTTP/2 or redirect options; the
-        // timeout is set per request in `dispatch`, and no User-Agent is set (ADR-040 §6).
+        // timeout is set per request in `dispatch`, and no User-Agent is set.
         #[cfg(target_arch = "wasm32")]
         let mut builder = Client::builder();
 
@@ -237,7 +237,7 @@ impl HttpTransport {
     }
 
     /// Attaches OAuth client credentials: the transport obtains, caches and
-    /// refreshes access tokens itself (ADR-039). They replace any bearer set
+    /// refreshes access tokens itself. They replace any bearer set
     /// with [`Transport::update_auth_header`].
     ///
     /// # Errors
@@ -359,7 +359,7 @@ impl HttpTransport {
     }
 
     /// Sends a request. With OAuth client credentials attached it carries the
-    /// current token, and a `401` gets one refresh and one retry (ADR-039 §6).
+    /// current token, and a `401` gets one refresh and one retry.
     ///
     /// # Errors
     ///
@@ -371,7 +371,7 @@ impl HttpTransport {
         builder: reqwest::RequestBuilder,
         what: &str,
     ) -> McpClientResult<Response> {
-        // fetch has no client-level timeout; this one aborts the whole response (ADR-040 §6).
+        // fetch has no client-level timeout; this one aborts the whole response.
         #[cfg(target_arch = "wasm32")]
         let builder = builder.timeout(WASM_REQUEST_TIMEOUT);
         self.dispatch_untimed(builder, what).await
@@ -1206,7 +1206,7 @@ impl Transport for HttpTransport {
             return Ok(rx);
         }
 
-        // The listener serves 2025-11-25 only, which wasm32 does not build (ADR-040 §3).
+        // The listener serves 2025-11-25 only, which wasm32 does not build.
         #[cfg(not(target_arch = "wasm32"))]
         {
             let client = self.client.clone();
@@ -1241,7 +1241,7 @@ impl Transport for HttpTransport {
                             request_builder.header(reqwest::header::AUTHORIZATION, value);
                     }
                     // The OAuth token source owns Authorization when attached; an
-                    // expired token is refreshed here (ADR-039 §6).
+                    // expired token is refreshed here.
                     #[cfg(feature = "oauth-client-credentials")]
                     let mut sent_token = None;
                     #[cfg(feature = "oauth-client-credentials")]

@@ -1,4 +1,4 @@
-//! OAuth Client Credentials (ADR-039): the HTTP transport's token flow against a
+//! OAuth Client Credentials: the HTTP transport's token flow against a
 //! wiremock authorization server, and end to end against a real resource server.
 #![cfg(feature = "oauth-client-credentials")]
 

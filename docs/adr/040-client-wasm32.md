@@ -47,7 +47,7 @@ Measured on `wasm32-unknown-unknown` (0.4.17, `--no-default-features
 2. **Supported feature set:**
    `default-features = false, features = ["http", "client-2026-07-28-only"]`.
    The wire is the 2026-07-28 stateless HTTP POST. On wasm32 a
-   `compile_error!` naming this ADR fires for:
+   `compile_error!` with its own message fires for:
    - `client-bilingual` (the default) or `client-2025-11-25-only`: the
      2025-11-25 lane needs a session and a long-lived GET SSE stream;
    - `oauth-client-credentials`: its token source needs a client with its own
@@ -185,7 +185,7 @@ Measured on `wasm32-unknown-unknown` (0.4.17, `--no-default-features
   - `resources/read` of an unknown URI returns `McpClientError::ServerError`
     with code -32602 and the server's message. Decoding `data` is shared code,
     covered natively in `error.rs`.
-  - The slow resource, with a 100 ms request timeout and one attempt, returns
+  - The slow resource, with a 1 s request timeout (the resource takes 2 s) and one attempt, returns
     `McpClientError::Timeout` (`rt::timeout` and `rt::sleep`).
   - `call_tool_with_progress` returns the final `structuredContent`, and
     `on_progress` receives exactly one notification carrying the progress,
@@ -266,3 +266,5 @@ Measured on `wasm32-unknown-unknown` (0.4.17, `--no-default-features
   - the native feature trees are identical;
   - revert-and-fail: a script-set `User-Agent` leaves Node green and fails 5
     tests in Firefox on the CORS preflight.
+- **2026-11-21**: The timeout test uses a 1 s request timeout instead of 100 ms. `connect` is bounded by the same timeout, and it exceeded 100 ms in headless Firefox on a CI runner. The slow resource takes 2 s, so the test still proves the timeout fires.
+- **2026-11-21**: Source, manifest, gate and CI names no longer cite this ADR, as `docs/rules/comments.md` requires. The `compile_error!` messages state the constraint without the ADR number, and the gate checks their text.

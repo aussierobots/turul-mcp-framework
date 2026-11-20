@@ -19,6 +19,8 @@ pub mod postgres;
 #[cfg(feature = "dynamodb")]
 pub mod dynamodb;
 
+mod unique_name;
+
 /// The behaviour contract every [`TaskStore`] backend must satisfy,
 /// written once and run against all of them. Enabled by `parity-harness`
 /// (implied by every backend feature, and by `cfg(test)` in this crate) so
