@@ -1,5 +1,5 @@
 //! Runtime primitives: the one place the client spawns, sleeps, times out and
-//! reads the clock (ADR-040 §4). Native re-exports tokio and `std::time`;
+//! reads the clock. Native re-exports tokio and `std::time`;
 //! wasm32 uses wasm-bindgen's executor, JavaScript timers and `web_time`.
 
 #[cfg(not(target_arch = "wasm32"))]

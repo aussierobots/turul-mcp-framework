@@ -1,4 +1,4 @@
-//! A 2026-07-28 server for the wasm32 client tests (`tests/wasm.rs`, ADR-040).
+//! A 2026-07-28 server for the wasm32 client tests (`tests/wasm.rs`).
 //!
 //! It serves a blob resource with `_meta`, a resource that takes 2 s, and a
 //! tool that reports progress. `scripts/ci-gates.sh wasm` starts it:

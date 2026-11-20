@@ -37,6 +37,11 @@ lines move:
 - **Client wasm32 timeout test is no longer flaky.** Its request timeout is now 1 s instead of
   100 ms, against a 2 s resource. `connect` shares the timeout, and on a slow CI browser it took
   longer than 100 ms. Test-only.
+- **No ADR citations in client source, manifests, gate labels or CI job names.** The rule in
+  `docs/rules/comments.md` keeps ADR references to ADRs, the CHANGELOG and commits. The wasm32
+  `compile_error!` messages state the constraint without the ADR number, and the CI job is now
+  `wasm32 client`.
+- **CI:** `actions/setup-node@v5`, which runs on Node 24. v4 ran on the deprecated Node 20.
 
 ## [0.4.37] - 2026-11-21
 

@@ -407,7 +407,7 @@ impl McpClient {
             crate::version::DiscoverProbe::Discovered => {
                 self.lock_version(crate::version::McpVersion::V2026_07_28).await
             }
-            // A transport or authorization failure, not a version signal (ADR-030).
+            // A transport or authorization failure, not a version signal.
             crate::version::DiscoverProbe::HttpStatus { status, message } => {
                 Err(crate::error::TransportError::HttpStatus { status, message }.into())
             }
@@ -2587,7 +2587,7 @@ impl McpClientBuilder {
 
     /// Attaches OAuth client credentials to the HTTP transport `build()` creates
     /// from [`with_url`](Self::with_url); see
-    /// [`oauth_client_credentials`](crate::oauth_client_credentials) (ADR-039).
+    /// [`oauth_client_credentials`](crate::oauth_client_credentials).
     ///
     /// A transport passed to [`with_transport`](Self::with_transport) is built by
     /// the caller, so attach credentials to it with
@@ -2702,7 +2702,7 @@ impl McpClientBuilder {
                 }
                 #[cfg(target_arch = "wasm32")]
                 crate::transport::TransportType::Sse => {
-                    panic!("the SSE transport is not available on wasm32 (ADR-040 §3); use HTTP")
+                    panic!("the SSE transport is not available on wasm32; use HTTP")
                 }
                 #[cfg(not(target_arch = "wasm32"))]
                 crate::transport::TransportType::Sse => {

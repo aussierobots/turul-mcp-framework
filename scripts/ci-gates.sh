@@ -71,7 +71,7 @@ gate_default() {
   run "Tasks extension (SEP-2663, opt-in feature)" cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-tasks --test ext_tasks_2026
   run "Skills extension (SEP-2640, opt-in feature)" cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-skills --test ext_skills_2026
   run "Skills extension client (SEP-2640, opt-in feature)" cargo test -p turul-mcp-client --features ext-skills --test ext_skills_client_2026
-  run "OAuth Client Credentials client (ADR-039, opt-in feature)" cargo test -p turul-mcp-client --features oauth-client-credentials --lib --test oauth_client_credentials
+  run "OAuth Client Credentials client (opt-in feature)" cargo test -p turul-mcp-client --features oauth-client-credentials --lib --test oauth_client_credentials
   run "OAuth Client Credentials clippy" cargo clippy -p turul-mcp-client --features oauth-client-credentials --all-targets -- -D warnings
   run "Server Cards (experimental, opt-in feature)" cargo test -p turul-mcp-server --no-default-features --features http,sse,ext-server-card --test server_card_2026
   run "lambda routes with dynamic-tools (route before tool-change check)" cargo test -p turul-mcp-aws-lambda --features dynamic-tools --lib
@@ -164,7 +164,7 @@ gate_lambda() {
   # 2026 ones beyond the boot loop. It builds the same binary with a different
   # feature set.
   run "2025-11-25 Lambda E2E (cargo lambda watch, real Runtime API)" ./scripts/e2e-lambda-local-2025-11-25.sh
-  # Skills through the single owner (ADR-035): same live gate as the HTTP
+  # Skills through the single owner: same live gate as the HTTP
   # example, against the Lambda function.
   run "Skills on Lambda (cargo lambda watch: readback + sep-2640)" ./scripts/e2e-lambda-skills.sh
   # The other direction: our own client driven against a Lambda-hosted server
@@ -274,7 +274,7 @@ gate_conformance() {
   fi
 }
 
-# wasm32-unknown-unknown (ADR-040): the client's 2026-07-28 HTTP lane under
+# wasm32-unknown-unknown: the client's 2026-07-28 HTTP lane under
 # wasm-bindgen. Needs the wasm32 target, Node >= 20, Firefox with geckodriver, and
 # wasm-bindgen-test-runner at the wasm-bindgen version in Cargo.lock
 # (override the binary with WASM_BINDGEN_TEST_RUNNER, the driver with GECKODRIVER).
@@ -286,9 +286,9 @@ gate_wasm() {
   run "wasm-bindgen-test-runner matches Cargo.lock wasm-bindgen $locked" \
     bash -c "[ -x '$runner' ] && '$runner' --version | grep -qx 'wasm-bindgen-test-runner $locked'"
   run "wasm32 check (http, client-2026-07-28-only)" cargo check "${wasm[@]}"
-  run "wasm32 refuses the default feature set with ADR-040's message" bash -c \
-    "cargo check --target wasm32-unknown-unknown -p turul-mcp-client 2>&1 | grep -q 'only the 2026-07-28 lane is supported (ADR-040)'"
-  run "wasm32 refuses oauth-client-credentials with ADR-040's message" bash -c \
+  run "wasm32 refuses the default feature set with its own message" bash -c \
+    "cargo check --target wasm32-unknown-unknown -p turul-mcp-client 2>&1 | grep -q 'only the 2026-07-28 lane is supported'"
+  run "wasm32 refuses oauth-client-credentials with its own message" bash -c \
     "cargo check ${wasm[*]},oauth-client-credentials 2>&1 | grep -q 'oauth-client-credentials\` is not supported on wasm32'"
   run "wasm32 clippy (deny warnings)" env TURUL_WASM_E2E_URL=unset TURUL_WASM_E2E_DEAD_URL=unset \
     cargo clippy "${wasm[@]}" --lib --test wasm -- -D warnings

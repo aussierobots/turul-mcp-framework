@@ -1,6 +1,6 @@
 #![cfg(any(feature = "client-bilingual", feature = "client-2026-07-28-only"))]
 //! An HTTP failure on the `server/discover` probe reaches the caller as that
-//! HTTP status and its body (ADR-030 §"Version detection mechanism"): it is a
+//! HTTP status and its body: it is a
 //! transport or authorization failure, not a protocol-version signal.
 //!
 //! Runs on the bilingual build and on `client-2026-07-28-only`. A server that

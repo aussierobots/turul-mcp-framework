@@ -73,7 +73,7 @@ pub(crate) enum ProbeDecision {
     Abort(String),
     /// Abort with the probe's HTTP failure, reported to the caller as that
     /// status and body: a transport or authorization failure, not a version
-    /// signal (ADR-030).
+    /// signal.
     HttpFailure {
         /// The HTTP status code.
         status: u16,

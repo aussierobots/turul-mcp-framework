@@ -85,11 +85,11 @@ compile_error!(
      `--no-default-features`, add one explicitly."
 );
 
-// wasm32 (ADR-040): wasm-bindgen hosts only, 2026-07-28 HTTP only.
+// wasm32: wasm-bindgen hosts only, 2026-07-28 HTTP only.
 #[cfg(all(target_arch = "wasm32", not(target_os = "unknown")))]
 compile_error!(
     "turul-mcp-client: on wasm32 only `wasm32-unknown-unknown` (a wasm-bindgen host: \
-     browser or Node) is supported; see ADR-040."
+     browser or Node) is supported."
 );
 
 #[cfg(all(
@@ -97,13 +97,13 @@ compile_error!(
     any(feature = "client-bilingual", feature = "client-2025-11-25-only")
 ))]
 compile_error!(
-    "turul-mcp-client: on wasm32 only the 2026-07-28 lane is supported (ADR-040). Use \
+    "turul-mcp-client: on wasm32 only the 2026-07-28 lane is supported. Use \
      `default-features = false, features = [\"http\", \"client-2026-07-28-only\"]`."
 );
 
 #[cfg(all(target_arch = "wasm32", feature = "oauth-client-credentials"))]
 compile_error!(
-    "turul-mcp-client: `oauth-client-credentials` is not supported on wasm32 (ADR-040): \
+    "turul-mcp-client: `oauth-client-credentials` is not supported on wasm32: \
      its token source needs a redirect policy and timeout that fetch cannot express."
 );
 

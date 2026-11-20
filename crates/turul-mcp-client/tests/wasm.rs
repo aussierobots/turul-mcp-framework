@@ -1,4 +1,4 @@
-//! The client on wasm32 under wasm-bindgen (ADR-040), run in Node and in
+//! The client on wasm32 under wasm-bindgen, run in Node and in
 //! headless Firefox against `examples/wasm_e2e_fixture.rs`. Two URLs are fixed
 //! at compile time: `TURUL_WASM_E2E_URL` (the running fixture) and
 //! `TURUL_WASM_E2E_DEAD_URL` (a port with nothing listening).
@@ -216,7 +216,7 @@ fn retry_jitter_stays_in_range() {
     );
 }
 
-/// `SseTransport` is not compiled on wasm32; the factory offers HTTP only (ADR-040 §3).
+/// `SseTransport` is not compiled on wasm32; the factory offers HTTP only.
 #[wasm_bindgen_test]
 fn transport_factory_offers_http_only() {
     assert_eq!(
