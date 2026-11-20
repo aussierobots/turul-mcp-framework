@@ -389,9 +389,8 @@ mod conformance {
                 .unwrap_or(0)
                 .saturating_sub(3_600_000_000_000u128);
             for db in rows {
-                if let Some(ns) = db
-                    .strip_prefix("turul_ext_tasks_")
-                    .and_then(|n| n.parse::<u128>().ok())
+                if let Some(ns) =
+                    crate::v2026_07_28::unique_name::created_at_nanos(&db, "turul_ext_tasks_")
                     && ns < cutoff
                 {
                     let _ =
@@ -402,13 +401,7 @@ mod conformance {
             }
         }
 
-        let name = format!(
-            "turul_ext_tasks_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        );
+        let name = crate::v2026_07_28::unique_name::unique_name("turul_ext_tasks_");
         // `name` is generated from a timestamp — digits and underscores only,
         // never user input. AssertSqlSafe is the sanctioned way to say so;
         // sqlx rejects dynamic SQL strings otherwise, which is right.

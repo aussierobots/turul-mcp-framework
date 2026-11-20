@@ -48,7 +48,7 @@ impl SqliteTaskStore {
     /// every pooled connection sees the same database — a plain `:memory:`
     /// gives each connection its own, which silently breaks every test.
     pub async fn in_memory() -> Result<Self, TaskStoreError> {
-        let unique = uuid_like();
+        let unique = crate::v2026_07_28::unique_name::unique_name("turul-ext-tasks-");
         let uri = format!("file:{unique}?mode=memory&cache=shared");
         let pool = SqlitePool::connect(&uri).await.map_err(backend)?;
         Self::from_pool(pool).await
@@ -139,20 +139,6 @@ async fn write_state(
     .await
     .map_err(backend)?;
     Ok(())
-}
-
-/// A unique name for the shared-cache in-memory URI. Avoids taking a `uuid`
-/// dependency for one string.
-fn unique_suffix() -> u128 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0)
-}
-
-fn uuid_like() -> String {
-    format!("turul-ext-tasks-{}", unique_suffix())
 }
 
 #[async_trait::async_trait]
@@ -293,7 +279,8 @@ mod conformance {
     /// for.
     #[tokio::test]
     async fn a_task_survives_reopening_the_database() {
-        let dir = std::env::temp_dir().join(format!("turul-tasks-{}", unique_suffix()));
+        let dir =
+            std::env::temp_dir().join(crate::v2026_07_28::unique_name::unique_name("turul-tasks-"));
         std::fs::create_dir_all(&dir).expect("tmpdir");
         let path = dir.join("tasks.db");
 

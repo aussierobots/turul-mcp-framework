@@ -500,13 +500,7 @@ mod conformance {
                 endpoint()
             );
         }
-        let table = format!(
-            "turul_ext_tasks_{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_nanos())
-                .unwrap_or(0)
-        );
+        let table = crate::v2026_07_28::unique_name::unique_name("turul_ext_tasks_");
         let mut s = DynamoDbTaskStore::new(client, table);
         if let Some(p) = retention {
             s = s.with_retention(p);

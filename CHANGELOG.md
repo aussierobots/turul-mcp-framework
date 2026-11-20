@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.38] - 2026-11-21
+
+`turul-mcp-ext-tasks` 0.1.10 → 0.1.11. These are republished only because their dependency
+lines move:
+- `turul-http-mcp-server` 0.4.15 → 0.4.16
+- `turul-mcp-oauth` 0.4.6 → 0.4.7
+- `turul-mcp-server` 0.4.22 → 0.4.23
+- `turul-mcp-aws-lambda` 0.4.14 → 0.4.15
+- `turul-mcp-client` 0.4.19 → 0.4.20
+
+### Fixed
+
+- **Task storage names are unique within one clock tick.** `turul-mcp-ext-tasks` named three
+  things from the Unix time in nanoseconds alone:
+  - the SQLite shared-cache in-memory database (production);
+  - the scratch Postgres databases (conformance tests);
+  - the DynamoDB tables (conformance tests).
+
+  Two names drawn in the same tick, or by two processes started together, were equal. Two
+  in-memory `SqliteTaskStore`s could then share one database. The Postgres conformance test
+  failed intermittently with `23505` "database already exists".
+  - The fix: one helper builds every such name as `{prefix}{unix_nanos}_{pid}_{sequence}`.
+  - The Postgres reaper reads the leading timestamp. It still reaps databases named in the old
+    format.
+  - Classification: patch.
+  - Tests: `unique_name` unit tests (16,000 names drawn concurrently are distinct; the name
+    carries the process id; the reaper's parse round-trips). They are red with bare timestamps.
+
 ## [0.4.37] - 2026-11-21
 
 `turul-http-mcp-server` 0.4.14 → 0.4.15. Republished because their dependency lines move:
@@ -3475,7 +3503,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.37...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.38...HEAD
+[0.4.38]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.37...v0.4.38
 [0.4.37]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.36...v0.4.37
 [0.4.36]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.35...v0.4.36
 [0.4.35]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.34...v0.4.35
