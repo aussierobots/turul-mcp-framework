@@ -37,8 +37,9 @@ pub enum OriginPolicy {
     /// NOT consulted — see the 2026-08-15 revision entry.
     SameOriginOrLoopback,
     /// `SameOriginOrLoopback` semantics PLUS an explicit allowlist of
-    /// origins (`scheme://host[:port]`, compared case-insensitively,
-    /// default-port normalized).
+    /// origins (`scheme://host[:port]`). An entry matches only when scheme,
+    /// host and port are all equal (RFC 6454 §4-5): case-insensitive, with a
+    /// missing port read as the scheme's default.
     AllowList(Vec<String>),
     /// No validation. For deployments that enforce origin upstream
     /// (API Gateway, ALB, reverse proxy) or are not browser-reachable.
@@ -179,3 +180,11 @@ a non-loopback origin calling the server directly, which needs a conscious
   only ever varied `Origin` while leaving `Host` truthful — the one
   combination that was rejected. Neither could have caught this; the first is
   inverted and kept under its new name.
+- **2026-11-21 (security correction: the allow-list compares the scheme)** — `OriginAuthority` was `(host, port)`, and `parse_origin` dropped the scheme after using it only to pick a default port. So an allow-list entry admitted any scheme with the same host and effective port:
+  - `https://app.example:8650` admitted `http://app.example:8650`;
+  - `https://app.example` admitted `http://app.example:443`.
+
+  RFC 6454 §4-5 defines an origin as the triple (scheme, host, port). A plain-HTTP page is a different origin, and it is the one a network attacker can inject script into. `OriginAuthority` is now `(scheme, host, port)`, and the allow-list compares all three.
+  - Unchanged: the loopback rule (host only), exact-match `null`, and default-port normalisation per scheme.
+  - No documented promise allowed a cross-scheme match. The policy's entries were always described as `scheme://host[:port]`.
+  - Acceptance: `origin::tests::allowlist_compares_the_scheme` (`http`, `wss` and `http://h:443` are refused against `https` entries, and the `https` default port, mixed case and loopback still pass). It is red before the fix.
