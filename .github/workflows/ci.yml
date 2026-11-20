@@ -295,6 +295,8 @@ jobs:
           node-version: "22"
       - name: wasm-bindgen-test-runner at the Cargo.lock wasm-bindgen version
         run: |
+          # Cargo.lock is not committed; resolve it so the runner matches this build.
+          cargo generate-lockfile
           version=$(awk '/^name = "wasm-bindgen"$/{getline; gsub(/[^0-9.]/, ""); print; exit}' Cargo.lock)
           cargo install --locked wasm-bindgen-cli --version "$version"
       - name: wasm gate
