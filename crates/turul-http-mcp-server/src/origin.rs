@@ -22,17 +22,20 @@ pub enum OriginPolicy {
     #[default]
     SameOriginOrLoopback,
     /// [`OriginPolicy::SameOriginOrLoopback`] semantics plus an explicit
-    /// allowlist of origins (`scheme://host[:port]`; host compared
-    /// case-insensitively, default-port normalized). The literal entry
-    /// `"null"` admits `Origin: null`.
+    /// allowlist of origins (`scheme://host[:port]`). An entry matches when the
+    /// scheme, host and port are all equal (RFC 6454 §4-5): scheme and host
+    /// compare case-insensitively, and a missing port is the scheme's default.
+    /// So `https://app.example` does not admit `http://app.example`. The
+    /// literal entry `"null"` admits `Origin: null`.
     AllowList(Vec<String>),
     /// No validation — for deployments that enforce origin upstream
     /// (API Gateway / ALB / reverse proxy) or are not browser-reachable.
     Disabled,
 }
 
-/// `(host_lowercase, effective_port)` of a parsed origin.
-type OriginAuthority = (String, u16);
+/// `(scheme_lowercase, host_lowercase, effective_port)`: the origin triple of
+/// RFC 6454 §4-5.
+type OriginAuthority = (String, String, u16);
 
 fn default_port(scheme: &str) -> Option<u16> {
     match scheme {
@@ -56,7 +59,7 @@ fn parse_origin(origin: &str) -> Option<OriginAuthority> {
         Some(p) => p,
         None => default_port(&scheme)?,
     };
-    Some((host, port))
+    Some((scheme, host, port))
 }
 
 /// Splits `host[:port]`, handling bracketed IPv6 (`[::1]:8080`).
@@ -122,7 +125,7 @@ pub(crate) fn validate_origin(headers: &HeaderMap, policy: &OriginPolicy) -> Res
     let Some(parsed) = parse_origin(origin) else {
         return Err(origin.to_string()); // includes `Origin: null`
     };
-    if is_loopback_host(&parsed.0) {
+    if is_loopback_host(&parsed.1) {
         return Ok(());
     }
     // Deliberately NOT compared against the request's `Host` header. `Host` is
@@ -246,6 +249,30 @@ mod tests {
         assert!(validate_origin(&headers(Some("http://localhost:3000"), host), &p).is_ok());
         // unlisted still rejected
         assert!(validate_origin(&headers(Some("https://other.example"), host), &p).is_err());
+    }
+
+    /// An origin is the triple (scheme, host, port) (RFC 6454 §4-5): a listed
+    /// `https://` origin does not admit the `http://` page on the same host and
+    /// port, which a network attacker can inject script into.
+    #[test]
+    fn allowlist_compares_the_scheme() {
+        let p = OriginPolicy::AllowList(vec!["https://h.example:8650".into()]);
+        let host = Some("h.example:8649");
+        assert!(validate_origin(&headers(Some("https://h.example:8650"), host), &p).is_ok());
+        assert!(validate_origin(&headers(Some("HTTPS://H.example:8650"), host), &p).is_ok());
+        assert!(validate_origin(&headers(Some("http://h.example:8650"), host), &p).is_err());
+        assert!(validate_origin(&headers(Some("wss://h.example:8650"), host), &p).is_err());
+
+        // Default-port normalisation is per scheme: `https://h` is port 443, and
+        // `http://h:443` is still a different origin.
+        let p = OriginPolicy::AllowList(vec!["https://h.example".into()]);
+        assert!(validate_origin(&headers(Some("https://h.example:443"), host), &p).is_ok());
+        assert!(validate_origin(&headers(Some("http://h.example:443"), host), &p).is_err());
+        assert!(validate_origin(&headers(Some("http://h.example"), host), &p).is_err());
+
+        // Loopback stays host-only, and `null` stays exact-match only.
+        assert!(validate_origin(&headers(Some("http://localhost:8650"), host), &p).is_ok());
+        assert!(validate_origin(&headers(Some("null"), host), &p).is_err());
     }
 
     #[test]

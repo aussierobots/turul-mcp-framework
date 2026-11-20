@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-oauth"
-version = "0.4.5"
+version = "0.4.6"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -28,7 +28,7 @@ protocol-2026-07-28 = [
 ]
 
 [dependencies]
-turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.14", default-features = false, features = ["sse"] }
+turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.4.15", default-features = false, features = ["sse"] }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.4.4", default-features = false, features = ["in-memory"] }
 
 turul-jwt-validator.workspace = true

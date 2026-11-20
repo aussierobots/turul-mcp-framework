@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.37] - 2026-11-21
+
+`turul-http-mcp-server` 0.4.14 → 0.4.15. Republished because their dependency lines move:
+`turul-mcp-oauth` 0.4.5 → 0.4.6, `turul-mcp-server` 0.4.21 → 0.4.22,
+`turul-mcp-aws-lambda` 0.4.13 → 0.4.14.
+
+### Security
+
+- **`OriginPolicy::AllowList` now compares the scheme (ADR-031).** An entry matched any origin
+  with the same host and effective port, whatever its scheme:
+  - `https://app.example:8650` admitted `Origin: http://app.example:8650`;
+  - `https://app.example` admitted `http://app.example:443`.
+
+  An origin is the triple (scheme, host, port) (RFC 6454 §4-5). The plain-HTTP page is a
+  different origin, and it is the one a network attacker can inject script into. Entries now
+  match only when scheme, host and port are all equal (case-insensitive, with the default port
+  per scheme).
+  - Unchanged: loopback origins pass on host alone, and `null` matches only the literal `null`
+    entry.
+  - Lambda deployments get the fix too: `LambdaMcpServerBuilder` builds the same `AllowList`
+    from its CORS origins.
+  - Action: list every scheme you serve the browser app from, for example both
+    `https://app.example` and `http://app.example` if both are in use.
+  - Classification: patch; this is a security correction. No documented promise covered a
+    cross-scheme match.
+  - Test: `origin::tests::allowlist_compares_the_scheme`, red before the fix.
+
 ## [0.4.36] - 2026-11-20
 
 `turul-mcp-client` 0.4.18 → 0.4.19.
@@ -3448,7 +3475,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.36...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.37...HEAD
+[0.4.37]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.36...v0.4.37
 [0.4.36]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.35...v0.4.36
 [0.4.35]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.34...v0.4.35
 [0.4.34]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.33...v0.4.34
