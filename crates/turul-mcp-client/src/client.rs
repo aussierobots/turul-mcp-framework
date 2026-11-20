@@ -388,6 +388,9 @@ impl McpClient {
             ProbeDecision::Abort(reason) => {
                 Err(crate::error::ProtocolError::NegotiationFailed(reason).into())
             }
+            ProbeDecision::HttpFailure { status, message } => {
+                Err(crate::error::TransportError::HttpStatus { status, message }.into())
+            }
         }
     }
 
@@ -403,6 +406,10 @@ impl McpClient {
         match self.probe_discover().await? {
             crate::version::DiscoverProbe::Discovered => {
                 self.lock_version(crate::version::McpVersion::V2026_07_28).await
+            }
+            // A transport or authorization failure, not a version signal (ADR-030).
+            crate::version::DiscoverProbe::HttpStatus { status, message } => {
+                Err(crate::error::TransportError::HttpStatus { status, message }.into())
             }
             _ => Err(crate::error::ProtocolError::UnsupportedVersion(
                 "client-2026-07-28-only: server did not answer server/discover — not a 2026-07-28 server"
@@ -481,7 +488,7 @@ impl McpClient {
                     let message = body.pointer("/error/message").and_then(|m| m.as_str());
                     return Ok(probe_from_jsonrpc_error(code, message, supported));
                 }
-                Ok(DiscoverProbe::HttpStatus(status))
+                Ok(DiscoverProbe::HttpStatus { status, message })
             }
             Ok(Err(other)) => Err(other),
         }

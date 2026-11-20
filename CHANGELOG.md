@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.36] - 2026-11-20
+
+`turul-mcp-client` 0.4.18 → 0.4.19.
+
+### Fixed
+
+- **An HTTP failure on the `server/discover` probe is now reported as that status and its body
+  (ADR-030).** `connect()` against a server that answers 401, 403, 404 or a non-JSON-RPC 400 now
+  returns `TransportError::HttpStatus { status, message }`, where `message` is the response body.
+  - Before, a `client-2026-07-28-only` build reported it as
+    `ProtocolError::UnsupportedVersion("… not a 2026-07-28 server")`. So a server refusing the
+    caller's origin with 403 read as a version mismatch.
+  - Before, the default bilingual build reported `ProtocolError::NegotiationFailed` and dropped the
+    body.
+  - Neither build downgrades. The opt-in 404/405 `allow_legacy_gateway_fallback` and the
+    classification of JSON-RPC errors are unchanged.
+  - Classification: patch. Code that matched `NegotiationFailed` or `UnsupportedVersion` for an
+    HTTP failure now sees `Transport(HttpStatus { .. })`, which is what ADR-030 always specified.
+  - Test: `tests/discover_http_status.rs`, run on the bilingual and 2026-only builds.
+
 ## [0.4.35] - 2026-11-20
 
 `turul-mcp-client` 0.4.17 → 0.4.18.
@@ -3428,7 +3448,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.35...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.36...HEAD
+[0.4.36]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.35...v0.4.36
 [0.4.35]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.34...v0.4.35
 [0.4.34]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.33...v0.4.34
 [0.4.33]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.4.32...v0.4.33
