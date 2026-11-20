@@ -119,7 +119,9 @@ async fn unknown_resource_is_a_structured_server_error() {
 #[wasm_bindgen_test]
 async fn request_timeout_fires() {
     let mut config = ClientConfig::default();
-    config.timeouts.request = Duration::from_millis(100);
+    // `connect` is bounded by this too, so leave it room on a slow host; the
+    // fixture's slow resource takes 2 s.
+    config.timeouts.request = Duration::from_secs(1);
     config.retry.max_attempts = 1;
     let client = connected(config).await;
     let err = client

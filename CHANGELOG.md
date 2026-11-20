@@ -34,6 +34,9 @@ lines move:
   - Classification: patch.
   - Tests: `unique_name` unit tests (16,000 names drawn concurrently are distinct; the name
     carries the process id; the reaper's parse round-trips). They are red with bare timestamps.
+- **Client wasm32 timeout test is no longer flaky.** Its request timeout is now 1 s instead of
+  100 ms, against a 2 s resource. `connect` shares the timeout, and on a slow CI browser it took
+  longer than 100 ms. Test-only.
 
 ## [0.4.37] - 2026-11-21
 
